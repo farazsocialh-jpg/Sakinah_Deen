@@ -32,6 +32,7 @@ val astronomyModule = module {
 
 val travelModule = module {
     single { TravelStatusManager() }
+    single { com.sakinah.deen.domain.sensor.QiblaSensorManager(get()) }
 }
 
 val networkModule = module {
@@ -46,7 +47,7 @@ val viewModelModule = module {
     factory { SalahViewModel(get(), get(), get(), get()) }
     factory { QuranViewModel(get(), get()) }
     factory { HadithViewModel() }
-    factory { TravelViewModel(get(), get()) }
+    factory { TravelViewModel(get(), get(), getOrNull()) }
     factory { WealthViewModel(get()) }
     factory { AiScholarViewModel(get()) }
 }

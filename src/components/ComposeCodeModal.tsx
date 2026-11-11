@@ -440,12 +440,149 @@ val viewModelModule = module {
     factory { SalahViewModel(get(), get(), get(), get()) }
     factory { QuranViewModel(get(), get()) }
     factory { HadithViewModel() }
-    factory { TravelViewModel(get(), get()) }
+    factory { TravelViewModel(get(), get(), getOrNull()) }
     factory { WealthViewModel(get()) }
     factory { AiScholarViewModel(get()) }
 }
 
-val appModules = listOf(databaseModule, networkModule, viewModelModule)`
+val appModules = listOf(databaseModule, networkModule, travelModule, viewModelModule)`
+  },
+  'AlarmScheduler': {
+    filename: 'PrayerAlarmScheduler.kt',
+    category: 'Exact Alarms & Doze Bypass',
+    code: `package com.sakinah.deen.service
+
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import com.sakinah.deen.data.model.PrayerType
+
+class PrayerAlarmScheduler(
+    private val context: Context,
+    private val astronomyEngine: PrayerCalculationEngine
+) {
+    fun scheduleSingleAlarm(prayer: PrayerType, triggerEpochMillis: Long) {
+        val intent = Intent(context, PrayerAlarmReceiver::class.java).apply {
+            action = ACTION_PRAYER_ALARM
+            putExtra(EXTRA_PRAYER_TYPE, prayer.name)
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context, 1000 + prayer.ordinal, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Android 12+ runtime permission check for exact alarms
+        val canScheduleExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            alarmManager.canScheduleExactAlarms()
+        } else true
+
+        if (canScheduleExact) {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerEpochMillis, pendingIntent)
+        } else {
+            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerEpochMillis, pendingIntent)
+        }
+    }
+}`
+  },
+  'AdhanService': {
+    filename: 'AdhanPlaybackService.kt',
+    category: 'Media3 Foreground Service',
+    code: `package com.sakinah.deen.service
+
+import android.app.Service
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.media.MediaPlayer
+import androidx.core.app.NotificationCompat
+
+class AdhanPlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
+    // Android 14+ Foreground Service (foregroundServiceType="mediaPlayback")
+    // Progressive audio fade-in over 5 seconds
+    // Lock-screen playback notification with controls: Stop, Mute, Snooze 10m
+    // Audio focus management with automatic ducking over telephone calls
+    override fun onAudioFocusChange(focusChange: Int) {
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS -> stopPlayback()
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> mediaPlayer?.setVolume(0.2f, 0.2f)
+            AudioManager.AUDIOFOCUS_GAIN -> mediaPlayer?.setVolume(1.0f, 1.0f)
+        }
+    }
+}`
+  },
+  'QiblaSensor': {
+    filename: 'QiblaSensorManager.kt',
+    category: 'Sensor Fusion Compass',
+    code: `package com.sakinah.deen.domain.sensor
+
+import android.hardware.GeomagneticField
+import android.hardware.Sensor
+import android.hardware.SensorManager
+
+class QiblaSensorManager(private val context: Context) : SensorEventListener {
+    // 1. Rotation Vector Fusion with Accelerometer+Magnetometer fallback
+    // 2. Exponential Moving Average (EMA alpha=0.15) to damp motor vibration
+    // 3. GeomagneticField true north declination adjustment
+    // 4. Over 15 km/h vehicle speed: smoothly transitions to GPS trajectory heading
+    override fun onSensorChanged(event: SensorEvent) {
+        if (isMovingFast && location.hasBearing()) {
+            val vehicleHeading = location.bearing
+            smoothedAzimuth = smoothAngle(smoothedAzimuth, vehicleHeading)
+            evaluateHeadingOutput(smoothedAzimuth, isVehicular = true)
+            return
+        }
+        // Sensor fusion computation...
+    }
+}`
+  },
+  'CarBluetooth': {
+    filename: 'CarBluetoothReceiver.kt',
+    category: 'Bluetooth Car Handshake',
+    code: `package com.sakinah.deen.receiver
+
+import android.bluetooth.BluetoothClass
+import android.bluetooth.BluetoothDevice
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+
+class CarBluetoothReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == BluetoothDevice.ACTION_ACL_CONNECTED) {
+            val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+            if (device?.bluetoothClass?.deviceClass == BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO) {
+                // Trigger heads-up notification with one-tap Dua al-Safar playback
+                showVehiclePromptNotification(context, device.name ?: "Vehicle Audio")
+            }
+        }
+    }
+}`
+  },
+  'ProGuard': {
+    filename: 'proguard-rules.pro',
+    category: 'R8 / Size Optimization',
+    code: `# SQLCipher Keep Rules
+-keep class net.zetetic.database.sqlcipher.** { *; }
+-dontwarn net.zetetic.database.sqlcipher.**
+
+# Adhan-Kotlin & Astronomy
+-keep class com.batoulapps.adhan.** { *; }
+-keep class com.sakinah.deen.domain.astronomy.** { *; }
+
+# Serialization
+-keepattributes *Annotation*, InnerClasses, Signature
+-dontnote kotlinx.serialization.**
+-keepclasseswithmembers class * {
+    @kotlinx.serialization.Serializable <fields>;
+}
+
+# Strip release debugging logs (Zero telemetry)
+-assumenosideeffects class android.util.Log {
+    public static boolean isLoggable(java.lang.String, int);
+    public static int v(...);
+    public static int d(...);
+}`
   }
 };
 

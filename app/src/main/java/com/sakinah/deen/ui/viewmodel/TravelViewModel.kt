@@ -1,14 +1,17 @@
 package com.sakinah.deen.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
+import com.sakinah.deen.domain.sensor.QiblaSensorManager
 import com.sakinah.deen.domain.travel.TravelState
 import com.sakinah.deen.domain.travel.TravelStatusManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 data class TravelUiState(
     val homeAnchorCity: String = "London, UK",
@@ -23,6 +26,7 @@ data class TravelUiState(
     val relativeAngle: Float = 76f,
     val isBluetoothConnected: Boolean = true,
     val isPlayingDua: Boolean = false,
+    val isVehicularTrajectoryActive: Boolean = false,
     val prayerRakats: Map<PrayerType, Int> = mapOf(
         PrayerType.FAJR to 2,
         PrayerType.DHUHR to 4,
@@ -43,7 +47,8 @@ sealed class TravelUiIntent {
 
 class TravelViewModel(
     private val travelManager: TravelStatusManager,
-    private val astronomyEngine: PrayerCalculationEngine
+    private val astronomyEngine: PrayerCalculationEngine,
+    private val sensorManager: QiblaSensorManager? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TravelUiState())
@@ -51,6 +56,23 @@ class TravelViewModel(
 
     init {
         recomputeTravelState()
+        observeSensorCompass()
+    }
+
+    private fun observeSensorCompass() {
+        if (sensorManager == null) return
+        viewModelScope.launch {
+            sensorManager.compassFlow.collect { compassData ->
+                _uiState.update {
+                    it.copy(
+                        vehicleHeading = compassData.azimuthTrueNorthDeg,
+                        kaabaAzimuth = compassData.kaabaBearingDeg,
+                        relativeAngle = compassData.needleRelativeAngleDeg,
+                        isVehicularTrajectoryActive = compassData.isVehicularTrajectoryActive
+                    )
+                }
+            }
+        }
     }
 
     fun onIntent(intent: TravelUiIntent) {
