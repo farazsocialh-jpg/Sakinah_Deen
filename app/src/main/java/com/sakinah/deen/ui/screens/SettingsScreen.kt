@@ -3,8 +3,10 @@ package com.sakinah.deen.ui.screens
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,9 +34,12 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         val isGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
     }
+    var showManualCityDialog by remember { mutableStateOf(false) }
 
     val themes = ThemeMode.entries
     val adhanChoices = AdhanChoice.entries
+    val context = LocalContext.current
+    val appPrefs = remember { SakinahPreferences(context) }
 
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
@@ -52,8 +57,6 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             var calcExpanded by remember { mutableStateOf(false) }
             // Android resolves the country's Sunni authority (Umm Al-Qura, Qatar Awqaf, ...) by
             // default; a choice here is an explicit override that also drives online timings.
-            val context = LocalContext.current
-            val appPrefs = remember { SakinahPreferences(context) }
             var methodOverride by remember { mutableStateOf(appPrefs.calculationMethodOverride) }
             ExposedDropdownMenuBox(expanded = calcExpanded, onExpandedChange = { calcExpanded = it }) {
                 OutlinedTextField(
@@ -238,6 +241,61 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             Button(onClick = { scope.launch { repo.clearCache() } }) { Text("Clear cache") }
 
             TextButton(onClick = onBack) { Text("Back") }
+        }
+    }
+
+    // City picker dialog for Home Location
+    if (showManualCityDialog) {
+        Dialog(onDismissRequest = { showManualCityDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Select Home City",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = EmeraldDeep
+                    )
+                    listOf(
+                        Triple(25.2854, 51.5310, "Doha, Qatar"),
+                        Triple(21.4225, 39.8262, "Makkah, Saudi Arabia"),
+                        Triple(24.4686, 39.6142, "Madinah, Saudi Arabia"),
+                        Triple(25.2048, 55.2708, "Dubai, UAE"),
+                        Triple(24.8607, 67.0011, "Karachi, Pakistan"),
+                        Triple(51.5074, -0.1278, "London, UK"),
+                        Triple(40.7128, -74.0060, "New York, USA")
+                    ).forEach { (lat, lon, name) ->
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = EmeraldDeep.copy(alpha = 0.05f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    appPrefs.saveHomeAnchor(lat, lon, name)
+                                    showManualCityDialog = false
+                                }
+                        ) {
+                            Text(
+                                text = name,
+                                modifier = Modifier.padding(12.dp),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = EmeraldDeep
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -298,8 +298,7 @@ fun SalahScreen(
                     }
                     OutlinedButton(
                         onClick = { showManualCityDialog = true },
-                        modifier = Modifier.padding(start = 4.dp),
-                        modifier2 = Modifier.height(32.dp)
+                        modifier = Modifier.padding(start = 4.dp).height(32.dp)
                     ) {
                         Text("Pick City", fontSize = 10.sp, color = EmeraldDeep)
                     }
