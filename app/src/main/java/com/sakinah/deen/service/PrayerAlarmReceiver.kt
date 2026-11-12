@@ -54,6 +54,15 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         prayerName: String,
         prayerTime: String
     ) {
+        // POST_NOTIFICATIONS is a runtime permission on Android 13+. If the user
+        // denied it, degrade silently instead of crashing or spamming logs.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.POST_NOTIFICATIONS
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!granted) return
+        }
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
 

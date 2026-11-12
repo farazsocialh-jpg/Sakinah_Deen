@@ -90,3 +90,31 @@
 -keep class com.sakinah.deen.service.** { *; }
 -keep class com.sakinah.deen.receiver.** { *; }
 -keep class com.sakinah.deen.work.** { *; }
+
+# ------------------------------------------------------------------------------
+# 8. Room generated implementations & SQLCipher (legacy net.sqlcipher package)
+# ------------------------------------------------------------------------------
+-keep class * extends androidx.room.RoomDatabase { *; }
+-keep class * extends androidx.room.SharedSQLiteStatement { *; }
+-keep class * extends androidx.room.EntityInsertionAdapter { *; }
+-keep class * extends androidx.room.EntityDeletionOrUpdateAdapter { *; }
+-keep class net.sqlcipher.** { *; }
+-dontwarn net.sqlcipher.**
+
+# ------------------------------------------------------------------------------
+# 9. kotlinx.serialization internal factories & Koin core metadata
+# ------------------------------------------------------------------------------
+-keep class kotlinx.serialization.** { *; }
+-dontwarn kotlinx.serialization.**
+-keep class org.koin.core.** { *; }
+-keep class org.koin.android.** { *; }
+-keepattributes RuntimeVisibleAnnotations, RuntimeInvisibleAnnotations, InnerClasses, Signature, EnclosingMethod
+
+# ------------------------------------------------------------------------------
+# 10. WorkManager workers declared in the manifest / by reflection
+# ------------------------------------------------------------------------------
+-keep class * extends androidx.work.Worker { *; }
+-keep class * extends androidx.work.ListenableWorker { *; }
+-keepclassmembers class * extends androidx.work.Worker {
+    public <init>(android.content.Context, androidx.work.WorkerParameters);
+}
