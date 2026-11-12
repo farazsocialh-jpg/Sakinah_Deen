@@ -41,6 +41,7 @@ object DatabaseSeeder {
     private const val TAG = "SakinahSeeder"
 
     const val QURAN_ASSET = "seed_quran_juz_amma.json"
+    const val SURAH_METADATA_ASSET = "seed_quran_surahs.json"
     const val HADITH_ASSET = "seed_hadith_nawawi.json"
     const val HISN_ASSET = "seed_hisn_muslim.json"
 
@@ -94,10 +95,11 @@ object DatabaseSeeder {
         val target = runCatching { content() }.getOrNull() ?: return@withLock SeedSummary()
         runCatching {
             val needsQuran = target.quranDao.countAyahs(1) <= 0
+            val needsSurahMetadata = target.quranDao.countSurahs() < 114
             val needsHadith = target.hadithDao.countForBook(NAWAWI_BOOK_KEY) <= 0
             val needsAdhkar = target.adhkarDao.count() <= 0
 
-            if (!needsQuran && !needsHadith && !needsAdhkar) {
+            if (!needsQuran && !needsSurahMetadata && !needsHadith && !needsAdhkar) {
                 return@runCatching SeedSummary(skipped = true)
             }
 
@@ -108,6 +110,13 @@ object DatabaseSeeder {
                     applyQuranSeed(text, target.quranDao).let { (surahCount, ayahCount) ->
                         surahs = surahCount
                         ayahs = ayahCount
+                    }
+                }
+            }
+            if (needsSurahMetadata) {
+                readAsset(SURAH_METADATA_ASSET)?.let { text ->
+                    applyQuranSeed(text, target.quranDao).let { (surahCount, _) ->
+                        if (surahs == 0) surahs = surahCount
                     }
                 }
             }

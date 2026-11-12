@@ -50,16 +50,18 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
             TextButton(onClick = { isSignUp = !isSignUp }) {
                 Text(if (isSignUp) "Already have an account? Sign in" else "Need an account? Create one")
             }
-            OutlinedButton(
-                onClick = { /* OAuth/Credential Manager hook: wire when provider configured */ },
-                enabled = authProvidersEnabled,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Continue with Google (configure OAuth to enable)") }
-            OutlinedButton(
-                onClick = { /* Sign in with Apple hook */ },
-                enabled = authProvidersEnabled,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Continue with Apple (configure to enable)") }
+            if (authProvidersEnabled) {
+                OutlinedButton(
+                    onClick = { /* OAuth/Credential Manager hook: wire when provider configured */ },
+                    enabled = true,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Continue with Google") }
+                OutlinedButton(
+                    onClick = { /* Sign in with Apple hook */ },
+                    enabled = true,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Continue with Apple") }
+            }
             TextButton(onClick = { scope.launch { repo.continueAsGuest(); onDone() } }) {
                 Text("Skip / Continue as Guest")
             }

@@ -42,6 +42,8 @@ class FakeQuranDao : QuranDao {
     override suspend fun countAyahs(surahNumber: Int): Int =
         ayahs.values.count { it.surahNumber == surahNumber }
 
+    override suspend fun countSurahs(): Int = surahs.size
+
     override fun observeSurahs(): Flow<List<SurahMetadataEntity>> =
         flow { emit(surahs.values.sortedBy { it.surahNumber }) }
 

@@ -96,7 +96,7 @@ class OfflineSeedingTest {
         assertFalse(first.skipped)
         assertTrue("second pass should be a no-op", second.skipped)
         assertEquals(writesAfterFirst, quranDao.ayahWrites + hadithDao.writes + adhkarDao.writes)
-        assertEquals(38, quranDao.surahs.size)
+        assertEquals(114, quranDao.surahs.size)
     }
 
     @Test
@@ -147,7 +147,7 @@ class OfflineSeedingTest {
         // plain-ASCII word that is present in the bundled translation.
         val searchResults = repo.searchAyahs("Merciful").first()
 
-        assertEquals(38, surahs.size)
+        assertEquals(114, surahs.size)
         assertEquals(7, ayahs.size)
         assertTrue(hadithResults.isNotEmpty())
         assertTrue("offline search should match seeded translations", searchResults.isNotEmpty())
