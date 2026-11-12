@@ -17,6 +17,7 @@ import com.sakinah.deen.ui.viewmodel.HadithViewModel
 import com.sakinah.deen.ui.viewmodel.QuranViewModel
 import com.sakinah.deen.ui.viewmodel.SalahViewModel
 import com.sakinah.deen.ui.viewmodel.TravelViewModel
+import com.sakinah.deen.di.sharedModule
 import com.sakinah.deen.ui.viewmodel.WealthViewModel
 import com.sakinah.deen.work.KoinWorkerFactory
 import io.ktor.client.HttpClient
@@ -120,6 +121,7 @@ val viewModelModule = module {
 }
 
 val appModules = listOf(
+    sharedModule,
     preferencesModule,
     databaseModule,
     astronomyModule,

@@ -2,10 +2,35 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var selectedTab = 0
+    @StateObject private var account = AccountStore()
+    @State private var drawerOpen = false
 
     var body: some View {
+        ZStack(alignment: .leading) {
+            mainTabs
+
+            if drawerOpen {
+                Color.black.opacity(0.35)
+                    .ignoresSafeArea()
+                    .onTapGesture { closeDrawer() }
+                SideDrawer(store: account, isOpen: $drawerOpen)
+                    .transition(.move(edge: .leading))
+            }
+        }
+        .onAppear { account.start() }
+    }
+
+    private func openDrawer() {
+        withAnimation(.easeInOut(duration: 0.22)) { drawerOpen = true }
+    }
+
+    private func closeDrawer() {
+        withAnimation(.easeInOut(duration: 0.22)) { drawerOpen = false }
+    }
+
+    private var mainTabs: some View {
         TabView(selection: $selectedTab) {
-            DailySalahView()
+            DailySalahView(onOpenMenu: openDrawer)
                 .tabItem {
                     Label("Salah", systemImage: "clock.fill")
                 }
@@ -46,6 +71,8 @@ struct ContentView: View {
 }
 
 struct DailySalahView: View {
+    var onOpenMenu: () -> Void = {}
+
     var body: some View {
         NavigationView {
             ZStack {
@@ -79,6 +106,16 @@ struct DailySalahView: View {
                 }
             }
             .navigationTitle("Sakinah")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: onOpenMenu) {
+                        Image(systemName: "line.3.horizontal")
+                            .foregroundColor(.emeraldDeep)
+                    }
+                    .accessibilityLabel("Open menu")
+                }
+            }
         }
     }
 }
