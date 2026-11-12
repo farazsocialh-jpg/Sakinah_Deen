@@ -34,8 +34,19 @@ enum class CalculationMethod {
     EGYPTIAN,
     KARACHI,
     UMM_AL_QURA,
+    DUBAI,
+    QATAR,
     NORTH_AMERICA
 }
+
+data class PrayerAdjustments(
+    val fajrMinutes: Int = 0,
+    val sunriseMinutes: Int = 0,
+    val dhuhrMinutes: Int = 0,
+    val asrMinutes: Int = 0,
+    val maghribMinutes: Int = 0,
+    val ishaMinutes: Int = 0
+)
 
 // Quran & Tafseer Models
 data class Ayah(

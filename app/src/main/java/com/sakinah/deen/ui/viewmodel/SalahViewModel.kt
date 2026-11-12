@@ -8,10 +8,12 @@ import com.sakinah.deen.data.database.entity.SalahRecordEntity
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
 import com.sakinah.deen.data.model.NaflType
+import com.sakinah.deen.data.model.PrayerAdjustments
 import com.sakinah.deen.data.model.PrayerModel
 import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
 import com.sakinah.deen.domain.astronomy.PrayerCountdownInfo
+import com.sakinah.deen.domain.astronomy.UserLocationProvider
 import com.sakinah.deen.domain.travel.TravelStatusManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +22,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 data class SalahUiState(
@@ -33,8 +36,13 @@ data class SalahUiState(
     val prayersList: List<PrayerModel> = emptyList(),
     val qadhaDeficits: Map<PrayerType, Int> = emptyMap(),
     val isTraveler: Boolean = false,
-    val calculationMethod: CalculationMethod = CalculationMethod.MUSLIM_WORLD_LEAGUE,
-    val madhhab: Madhhab = Madhhab.HANAFI
+    val calculationMethod: CalculationMethod = CalculationMethod.UMM_AL_QURA,
+    val madhhab: Madhhab = Madhhab.SHAFI_HANBALI_MALIKI,
+    val adjustments: PrayerAdjustments = PrayerAdjustments(),
+    val locationName: String = "Detecting Location...",
+    val isLocationPermissionGranted: Boolean = false,
+    val showLocationWarningBanner: Boolean = false,
+    val userCoordinates: Pair<Double, Double> = Pair(21.4225, 39.8262) // Default to Makkah
 )
 
 sealed class SalahUiIntent {
@@ -44,22 +52,25 @@ sealed class SalahUiIntent {
     data class DecrementQadha(val prayerType: PrayerType) : SalahUiIntent()
     data class ChangeCalculationMethod(val method: CalculationMethod) : SalahUiIntent()
     data class ChangeMadhhab(val madhhab: Madhhab) : SalahUiIntent()
+    data class UpdatePrayerAdjustments(val adjustments: PrayerAdjustments) : SalahUiIntent()
+    data class LocationPermissionResult(val isGranted: Boolean) : SalahUiIntent()
+    data object RefreshLocation : SalahUiIntent()
+    data class SetManualLocation(val lat: Double, val lon: Double, val name: String) : SalahUiIntent()
 }
 
 class SalahViewModel(
     private val salahDao: SalahDao,
     private val qadhaDao: QadhaDao,
     private val astronomyEngine: PrayerCalculationEngine,
-    private val travelManager: TravelStatusManager
+    private val travelManager: TravelStatusManager,
+    private val locationProvider: UserLocationProvider? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SalahUiState())
     val uiState: StateFlow<SalahUiState> = _uiState.asStateFlow()
 
-    private var userCoordinates: Pair<Double, Double> = Pair(51.5074, -0.1278) // London default
-
     init {
-        loadDailySchedule()
+        checkAndRefreshLocation()
         observeQadhaLedger()
     }
 
@@ -77,20 +88,78 @@ class SalahViewModel(
                 _uiState.update { it.copy(madhhab = intent.madhhab) }
                 loadDailySchedule()
             }
+            is SalahUiIntent.UpdatePrayerAdjustments -> {
+                _uiState.update { it.copy(adjustments = intent.adjustments) }
+                loadDailySchedule()
+            }
+            is SalahUiIntent.LocationPermissionResult -> {
+                if (intent.isGranted) {
+                    _uiState.update { it.copy(isLocationPermissionGranted = true, showLocationWarningBanner = false) }
+                    checkAndRefreshLocation()
+                } else {
+                    _uiState.update { it.copy(isLocationPermissionGranted = false, showLocationWarningBanner = true) }
+                    loadDailySchedule()
+                }
+            }
+            is SalahUiIntent.RefreshLocation -> {
+                checkAndRefreshLocation()
+            }
+            is SalahUiIntent.SetManualLocation -> {
+                _uiState.update {
+                    it.copy(
+                        userCoordinates = Pair(intent.lat, intent.lon),
+                        locationName = intent.name,
+                        showLocationWarningBanner = false
+                    )
+                }
+                loadDailySchedule()
+            }
+        }
+    }
+
+    private fun checkAndRefreshLocation() {
+        if (locationProvider == null) {
+            loadDailySchedule()
+            return
+        }
+
+        val hasPermission = locationProvider.hasLocationPermission()
+        _uiState.update {
+            it.copy(
+                isLocationPermissionGranted = hasPermission,
+                showLocationWarningBanner = !hasPermission
+            )
+        }
+
+        viewModelScope.launch {
+            val resolved = locationProvider.getFreshOrCachedLocation()
+            _uiState.update {
+                it.copy(
+                    userCoordinates = Pair(resolved.latitude, resolved.longitude),
+                    locationName = if (resolved.countryName.isNotBlank()) "${resolved.cityName}, ${resolved.countryName}" else resolved.cityName,
+                    showLocationWarningBanner = !resolved.isFromGps && !hasPermission
+                )
+            }
+            loadDailySchedule()
         }
     }
 
     private fun loadDailySchedule() {
         val today = LocalDate.now()
+        val userZone = ZoneId.systemDefault()
+        val coords = _uiState.value.userCoordinates
+
         val times = astronomyEngine.getPrayerTimes(
-            userCoordinates,
-            today,
-            _uiState.value.calculationMethod,
-            _uiState.value.madhhab
+            coordinates = coords,
+            date = today,
+            method = _uiState.value.calculationMethod,
+            madhhab = _uiState.value.madhhab,
+            zoneId = userZone,
+            adjustments = _uiState.value.adjustments
         )
 
-        val countdown: PrayerCountdownInfo = astronomyEngine.calculateCountdown(times, LocalTime.now())
-        val travel = travelManager.evaluateTravelState(userCoordinates)
+        val countdown: PrayerCountdownInfo = astronomyEngine.calculateCountdown(times, LocalTime.now(userZone))
+        val travel = travelManager.evaluateTravelState(coords)
 
         val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a")
 

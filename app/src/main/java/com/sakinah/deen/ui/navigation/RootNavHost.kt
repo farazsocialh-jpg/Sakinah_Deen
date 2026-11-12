@@ -27,6 +27,8 @@ import com.sakinah.deen.ui.screens.SalahScreen
 import com.sakinah.deen.ui.screens.TravelScreen
 import com.sakinah.deen.ui.screens.VisualSalahGuideScreen
 import com.sakinah.deen.ui.screens.WealthScreen
+import com.sakinah.deen.ui.viewmodel.SalahViewModel
+import org.koin.androidx.compose.koinViewModel
 
 enum class SakinahScreen(val title: String) {
     Onboarding("Journey"),
@@ -97,8 +99,10 @@ fun RootNavHost() {
                 )
             }
             SakinahScreen.DailySalah -> {
+                val salahVm = runCatching { koinViewModel<SalahViewModel>() }.getOrNull()
                 SalahScreen(
                     onOpenGuide = { currentScreen = SakinahScreen.VisualGuide },
+                    viewModel = salahVm,
                     modifier = Modifier.padding(innerPadding)
                 )
             }

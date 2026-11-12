@@ -2,5 +2,7 @@
   "name": "Sakinah - Sunni Islamic Companion (Android & iOS)",
   "description": "Comprehensive Sunni Islamic mobile companion featuring Daily Salah dashboard, Visual Posture Salah Guide, Quran & Multi-Tafseer Studio, 9 Canonical Hadith Encyclopedia, Safar Travel Qibla Compass, Zakat Hub, and grounded AI Scholar chat.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

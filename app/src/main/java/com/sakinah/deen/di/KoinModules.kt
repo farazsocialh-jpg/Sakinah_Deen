@@ -49,6 +49,7 @@ val databaseModule = module {
 
 val astronomyModule = module {
     single<PrayerCalculationEngine> { PrayerCalculationEngineImpl() }
+    single { UserLocationProvider(androidContext()) }
 }
 
 val travelModule = module {
@@ -108,7 +109,7 @@ val workerModule = module {
 }
 
 val viewModelModule = module {
-    factory { SalahViewModel(get(), get(), get(), get()) }
+    factory { SalahViewModel(get(), get(), get(), get(), getOrNull()) }
     factory { QuranViewModel(get(), get()) }
     factory { HadithViewModel() }
     factory { TravelViewModel(get(), get(), getOrNull()) }

@@ -17,6 +17,7 @@ koin = "4.0.0"
 adhan = "1.2.1"
 ktor = "3.0.1"
 kotlinxSerialization = "1.7.3"
+playServicesLocation = "21.3.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -49,6 +50,9 @@ androidx-media3-session = { group = "androidx.media3", name = "media3-session", 
 
 # Adhan Astronomical Calculation
 adhan-kotlin = { group = "com.batoulapps.adhan", name = "adhan", version.ref = "adhan" }
+
+# Location Services
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 
 # Koin Dependency Injection
 koin-android = { group = "io.insert-koin", name = "koin-android", version.ref = "koin" }

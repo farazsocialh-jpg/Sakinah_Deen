@@ -118,6 +118,7 @@ dependencies {
 
     // Astronomy & Prayer Calculation
     implementation(libs.adhan.kotlin)
+    implementation(libs.play.services.location)
 
     // Koin Dependency Injection
     implementation(libs.koin.android)

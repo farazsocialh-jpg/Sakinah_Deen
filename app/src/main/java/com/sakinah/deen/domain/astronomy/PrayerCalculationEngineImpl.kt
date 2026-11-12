@@ -2,10 +2,13 @@ package com.sakinah.deen.domain.astronomy
 
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
+import com.sakinah.deen.data.model.PrayerAdjustments
 import com.sakinah.deen.data.model.PrayerType
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import kotlin.math.PI
 import kotlin.math.acos
 import kotlin.math.asin
@@ -40,84 +43,111 @@ class PrayerCalculationEngineImpl : PrayerCalculationEngine {
         coordinates: Pair<Double, Double>,
         date: LocalDate,
         method: CalculationMethod,
-        madhhab: Madhhab
+        madhhab: Madhhab,
+        zoneId: ZoneId,
+        adjustments: PrayerAdjustments
     ): Map<PrayerType, LocalTime> {
         val lat = coordinates.first
         val lon = coordinates.second
         val dayOfYear = date.dayOfYear
 
-        // Astronomical Solar Declination & Equation of Time
+        // Astronomical Solar Declination & Equation of Time (Spencer 1971 / NOAA)
         val gamma = 2.0 * PI / 365.0 * (dayOfYear - 1)
         val eqtime = 229.18 * (0.000075 + 0.001868 * cos(gamma) - 0.032077 * sin(gamma) -
-                0.014615 * cos(2 * gamma) - 0.040849 * sin(2 * gamma)) // minutes
+                0.014615 * cos(2 * gamma) - 0.040849 * sin(2 * gamma)) // in minutes
+
         val declRad = 0.006918 - 0.399912 * cos(gamma) + 0.070257 * sin(gamma) -
                 0.006758 * cos(2 * gamma) + 0.000907 * sin(2 * gamma) -
                 0.002697 * cos(3 * gamma) + 0.00148 * sin(3 * gamma)
 
         val latRad = Math.toRadians(lat)
 
-        // Solar Noon in UTC hours
-        val timeZoneOffset = Math.round(lon / 15.0).toDouble()
+        // 1. Calculate Exact Solar Noon in UTC Minutes
+        // Solar noon occurs when Sun transits the local meridian: 12:00 UTC - (lon * 4 min/deg) - EoT
         val solarNoonUtcMinutes = 720.0 - (4.0 * lon) - eqtime
-        val solarNoonHours = (solarNoonUtcMinutes / 60.0) + timeZoneOffset
 
-        // Dhuhr (Solar noon + 2 min safety buffer)
-        val dhuhrHours = solarNoonHours + (2.0 / 60.0)
+        // 2. Dynamic Local TimeZone Resolution: Use the exact device ZoneId offset for this date
+        // Never estimate timezone using (lon / 15.0) which causes multi-hour errors in regions with non-solar political timezones!
+        val noonUtcInstant = date.atTime(12, 0).atZone(ZoneId.of("UTC")).toInstant()
+        val zoneOffsetSeconds = zoneId.rules.getOffset(noonUtcInstant).totalSeconds
+        val zoneOffsetHours = zoneOffsetSeconds / 3600.0
 
-        // Sunrise & Sunset angle: -0.8333 degrees
+        val solarNoonLocalHours = (solarNoonUtcMinutes / 60.0) + zoneOffsetHours
+
+        // Dhuhr: Solar noon + 2 min safety buffer (Zawal passed)
+        val dhuhrHours = solarNoonLocalHours + (2.0 / 60.0)
+
+        // 3. Sunrise & Sunset Angle: -0.8333 degrees (atmospheric refraction + solar disc semi-diameter)
         val sunAltRad = Math.toRadians(-0.8333)
         val cosHourAngleSun = (sin(sunAltRad) - sin(latRad) * sin(declRad)) / (cos(latRad) * cos(declRad))
         val hourAngleSunDeg = if (cosHourAngleSun in -1.0..1.0) Math.toDegrees(acos(cosHourAngleSun)) else 90.0
         val halfDayHours = hourAngleSunDeg / 15.0
 
-        val sunriseHours = solarNoonHours - halfDayHours
-        val maghribHours = solarNoonHours + halfDayHours
+        val sunriseHours = solarNoonLocalHours - halfDayHours
+        val maghribHours = solarNoonLocalHours + halfDayHours
 
-        // Fajr angle depending on calculation authority
+        // 4. Fajr Angle by Juristic / Regional Authority
         val fajrAngle = when (method) {
             CalculationMethod.MUSLIM_WORLD_LEAGUE -> 18.0
             CalculationMethod.EGYPTIAN -> 19.5
             CalculationMethod.KARACHI -> 18.0
             CalculationMethod.UMM_AL_QURA -> 18.5
+            CalculationMethod.DUBAI -> 18.2
+            CalculationMethod.QATAR -> 18.0
             CalculationMethod.NORTH_AMERICA -> 15.0
         }
         val fajrAltRad = Math.toRadians(-fajrAngle)
         val cosHourAngleFajr = (sin(fajrAltRad) - sin(latRad) * sin(declRad)) / (cos(latRad) * cos(declRad))
         val hourAngleFajrDeg = if (cosHourAngleFajr in -1.0..1.0) Math.toDegrees(acos(cosHourAngleFajr)) else 108.0
-        val fajrHours = solarNoonHours - (hourAngleFajrDeg / 15.0)
+        val fajrHours = solarNoonLocalHours - (hourAngleFajrDeg / 15.0)
 
-        // Asr juristic shadow calculation: Standard (1:1) vs Hanafi (2:1)
+        // 5. Asr Juristic Shadow Calculation: Standard Shafi'i/Maliki/Hanbali (1:1) vs Hanafi (2:1)
         val shadowRatio = if (madhhab == Madhhab.HANAFI) 2.0 else 1.0
         val zenithDiff = Math.abs(latRad - declRad)
         val asrAltRad = atan(1.0 / (shadowRatio + tan(zenithDiff)))
         val cosHourAngleAsr = (sin(asrAltRad) - sin(latRad) * sin(declRad)) / (cos(latRad) * cos(declRad))
         val hourAngleAsrDeg = if (cosHourAngleAsr in -1.0..1.0) Math.toDegrees(acos(cosHourAngleAsr)) else 60.0
-        val asrHours = solarNoonHours + (hourAngleAsrDeg / 15.0)
+        val asrHours = solarNoonLocalHours + (hourAngleAsrDeg / 15.0)
 
-        // Isha calculation
-        val ishaHours = if (method == CalculationMethod.UMM_AL_QURA) {
-            maghribHours + 1.5 // 90 minutes after Maghrib
-        } else {
-            val ishaAngle = when (method) {
-                CalculationMethod.MUSLIM_WORLD_LEAGUE -> 17.0
-                CalculationMethod.EGYPTIAN -> 17.5
-                CalculationMethod.KARACHI -> 18.0
-                CalculationMethod.NORTH_AMERICA -> 15.0
-                else -> 17.0
+        // 6. Isha Angle / Interval Calculation
+        val ishaHours = when (method) {
+            CalculationMethod.UMM_AL_QURA, CalculationMethod.QATAR -> {
+                // Fixed 90-minute interval after Maghrib (120 minutes during Ramadan)
+                maghribHours + (90.0 / 60.0)
             }
-            val ishaAltRad = Math.toRadians(-ishaAngle)
-            val cosHourAngleIsha = (sin(ishaAltRad) - sin(latRad) * sin(declRad)) / (cos(latRad) * cos(declRad))
-            val hourAngleIshaDeg = if (cosHourAngleIsha in -1.0..1.0) Math.toDegrees(acos(cosHourAngleIsha)) else 105.0
-            solarNoonHours + (hourAngleIshaDeg / 15.0)
+            CalculationMethod.DUBAI -> {
+                maghribHours + (90.0 / 60.0)
+            }
+            else -> {
+                val ishaAngle = when (method) {
+                    CalculationMethod.MUSLIM_WORLD_LEAGUE -> 17.0
+                    CalculationMethod.EGYPTIAN -> 17.5
+                    CalculationMethod.KARACHI -> 18.0
+                    CalculationMethod.NORTH_AMERICA -> 15.0
+                    else -> 17.0
+                }
+                val ishaAltRad = Math.toRadians(-ishaAngle)
+                val cosHourAngleIsha = (sin(ishaAltRad) - sin(latRad) * sin(declRad)) / (cos(latRad) * cos(declRad))
+                val hourAngleIshaDeg = if (cosHourAngleIsha in -1.0..1.0) Math.toDegrees(acos(cosHourAngleIsha)) else 105.0
+                solarNoonLocalHours + (hourAngleIshaDeg / 15.0)
+            }
         }
 
+        // Apply manual neighborhood mosque minute adjustments
+        val rawFajr = hoursToLocalTime(fajrHours).plusMinutes(adjustments.fajrMinutes.toLong())
+        val rawSunrise = hoursToLocalTime(sunriseHours).plusMinutes(adjustments.sunriseMinutes.toLong())
+        val rawDhuhr = hoursToLocalTime(dhuhrHours).plusMinutes(adjustments.dhuhrMinutes.toLong())
+        val rawAsr = hoursToLocalTime(asrHours).plusMinutes(adjustments.asrMinutes.toLong())
+        val rawMaghrib = hoursToLocalTime(maghribHours).plusMinutes(adjustments.maghribMinutes.toLong())
+        val rawIsha = hoursToLocalTime(ishaHours).plusMinutes(adjustments.ishaMinutes.toLong())
+
         return mapOf(
-            PrayerType.FAJR to hoursToLocalTime(fajrHours),
-            PrayerType.SUNRISE to hoursToLocalTime(sunriseHours),
-            PrayerType.DHUHR to hoursToLocalTime(dhuhrHours),
-            PrayerType.ASR to hoursToLocalTime(asrHours),
-            PrayerType.MAGHRIB to hoursToLocalTime(maghribHours),
-            PrayerType.ISHA to hoursToLocalTime(ishaHours)
+            PrayerType.FAJR to rawFajr,
+            PrayerType.SUNRISE to rawSunrise,
+            PrayerType.DHUHR to rawDhuhr,
+            PrayerType.ASR to rawAsr,
+            PrayerType.MAGHRIB to rawMaghrib,
+            PrayerType.ISHA to rawIsha
         )
     }
 
