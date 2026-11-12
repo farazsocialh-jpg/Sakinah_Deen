@@ -32,6 +32,7 @@ struct ProfileView: View {
                 Button("Delete account", role: .destructive) { confirmDelete = true }
             }
         }
+        .frame(maxWidth: 600)
         .navigationTitle("Profile & Account")
         .alert("Delete account?", isPresented: $confirmDelete) {
             Button("Delete", role: .destructive) {

@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,7 +21,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -55,6 +58,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -109,13 +113,15 @@ fun SalahScreen(
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showManualCityDialog by remember { mutableStateOf(false) }
     var expandedId by remember { mutableStateOf<String?>("asr") }
+    val context = LocalContext.current
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp),
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // 1. Top Bar: Dynamic Date & Active Location Badge with Settings Trigger
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -321,7 +327,13 @@ fun SalahScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         FilledTonalButton(
-                            onClick = { /* Hear Adhan audio playback */ },
+                            onClick = {
+                                val resId = context.resources.getIdentifier("adhan_fajr", "raw", context.packageName)
+                                if (resId != 0) {
+                                    val mp = android.media.MediaPlayer.create(context, resId)
+                                    mp?.start()
+                                }
+                            },
                             shape = RoundedCornerShape(14.dp)
                         ) {
                             Icon(Icons.Outlined.VolumeUp, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -340,13 +352,11 @@ fun SalahScreen(
                 }
             }
         }
+            }
+        }
 
         // 4. Daily Prayer Matrix (Interactive Cards)
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(state.prayersList) { prayer ->
+        items(state.prayersList) { prayer ->
                 val isExpanded = expandedId == prayer.id
                 val isSunrise = prayer.id == "sunrise"
 
@@ -482,7 +492,6 @@ fun SalahScreen(
                 }
             }
         }
-    }
 
     // 5. Prayer Calculation & Regional Settings Dialog
     if (showSettingsDialog) {
@@ -613,7 +622,9 @@ fun SalahScreen(
                     .padding(16.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(20.dp),
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(

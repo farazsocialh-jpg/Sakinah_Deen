@@ -82,6 +82,7 @@ struct SettingsView: View {
                 Button("Clear cache", role: .destructive) { store.clearCache() }
             }
         }
+        .frame(maxWidth: 600)
         .navigationTitle("App Settings")
     }
 }

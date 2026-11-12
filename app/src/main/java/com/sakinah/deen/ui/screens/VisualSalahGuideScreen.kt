@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sakinah.deen.data.model.PostureStepModel
@@ -133,6 +134,8 @@ fun VisualSalahGuideScreen(
 
     var currentStepIndex by remember { mutableIntStateOf(0) }
     val step = steps[currentStepIndex]
+    var loopEnabled by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     Column(
         modifier = modifier
@@ -209,19 +212,22 @@ fun VisualSalahGuideScreen(
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = "Orientation: Facing Qibla with calm focus",
                         fontSize = 11.sp,
                         color = EmeraldDeep,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
                     )
                     Text(
                         text = step.postureAngleText.split(",")[0],
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        textAlign = TextAlign.End,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        modifier = Modifier.weight(1f)
                     )
                 }
 
@@ -347,16 +353,23 @@ fun VisualSalahGuideScreen(
                 // Audio Trigger Bar
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FilledTonalButton(onClick = { /* Synthesized audio playback */ }) {
+                    FilledTonalButton(modifier = Modifier.weight(1f), onClick = {
+                        val resId = context.resources.getIdentifier("adhan_fajr", "raw", context.packageName)
+                        if (resId != 0) {
+                            val mp = android.media.MediaPlayer.create(context, resId)
+                            mp?.isLooping = loopEnabled
+                            mp?.start()
+                        }
+                    }) {
                         Icon(Icons.Default.PlayArrow, contentDescription = "Play")
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("Pronounce Audio")
                     }
-                    IconButton(onClick = { /* Toggle repeat */ }) {
-                        Icon(Icons.Default.Repeat, contentDescription = "Loop")
+                    IconButton(onClick = { loopEnabled = !loopEnabled }) {
+                        Icon(Icons.Default.Repeat, contentDescription = "Loop", tint = if (loopEnabled) EmeraldDeep else Color.Gray)
                     }
                 }
             }

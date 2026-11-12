@@ -43,7 +43,7 @@ struct SideDrawer: View {
                 .padding(.top, 8)
             }
         }
-        .frame(width: 300)
+        .frame(width: min(UIScreen.main.bounds.width * 0.82, 320))
         .background(Color.warmCream.ignoresSafeArea())
         .sheet(item: $route) { route in
             NavigationStack {

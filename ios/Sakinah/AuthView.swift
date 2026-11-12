@@ -89,6 +89,7 @@ struct AuthView: View {
                 .font(.footnote.bold())
             }
             .padding()
+            .frame(maxWidth: 600)
         }
         .background(Color.warmCream.ignoresSafeArea())
         .navigationTitle(isCreateAccount ? "Create Account" : "Sign In")
