@@ -105,9 +105,14 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     }
                 } else {
                     OutlinedButton(
-                        onClick = { locationPermissionLauncher.launch(
-                            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-                        }),
+                        onClick = {
+                            locationPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
+                        },
                         modifier = Modifier.padding(end = 4.dp)
                     ) {
                         Text("Use Current GPS")

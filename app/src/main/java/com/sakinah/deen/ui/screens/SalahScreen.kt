@@ -288,9 +288,14 @@ fun SalahScreen(
                         )
                     }
                     OutlinedButton(
-                        onClick = { locationPermissionLauncher.launch(
-                            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-                        }),
+                        onClick = {
+                            locationPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
+                        },
                         modifier = Modifier.height(32.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = EmeraldDeep)
                     ) {
