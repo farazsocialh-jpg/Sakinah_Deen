@@ -1,5 +1,6 @@
 package com.sakinah.deen.ui.navigation
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Book
@@ -19,6 +20,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.sakinah.deen.R
 import com.sakinah.deen.ui.screens.AiChatScreen
 import com.sakinah.deen.ui.screens.HadithScreen
 import com.sakinah.deen.ui.screens.OnboardingScreen
@@ -30,15 +33,15 @@ import com.sakinah.deen.ui.screens.WealthScreen
 import com.sakinah.deen.ui.viewmodel.SalahViewModel
 import org.koin.androidx.compose.koinViewModel
 
-enum class SakinahScreen(val title: String) {
-    Onboarding("Journey"),
-    DailySalah("Salah"),
-    VisualGuide("Guide"),
-    Quran("Quran"),
-    Hadith("Hadith"),
-    Travel("Safar"),
-    Wealth("Zakat"),
-    AiScholar("Scholar")
+enum class SakinahScreen(@StringRes val titleRes: Int) {
+    Onboarding(R.string.app_name),
+    DailySalah(R.string.nav_salah),
+    VisualGuide(R.string.nav_guide),
+    Quran(R.string.nav_quran),
+    Hadith(R.string.nav_hadith),
+    Travel(R.string.nav_travel),
+    Wealth(R.string.nav_wealth),
+    AiScholar(R.string.nav_scholar)
 }
 
 @Composable
@@ -49,44 +52,51 @@ fun RootNavHost() {
     var targetHadithBookKey by remember { mutableStateOf("all") }
     var targetHadithSearchQuery by remember { mutableStateOf("") }
 
+    val salahLabel = stringResource(R.string.nav_salah)
+    val quranLabel = stringResource(R.string.nav_quran)
+    val hadithLabel = stringResource(R.string.nav_hadith)
+    val safarLabel = stringResource(R.string.nav_travel)
+    val zakatLabel = stringResource(R.string.nav_wealth)
+    val scholarLabel = stringResource(R.string.nav_scholar)
+
     Scaffold(
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
                     selected = currentScreen == SakinahScreen.DailySalah,
                     onClick = { currentScreen = SakinahScreen.DailySalah },
-                    icon = { Icon(Icons.Default.Mosque, contentDescription = "Salah") },
-                    label = { Text("Salah") }
+                    icon = { Icon(Icons.Default.Mosque, contentDescription = salahLabel) },
+                    label = { Text(salahLabel) }
                 )
                 NavigationBarItem(
                     selected = currentScreen == SakinahScreen.Quran,
                     onClick = { currentScreen = SakinahScreen.Quran },
-                    icon = { Icon(Icons.Default.Book, contentDescription = "Quran") },
-                    label = { Text("Quran") }
+                    icon = { Icon(Icons.Default.Book, contentDescription = quranLabel) },
+                    label = { Text(quranLabel) }
                 )
                 NavigationBarItem(
                     selected = currentScreen == SakinahScreen.Hadith,
                     onClick = { currentScreen = SakinahScreen.Hadith },
-                    icon = { Icon(Icons.Default.LibraryBooks, contentDescription = "Hadith") },
-                    label = { Text("Hadith") }
+                    icon = { Icon(Icons.Default.LibraryBooks, contentDescription = hadithLabel) },
+                    label = { Text(hadithLabel) }
                 )
                 NavigationBarItem(
                     selected = currentScreen == SakinahScreen.Travel,
                     onClick = { currentScreen = SakinahScreen.Travel },
-                    icon = { Icon(Icons.Default.Explore, contentDescription = "Safar") },
-                    label = { Text("Safar") }
+                    icon = { Icon(Icons.Default.Explore, contentDescription = safarLabel) },
+                    label = { Text(safarLabel) }
                 )
                 NavigationBarItem(
                     selected = currentScreen == SakinahScreen.Wealth,
                     onClick = { currentScreen = SakinahScreen.Wealth },
-                    icon = { Icon(Icons.Default.MonetizationOn, contentDescription = "Zakat") },
-                    label = { Text("Zakat") }
+                    icon = { Icon(Icons.Default.MonetizationOn, contentDescription = zakatLabel) },
+                    label = { Text(zakatLabel) }
                 )
                 NavigationBarItem(
                     selected = currentScreen == SakinahScreen.AiScholar,
                     onClick = { currentScreen = SakinahScreen.AiScholar },
-                    icon = { Icon(Icons.Default.Chat, contentDescription = "Scholar") },
-                    label = { Text("Scholar") }
+                    icon = { Icon(Icons.Default.Chat, contentDescription = scholarLabel) },
+                    label = { Text(scholarLabel) }
                 )
             }
         }

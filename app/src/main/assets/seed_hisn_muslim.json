@@ -1,0 +1,53 @@
+{
+ "source": "Quran.com API v4; Sahih Muslim via fawazahmed0/hadith-api",
+ "note": "Seed contains only text verifiable against these sources; expand from a reviewed Hisn al-Muslim edition.",
+ "categories": [
+  {
+   "key": "morning_evening",
+   "title": "Morning & Evening Protection",
+   "items": [
+    {
+     "id": "ayat_al_kursi",
+     "title": "Ayat al-Kursi",
+     "arabic": "ٱللَّهُ لَآ إِلَـٰهَ إِلَّا هُوَ ٱلْحَىُّ ٱلْقَيُّومُ ۚ لَا تَأْخُذُهُۥ سِنَةٌ وَلَا نَوْمٌ ۚ لَّهُۥ مَا فِى ٱلسَّمَـٰوَٰتِ وَمَا فِى ٱلْأَرْضِ ۗ مَن ذَا ٱلَّذِى يَشْفَعُ عِندَهُۥٓ إِلَّا بِإِذْنِهِۦ ۚ يَعْلَمُ مَا بَيْنَ أَيْدِيهِمْ وَمَا خَلْفَهُمْ ۖ وَلَا يُحِيطُونَ بِشَىْءٍ مِّنْ عِلْمِهِۦٓ إِلَّا بِمَا شَآءَ ۚ وَسِعَ كُرْسِيُّهُ ٱلسَّمَـٰوَٰتِ وَٱلْأَرْضَ ۖ وَلَا يَـُٔودُهُۥ حِفْظُهُمَا ۚ وَهُوَ ٱلْعَلِىُّ ٱلْعَظِيمُ",
+     "translation": "Allāh - there is no deity except Him, the Ever-Living, the Self-Sustaining. Neither drowsiness overtakes Him nor sleep. To Him belongs whatever is in the heavens and whatever is on the earth. Who is it that can intercede with Him except by His permission? He knows what is [presently] before them and what will be after them, and they encompass not a thing of His knowledge except for what He wills. His Kursī extends over the heavens and the earth, and their preservation tires Him not. And He is the Most High, the Most Great.",
+     "reference": "Quran 2:255"
+    },
+    {
+     "id": "surah_ikhlas",
+     "title": "Surah Al-Ikhlas",
+     "arabic": " قُلْ هُوَ ٱللَّهُ أَحَدٌ",
+     "translation": "Say, \"He is Allāh, [who is] One,",
+     "reference": "Quran 112"
+    },
+    {
+     "id": "surah_falaq",
+     "title": "Surah Al-Falaq",
+     "arabic": " قُلْ أَعُوذُ بِرَبِّ ٱلْفَلَقِ",
+     "translation": "Say, \"I seek refuge in the Lord of daybreak",
+     "reference": "Quran 113"
+    },
+    {
+     "id": "surah_nas",
+     "title": "Surah An-Nas",
+     "arabic": " قُلْ أَعُوذُ بِرَبِّ ٱلنَّاسِ",
+     "translation": "Say, \"I seek refuge in the Lord of mankind,",
+     "reference": "Quran 114"
+    }
+   ]
+  },
+  {
+   "key": "travel",
+   "title": "Travel (Safar)",
+   "items": [
+    {
+     "id": "dua_al_safar",
+     "title": "Dua al-Safar",
+     "arabic": "سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ وَإِنَّا إِلَى رَبِّنَا لَمُنْقَلِبُونَ اللَّهُمَّ إِنَّا نَسْأَلُكَ فِي سَفَرِنَا هَذَا الْبِرَّ وَالتَّقْوَى وَمِنَ الْعَمَلِ مَا تَرْضَى اللَّهُمَّ هَوِّنْ عَلَيْنَا سَفَرَنَا هَذَا وَاطْوِ عَنَّا بُعْدَهُ اللَّهُمَّ أَنْتَ الصَّاحِبُ فِي السَّفَرِ وَالْخَلِيفَةُ فِي الأَهْلِ اللَّهُمَّ إِنِّي أَعُوذُ بِكَ مِنْ وَعْثَاءِ السَّفَرِ وَكَآبَةِ الْمَنْظَرِ وَسُوءِ الْمُنْقَلَبِ فِي الْمَالِ وَالأَهْلِ ‏\"‏ ‏.‏ وَإِذَا رَجَعَ قَالَهُنَّ ‏.‏ وَزَادَ فِيهِنَّ ‏\"‏ آيِبُونَ تَائِبُونَ عَابِدُونَ لِرَبِّنَا حَامِدُونَ ‏\"‏ ‏.‏",
+     "translation": "Ibn Umar (Allah be pleased with them) reported that whenever Allah's Messenger (ﷺ) mounted his camel while setting out on a journey, he glorified Allah (uttered Allah-o-Akbar) thrice, and then said:Hallowed is He Who subdued for us this (ride) and we were not ourselves powerful enough to use It as a ride, and we are going to return to our Lord. O Allah, we seek virtue and piety from Thee in this journey of ours and the act which pleaseth Thee. O Allah, lighten this journey of ours, and make its distance easy for us. O Allah, Thou art (our) companion during the journey, and guardian of (our) family. O Allah, I seek refuge with Thee from hardships of the journey, gloominess of the sights, and finding of evil changes in property and family on return. And he (the Holy Prophet) uttered (these words), and made this addition to them: We are returning, repentant, worshipping our Lord. and praising Him",
+     "reference": "Sahih Muslim #3275"
+    }
+   ]
+  }
+ ]
+}

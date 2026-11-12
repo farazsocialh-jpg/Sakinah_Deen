@@ -46,6 +46,7 @@ val databaseModule = module {
     single { get<SakinahEncryptedDatabase>().quranDao() }
     single { get<SakinahEncryptedDatabase>().hadithDao() }
     single { get<SakinahEncryptedDatabase>().tafsirDao() }
+    single { get<SakinahEncryptedDatabase>().adhkarDao() }
 }
 
 val astronomyModule = module {

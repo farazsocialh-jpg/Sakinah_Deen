@@ -1,3 +1,5 @@
+import java.io.File
+import java.net.URI
 import java.util.Properties
 
 plugins {
@@ -84,11 +86,16 @@ android {
         compose = true
         buildConfig = true
     }
+    androidResources {
+        // Fonts and audio are already compressed formats; do not store them twice.
+        noCompress += listOf("ogg", "mp3", "ttf")
+    }
 }
 
 dependencies {
     // Core & Lifecycle
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
@@ -130,4 +137,101 @@ dependencies {
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.kotlinx.serialization.json)
+}
+
+// ---------------------------------------------------------------------------
+// Bundled offline resources (Uthmani/Amiri fonts + Adhan & Dua audio)
+// ---------------------------------------------------------------------------
+// The files are committed so offline and CI builds work without network access.
+// These tasks only fetch an asset when it is missing or truncated, or when
+// -PforceDownloadAssets=true is passed. Network failure never fails the build:
+// the app degrades to the committed asset or a notification-only alert.
+val bundledFonts = listOf(
+    Triple(
+        "uthmanic_hafs.ttf",
+        "https://cdn.jsdelivr.net/gh/thetruetruth/quran-data-kfgqpc@main/hafs/font/hafs.18.ttf",
+        50_000L
+    ),
+    Triple(
+        "amiri_regular.ttf",
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Regular.ttf",
+        50_000L
+    ),
+    Triple(
+        "amiri_bold.ttf",
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Bold.ttf",
+        50_000L
+    )
+)
+
+val bundledAudio = listOf(
+    Triple(
+        "adhan_makkah.ogg",
+        "https://archive.org/download/4-9-13MakkahDuhurAdhanSheikhYunusKhoja/4-9-13MakkahDuhurAdhanSheikhYunusKhoja.ogg",
+        200_000L
+    ),
+    Triple(
+        "adhan_fajr.ogg",
+        "https://archive.org/download/MakkahAdhanAl-fajr5-9-13SheikhYunusKhoja/MakkahAdhanAl-fajr5-9-13SheikhYunusKhoja.ogg",
+        200_000L
+    ),
+    Triple(
+        "dua_al_safar.mp3",
+        "https://cdn.islamic.network/quran/audio/128/ar.alafasy/4339.mp3",
+        20_000L
+    )
+)
+
+fun fetchBundledAsset(targetFile: java.io.File, url: String, minBytes: Long, force: Boolean) {
+    if (!force && targetFile.exists() && targetFile.length() >= minBytes) return
+    targetFile.parentFile?.mkdirs()
+    val partial = File(targetFile.parentFile, targetFile.name + ".part")
+    try {
+        URI(url).toURL().openStream().use { input ->
+            partial.outputStream().use { output -> input.copyTo(output) }
+        }
+        if (partial.length() < minBytes) {
+            partial.delete()
+            logger.warn("Sakinah: ${targetFile.name} download was too small; keeping existing asset")
+            return
+        }
+        if (targetFile.exists()) targetFile.delete()
+        if (!partial.renameTo(targetFile)) {
+            partial.copyTo(targetFile, overwrite = true)
+            partial.delete()
+        }
+        logger.lifecycle("Sakinah: fetched ${targetFile.name} (${targetFile.length()} bytes)")
+    } catch (e: Exception) {
+        partial.delete()
+        logger.warn("Sakinah: could not fetch ${targetFile.name}: ${e.message}")
+    }
+}
+
+val downloadFontAssets = tasks.register("downloadFontAssets") {
+    group = "sakinah"
+    description = "Ensures the bundled Uthmani Hafs and Amiri fonts exist in res/font."
+    val force = project.hasProperty("forceDownloadAssets")
+    val targetDir = project.file("src/main/res/font")
+    doLast {
+        bundledFonts.forEach { (name, url, minBytes) ->
+            fetchBundledAsset(File(targetDir, name), url, minBytes, force)
+        }
+    }
+}
+
+val downloadAudioAssets = tasks.register("downloadAudioAssets") {
+    group = "sakinah"
+    description = "Ensures the bundled Adhan and Dua al-Safar audio exist in res/raw."
+    val force = project.hasProperty("forceDownloadAssets")
+    val targetDir = project.file("src/main/res/raw")
+    doLast {
+        bundledAudio.forEach { (name, url, minBytes) ->
+            fetchBundledAsset(File(targetDir, name), url, minBytes, force)
+        }
+    }
+}
+
+// Populate resources before they are merged into the APK.
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn(downloadFontAssets, downloadAudioAssets)
 }

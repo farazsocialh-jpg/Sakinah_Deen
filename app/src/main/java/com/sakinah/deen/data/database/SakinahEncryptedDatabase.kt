@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.sakinah.deen.data.database.converter.SakinahTypeConverters
+import com.sakinah.deen.data.database.dao.AdhkarDao
 import com.sakinah.deen.data.database.dao.HadithDao
 import com.sakinah.deen.data.database.dao.HifzDao
 import com.sakinah.deen.data.database.dao.QadhaDao
@@ -13,6 +14,7 @@ import com.sakinah.deen.data.database.dao.QuranDao
 import com.sakinah.deen.data.database.dao.SadaqahDao
 import com.sakinah.deen.data.database.dao.SalahDao
 import com.sakinah.deen.data.database.dao.TafsirDao
+import com.sakinah.deen.data.database.entity.AdhkarEntity
 import com.sakinah.deen.data.database.entity.HadithEntryEntity
 import com.sakinah.deen.data.database.entity.HifzMistakeEntity
 import com.sakinah.deen.data.database.entity.QadhaLedgerEntity
@@ -32,9 +34,10 @@ import net.sqlcipher.database.SupportFactory
         QuranAyahEntity::class,
         SurahMetadataEntity::class,
         HadithEntryEntity::class,
-        TafsirEntryEntity::class
+        TafsirEntryEntity::class,
+        AdhkarEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(SakinahTypeConverters::class)
@@ -46,6 +49,7 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
     abstract fun quranDao(): QuranDao
     abstract fun hadithDao(): HadithDao
     abstract fun tafsirDao(): TafsirDao
+    abstract fun adhkarDao(): AdhkarDao
 
     companion object {
         private const val DB_NAME = "sakinah_encrypted.db"
@@ -62,10 +66,10 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
                     DB_NAME
                 )
                     .openHelperFactory(factory)
-                    // Version 2 introduces the offline Quran/Hadith/Tafsir cache. No
-                    // user-authored content exists in v1 tables, so destructive migration
-                    // is acceptable here; switch to explicit migrations before shipping.
+                    // Bundled seed data makes a destructive schema change cheap: the
+                    // first run repopulates everything from assets.
                     .fallbackToDestructiveMigration()
+                    .addCallback(DatabaseSeeder.createCallback(context.applicationContext) { INSTANCE })
                     .build()
                 INSTANCE = instance
                 instance

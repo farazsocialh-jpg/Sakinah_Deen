@@ -3,7 +3,6 @@ package com.sakinah.deen.service
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.Uri
@@ -17,6 +16,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import com.sakinah.deen.MainActivity
+import com.sakinah.deen.R
 import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import kotlinx.coroutines.CoroutineScope
@@ -30,9 +30,9 @@ import kotlinx.coroutines.launch
 /**
  * Foreground Adhan playback built on Media3/ExoPlayer.
  *
- * The notification exposes Stop and Snooze (10 min); playback fades in over 5
- * seconds, pauses on transient audio-focus loss (phone calls, navigation prompts)
- * and ducks when the system requests it.
+ * Fajr uses the recording that includes "As-salatu khayrun min an-nawm"; the other
+ * prayers use the standard Makkah Adhan. Both are bundled, so playback works with
+ * no network and even after the app process was killed.
  */
 class AdhanPlaybackService : Service() {
 
@@ -53,9 +53,10 @@ class AdhanPlaybackService : Service() {
         private const val MISSING_AUDIO_STOP_DELAY_MS = 4000L
     }
 
-    private enum class PlaybackSource(val rawResourceName: String) {
-        ADHAN("adhan_call"),
-        DUA_SAFAR("dua_safar")
+    private enum class PlaybackSource(val rawResourceId: Int) {
+        ADHAN_MAKKAH(R.raw.adhan_makkah),
+        ADHAN_FAJR(R.raw.adhan_fajr),
+        DUA_SAFAR(R.raw.dua_al_safar)
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -79,14 +80,17 @@ class AdhanPlaybackService : Service() {
 
         when (action) {
             ACTION_PLAY_ADHAN -> {
-                currentPrayerName = intent.getStringExtra(EXTRA_PRAYER_NAME) ?: "Salah"
+                currentPrayerName = intent.getStringExtra(EXTRA_PRAYER_NAME) ?: getString(R.string.nav_salah)
                 currentPrayerType = intent.getStringExtra(EXTRA_PRAYER_TYPE)
                     ?.let { name -> runCatching { PrayerType.valueOf(name) }.getOrNull() }
                     ?: PrayerType.DHUHR
                 isDuaSafar = false
 
                 startPlaybackForeground(buildAdhanNotification(currentPrayerName))
-                playCue(PlaybackSource.ADHAN)
+                playCue(
+                    if (currentPrayerType == PrayerType.FAJR) PlaybackSource.ADHAN_FAJR
+                    else PlaybackSource.ADHAN_MAKKAH
+                )
             }
 
             ACTION_PLAY_DUA_SAFAR -> {
@@ -96,12 +100,15 @@ class AdhanPlaybackService : Service() {
             }
 
             ACTION_SNOOZE -> {
-                PrayerAlarmScheduler(this, com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl(), preferences)
-                    .scheduleSnooze(
-                        prayerType = currentPrayerType,
-                        prayerName = currentPrayerName,
-                        minutes = SNOOZE_MINUTES
-                    )
+                PrayerAlarmScheduler(
+                    this,
+                    com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl(),
+                    preferences
+                ).scheduleSnooze(
+                    prayerType = currentPrayerType,
+                    prayerName = currentPrayerName,
+                    minutes = SNOOZE_MINUTES
+                )
                 finishPlayback()
             }
 
@@ -127,8 +134,6 @@ class AdhanPlaybackService : Service() {
     private fun playCue(source: PlaybackSource) {
         val uri = resolveCueUri(source)
         if (uri == null) {
-            // Keep the notification (and therefore the user-visible reminder) alive briefly,
-            // then release the foreground slot instead of crashing on an empty data source.
             scope.launch {
                 delay(MISSING_AUDIO_STOP_DELAY_MS)
                 finishPlayback()
@@ -146,8 +151,8 @@ class AdhanPlaybackService : Service() {
         fadeJob = scope.launch {
             for (step in 1..FADE_STEPS) {
                 delay(FADE_STEP_MS)
-                val target = player ?: break
-                target.volume = step.toFloat() / FADE_STEPS.toFloat()
+                val activePlayer = player ?: break
+                activePlayer.volume = step.toFloat() / FADE_STEPS.toFloat()
             }
         }
     }
@@ -183,15 +188,19 @@ class AdhanPlaybackService : Service() {
         return exoPlayer
     }
 
+    /**
+     * A user-supplied recording wins; otherwise the bundled raw resource is used.
+     */
     private fun resolveCueUri(source: PlaybackSource): Uri? {
-        val bundled = NotificationChannels.resolveRawSound(this, source.rawResourceName)
-        if (bundled != null) return bundled
-
         val override = when (source) {
-            PlaybackSource.ADHAN -> preferences.adhanSoundUri
             PlaybackSource.DUA_SAFAR -> preferences.duaSafarSoundUri
+            PlaybackSource.ADHAN_MAKKAH -> preferences.adhanSoundUri
+            PlaybackSource.ADHAN_FAJR -> preferences.adhanSoundUri
         }
-        return override?.takeIf { it.isNotBlank() }?.let(Uri::parse)
+        if (!override.isNullOrBlank()) {
+            return Uri.parse(override)
+        }
+        return Uri.parse("android.resource://$packageName/${source.rawResourceId}")
     }
 
     private fun finishPlayback() {
@@ -223,28 +232,44 @@ class AdhanPlaybackService : Service() {
 
     private fun buildAdhanNotification(prayerName: String): Notification =
         NotificationCompat.Builder(this, NotificationChannels.CHANNEL_SALAH_ADHAN)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle("Adhan: Time for $prayerName Prayer")
-            .setContentText("حي على الصلاة ، حي على الفلاح — Come to Prayer, Come to Success")
+            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setContentTitle(getString(R.string.adhan_title, prayerName))
+            .setContentText(getString(R.string.adhan_body))
             .setContentIntent(contentPendingIntent())
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .addAction(android.R.drawable.ic_media_pause, "Stop", actionPendingIntent(1, ACTION_STOP_ADHAN))
-            .addAction(android.R.drawable.ic_lock_silent_mode, "Mute", actionPendingIntent(2, ACTION_MUTE_ADHAN))
-            .addAction(android.R.drawable.ic_menu_recent_history, "Snooze 10m", actionPendingIntent(3, ACTION_SNOOZE))
+            .addAction(
+                android.R.drawable.ic_media_pause,
+                getString(R.string.adhan_action_stop),
+                actionPendingIntent(1, ACTION_STOP_ADHAN)
+            )
+            .addAction(
+                android.R.drawable.ic_lock_silent_mode,
+                getString(R.string.adhan_action_mute),
+                actionPendingIntent(2, ACTION_MUTE_ADHAN)
+            )
+            .addAction(
+                android.R.drawable.ic_menu_recent_history,
+                getString(R.string.adhan_action_snooze),
+                actionPendingIntent(3, ACTION_SNOOZE)
+            )
             .build()
 
     private fun buildDuaSafarNotification(): Notification =
         NotificationCompat.Builder(this, NotificationChannels.CHANNEL_TRAVEL_SAFAR)
-            .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentTitle("Safar: Dua al-Safar")
-            .setContentText("سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَٰذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ")
+            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setContentTitle(getString(R.string.safar_title))
+            .setContentText(getString(R.string.safar_dua_arabic))
             .setContentIntent(contentPendingIntent())
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .addAction(android.R.drawable.ic_media_pause, "Stop", actionPendingIntent(1, ACTION_STOP_ADHAN))
+            .addAction(
+                android.R.drawable.ic_media_pause,
+                getString(R.string.adhan_action_stop),
+                actionPendingIntent(1, ACTION_STOP_ADHAN)
+            )
             .build()
 
     override fun onBind(intent: Intent?): IBinder? = null

@@ -7,7 +7,7 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
-import android.provider.Settings
+import com.sakinah.deen.R
 
 object NotificationChannels {
 
@@ -20,6 +20,16 @@ object NotificationChannels {
     const val CHANNEL_TRAVEL_SAFAR = "travel_safar_channel"
     const val CHANNEL_HABIT_REMINDERS = "habit_reminders_channel"
 
+    /** Bundled Adhan URI, playable even when the app process was killed. */
+    fun adhanSoundUri(context: Context): Uri =
+        Uri.parse("android.resource://${context.packageName}/${R.raw.adhan_makkah}")
+
+    fun fajrAdhanSoundUri(context: Context): Uri =
+        Uri.parse("android.resource://${context.packageName}/${R.raw.adhan_fajr}")
+
+    fun duaSafarSoundUri(context: Context): Uri =
+        Uri.parse("android.resource://${context.packageName}/${R.raw.dua_al_safar}")
+
     fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
@@ -28,29 +38,23 @@ object NotificationChannels {
 
         notificationManager.createNotificationChannelGroups(
             listOf(
-                NotificationChannelGroup(GROUP_PRAYER, "Prayer & Salah Alerts"),
-                NotificationChannelGroup(GROUP_TRAVEL, "Travel & Mobility (Safar)"),
-                NotificationChannelGroup(GROUP_HABIT, "Habits & Adhkar")
+                NotificationChannelGroup(GROUP_PRAYER, context.getString(R.string.channel_group_prayer)),
+                NotificationChannelGroup(GROUP_TRAVEL, context.getString(R.string.channel_group_travel)),
+                NotificationChannelGroup(GROUP_HABIT, context.getString(R.string.channel_group_habit))
             )
         )
 
-        // 1. Salah Adhan: HIGH importance, audible, lock-screen visible.
-        // The bundled raw Adhan is optional; fall back to the system alarm tone so the
-        // channel is never silent just because res/raw/adhan_call is absent.
-        val adhanSoundUri = resolveRawSound(context, "adhan_call")
-            ?: Settings.System.DEFAULT_ALARM_ALERT_URI
-
         val adhanChannel = NotificationChannel(
             CHANNEL_SALAH_ADHAN,
-            "Adhan & Exact Salah Call",
+            context.getString(R.string.channel_adhan_name),
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
             group = GROUP_PRAYER
-            description = "High-priority Adhan reminders at astronomical prayer entry times"
+            description = context.getString(R.string.channel_adhan_desc)
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 500, 250, 500, 250, 500)
             setSound(
-                adhanSoundUri,
+                adhanSoundUri(context),
                 AudioAttributes.Builder()
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .setUsage(AudioAttributes.USAGE_ALARM)
@@ -60,40 +64,37 @@ object NotificationChannels {
             setShowBadge(true)
         }
 
-        // 2. Silent countdown channel
         val silentChannel = NotificationChannel(
             CHANNEL_SALAH_SILENT,
-            "Prayer Countdown (Ongoing)",
+            context.getString(R.string.channel_salah_silent_name),
             NotificationManager.IMPORTANCE_LOW
         ).apply {
             group = GROUP_PRAYER
-            description = "Subtle, non-audible ongoing countdown to the next prayer"
+            description = context.getString(R.string.channel_salah_silent_desc)
             setShowBadge(false)
             enableVibration(false)
             setSound(null, null)
         }
 
-        // 3. Travel Safar: heads-up requires IMPORTANCE_HIGH. DEFAULT cannot produce a
-        // heads-up banner on Android 8+, so HIGH is used deliberately here.
+        // Heads-up banners require IMPORTANCE_HIGH on Android 8+.
         val safarChannel = NotificationChannel(
             CHANNEL_TRAVEL_SAFAR,
-            "Travel Mode & Dua al-Safar",
+            context.getString(R.string.channel_safar_name),
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
             group = GROUP_TRAVEL
-            description = "Heads-up in-vehicle prompts on car Bluetooth connection and Qasr travel mode"
+            description = context.getString(R.string.channel_safar_desc)
             enableVibration(true)
             setShowBadge(true)
         }
 
-        // 4. Habit reminders
         val habitChannel = NotificationChannel(
             CHANNEL_HABIT_REMINDERS,
-            "Daily Sunnah & Adhkar Habits",
+            context.getString(R.string.channel_habit_name),
             NotificationManager.IMPORTANCE_LOW
         ).apply {
             group = GROUP_HABIT
-            description = "Morning/Evening Adhkar, Surah Al-Kahf on Fridays, and Sunnah fasting"
+            description = context.getString(R.string.channel_habit_desc)
             setShowBadge(true)
             enableVibration(false)
         }
@@ -101,15 +102,5 @@ object NotificationChannels {
         notificationManager.createNotificationChannels(
             listOf(adhanChannel, silentChannel, safarChannel, habitChannel)
         )
-    }
-
-    /** Resolves a raw resource by name without generating an R reference. */
-    fun resolveRawSound(context: Context, resourceName: String): Uri? {
-        val resId = context.resources.getIdentifier(resourceName, "raw", context.packageName)
-        return if (resId != 0) {
-            Uri.parse("android.resource://${context.packageName}/$resId")
-        } else {
-            null
-        }
     }
 }

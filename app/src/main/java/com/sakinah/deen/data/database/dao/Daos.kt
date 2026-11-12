@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.sakinah.deen.data.database.entity.AdhkarEntity
 import com.sakinah.deen.data.database.entity.HadithEntryEntity
 import com.sakinah.deen.data.database.entity.HifzMistakeEntity
 import com.sakinah.deen.data.database.entity.QadhaLedgerEntity
@@ -166,6 +167,18 @@ interface HadithDao {
 
     @Query("DELETE FROM hadith_entries WHERE bookKey = :bookKey")
     suspend fun clearBook(bookKey: String)
+}
+
+@Dao
+interface AdhkarDao {
+    @Query("SELECT * FROM adhkar_entries WHERE categoryKey = :categoryKey ORDER BY orderIndex ASC")
+    fun observeCategory(categoryKey: String): Flow<List<AdhkarEntity>>
+
+    @Query("SELECT COUNT(*) FROM adhkar_entries")
+    suspend fun count(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(entries: List<AdhkarEntity>)
 }
 
 @Dao

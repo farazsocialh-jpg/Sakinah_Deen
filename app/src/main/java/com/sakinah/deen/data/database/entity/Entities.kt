@@ -102,6 +102,22 @@ data class HadithEntryEntity(
     val downloadedAt: Long = System.currentTimeMillis()
 )
 
+/**
+ * Bundled adhkar/du'a seeded from assets on first launch (Hisn al-Muslim essentials).
+ */
+@Entity(tableName = "adhkar_entries")
+data class AdhkarEntity(
+    @PrimaryKey
+    val id: String,
+    val categoryKey: String,
+    val categoryTitle: String,
+    val title: String,
+    val arabic: String,
+    val translation: String,
+    val reference: String,
+    val orderIndex: Int = 0
+)
+
 @Entity(
     tableName = "tafsir_entries",
     primaryKeys = ["sourceKey", "surahNumber", "ayahNumber"]

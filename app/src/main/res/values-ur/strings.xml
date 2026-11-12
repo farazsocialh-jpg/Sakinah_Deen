@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">سکینہ</string>
+
+    <string name="nav_salah">نماز</string>
+    <string name="nav_quran">قرآن</string>
+    <string name="nav_hadith">حدیث</string>
+    <string name="nav_travel">سفر</string>
+    <string name="nav_wealth">زکوٰۃ</string>
+    <string name="nav_scholar">عالم</string>
+    <string name="nav_guide">رہنمائی</string>
+
+    <string name="prayer_fajr">فجر</string>
+    <string name="prayer_dhuhr">ظہر</string>
+    <string name="prayer_asr">عصر</string>
+    <string name="prayer_maghrib">مغرب</string>
+    <string name="prayer_isha">عشاء</string>
+
+    <string name="channel_group_prayer">نماز اور اذان کی اطلاعات</string>
+    <string name="channel_group_travel">سفر اور سفر نامہ</string>
+    <string name="channel_group_habit">اذکار اور سنتیں</string>
+    <string name="channel_adhan_name">اذان اور نماز کی پکار</string>
+    <string name="channel_adhan_desc">نماز کے وقت پر اعلیٰ ترجیحی اذان کی یاد دہانی</string>
+    <string name="channel_salah_silent_name">نماز کا الٹی گنتی</string>
+    <string name="channel_salah_silent_desc">اگلی نماز تک خاموش الٹی گنتی</string>
+    <string name="channel_safar_name">سفر موڈ اور دعائے سفر</string>
+    <string name="channel_safar_desc">کار بلوٹوتھ اور قصر کے موقع پر اطلاعات</string>
+    <string name="channel_habit_name">روزانہ اذکار و سنن</string>
+    <string name="channel_habit_desc">صبح و شام کے اذکار، سورۃ الکہف اور سنتی روزے</string>
+
+    <string name="adhan_title">اذان: %1$s کا وقت ہو گیا</string>
+    <string name="adhan_body">حی علی الصلاۃ، حی علی الفلاح</string>
+    <string name="adhan_action_stop">بند کریں</string>
+    <string name="adhan_action_mute">خاموش</string>
+    <string name="adhan_action_snooze">10 منٹ بعد</string>
+    <string name="adhan_fallback_title">اذان: %1$s · %2$s</string>
+
+    <string name="safar_title">سفر: دعائے سفر</string>
+    <string name="safar_dua_arabic">سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَٰذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ</string>
+    <string name="safar_connected_title">%1$s سے منسلک</string>
+    <string name="safar_enter_prompt">سفر موڈ فعال۔ کیا آپ دعائے سفر پڑھنا اور قبلہ کی سمت دیکھنا چاہتے ہیں؟</string>
+    <string name="safar_play_dua">دعائے سفر چلائیں</string>
+    <string name="safar_open_qibla">روڈ قبلہ کھولیں</string>
+    <string name="safar_qasr_active">فاصلہ %1$d کلومیٹر سے زیادہ — قصر (دو رکعت) فعال ہے۔</string>
+    <string name="safar_qasr_inactive">گھر سے %1$d کلومیٹر — ابھی قصر لازم نہیں۔</string>
+    <string name="safar_location_needed">قصر کے لیے مقام کی اجازت دیں۔</string>
+
+    <string name="zakat_nisab">نصاب</string>
+    <string name="zakat_gold">سونا</string>
+    <string name="zakat_silver">چاندی</string>
+
+    <string name="action_retry">دوبارہ کوشش</string>
+    <string name="action_close">بند کریں</string>
+    <string name="action_download">ڈاؤن لوڈ</string>
+    <string name="action_play">چلائیں</string>
+    <string name="offline_seed_note">آف لائن شامل مواد</string>
+</resources>

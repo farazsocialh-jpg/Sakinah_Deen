@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sakinah</string>
+
+    <!-- Navigation -->
+    <string name="nav_salah">Salah</string>
+    <string name="nav_quran">Quran</string>
+    <string name="nav_hadith">Hadith</string>
+    <string name="nav_travel">Safar</string>
+    <string name="nav_wealth">Zakat</string>
+    <string name="nav_scholar">Scholar</string>
+    <string name="nav_guide">Guide</string>
+
+    <!-- Prayer names -->
+    <string name="prayer_fajr">Fajr</string>
+    <string name="prayer_dhuhr">Dhuhr</string>
+    <string name="prayer_asr">Asr</string>
+    <string name="prayer_maghrib">Maghrib</string>
+    <string name="prayer_isha">Isha</string>
+
+    <!-- Notification channels -->
+    <string name="channel_group_prayer">Prayer &amp; Salah Alerts</string>
+    <string name="channel_group_travel">Travel &amp; Mobility (Safar)</string>
+    <string name="channel_group_habit">Habits &amp; Adhkar</string>
+    <string name="channel_adhan_name">Adhan &amp; Exact Salah Call</string>
+    <string name="channel_adhan_desc">High-priority Adhan reminders at astronomical prayer entry times</string>
+    <string name="channel_salah_silent_name">Prayer Countdown (Ongoing)</string>
+    <string name="channel_salah_silent_desc">Subtle, non-audible ongoing countdown to the next prayer</string>
+    <string name="channel_safar_name">Travel Mode &amp; Dua al-Safar</string>
+    <string name="channel_safar_desc">Heads-up in-vehicle prompts on car Bluetooth connection and Qasr travel mode</string>
+    <string name="channel_habit_name">Daily Sunnah &amp; Adhkar Habits</string>
+    <string name="channel_habit_desc">Morning/Evening Adhkar, Surah Al-Kahf on Fridays, and Sunnah fasting</string>
+
+    <!-- Adhan notification -->
+    <string name="adhan_title">Adhan: Time for %1$s Prayer</string>
+    <string name="adhan_body">حي على الصلاة ، حي على الفلاح — Come to Prayer, Come to Success</string>
+    <string name="adhan_action_stop">Stop</string>
+    <string name="adhan_action_mute">Mute</string>
+    <string name="adhan_action_snooze">Snooze 10m</string>
+    <string name="adhan_fallback_title">Adhan: Time for %1$s · %2$s</string>
+
+    <!-- Safar / travel -->
+    <string name="safar_title">Safar: Dua al-Safar</string>
+    <string name="safar_dua_arabic">سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَٰذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ</string>
+    <string name="safar_connected_title">Connected to %1$s</string>
+    <string name="safar_enter_prompt">Entering vehicular travel mode. Would you like to recite Dua al-Safar and activate Qibla road tracking?</string>
+    <string name="safar_play_dua">Play Dua al-Safar</string>
+    <string name="safar_open_qibla">Open Road Qibla</string>
+    <string name="safar_qasr_active">Journey exceeds %1$d km — Qasr (2 Rak\'ah) is active.</string>
+    <string name="safar_qasr_inactive">%1$d km from home — Qasr not yet applicable.</string>
+    <string name="safar_location_needed">Allow location to calculate Qasr eligibility.</string>
+
+    <!-- Zakat -->
+    <string name="zakat_nisab">Nisab</string>
+    <string name="zakat_gold">Gold</string>
+    <string name="zakat_silver">Silver</string>
+
+    <!-- Common -->
+    <string name="action_retry">Retry</string>
+    <string name="action_close">Close</string>
+    <string name="action_download">Download</string>
+    <string name="action_play">Play</string>
+    <string name="offline_seed_note">Bundled offline content</string>
+</resources>
