@@ -1,7 +1,12 @@
 package com.sakinah.deen.ui.screens
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -9,12 +14,17 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.sakinah.deen.data.model.CalculationMethod as AppMethod
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.settings.*
 import com.sakinah.deen.ui.rememberInject
+import com.sakinah.deen.ui.theme.EmeraldDeep
+import com.sakinah.deen.ui.theme.MintGreen
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -23,9 +33,18 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val repo = rememberInject<SettingsRepository>()
     val settings by repo.settings.collectAsState()
     val scope = rememberCoroutineScope()
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val isGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+    }
+    var showManualCityDialog by remember { mutableStateOf(false) }
 
     val themes = ThemeMode.entries
     val adhanChoices = AdhanChoice.entries
+    val context = LocalContext.current
+    val appPrefs = remember { SakinahPreferences(context) }
 
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
@@ -43,8 +62,6 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             var calcExpanded by remember { mutableStateOf(false) }
             // Android resolves the country's Sunni authority (Umm Al-Qura, Qatar Awqaf, ...) by
             // default; a choice here is an explicit override that also drives online timings.
-            val context = LocalContext.current
-            val appPrefs = remember { SakinahPreferences(context) }
             var methodOverride by remember { mutableStateOf(appPrefs.calculationMethodOverride) }
             ExposedDropdownMenuBox(expanded = calcExpanded, onExpandedChange = { calcExpanded = it }) {
                 OutlinedTextField(
@@ -72,6 +89,45 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                             calcExpanded = false
                         })
                     }
+                }
+            }
+            // Home Location row
+            val homeCoords = appPrefs.homeCoordinates
+            val homeCity = appPrefs.homeCityName
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Home Location", modifier = Modifier.weight(1f))
+                if (homeCoords != null) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MintGreen.copy(alpha = 0.15f),
+                        modifier = Modifier.padding(end = 4.dp)
+                    ) {
+                        Text(
+                            text = "${homeCity ?: "Saved"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = EmeraldDeep
+                        )
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = {
+                            locationPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
+                        },
+                        modifier = Modifier.padding(end = 4.dp)
+                    ) {
+                        Text("Use Current GPS")
+                    }
+                }
+                OutlinedButton(
+                    onClick = { showManualCityDialog = true },
+                    modifier = Modifier.padding(start = 4.dp)
+                ) {
+                    Text("Choose City")
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -195,6 +251,61 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             Button(onClick = { scope.launch { repo.clearCache() } }) { Text("Clear cache") }
 
             TextButton(onClick = onBack) { Text("Back") }
+        }
+    }
+
+    // City picker dialog for Home Location
+    if (showManualCityDialog) {
+        Dialog(onDismissRequest = { showManualCityDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Select Home City",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = EmeraldDeep
+                    )
+                    listOf(
+                        Triple(25.2854, 51.5310, "Doha, Qatar"),
+                        Triple(21.4225, 39.8262, "Makkah, Saudi Arabia"),
+                        Triple(24.4686, 39.6142, "Madinah, Saudi Arabia"),
+                        Triple(25.2048, 55.2708, "Dubai, UAE"),
+                        Triple(24.8607, 67.0011, "Karachi, Pakistan"),
+                        Triple(51.5074, -0.1278, "London, UK"),
+                        Triple(40.7128, -74.0060, "New York, USA")
+                    ).forEach { (lat, lon, name) ->
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = EmeraldDeep.copy(alpha = 0.05f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    appPrefs.saveHomeAnchor(lat, lon, name)
+                                    showManualCityDialog = false
+                                }
+                        ) {
+                            Text(
+                                text = name,
+                                modifier = Modifier.padding(12.dp),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = EmeraldDeep
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

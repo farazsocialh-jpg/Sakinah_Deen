@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.Explore
@@ -52,6 +54,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sakinah.deen.data.prefs.SakinahPreferences
+import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.EmeraldDeep
 import com.sakinah.deen.ui.theme.EmeraldSurface
 import com.sakinah.deen.ui.theme.MintGreen
@@ -61,6 +65,7 @@ import kotlin.math.sin
 
 @Composable
 fun TravelScreen(
+    onChangeHome: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var distanceKm by remember { mutableFloatStateOf(74f) }
@@ -70,6 +75,10 @@ fun TravelScreen(
     val kaabaAzimuth = 118f // Kaaba bearing
     val relativeAngle = (kaabaAzimuth - vehicleHeading + 360f) % 360f
 
+    // Saved Home Location is the source of truth for the Qasr distance check
+    val appPrefs = rememberInject<SakinahPreferences>()
+    val homeCoordinates = appPrefs.homeCoordinates
+    val homeCity = appPrefs.homeCityName
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -101,14 +110,20 @@ fun TravelScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
+                            // Show saved home city or "Not set"
+                            val homeDisplay = if (homeCoordinates != null) {
+                                homeCity ?: "Saved Location"
+                            } else {
+                                "Not set"
+                            }
                             Text(
-                                text = "Home Anchor: London, UK",
+                                text = "Home Anchor: ${homeDisplay}",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = EmeraldDeep
                             )
                             Text(
-                                text = "M40 Motorway, Milepost 46",
+                                text = homeCoordinates?.let { "(${it.first.toInt()}, ${it.second.toInt()})" } ?: "",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
@@ -154,6 +169,18 @@ fun TravelScreen(
                         fontSize = 11.sp
                     )
                 }
+            }
+        }
+
+        // Add Change Home button below the banner
+        FilledTonalButton(
+            onClick = onChangeHome,
+            modifier = Modifier.widthIn(280.dp),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Change Home", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Icon(Icons.Default.LocationOn, contentDescription = null, tint = EmeraldDeep, modifier = Modifier.size(18.dp))
             }
         }
 
