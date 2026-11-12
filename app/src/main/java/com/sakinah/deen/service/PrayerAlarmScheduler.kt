@@ -10,11 +10,17 @@ import com.sakinah.deen.data.model.Madhhab
 import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
-import java.time.LocalDate
+import java.time.LocalDate as JLocalDate
 import java.time.LocalDateTime
-import java.time.LocalTime
+import java.time.LocalTime as JLocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.datetime.Clock
+import kotlinx.datetime.LocalDate as KLocalDate
+import kotlinx.datetime.todayIn
+import kotlinx.datetime.TimeZone as KTimeZone
+import kotlinx.datetime.toJavaLocalDate
+import kotlinx.datetime.toJavaLocalTime
 
 class PrayerAlarmScheduler(
     private val context: Context,
@@ -52,14 +58,14 @@ class PrayerAlarmScheduler(
         val calculationMethod = method ?: preferences.calculationMethod
         val school = madhhab ?: preferences.madhhab
 
-        val today = LocalDate.now()
-        val now = LocalTime.now()
+        val todayK = Clock.System.todayIn(KTimeZone.currentSystemDefault())
+        val nowJ = JLocalTime.now()
         val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a")
 
-        val timesToday = astronomyEngine.getPrayerTimes(coords, today, calculationMethod, school)
+        val timesToday = astronomyEngine.getPrayerTimes(coords, todayK, calculationMethod, school)
         val timesTomorrow = astronomyEngine.getPrayerTimes(
             coords,
-            today.plusDays(1),
+            KLocalDate.parse(JLocalDate.now().plusDays(1).toString()),
             calculationMethod,
             school
         )
@@ -74,11 +80,11 @@ class PrayerAlarmScheduler(
 
         for (prayer in prayersToSchedule) {
             val todayTime = timesToday[prayer] ?: continue
-            val isFutureToday = todayTime.isAfter(now)
-            val triggerDate = if (isFutureToday) today else today.plusDays(1)
-            val effectiveTime = if (isFutureToday) todayTime else (timesTomorrow[prayer] ?: todayTime)
+            val isFutureToday = todayTime.toJavaLocalTime().isAfter(nowJ)
+            val triggerDateJava = if (isFutureToday) JLocalDate.now() else JLocalDate.now().plusDays(1)
+            val effectiveTimeK = if (isFutureToday) todayTime else (timesTomorrow[prayer] ?: todayTime)
 
-            val triggerMillis = LocalDateTime.of(triggerDate, effectiveTime)
+            val triggerMillis = LocalDateTime.of(triggerDateJava, effectiveTimeK.toJavaLocalTime())
                 .atZone(ZoneId.systemDefault())
                 .toInstant()
                 .toEpochMilli()
@@ -86,7 +92,7 @@ class PrayerAlarmScheduler(
             scheduleSingleAlarm(
                 prayerType = prayer,
                 prayerName = prayer.name.lowercase().replaceFirstChar { it.uppercase() },
-                timeFormatted = effectiveTime.format(timeFormatter),
+                timeFormatted = effectiveTimeK.toJavaLocalTime().format(timeFormatter),
                 triggerEpochMillis = triggerMillis
             )
         }

@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Sakinah"
 include(":app")
+include(":shared")

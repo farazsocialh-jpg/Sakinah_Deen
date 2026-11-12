@@ -36,6 +36,12 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
+      - name: Build shared KMP module
+        run: ./gradlew :shared:build --stacktrace --no-daemon
+
+      - name: Run shared KMP tests
+        run: ./gradlew :shared:allTests --stacktrace --no-daemon
+
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
 

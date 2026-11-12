@@ -1,13 +1,23 @@
-node_modules/
+# Gradle / KMP build outputs
 build/
-dist/
-coverage/
-.DS_Store
+.gradle/
+.kotlin/
 *.log
-.env*
-!.env.example
 
-# Local release signing material must never be committed
+# iOS / Xcode
+ios/build/
+ios/DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.ipa
+
+# Node is no longer used by this project
+node_modules/
+
+# Local secrets and signing material
+.env
+.env.*
+!.env.example
 local.properties
 keystore.properties
 *.jks
@@ -15,6 +25,5 @@ keystore.properties
 keystore/
 app/release/
 
-# Gradle local caches / Kotlin session data
-.gradle/
-.kotlin/
+# macOS
+.DS_Store

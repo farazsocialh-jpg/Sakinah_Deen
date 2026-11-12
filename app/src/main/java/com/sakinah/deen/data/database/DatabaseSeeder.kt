@@ -4,6 +4,14 @@ import android.content.Context
 import android.util.Log
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.sakinah.deen.content.SeedAdhkar
+import com.sakinah.deen.content.SeedAyah
+import com.sakinah.deen.content.SeedCategory
+import com.sakinah.deen.content.SeedHadith
+import com.sakinah.deen.content.SeedHadithDocument
+import com.sakinah.deen.content.SeedHisnDocument
+import com.sakinah.deen.content.SeedQuranDocument
+import com.sakinah.deen.content.SeedSurah
 import com.sakinah.deen.data.database.entity.AdhkarEntity
 import com.sakinah.deen.data.database.entity.HadithEntryEntity
 import com.sakinah.deen.data.database.entity.QuranAyahEntity
@@ -169,61 +177,4 @@ object DatabaseSeeder {
         null
     }
 
-    // ---------------------------------------------------------------- DTOs
-
-    @Serializable
-    private data class SeedQuranDocument(val surahs: List<SeedSurah> = emptyList())
-
-    @Serializable
-    private data class SeedSurah(
-        val number: Int = 0,
-        val nameEnglish: String = "",
-        val nameArabic: String = "",
-        val meaning: String = "",
-        val revelationPlace: String = "",
-        val versesCount: Int = 0,
-        val ayahs: List<SeedAyah> = emptyList()
-    )
-
-    @Serializable
-    private data class SeedAyah(
-        val number: Int = 0,
-        val arabic: String = "",
-        val translation: String = ""
-    )
-
-    @Serializable
-    private data class SeedHadithDocument(
-        val bookKey: String = "nawawi",
-        val title: String = "",
-        val hadiths: List<SeedHadith> = emptyList()
-    )
-
-    @Serializable
-    private data class SeedHadith(
-        val number: Int? = null,
-        val arabic: String = "",
-        val english: String = "",
-        val grade: String = "",
-        val gradingScholar: String = ""
-    )
-
-    @Serializable
-    private data class SeedHisnDocument(val categories: List<SeedCategory> = emptyList())
-
-    @Serializable
-    private data class SeedCategory(
-        val key: String = "",
-        val title: String = "",
-        val items: List<SeedAdhkar> = emptyList()
-    )
-
-    @Serializable
-    private data class SeedAdhkar(
-        val id: String = "",
-        val title: String = "",
-        val arabic: String = "",
-        val translation: String = "",
-        val reference: String = ""
-    )
 }

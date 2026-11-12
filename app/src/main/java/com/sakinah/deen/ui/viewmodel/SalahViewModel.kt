@@ -24,11 +24,18 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.datetime.Clock
+import kotlinx.datetime.LocalDate as KLocalDate
+import kotlinx.datetime.todayIn
+import kotlinx.datetime.LocalTime as KLocalTime
+import kotlinx.datetime.TimeZone as KTimeZone
+import kotlinx.datetime.toJavaLocalTime
+import kotlinx.datetime.toLocalDateTime
 
 data class SalahUiState(
     val hijriDate: String = "14 Jumada al-Ula 1448 AH",
     val gregorianDate: String = "Tuesday · 11 November 2026",
-    val prayerTimes: Map<PrayerType, LocalTime> = emptyMap(),
+    val prayerTimes: Map<PrayerType, KLocalTime> = emptyMap(),
     val currentPrayer: PrayerType = PrayerType.DHUHR,
     val nextPrayer: PrayerType = PrayerType.ASR,
     val countdownText: String = "01h 24m 12s",
@@ -145,8 +152,8 @@ class SalahViewModel(
     }
 
     private fun loadDailySchedule() {
-        val today = LocalDate.now()
-        val userZone = ZoneId.systemDefault()
+        val today = Clock.System.todayIn(KTimeZone.currentSystemDefault())
+        val userZone = KTimeZone.currentSystemDefault()
         val coords = _uiState.value.userCoordinates
 
         val times = astronomyEngine.getPrayerTimes(
@@ -154,22 +161,22 @@ class SalahViewModel(
             date = today,
             method = _uiState.value.calculationMethod,
             madhhab = _uiState.value.madhhab,
-            zoneId = userZone,
+            timeZone = userZone,
             adjustments = _uiState.value.adjustments
         )
 
-        val countdown: PrayerCountdownInfo = astronomyEngine.calculateCountdown(times, LocalTime.now(userZone))
+        val countdown: PrayerCountdownInfo = astronomyEngine.calculateCountdown(times, Clock.System.now().toLocalDateTime(userZone).time)
         val travel = travelManager.evaluateTravelState(coords)
 
         val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a")
 
         val prayerModels = listOf(
-            PrayerModel("fajr", "Fajr", "الفجر", times[PrayerType.FAJR]?.format(timeFormatter) ?: "05:14 AM", travel.shortenedRakats[PrayerType.FAJR] ?: 2, 2, 0),
-            PrayerModel("sunrise", "Sunrise", "الشروق", times[PrayerType.SUNRISE]?.format(timeFormatter) ?: "06:38 AM", 0, 0, 0),
-            PrayerModel("dhuhr", "Dhuhr", "الظهر", times[PrayerType.DHUHR]?.format(timeFormatter) ?: "12:45 PM", travel.shortenedRakats[PrayerType.DHUHR] ?: 4, 4, 2, nawafilName = "2 Rakat Nafl"),
-            PrayerModel("asr", "Asr", "العصر", times[PrayerType.ASR]?.format(timeFormatter) ?: "03:52 PM", travel.shortenedRakats[PrayerType.ASR] ?: 4, 4, 0),
-            PrayerModel("maghrib", "Maghrib", "المغرب", times[PrayerType.MAGHRIB]?.format(timeFormatter) ?: "06:18 PM", travel.shortenedRakats[PrayerType.MAGHRIB] ?: 3, 0, 2, nawafilName = "Awwabin (6 Rakat)"),
-            PrayerModel("isha", "Isha", "العشاء", times[PrayerType.ISHA]?.format(timeFormatter) ?: "07:44 PM", travel.shortenedRakats[PrayerType.ISHA] ?: 4, 4, 2, nawafilName = "Tahajjud & Witr")
+            PrayerModel("fajr", "Fajr", "الفجر", times[PrayerType.FAJR]?.toJavaLocalTime()?.format(timeFormatter) ?: "05:14 AM", travel.shortenedRakats[PrayerType.FAJR] ?: 2, 2, 0),
+            PrayerModel("sunrise", "Sunrise", "الشروق", times[PrayerType.SUNRISE]?.toJavaLocalTime()?.format(timeFormatter) ?: "06:38 AM", 0, 0, 0),
+            PrayerModel("dhuhr", "Dhuhr", "الظهر", times[PrayerType.DHUHR]?.toJavaLocalTime()?.format(timeFormatter) ?: "12:45 PM", travel.shortenedRakats[PrayerType.DHUHR] ?: 4, 4, 2, nawafilName = "2 Rakat Nafl"),
+            PrayerModel("asr", "Asr", "العصر", times[PrayerType.ASR]?.toJavaLocalTime()?.format(timeFormatter) ?: "03:52 PM", travel.shortenedRakats[PrayerType.ASR] ?: 4, 4, 0),
+            PrayerModel("maghrib", "Maghrib", "المغرب", times[PrayerType.MAGHRIB]?.toJavaLocalTime()?.format(timeFormatter) ?: "06:18 PM", travel.shortenedRakats[PrayerType.MAGHRIB] ?: 3, 0, 2, nawafilName = "Awwabin (6 Rakat)"),
+            PrayerModel("isha", "Isha", "العشاء", times[PrayerType.ISHA]?.toJavaLocalTime()?.format(timeFormatter) ?: "07:44 PM", travel.shortenedRakats[PrayerType.ISHA] ?: 4, 4, 2, nawafilName = "Tahajjud & Witr")
         )
 
         _uiState.update {

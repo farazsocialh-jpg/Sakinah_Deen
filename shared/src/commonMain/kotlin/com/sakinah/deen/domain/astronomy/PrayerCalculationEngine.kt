@@ -4,9 +4,9 @@ import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
 import com.sakinah.deen.data.model.PrayerAdjustments
 import com.sakinah.deen.data.model.PrayerType
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
 
 data class PrayerCountdownInfo(
     val currentPrayer: PrayerType,
@@ -22,7 +22,7 @@ interface PrayerCalculationEngine {
         date: LocalDate,
         method: CalculationMethod,
         madhhab: Madhhab,
-        zoneId: ZoneId = ZoneId.systemDefault(),
+        timeZone: TimeZone = TimeZone.currentSystemDefault(),
         adjustments: PrayerAdjustments = PrayerAdjustments()
     ): Map<PrayerType, LocalTime>
 
