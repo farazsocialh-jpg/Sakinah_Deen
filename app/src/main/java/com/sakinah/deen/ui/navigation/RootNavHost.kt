@@ -215,6 +215,7 @@ fun RootNavHost() {
             }
             SakinahScreen.Travel -> {
                 TravelScreen(
+                    onChangeHome = { currentScreen = SakinahScreen.Settings },
                     modifier = Modifier.padding(innerPadding)
                 )
             }

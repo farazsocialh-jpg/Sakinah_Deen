@@ -14,12 +14,17 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.sakinah.deen.data.model.CalculationMethod as AppMethod
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.settings.*
 import com.sakinah.deen.ui.rememberInject
+import com.sakinah.deen.ui.theme.EmeraldDeep
+import com.sakinah.deen.ui.theme.MintGreen
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
