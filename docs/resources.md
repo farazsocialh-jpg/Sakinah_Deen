@@ -34,6 +34,10 @@ marks render correctly.
 | `adhan_fajr.ogg` | Makkah Fajr Adhan (includes *As-salatu khayrun min an-nawm*) | [archive.org — Makkah Adhan Al-Fajr](https://archive.org/download/MakkahAdhanAl-fajr5-9-13SheikhYunusKhoja/) |
 | `dua_al_safar.mp3` | Recitation of Quran 43:13–14, the verse behind Dua al-Safar | [cdn.islamic.network](https://cdn.islamic.network/quran/audio/128/ar.alafasy/4338.mp3) (Mishary al-Afasy) |
 
+> A forced refresh (`-PforceDownloadAssets=true`) re-fetches `dua_al_safar.mp3` as the
+> single recitation of 43:13, not the committed 43:13+43:14 concatenation. Rebuild the
+> two-ayah file by hand if you need the longer version.
+
 > **Check before publishing to Play.** The two archive.org recordings do not declare a
 > licence in their item metadata. They are bundled here as working placeholders. For a
 > store release either confirm redistribution rights or replace them with your own
