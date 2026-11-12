@@ -3,6 +3,7 @@ package com.sakinah.deen.ui.screens
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -21,7 +22,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.sakinah.deen.data.model.CalculationMethod as AppMethod
 import com.sakinah.deen.data.prefs.SakinahPreferences
+import com.sakinah.deen.domain.astronomy.UserLocationProvider
 import com.sakinah.deen.settings.*
+import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
 import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.EmeraldDeep
 import com.sakinah.deen.ui.theme.MintGreen
@@ -33,18 +36,41 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val repo = rememberInject<SettingsRepository>()
     val settings by repo.settings.collectAsState()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val appPrefs = remember { SakinahPreferences(context) }
+    val locationProvider = rememberInject<UserLocationProvider>()
+
+    // Mirrored into local state so the Home Location card refreshes right after a save.
+    var hasHomeLocation by remember { mutableStateOf(appPrefs.homeCoordinates != null) }
+    var homeCityName by remember { mutableStateOf(appPrefs.homeCityName) }
+    var showHomeCityPicker by remember { mutableStateOf(false) }
+    var gpsHomeRequested by remember { mutableStateOf(false) }
+
+    fun saveCurrentGpsAsHome() {
+        scope.launch {
+            val resolved = locationProvider.getFreshOrCachedLocation()
+            val label = listOf(resolved.cityName, resolved.countryName)
+                .filter { it.isNotBlank() }
+                .joinToString(", ")
+                .ifBlank { "Saved Location" }
+            // saveHomeAnchor ignores invalid fixes and clears any stale Travel Mode.
+            appPrefs.saveHomeAnchor(resolved.latitude, resolved.longitude, label)
+            hasHomeLocation = appPrefs.homeCoordinates != null
+            homeCityName = appPrefs.homeCityName
+        }
+    }
+
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val isGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (isGranted && gpsHomeRequested) saveCurrentGpsAsHome()
+        gpsHomeRequested = false
     }
-    var showManualCityDialog by remember { mutableStateOf(false) }
 
     val themes = ThemeMode.entries
     val adhanChoices = AdhanChoice.entries
-    val context = LocalContext.current
-    val appPrefs = remember { SakinahPreferences(context) }
 
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
@@ -91,43 +117,55 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     }
                 }
             }
-            // Home Location row
-            val homeCoords = appPrefs.homeCoordinates
-            val homeCity = appPrefs.homeCityName
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Home Location", modifier = Modifier.weight(1f))
-                if (homeCoords != null) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MintGreen.copy(alpha = 0.15f),
-                        modifier = Modifier.padding(end = 4.dp)
-                    ) {
-                        Text(
-                            text = "${homeCity ?: "Saved"}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = EmeraldDeep
-                        )
-                    }
-                } else {
-                    OutlinedButton(
-                        onClick = {
-                            locationPermissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION
-                                )
-                            )
-                        },
-                        modifier = Modifier.padding(end = 4.dp)
-                    ) {
-                        Text("Use Current GPS")
-                    }
-                }
-                OutlinedButton(
-                    onClick = { showManualCityDialog = true },
-                    modifier = Modifier.padding(start = 4.dp)
+            // Home Location — the anchor Safar (Qasr) is measured from.
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Choose City")
+                    Text("Home Location", fontWeight = FontWeight.Bold, color = EmeraldDeep)
+                    Text(
+                        text = homeCityName
+                            ?: if (hasHomeLocation) "Saved location" else "Not set (normal 4 rakat)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                gpsHomeRequested = true
+                                locationPermissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION
+                                    )
+                                )
+                            },
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            Text("Use Current GPS as Home", fontSize = 11.sp)
+                        }
+                        OutlinedButton(
+                            onClick = { showHomeCityPicker = true },
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            Text("Choose Home City", fontSize = 11.sp)
+                        }
+                        TextButton(
+                            onClick = {
+                                appPrefs.clearHomeAnchor()
+                                hasHomeLocation = false
+                                homeCityName = null
+                            },
+                            enabled = hasHomeLocation
+                        ) {
+                            Text("Clear", fontSize = 11.sp)
+                        }
+                    }
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -254,61 +292,20 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         }
     }
 
-    // City picker dialog for Home Location
-    if (showManualCityDialog) {
-        Dialog(onDismissRequest = { showManualCityDialog = false }) {
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .verticalScroll(rememberScrollState())
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "Select Home City",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = EmeraldDeep
-                    )
-                    listOf(
-                        Triple(25.2854, 51.5310, "Doha, Qatar"),
-                        Triple(21.4225, 39.8262, "Makkah, Saudi Arabia"),
-                        Triple(24.4686, 39.6142, "Madinah, Saudi Arabia"),
-                        Triple(25.2048, 55.2708, "Dubai, UAE"),
-                        Triple(24.8607, 67.0011, "Karachi, Pakistan"),
-                        Triple(51.5074, -0.1278, "London, UK"),
-                        Triple(40.7128, -74.0060, "New York, USA")
-                    ).forEach { (lat, lon, name) ->
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = EmeraldDeep.copy(alpha = 0.05f),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    appPrefs.saveHomeAnchor(lat, lon, name)
-                                    showManualCityDialog = false
-                                }
-                        ) {
-                            Text(
-                                text = name,
-                                modifier = Modifier.padding(12.dp),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = EmeraldDeep
-                            )
-                        }
-                    }
-                }
+    // Searchable Home City picker (shared with the Travel screen).
+    if (showHomeCityPicker) {
+        HomeLocationCityPickerDialog(
+            onDismiss = { showHomeCityPicker = false },
+            onCitySelected = { city ->
+                appPrefs.saveHomeAnchor(city.latitude, city.longitude, city.name)
+                homeCityName = appPrefs.homeCityName
+                hasHomeLocation = appPrefs.homeCoordinates != null
+                showHomeCityPicker = false
             }
-        }
+        )
     }
 }
+
 
 /** Mirrors an Android override into the shared settings store (closest equivalent authority). */
 private fun sharedMethodFor(method: AppMethod): CalculationMethod? = when (method) {

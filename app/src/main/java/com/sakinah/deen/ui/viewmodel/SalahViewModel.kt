@@ -17,6 +17,8 @@ import com.sakinah.deen.data.repository.PrayerTimeRepository
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
 import com.sakinah.deen.domain.astronomy.PrayerCountdownInfo
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
+import com.sakinah.deen.domain.travel.HomeAnchorStore
+import com.sakinah.deen.domain.travel.SafarPolicy
 import com.sakinah.deen.domain.travel.TravelStatusManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -24,6 +26,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -119,7 +122,30 @@ class SalahViewModel(
         syncAuthority()
         checkAndRefreshLocation()
         observeQadhaLedger()
+        observeHomeAnchorChanges()
         startCountdownTicker()
+    }
+
+    /**
+     * The dashboard ViewModel outlives the Settings/Travel screens, so a Home saved
+     * (or cleared) elsewhere has to reach it without a restart.
+     */
+    private fun observeHomeAnchorChanges() {
+        viewModelScope.launch {
+            // Skip the initial `null`; `init` has already restored the saved anchor.
+            HomeAnchorStore.state.drop(1).collect { home ->
+                val anchor = SafarPolicy.sanitize(home)
+                if (anchor == null) travelManager.clearHomeAnchor() else travelManager.setHomeAnchor(anchor)
+                _uiState.update {
+                    it.copy(
+                        hasHomeLocation = travelManager.hasHomeAnchor,
+                        isTraveler = false,
+                        distanceFromHomeKm = 0.0
+                    )
+                }
+                loadDailySchedule()
+            }
+        }
     }
 
     fun onIntent(intent: SalahUiIntent) {
@@ -166,17 +192,22 @@ class SalahViewModel(
                 checkAndRefreshLocation()
             }
             is SalahUiIntent.SetHomeLocationFromCurrent -> {
-                val coords = _uiState.value.userCoordinates
-                travelManager.setHomeAnchor(coords)
-                preferences?.saveHomeAnchor(coords.first, coords.second, _uiState.value.locationName)
-                _uiState.update {
-                    it.copy(
-                        hasHomeLocation = true,
-                        isTraveler = false,
-                        distanceFromHomeKm = 0.0
-                    )
+                // An unresolved fix (0.0, 0.0) must never become the Home anchor.
+                val coords = SafarPolicy.sanitize(_uiState.value.userCoordinates)
+                if (coords == null) {
+                    loadDailySchedule()
+                } else {
+                    travelManager.setHomeAnchor(coords)
+                    preferences?.saveHomeAnchor(coords.first, coords.second, _uiState.value.locationName)
+                    _uiState.update {
+                        it.copy(
+                            hasHomeLocation = true,
+                            isTraveler = false,
+                            distanceFromHomeKm = 0.0
+                        )
+                    }
+                    loadDailySchedule()
                 }
-                loadDailySchedule()
             }
             is SalahUiIntent.SetManualLocation -> {
                 countryCode = intent.countryCode?.takeIf { it.isNotBlank() } ?: countryCode
@@ -322,15 +353,24 @@ class SalahViewModel(
         val countdown: PrayerCountdownInfo = astronomyEngine.calculateCountdown(times, Clock.System.now().toLocalDateTime(userZone).time)
         val travel = travelManager.evaluateTravelState(coords)
 
+        // A manual Travel Mode override only survives while the user is away from Home.
+        // Back within 80 km of a saved Home it is cleared, so four rakat return immediately.
+        val manualTravelMode = preferences?.travelModeActive == true
+        val clearManualTravelMode = manualTravelMode &&
+            SafarPolicy.shouldClearManualTravelMode(travelManager.getHomeAnchor(), coords)
+        if (clearManualTravelMode) preferences?.travelModeActive = false
+        val isSafar = travel.isTraveler || (manualTravelMode && !clearManualTravelMode)
+        val rakats = SafarPolicy.rakats(isSafar)
+
         val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a")
 
         val prayerModels = listOf(
-            PrayerModel("fajr", "Fajr", "الفجر", times[PrayerType.FAJR]?.toJavaLocalTime()?.format(timeFormatter) ?: "05:14 AM", travel.shortenedRakats[PrayerType.FAJR] ?: 2, 2, 0),
+            PrayerModel("fajr", "Fajr", "الفجر", times[PrayerType.FAJR]?.toJavaLocalTime()?.format(timeFormatter) ?: "05:14 AM", rakats[PrayerType.FAJR] ?: 2, 2, 0),
             PrayerModel("sunrise", "Sunrise", "الشروق", times[PrayerType.SUNRISE]?.toJavaLocalTime()?.format(timeFormatter) ?: "06:38 AM", 0, 0, 0),
-            PrayerModel("dhuhr", "Dhuhr", "الظهر", times[PrayerType.DHUHR]?.toJavaLocalTime()?.format(timeFormatter) ?: "12:45 PM", travel.shortenedRakats[PrayerType.DHUHR] ?: 4, 4, 2, nawafilName = "2 Rakat Nafl"),
-            PrayerModel("asr", "Asr", "العصر", times[PrayerType.ASR]?.toJavaLocalTime()?.format(timeFormatter) ?: "03:52 PM", travel.shortenedRakats[PrayerType.ASR] ?: 4, 4, 0),
-            PrayerModel("maghrib", "Maghrib", "المغرب", times[PrayerType.MAGHRIB]?.toJavaLocalTime()?.format(timeFormatter) ?: "06:18 PM", travel.shortenedRakats[PrayerType.MAGHRIB] ?: 3, 0, 2, nawafilName = "Awwabin (6 Rakat)"),
-            PrayerModel("isha", "Isha", "العشاء", times[PrayerType.ISHA]?.toJavaLocalTime()?.format(timeFormatter) ?: "07:44 PM", travel.shortenedRakats[PrayerType.ISHA] ?: 4, 4, 2, nawafilName = "Tahajjud & Witr")
+            PrayerModel("dhuhr", "Dhuhr", "الظهر", times[PrayerType.DHUHR]?.toJavaLocalTime()?.format(timeFormatter) ?: "12:45 PM", rakats[PrayerType.DHUHR] ?: 4, 4, 2, nawafilName = "2 Rakat Nafl"),
+            PrayerModel("asr", "Asr", "العصر", times[PrayerType.ASR]?.toJavaLocalTime()?.format(timeFormatter) ?: "03:52 PM", rakats[PrayerType.ASR] ?: 4, 4, 0),
+            PrayerModel("maghrib", "Maghrib", "المغرب", times[PrayerType.MAGHRIB]?.toJavaLocalTime()?.format(timeFormatter) ?: "06:18 PM", rakats[PrayerType.MAGHRIB] ?: 3, 0, 2, nawafilName = "Awwabin (6 Rakat)"),
+            PrayerModel("isha", "Isha", "العشاء", times[PrayerType.ISHA]?.toJavaLocalTime()?.format(timeFormatter) ?: "07:44 PM", rakats[PrayerType.ISHA] ?: 4, 4, 2, nawafilName = "Tahajjud & Witr")
         )
 
         _uiState.update {
@@ -341,7 +381,7 @@ class SalahViewModel(
                 countdownText = "${countdown.remainingMinutes}m ${countdown.remainingSeconds}s",
                 elapsedWindowRatio = countdown.elapsedRatio,
                 prayersList = prayerModels,
-                isTraveler = travel.isTraveler || (preferences?.travelModeActive == true),
+                isTraveler = isSafar,
                 distanceFromHomeKm = travel.distanceKm,
                 hasHomeLocation = travelManager.hasHomeAnchor,
                 sourceLabel = sourceLabel,

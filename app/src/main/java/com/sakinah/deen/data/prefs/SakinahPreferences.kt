@@ -1,14 +1,24 @@
 package com.sakinah.deen.data.prefs
 
 import android.content.Context
+import android.content.SharedPreferences
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
+import com.sakinah.deen.domain.travel.HomeAnchorStore
+import com.sakinah.deen.domain.travel.SafarPolicy
 
 /**
  * Single source of truth for values that background components (alarms, receivers,
  * services) need while no Activity or ViewModel exists.
+ *
+ * The [SharedPreferences] constructor is internal so the preference rules ("a saved Home
+ * clears Travel Mode", "(0,0) is not a Home") can be unit tested without Android.
  */
-class SakinahPreferences(context: Context) {
+class SakinahPreferences internal constructor(private val prefs: SharedPreferences) {
+
+    constructor(context: Context) : this(
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    )
 
     companion object {
         const val DEFAULT_LATITUDE = 51.5074
@@ -34,9 +44,6 @@ class SakinahPreferences(context: Context) {
         private const val KEY_ADHAN_SOUND_URI = "adhan_sound_uri"
         private const val KEY_DUA_SAFAR_SOUND_URI = "dua_safar_sound_uri"
     }
-
-    private val prefs =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     /** Double is stored as raw bits so stored coordinates do not lose precision. */
     var locationLatitude: Double?
@@ -98,11 +105,12 @@ class SakinahPreferences(context: Context) {
             if (value.isNullOrBlank()) remove(KEY_HOME_CITY) else putString(KEY_HOME_CITY, value)
         }.apply()
 
+    /** `null` when unsaved or when the stored pair cannot be a real Home (e.g. `(0.0, 0.0)`). */
     val homeCoordinates: Pair<Double, Double>?
         get() {
             val lat = homeLatitude ?: return null
             val lon = homeLongitude ?: return null
-            return Pair(lat, lon)
+            return SafarPolicy.sanitize(Pair(lat, lon))
         }
 
     var calculationMethod: CalculationMethod
@@ -165,10 +173,31 @@ class SakinahPreferences(context: Context) {
         locationLabel = label
     }
 
+    /**
+     * Saves a Home Location. Invalid coordinates (e.g. an unresolved `(0.0, 0.0)` fix) are
+     * ignored so an existing Home is never overwritten by junk. Saving a Home also drops any
+     * stale Safar override, so rakat counts immediately return to normal.
+     */
     fun saveHomeAnchor(latitude: Double, longitude: Double, cityName: String? = null) {
-        homeLatitude = latitude
-        homeLongitude = longitude
+        val home = SafarPolicy.sanitize(Pair(latitude, longitude)) ?: return
+        homeLatitude = home.first
+        homeLongitude = home.second
         if (cityName != null) homeCityName = cityName
+        travelModeActive = false
+        qasrActive = false
+        lastDistanceFromHomeKm = 0f
+        HomeAnchorStore.publish(home)
+    }
+
+    /** Removes the Home Location and every Safar flag derived from it. */
+    fun clearHomeAnchor() {
+        homeLatitude = null
+        homeLongitude = null
+        homeCityName = null
+        travelModeActive = false
+        qasrActive = false
+        lastDistanceFromHomeKm = 0f
+        HomeAnchorStore.publish(null)
     }
 
     fun saveCarDevice(address: String, name: String?) {
