@@ -5,6 +5,7 @@ import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.TafseerDownloadRepository
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl
+import com.sakinah.deen.domain.astronomy.UserLocationProvider
 import com.sakinah.deen.domain.sensor.QiblaSensorManager
 import com.sakinah.deen.domain.travel.TravelStatusManager
 import com.sakinah.deen.network.IslamicDataRepository
