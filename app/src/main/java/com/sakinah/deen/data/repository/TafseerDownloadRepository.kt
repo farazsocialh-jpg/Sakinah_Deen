@@ -134,6 +134,7 @@ class TafseerDownloadRepository(
 
             Result.success(targetFile)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             // Offline fallback: write local pre-indexed schema
             createFallbackTafseerDb(targetFile, pkg)
             _packages.value = _packages.value.map {
@@ -168,6 +169,7 @@ class TafseerDownloadRepository(
 
             Result.success(alias)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Result.failure(e)
         }
     }
@@ -189,6 +191,7 @@ class TafseerDownloadRepository(
 
             Result.success(Unit)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Result.failure(e)
         }
     }

@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
         try {
             startService(intent)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             // Ignore background-start restrictions; the service may already be stopped.
         }
     }

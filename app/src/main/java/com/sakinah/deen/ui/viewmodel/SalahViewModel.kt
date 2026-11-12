@@ -397,6 +397,7 @@ class SalahViewModel(
                     try {
                         PrayerType.valueOf(it.prayerType) to it.totalMissed
                     } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
                         PrayerType.FAJR to it.totalMissed
                     }
                 }

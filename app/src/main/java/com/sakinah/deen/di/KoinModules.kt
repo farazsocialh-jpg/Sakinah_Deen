@@ -46,9 +46,7 @@ val preferencesModule = module {
 
 val databaseModule = module {
     single {
-        // TODO(security): replace this static passphrase with a Keystore-wrapped random
-        // key before production. Encrypting with a constant offers obfuscation only.
-        val dbPassphrase = "SakinahSecureOfflineMasterKey2026".toByteArray(Charsets.UTF_8)
+        val dbPassphrase = com.sakinah.deen.data.database.DatabasePassphraseProvider.getPassphrase(androidContext())
         SakinahEncryptedDatabase.getInstance(androidContext(), dbPassphrase)
     }
     single { get<SakinahEncryptedDatabase>().salahDao() }
@@ -97,6 +95,11 @@ val networkModule = module {
     }
     single {
         HttpClient(OkHttp) {
+            engine {
+                config {
+                    cache(okhttp3.Cache(java.io.File(androidContext().cacheDir, "http_cache"), 10L * 1024 * 1024))
+                }
+            }
             // Endpoints are free public services: surface status codes as values and
             // let repositories decide how to degrade instead of throwing on 4xx/5xx.
             expectSuccess = false
@@ -105,6 +108,11 @@ val networkModule = module {
                 requestTimeoutMillis = 90_000
                 connectTimeoutMillis = 15_000
                 socketTimeoutMillis = 90_000
+            }
+            install(io.ktor.client.plugins.HttpRequestRetry) {
+                retryOnServerErrors(maxRetries = 3)
+                retryIf { _, response -> response.status.value == 429 }
+                exponentialDelay()
             }
         }
     }
