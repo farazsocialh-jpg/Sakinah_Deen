@@ -3,7 +3,10 @@ package com.sakinah.deen.service
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.IBinder
@@ -63,6 +66,9 @@ class AdhanPlaybackService : Service() {
     private var player: ExoPlayer? = null
     private var mediaSession: MediaSession? = null
     private var fadeJob: Job? = null
+
+    @Volatile private var isPlayingAdhan: Boolean = false
+    private var volumeReceiver: BroadcastReceiver? = null
 
     private var currentPrayerName: String = "Salah"
     private var currentPrayerType: PrayerType = PrayerType.DHUHR
@@ -146,6 +152,8 @@ class AdhanPlaybackService : Service() {
         exo.volume = 0f
         exo.prepare()
         exo.play()
+        isPlayingAdhan = true
+        registerVolumeReceiver()
 
         fadeJob?.cancel()
         fadeJob = scope.launch {
@@ -204,6 +212,8 @@ class AdhanPlaybackService : Service() {
     }
 
     private fun finishPlayback() {
+        isPlayingAdhan = false
+        unregisterVolumeReceiver()
         fadeJob?.cancel()
         fadeJob = null
         try {
@@ -233,7 +243,8 @@ class AdhanPlaybackService : Service() {
     private fun buildAdhanNotification(prayerName: String): Notification =
         NotificationCompat.Builder(this, NotificationChannels.CHANNEL_SALAH_ADHAN)
             .setSmallIcon(R.drawable.ic_launcher_monochrome)
-            .setContentTitle(getString(R.string.adhan_title, prayerName))
+            // Title format requested for the prayer-time notification, e.g. "Maghrib prayer time started".
+            .setContentTitle("$prayerName prayer time started")
             .setContentText(getString(R.string.adhan_body))
             .setContentIntent(contentPendingIntent())
             .setOngoing(true)
@@ -272,9 +283,33 @@ class AdhanPlaybackService : Service() {
             )
             .build()
 
+    private fun registerVolumeReceiver() {
+        if (volumeReceiver != null) return
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (isPlayingAdhan) finishPlayback()
+            }
+        }
+        volumeReceiver = receiver
+        try {
+            registerReceiver(receiver, IntentFilter("android.media.VOLUME_CHANGED_ACTION"))
+        } catch (e: Exception) {
+            // Ignore registration races.
+        }
+    }
+
+    private fun unregisterVolumeReceiver() {
+        volumeReceiver?.let {
+            try { unregisterReceiver(it) } catch (e: Exception) { /* ignore */ }
+        }
+        volumeReceiver = null
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        isPlayingAdhan = false
+        unregisterVolumeReceiver()
         fadeJob?.cancel()
         mediaSession?.release()
         mediaSession = null

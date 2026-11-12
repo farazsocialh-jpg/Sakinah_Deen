@@ -11,12 +11,16 @@ import com.sakinah.deen.data.model.NaflType
 import com.sakinah.deen.data.model.PrayerAdjustments
 import com.sakinah.deen.data.model.PrayerModel
 import com.sakinah.deen.data.model.PrayerType
+import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.prayer.SunniMethodMapper
 import com.sakinah.deen.data.repository.PrayerTimeRepository
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
 import com.sakinah.deen.domain.astronomy.PrayerCountdownInfo
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
 import com.sakinah.deen.domain.travel.TravelStatusManager
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,7 +49,6 @@ data class SalahUiState(
     val elapsedWindowRatio: Float = 0.65f,
     val prayersList: List<PrayerModel> = emptyList(),
     val qadhaDeficits: Map<PrayerType, Int> = emptyMap(),
-    val isTraveler: Boolean = false,
     val calculationMethod: CalculationMethod = CalculationMethod.UMM_AL_QURA,
     val madhhab: Madhhab = Madhhab.SHAFI_HANBALI_MALIKI,
     val adjustments: PrayerAdjustments = PrayerAdjustments(),
@@ -58,7 +61,13 @@ data class SalahUiState(
     /** Short name of the authority the timings follow (country-mapped or manual). */
     val authorityName: String = "Muslim World League",
     /** True when no method was picked by hand, so the country's authority is followed. */
-    val isAutomaticMethod: Boolean = true
+    val isAutomaticMethod: Boolean = true,
+    /** Whether Qasr (shortened) rakats are currently active. */
+    val isTraveler: Boolean = false,
+    /** Great-circle distance from the saved Home location, in kilometres. */
+    val distanceFromHomeKm: Double = 0.0,
+    /** Whether a Home location has been saved (drives the "Set Home Location" prompt). */
+    val hasHomeLocation: Boolean = false
 )
 
 sealed class SalahUiIntent {
@@ -80,6 +89,9 @@ sealed class SalahUiIntent {
 
     /** Clears a manual calculation-method choice and follows the country's authority again. */
     data object UseAutomaticMethod : SalahUiIntent()
+
+    /** Saves the current GPS location as the user's Home location. */
+    data object SetHomeLocationFromCurrent : SalahUiIntent()
 }
 
 class SalahViewModel(
@@ -88,7 +100,8 @@ class SalahViewModel(
     private val astronomyEngine: PrayerCalculationEngine,
     private val travelManager: TravelStatusManager,
     private val locationProvider: UserLocationProvider? = null,
-    private val prayerTimes: PrayerTimeRepository? = null
+    private val prayerTimes: PrayerTimeRepository? = null,
+    private val preferences: SakinahPreferences? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SalahUiState())
@@ -101,9 +114,12 @@ class SalahViewModel(
     private var scheduleRequest = 0
 
     init {
+        // Restore the saved Home location so Qasr only activates for real travel.
+        preferences?.homeCoordinates?.let { travelManager.setHomeAnchor(it) }
         syncAuthority()
         checkAndRefreshLocation()
         observeQadhaLedger()
+        startCountdownTicker()
     }
 
     fun onIntent(intent: SalahUiIntent) {
@@ -149,6 +165,19 @@ class SalahViewModel(
             is SalahUiIntent.RefreshLocation -> {
                 checkAndRefreshLocation()
             }
+            is SalahUiIntent.SetHomeLocationFromCurrent -> {
+                val coords = _uiState.value.userCoordinates
+                travelManager.setHomeAnchor(coords)
+                preferences?.saveHomeAnchor(coords.first, coords.second, _uiState.value.locationName)
+                _uiState.update {
+                    it.copy(
+                        hasHomeLocation = true,
+                        isTraveler = false,
+                        distanceFromHomeKm = 0.0
+                    )
+                }
+                loadDailySchedule()
+            }
             is SalahUiIntent.SetManualLocation -> {
                 countryCode = intent.countryCode?.takeIf { it.isNotBlank() } ?: countryCode
                 _uiState.update {
@@ -185,7 +214,8 @@ class SalahViewModel(
                 it.copy(
                     userCoordinates = Pair(resolved.latitude, resolved.longitude),
                     locationName = if (resolved.countryName.isNotBlank()) "${resolved.cityName}, ${resolved.countryName}" else resolved.cityName,
-                    showLocationWarningBanner = !resolved.isFromGps && !hasPermission
+                    showLocationWarningBanner = !resolved.isFromGps && !hasPermission,
+                    hasHomeLocation = travelManager.hasHomeAnchor
                 )
             }
             syncAuthority()
@@ -208,6 +238,31 @@ class SalahViewModel(
                 authorityName = authority.displayName,
                 isAutomaticMethod = override == null
             )
+        }
+    }
+
+    /** Live 1-second countdown to the next prayer, so the UI ticks down without recomputation. */
+    private var countdownJob: Job? = null
+
+    private fun startCountdownTicker() {
+        countdownJob?.cancel()
+        countdownJob = viewModelScope.launch {
+            while (isActive) {
+                val times = _uiState.value.prayerTimes
+                if (times.isNotEmpty()) {
+                    val now = Clock.System.now().toLocalDateTime(KTimeZone.currentSystemDefault())
+                    val countdown = astronomyEngine.calculateCountdown(times, now.time)
+                    _uiState.update {
+                        it.copy(
+                            currentPrayer = countdown.currentPrayer,
+                            nextPrayer = countdown.nextPrayer,
+                            countdownText = "${countdown.remainingMinutes}m ${countdown.remainingSeconds}s",
+                            elapsedWindowRatio = countdown.elapsedRatio
+                        )
+                    }
+                }
+                delay(1000L)
+            }
         }
     }
 
@@ -286,7 +341,9 @@ class SalahViewModel(
                 countdownText = "${countdown.remainingMinutes}m ${countdown.remainingSeconds}s",
                 elapsedWindowRatio = countdown.elapsedRatio,
                 prayersList = prayerModels,
-                isTraveler = travel.isTraveler,
+                isTraveler = travel.isTraveler || (preferences?.travelModeActive == true),
+                distanceFromHomeKm = travel.distanceKm,
+                hasHomeLocation = travelManager.hasHomeAnchor,
                 sourceLabel = sourceLabel,
                 authorityName = authorityName ?: it.authorityName
             )

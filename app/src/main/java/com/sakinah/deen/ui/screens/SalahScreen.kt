@@ -49,6 +49,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -56,6 +57,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
@@ -79,6 +82,7 @@ import com.sakinah.deen.ui.viewmodel.SalahUiIntent
 import com.sakinah.deen.ui.viewmodel.SalahUiState
 import com.sakinah.deen.ui.viewmodel.SalahViewModel
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun SalahScreen(
     onOpenGuide: () -> Unit,
@@ -114,11 +118,24 @@ fun SalahScreen(
     var showManualCityDialog by remember { mutableStateOf(false) }
     var expandedId by remember { mutableStateOf<String?>("asr") }
     val context = LocalContext.current
+    var isRefreshing by remember { mutableStateOf(false) }
+    val refreshScope = rememberCoroutineScope()
 
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = {
+            isRefreshing = true
+            refreshScope.launch {
+                viewModel?.onIntent(SalahUiIntent.RefreshLocation)
+                isRefreshing = false
+            }
+        },
+        modifier = modifier.fillMaxSize()
+    ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -324,30 +341,34 @@ fun SalahScreen(
                         trackColor = Color.White.copy(alpha = 0.2f)
                     )
 
+                    // Qasr / Travel badge + a subtle prompt to save a Home location.
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        FilledTonalButton(
-                            onClick = {
-                                val resId = context.resources.getIdentifier("adhan_fajr", "raw", context.packageName)
-                                if (resId != 0) {
-                                    val mp = android.media.MediaPlayer.create(context, resId)
-                                    mp?.start()
-                                }
-                            },
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
-                            Icon(Icons.Outlined.VolumeUp, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Hear Adhan", fontSize = 12.sp)
+                        val isQasr = state.isTraveler
+                        if (isQasr) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MintGreen.copy(alpha = 0.25f),
+                                border = BorderStroke(1.dp, MintGreen)
+                            ) {
+                                Text(
+                                    text = "Travel Mode (Qasr) \u2022 ${state.distanceFromHomeKm.toInt()} km from Home",
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = EmeraldDeep
+                                )
+                            }
                         }
-                        FilledTonalButton(
-                            onClick = { viewModel?.onIntent(SalahUiIntent.RefreshLocation) },
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
-                            Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Refresh GPS", fontSize = 12.sp)
+                        if (!state.hasHomeLocation) {
+                            OutlinedButton(
+                                onClick = { viewModel?.onIntent(SalahUiIntent.SetHomeLocationFromCurrent) },
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Set Home Location", fontSize = 12.sp)
+                            }
                         }
                     }
                 }
@@ -769,6 +790,7 @@ fun SalahScreen(
                 }
             }
         }
+    }
     }
 }
 

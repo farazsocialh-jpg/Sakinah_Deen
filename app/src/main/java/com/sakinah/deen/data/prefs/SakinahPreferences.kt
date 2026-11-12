@@ -23,6 +23,7 @@ class SakinahPreferences(context: Context) {
         private const val KEY_CALCULATION_METHOD_OVERRIDE = "calculation_method_override"
         private const val KEY_HOME_LATITUDE = "home_latitude"
         private const val KEY_HOME_LONGITUDE = "home_longitude"
+        private const val KEY_HOME_CITY = "home_city"
         private const val KEY_CALCULATION_METHOD = "calculation_method"
         private const val KEY_MADHHAB = "madhhab"
         private const val KEY_CAR_ADDRESS = "car_bluetooth_address"
@@ -89,6 +90,12 @@ class SakinahPreferences(context: Context) {
         get() = if (prefs.contains(KEY_HOME_LONGITUDE)) Double.fromBits(prefs.getLong(KEY_HOME_LONGITUDE, 0L)) else null
         set(value) = prefs.edit().apply {
             if (value == null) remove(KEY_HOME_LONGITUDE) else putLong(KEY_HOME_LONGITUDE, value.toBits())
+        }.apply()
+
+    var homeCityName: String?
+        get() = prefs.getString(KEY_HOME_CITY, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().apply {
+            if (value.isNullOrBlank()) remove(KEY_HOME_CITY) else putString(KEY_HOME_CITY, value)
         }.apply()
 
     val homeCoordinates: Pair<Double, Double>?
@@ -158,9 +165,10 @@ class SakinahPreferences(context: Context) {
         locationLabel = label
     }
 
-    fun saveHomeAnchor(latitude: Double, longitude: Double) {
+    fun saveHomeAnchor(latitude: Double, longitude: Double, cityName: String? = null) {
         homeLatitude = latitude
         homeLongitude = longitude
+        if (cityName != null) homeCityName = cityName
     }
 
     fun saveCarDevice(address: String, name: String?) {

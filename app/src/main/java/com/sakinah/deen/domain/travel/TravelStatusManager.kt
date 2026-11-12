@@ -17,18 +17,26 @@ data class TravelState(
 )
 
 class TravelStatusManager(
-    private var homeAnchorCoordinates: Pair<Double, Double> = Pair(51.5074, -0.1278) // Default London Anchor
+    /** `null` until the user explicitly saves a Home location; Qasr never activates without one. */
+    private var homeAnchorCoordinates: Pair<Double, Double>? = null
 ) {
     companion object {
         const val TRAVEL_THRESHOLD_KM = 80.0
         private const val EARTH_RADIUS_KM = 6371.0
     }
 
+    /** Whether a Home location has been explicitly saved (as opposed to the unset default). */
+    val hasHomeAnchor: Boolean get() = homeAnchorCoordinates != null
+
     fun setHomeAnchor(coordinates: Pair<Double, Double>) {
         this.homeAnchorCoordinates = coordinates
     }
 
-    fun getHomeAnchor(): Pair<Double, Double> = homeAnchorCoordinates
+    fun clearHomeAnchor() {
+        this.homeAnchorCoordinates = null
+    }
+
+    fun getHomeAnchor(): Pair<Double, Double>? = homeAnchorCoordinates
 
     fun calculateHaversineDistanceKm(
         point1: Pair<Double, Double>,
@@ -49,8 +57,10 @@ class TravelStatusManager(
     }
 
     fun evaluateTravelState(currentCoordinates: Pair<Double, Double>): TravelState {
-        val distance = calculateHaversineDistanceKm(homeAnchorCoordinates, currentCoordinates)
-        val isTraveler = distance >= TRAVEL_THRESHOLD_KM
+        val home = homeAnchorCoordinates
+        // No saved Home location => always Muqim (never show 2 rakat by default).
+        val distance = if (home == null) 0.0 else calculateHaversineDistanceKm(home, currentCoordinates)
+        val isTraveler = home != null && distance >= TRAVEL_THRESHOLD_KM
 
         val rakats = if (isTraveler) {
             mapOf(
@@ -71,7 +81,7 @@ class TravelStatusManager(
         }
 
         return TravelState(
-            homeAnchorCoordinates = homeAnchorCoordinates,
+            homeAnchorCoordinates = home ?: currentCoordinates,
             currentCoordinates = currentCoordinates,
             distanceKm = distance,
             isTraveler = isTraveler,
