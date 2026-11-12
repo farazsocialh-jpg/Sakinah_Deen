@@ -257,6 +257,56 @@ fun SalahScreen(
             }
         }
 
+        // 3. Home Location Not Set Prompt (dismissible chip/banner)
+        if (!state.hasHomeLocation) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xFFFEF3C7),
+                border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = "Home Location",
+                            tint = EmeraldDeep,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Set Home Location for automatic Qasr (shortened prayers)",
+                            fontSize = 11.sp,
+                            color = Color(0xFF78350F)
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = { locationPermissionLauncher.launch(
+                            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+                        }),
+                        modifier = Modifier.height(32.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldDeep)
+                    ) {
+                        Text("Use Current GPS", fontSize = 10.sp, color = Color.White)
+                    }
+                    OutlinedButton(
+                        onClick = { showManualCityDialog = true },
+                        modifier = Modifier.padding(start = 4.dp),
+                        modifier2 = Modifier.height(32.dp)
+                    ) {
+                        Text("Pick City", fontSize = 10.sp, color = EmeraldDeep)
+                    }
+                }
+            }
+        }
+
         // 3. Hero Active Prayer Card (Deep Emerald Gradient with Live Countdown)
         Card(
             modifier = Modifier.fillMaxWidth(),

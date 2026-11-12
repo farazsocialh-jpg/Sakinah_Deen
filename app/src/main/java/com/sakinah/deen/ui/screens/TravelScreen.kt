@@ -52,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.EmeraldDeep
 import com.sakinah.deen.ui.theme.EmeraldSurface
 import com.sakinah.deen.ui.theme.MintGreen
@@ -69,7 +70,12 @@ fun TravelScreen(
     var vehicleHeading by remember { mutableFloatStateOf(42f) }
     val kaabaAzimuth = 118f // Kaaba bearing
     val relativeAngle = (kaabaAzimuth - vehicleHeading + 360f) % 360f
+    val context = LocalContext.current
 
+    // Get home anchor from TravelStatusManager via rememberInject
+    val travelManager = rememberInject<TravelStatusManager>
+    val homeAnchor by remember { travelManager.getHomeAnchor() }
+    val homeCity = rememberInject<SakinahPreferences>(context).homeCityName
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -101,14 +107,20 @@ fun TravelScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
+                            // Show saved home city or "Not set"
+                            val homeDisplay = if (homeAnchor != null) {
+                                homeCity ?: "Saved Location"
+                            } else {
+                                "Not set"
+                            }
                             Text(
-                                text = "Home Anchor: London, UK",
+                                text = "Home Anchor: ${homeDisplay}",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = EmeraldDeep
                             )
                             Text(
-                                text = "M40 Motorway, Milepost 46",
+                                text = homeAnchor?.let { "(${it.first.toInt()}, ${it.second.toInt()})" } ?: "",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
@@ -154,6 +166,21 @@ fun TravelScreen(
                         fontSize = 11.sp
                     )
                 }
+            }
+        }
+
+        // Add Change Home button below the banner
+        FilledTonalButton(
+            onClick = {
+                // Open home location setup - navigate to Settings or request location
+                Unit
+            },
+            modifier = Modifier.widthIn(280.dp),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Change Home", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Icon(Icons.Default.LocationOn, contentDescription = null, tint = EmeraldDeep, modifier = Modifier.size(18.dp))
             }
         }
 

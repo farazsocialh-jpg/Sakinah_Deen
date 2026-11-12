@@ -1,5 +1,8 @@
 package com.sakinah.deen.ui.screens
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -23,6 +26,12 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val repo = rememberInject<SettingsRepository>()
     val settings by repo.settings.collectAsState()
     val scope = rememberCoroutineScope()
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val isGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+    }
 
     val themes = ThemeMode.entries
     val adhanChoices = AdhanChoice.entries
@@ -72,6 +81,40 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                             calcExpanded = false
                         })
                     }
+                }
+            }
+            // Home Location row
+            val homeCoords = appPrefs.homeCoordinates
+            val homeCity = appPrefs.homeCityName
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Home Location", modifier = Modifier.weight(1f))
+                if (homeCoords != null) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MintGreen.copy(alpha = 0.15f),
+                        modifier = Modifier.padding(end = 4.dp)
+                    ) {
+                        Text(
+                            text = "${homeCity ?: "Saved"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = EmeraldDeep
+                        )
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = { locationPermissionLauncher.launch(
+                            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+                        }),
+                        modifier = Modifier.padding(end = 4.dp)
+                    ) {
+                        Text("Use Current GPS")
+                    }
+                }
+                OutlinedButton(
+                    onClick = { showManualCityDialog = true },
+                    modifier = Modifier.padding(start = 4.dp)
+                ) {
+                    Text("Choose City")
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
