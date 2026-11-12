@@ -231,6 +231,14 @@ class QuranViewModel(
                 contentNotice = "Loading surah ${listing.nameEnglish}…"
             )
         }
+
+        // Fetch ayahs on demand for any uncached surah.
+        val repo = islamicRepository
+        if (repo != null) {
+            viewModelScope.launch {
+                runCatching { repo.syncSurah(surahNumber) }
+            }
+        }
     }
 
     /**

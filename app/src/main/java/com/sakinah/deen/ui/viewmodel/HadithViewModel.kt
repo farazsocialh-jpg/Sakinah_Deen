@@ -166,8 +166,20 @@ class HadithViewModel(
     fun onIntent(intent: HadithUiIntent) {
         when (intent) {
             is HadithUiIntent.SelectBook -> {
-                _uiState.update { it.copy(selectedBookKey = intent.bookKey) }
+                _uiState.update { it.copy(selectedBookKey = intent.bookKey, isLoading = true) }
                 applyFilterAndSearch()
+                if (intent.bookKey != "all" && intent.bookKey in com.sakinah.deen.network.IslamicDataRepository.SUPPORTED_HADITH_BOOKS) {
+                    viewModelScope.launch {
+                        val repo = islamicRepository
+                        val available = repo?.isBookAvailable(intent.bookKey) ?: true
+                        if (!available) {
+                            repo?.syncHadithBook(intent.bookKey)
+                        }
+                        _uiState.update { it.copy(isLoading = false) }
+                    }
+                } else {
+                    _uiState.update { it.copy(isLoading = false) }
+                }
             }
             is HadithUiIntent.SearchQueryChanged -> {
                 _uiState.update { it.copy(searchQuery = intent.query) }

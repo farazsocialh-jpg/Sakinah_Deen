@@ -20,7 +20,8 @@ data class QiblaCompassData(
     val needleRelativeAngleDeg: Float = 118f,
     val accuracy: Int = SensorManager.SENSOR_STATUS_ACCURACY_HIGH,
     val isVehicularTrajectoryActive: Boolean = false,
-    val magneticDeclinationDeg: Float = 0f
+    val magneticDeclinationDeg: Float = 0f,
+    val isAligned: Boolean = false
 )
 
 class QiblaSensorManager(
@@ -177,6 +178,7 @@ class QiblaSensorManager(
 
     private fun evaluateHeadingOutput(headingTrueNorth: Float, isVehicular: Boolean = false) {
         val relativeNeedleAngle = (kaabaBearing - headingTrueNorth + 360f) % 360f
+        val aligned = relativeNeedleAngle <= 3f || relativeNeedleAngle >= 357f
 
         _compassFlow.value = QiblaCompassData(
             azimuthTrueNorthDeg = headingTrueNorth,
@@ -184,7 +186,8 @@ class QiblaSensorManager(
             needleRelativeAngleDeg = relativeNeedleAngle,
             accuracy = sensorAccuracy,
             isVehicularTrajectoryActive = isVehicular,
-            magneticDeclinationDeg = magneticDeclination
+            magneticDeclinationDeg = magneticDeclination,
+            isAligned = aligned
         )
     }
 

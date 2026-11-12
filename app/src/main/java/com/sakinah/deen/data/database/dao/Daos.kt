@@ -146,6 +146,9 @@ interface QuranDao {
     @Query("SELECT * FROM surah_metadata ORDER BY surahNumber ASC")
     fun observeSurahs(): Flow<List<SurahMetadataEntity>>
 
+    @Query("SELECT COUNT(*) FROM surah_metadata")
+    suspend fun countSurahs(): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAyahs(ayahs: List<QuranAyahEntity>)
 

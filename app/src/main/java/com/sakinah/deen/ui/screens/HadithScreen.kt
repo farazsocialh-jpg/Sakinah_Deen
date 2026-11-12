@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -135,16 +137,31 @@ fun HadithScreen(
 
         // 3. Results
         if (state.filteredHadiths.isEmpty()) {
-            Text(
-                text = if (state.isFromDatabase) {
-                    "No hadith match this filter in the offline library."
-                } else {
-                    "Preparing the offline hadith library…"
-                },
-                modifier = Modifier.padding(vertical = 16.dp),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-            )
+            if (state.isLoading) {
+                Row(
+                    modifier = Modifier.padding(vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Text(
+                        text = "Downloading hadith collection…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+            } else {
+                Text(
+                    text = if (state.isFromDatabase) {
+                        "No hadith match this filter in the offline library."
+                    } else {
+                        "Preparing the offline hadith library…"
+                    },
+                    modifier = Modifier.padding(vertical = 16.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
             return@Column
         }
 

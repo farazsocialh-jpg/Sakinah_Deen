@@ -1,8 +1,10 @@
 package com.sakinah.deen.ui.screens
 
 import android.Manifest
+import android.location.Location
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -43,6 +45,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +60,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -63,6 +70,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
+import com.sakinah.deen.domain.sensor.QiblaSensorManager
+import com.sakinah.deen.domain.travel.TravelStatusManager
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
 import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.EmeraldDeep
@@ -77,31 +86,38 @@ import kotlin.math.sin
 fun TravelScreen(
     modifier: Modifier = Modifier
 ) {
-    var distanceKm by remember { mutableFloatStateOf(74f) }
-    val thresholdKm = 88f
-    val isSafar = distanceKm >= thresholdKm
-    var vehicleHeading by remember { mutableFloatStateOf(42f) }
-    val kaabaAzimuth = 118f // Kaaba bearing
-    val relativeAngle = (kaabaAzimuth - vehicleHeading + 360f) % 360f
-
-    // Saved Home Location is the source of truth for the Qasr distance check.
     val appPrefs = rememberInject<SakinahPreferences>()
     val locationProvider = rememberInject<UserLocationProvider>()
-    val scope = rememberCoroutineScope()
+    val travelManager = rememberInject<TravelStatusManager>()
+    val qiblaManager = rememberInject<QiblaSensorManager>()
+
+    val compassData by qiblaManager.compassFlow.collectAsState()
+
+    val haptic = LocalHapticFeedback.current
+    LaunchedEffect(compassData.isAligned) {
+        if (compassData.isAligned) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+    }
+
+    var distanceKm by remember { mutableFloatStateOf(0f) }
+    val thresholdKm = 88f
+    var isSafar by remember { mutableStateOf(false) }
     var homeCoordinates by remember { mutableStateOf(appPrefs.homeCoordinates) }
     var homeCity by remember { mutableStateOf(appPrefs.homeCityName) }
     var showHomeOptions by remember { mutableStateOf(false) }
     var showHomeCityPicker by remember { mutableStateOf(false) }
     var gpsHomeRequested by remember { mutableStateOf(false) }
 
+    val scope = rememberCoroutineScope()
+
     fun saveCurrentGpsAsHome() {
         scope.launch {
             val resolved = locationProvider.getFreshOrCachedLocation()
             val label = listOf(resolved.cityName, resolved.countryName)
                 .filter { it.isNotBlank() }
-                .joinToString(", ")
+                .joinToString(",")
                 .ifBlank { "Saved Location" }
-            // Invalid fixes are ignored and any stale Travel Mode is cleared.
             appPrefs.saveHomeAnchor(resolved.latitude, resolved.longitude, label)
             homeCoordinates = appPrefs.homeCoordinates
             homeCity = appPrefs.homeCityName
@@ -116,6 +132,33 @@ fun TravelScreen(
         if (isGranted && gpsHomeRequested) saveCurrentGpsAsHome()
         gpsHomeRequested = false
     }
+
+    // Bind to live GPS + sensors.
+    LaunchedEffect(Unit) {
+        qiblaManager.startListening()
+        val resolved = locationProvider.getFreshOrCachedLocation()
+        val loc = Location("").apply {
+            latitude = resolved.latitude
+            longitude = resolved.longitude
+        }
+        qiblaManager.updateLocation(loc)
+        val travelState = travelManager.evaluateTravelState(Pair(resolved.latitude, resolved.longitude))
+        distanceKm = travelState.distanceKm.toFloat()
+        isSafar = travelState.isTraveler
+    }
+    DisposableEffect(Unit) {
+        onDispose { qiblaManager.stopListening() }
+    }
+
+    val animatedNeedle by animateFloatAsState(
+        targetValue = compassData.needleRelativeAngleDeg,
+        label = "needle"
+    )
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (compassData.isAligned) 1f else 0f,
+        label = "glow"
+    )
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -147,7 +190,6 @@ fun TravelScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
-                            // Show saved home city or "Not set"
                             val homeDisplay = if (homeCoordinates != null) {
                                 homeCity ?: "Saved Location"
                             } else {
@@ -194,9 +236,8 @@ fun TravelScreen(
                     color = if (isSafar) MintGreen else EmeraldDeep
                 )
 
-                // Toggle simulation
                 Button(
-                    onClick = { distanceKm = if (distanceKm >= 88f) 45f else 95f },
+                    onClick = { distanceKm = if (distanceKm >= 88f) 45f else 95f; isSafar = distanceKm >= thresholdKm },
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldDeep.copy(alpha = 0.1f))
                 ) {
@@ -209,7 +250,6 @@ fun TravelScreen(
             }
         }
 
-        // Change Home opens the same GPS / city picker options as Settings.
         FilledTonalButton(
             onClick = { showHomeOptions = true },
             modifier = Modifier.widthIn(280.dp),
@@ -221,7 +261,7 @@ fun TravelScreen(
             }
         }
 
-        // 2. Qasr & Jam' Prayer Timeline
+        // Qasr & Jam' Prayer Timeline
         Card(
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -266,7 +306,7 @@ fun TravelScreen(
             }
         }
 
-        // 3. In-Vehicle Qibla Compass (Smooth Canvas Drawing)
+        // Qibla Compass
         Card(
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -293,14 +333,13 @@ fun TravelScreen(
                         )
                     }
                     Text(
-                        text = "Kaaba: ${kaabaAzimuth.toInt()}° ESE",
+                        text = "Qibla: ${compassData.kaabaBearingDeg.toInt()}°",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = MintGreen
                     )
                 }
 
-                // Compass Dial Canvas
                 Canvas(
                     modifier = Modifier
                         .size(180.dp)
@@ -309,12 +348,15 @@ fun TravelScreen(
                     val radius = size.minDimension / 2f
                     val center = Offset(size.width / 2f, size.height / 2f)
 
-                    // Outer dial circle
                     drawCircle(Color.LightGray.copy(alpha = 0.3f), radius = radius, center = center)
                     drawCircle(Color(0xFF0B3B2C), radius = radius, center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 4f))
 
-                    // Pointer to Kaaba relative to car
-                    val angleRad = (relativeAngle - 90f) * (PI / 180f).toFloat()
+                    // Glow when aligned
+                    if (glowAlpha > 0f) {
+                        drawCircle(MintGreen.copy(alpha = 0.35f * glowAlpha), radius = radius + 8f, center = center)
+                    }
+
+                    val angleRad = (animatedNeedle - 90f) * (PI / 180f).toFloat()
                     val targetX = center.x + (radius - 20f) * cos(angleRad)
                     val targetY = center.y + (radius - 20f) * sin(angleRad)
 
@@ -328,22 +370,24 @@ fun TravelScreen(
                     drawCircle(Color(0xFF0B3B2C), radius = 12f, center = center)
                 }
 
+                if (compassData.isAligned) {
+                    Text(
+                        text = "Facing Qibla",
+                        fontWeight = FontWeight.Bold,
+                        color = MintGreen,
+                        fontSize = 14.sp
+                    )
+                }
+
                 Text(
-                    text = "Steering Heading: ${vehicleHeading.toInt()}° · Kaaba Offset: ${relativeAngle.toInt()}°",
+                    text = "Facing: ${compassData.azimuthTrueNorthDeg.toInt()}° · Qibla: ${compassData.kaabaBearingDeg.toInt()}°",
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium
-                )
-
-                Slider(
-                    value = vehicleHeading,
-                    onValueChange = { vehicleHeading = it },
-                    valueRange = 0f..360f,
-                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }
 
-        // 4. Bluetooth Dua al-Safar Quick Card
+        // Bluetooth Dua card
         Card(
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = EmeraldDeep)
@@ -394,8 +438,6 @@ fun TravelScreen(
         }
     }
 
-
-    // Home Location options — same GPS / city picker as Settings.
     if (showHomeOptions) {
         Dialog(onDismissRequest = { showHomeOptions = false }) {
             Surface(
@@ -482,5 +524,4 @@ fun TravelScreen(
             }
         )
     }
-
 }
