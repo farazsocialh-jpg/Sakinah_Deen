@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sakinah.deen.data.database.dao.SadaqahDao
 import com.sakinah.deen.data.database.entity.SadaqahLogEntity
+import com.sakinah.deen.data.repository.NisabRateRepository
+import com.sakinah.deen.data.repository.NisabRates
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,6 +20,7 @@ data class WealthUiState(
     val isGoldStandard: Boolean = true,
     val goldPricePerGram: Float = 88.40f,
     val silverPricePerGram: Float = 1.15f,
+    val nisabLastUpdatedEpochMillis: Long = 0L,
     val cashInBank: Float = 14200f,
     val goldHeld: Float = 4500f,
     val silverHeld: Float = 320f,
@@ -42,11 +46,13 @@ sealed class WealthUiIntent {
     data class UpdateStocksValue(val amount: Float) : WealthUiIntent()
     data class UpdateDebts(val amount: Float) : WealthUiIntent()
     data class AddMicroSadaqah(val amount: Float, val note: String? = null) : WealthUiIntent()
+    data object RefreshNisabRates : WealthUiIntent()
     data object ResetBalances : WealthUiIntent()
 }
 
 class WealthViewModel(
-    private val sadaqahDao: SadaqahDao
+    private val sadaqahDao: SadaqahDao,
+    private val nisabRateRepository: NisabRateRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WealthUiState())
@@ -55,6 +61,24 @@ class WealthViewModel(
     init {
         recalculateZakat()
         observeSadaqah()
+        observeNisabRates()
+    }
+
+    private fun observeNisabRates() {
+        val repo = nisabRateRepository ?: return
+        viewModelScope.launch {
+            repo.rates.collectLatest { rates: NisabRates ->
+                _uiState.update {
+                    it.copy(
+                        goldPricePerGram = rates.goldPricePerGram,
+                        silverPricePerGram = rates.silverPricePerGram,
+                        nisabLastUpdatedEpochMillis = rates.lastUpdatedEpochMillis
+                    )
+                }
+                recalculateZakat()
+            }
+        }
+        viewModelScope.launch { repo.refresh() }
     }
 
     fun onIntent(intent: WealthUiIntent) {
@@ -89,6 +113,9 @@ class WealthViewModel(
             }
             is WealthUiIntent.AddMicroSadaqah -> {
                 addMicroSadaqah(intent.amount, intent.note)
+            }
+            is WealthUiIntent.RefreshNisabRates -> {
+                viewModelScope.launch { nisabRateRepository?.refresh() }
             }
             is WealthUiIntent.ResetBalances -> {
                 _uiState.update {

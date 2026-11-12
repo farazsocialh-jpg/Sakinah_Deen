@@ -2,7 +2,9 @@ package com.sakinah.deen.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sakinah.deen.data.database.entity.HadithEntryEntity
 import com.sakinah.deen.data.model.HadithModel
+import com.sakinah.deen.network.IslamicDataRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,7 +26,9 @@ data class HadithUiState(
     val filteredHadiths: List<HadithModel> = emptyList(),
     val isLoading: Boolean = false,
     val bookmarkedIds: Set<String> = emptySet(),
-    val targetDeepLinkId: String? = null
+    val targetDeepLinkId: String? = null,
+    /** True once the encrypted database has supplied at least one hadith. */
+    val isFromDatabase: Boolean = false
 )
 
 sealed class HadithUiIntent {
@@ -36,7 +40,15 @@ sealed class HadithUiIntent {
     data object ClearSearch : HadithUiIntent()
 }
 
-class HadithViewModel : ViewModel() {
+/**
+ * Hadith reader backed by the encrypted Room tables seeded from
+ * `seed_hadith_nawawi.json` / `seed_hisn_muslim.json` and by any downloaded
+ * Kutub al-Tis'ah editions. The bundled canon below is used only as a placeholder
+ * until the database emits rows (for example on the very first cold start).
+ */
+class HadithViewModel(
+    private val islamicRepository: IslamicDataRepository? = null
+) : ViewModel() {
 
     private val canonicalBooks = listOf(
         HadithBookInfo("bukhari", "Sahih al-Bukhari", "7,563 Hadiths"),
@@ -50,7 +62,7 @@ class HadithViewModel : ViewModel() {
         HadithBookInfo("darimi", "Sunan al-Darimi", "3,500 Hadiths")
     )
 
-    private val canonicalCorpus = listOf(
+    private val placeholderCorpus = listOf(
         HadithModel(
             id = "bukhari-1",
             bookKey = "bukhari",
@@ -140,12 +152,16 @@ class HadithViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(
         HadithUiState(
             books = canonicalBooks,
-            hadiths = canonicalCorpus,
-            filteredHadiths = canonicalCorpus,
+            hadiths = placeholderCorpus,
+            filteredHadiths = placeholderCorpus,
             bookmarkedIds = setOf("bukhari-1", "muslim-140", "tirmidhi-1987")
         )
     )
     val uiState: StateFlow<HadithUiState> = _uiState.asStateFlow()
+
+    init {
+        observeDatabaseHadiths()
+    }
 
     fun onIntent(intent: HadithUiIntent) {
         when (intent) {
@@ -161,18 +177,68 @@ class HadithViewModel : ViewModel() {
                 _uiState.update { it.copy(filterGrade = intent.grade) }
                 applyFilterAndSearch()
             }
-            is HadithUiIntent.ToggleBookmark -> {
-                toggleBookmark(intent.hadithId)
-            }
-            is HadithUiIntent.NavigateToDeepLink -> {
-                navigateToDeepLink(intent.hadithIdOrSlug)
-            }
+            is HadithUiIntent.ToggleBookmark -> toggleBookmark(intent.hadithId)
+            is HadithUiIntent.NavigateToDeepLink -> navigateToDeepLink(intent.hadithIdOrSlug)
             is HadithUiIntent.ClearSearch -> {
                 _uiState.update { it.copy(searchQuery = "") }
                 applyFilterAndSearch()
             }
         }
     }
+
+    // ------------------------------------------------------------------ Room wiring
+
+    private fun observeDatabaseHadiths() {
+        val repo = islamicRepository ?: return
+        viewModelScope.launch {
+            repo.observeAllHadiths(limit = 500).collect { entries ->
+                if (entries.isEmpty()) return@collect
+                val bookmarked = _uiState.value.bookmarkedIds
+                val mapped = entries.map { entry ->
+                    entry.toModel(bookmarked.contains("${entry.bookKey}-${entry.hadithNumber}"))
+                }
+
+                _uiState.update {
+                    it.copy(
+                        books = buildBooks(entries),
+                        hadiths = mapped,
+                        isFromDatabase = true,
+                        isLoading = false
+                    )
+                }
+                applyFilterAndSearch()
+            }
+        }
+    }
+
+    private fun buildBooks(entries: List<HadithEntryEntity>): List<HadithBookInfo> =
+        entries
+            .groupBy { it.bookKey to it.bookTitle }
+            .map { (keyAndTitle, group) ->
+                HadithBookInfo(
+                    key = keyAndTitle.first,
+                    title = keyAndTitle.second,
+                    totalCount = "${group.size} Hadiths"
+                )
+            }
+            .sortedBy { it.key }
+
+    private fun HadithEntryEntity.toModel(bookmarked: Boolean): HadithModel = HadithModel(
+        id = "$bookKey-$hadithNumber",
+        bookKey = bookKey,
+        bookTitle = bookTitle,
+        bookTotalCount = 0,
+        hadithNumber = hadithNumber,
+        chapterTitle = chapterTitle,
+        grade = grade.ifBlank { "UNGRADED" },
+        gradingScholar = gradingScholar,
+        arabicText = arabicText,
+        sanad = "",
+        matnTranslation = englishText,
+        bookmarked = bookmarked
+    )
+
+    // ------------------------------------------------------------------ Filtering
 
     private fun applyFilterAndSearch() {
         val current = _uiState.value
@@ -197,28 +263,26 @@ class HadithViewModel : ViewModel() {
     }
 
     private fun toggleBookmark(hadithId: String) {
-        viewModelScope.launch {
-            val bookmarks = _uiState.value.bookmarkedIds.toMutableSet()
-            val isNowBookmarked = if (bookmarks.contains(hadithId)) {
-                bookmarks.remove(hadithId)
-                false
-            } else {
-                bookmarks.add(hadithId)
-                true
-            }
-
-            val updatedList = _uiState.value.hadiths.map {
-                if (it.id == hadithId) it.copy(bookmarked = isNowBookmarked) else it
-            }
-
-            _uiState.update {
-                it.copy(
-                    bookmarkedIds = bookmarks,
-                    hadiths = updatedList
-                )
-            }
-            applyFilterAndSearch()
+        val bookmarks = _uiState.value.bookmarkedIds.toMutableSet()
+        val isNowBookmarked = if (bookmarks.contains(hadithId)) {
+            bookmarks.remove(hadithId)
+            false
+        } else {
+            bookmarks.add(hadithId)
+            true
         }
+
+        val updatedList = _uiState.value.hadiths.map {
+            if (it.id == hadithId) it.copy(bookmarked = isNowBookmarked) else it
+        }
+
+        _uiState.update {
+            it.copy(
+                bookmarkedIds = bookmarks,
+                hadiths = updatedList
+            )
+        }
+        applyFilterAndSearch()
     }
 
     private fun navigateToDeepLink(hadithIdOrSlug: String) {

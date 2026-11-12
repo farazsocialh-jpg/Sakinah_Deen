@@ -2,6 +2,10 @@ package com.sakinah.deen.di
 
 import com.sakinah.deen.data.database.SakinahEncryptedDatabase
 import com.sakinah.deen.data.prefs.SakinahPreferences
+import com.sakinah.deen.data.repository.NisabRateRepository
+import com.sakinah.deen.data.repository.NisabRateRepositoryImpl
+import com.sakinah.deen.data.repository.PreferencesNisabRateCache
+import com.sakinah.deen.data.repository.SharedPreferencesNisabRateCacheStore
 import com.sakinah.deen.data.repository.TafseerDownloadRepository
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl
@@ -105,6 +109,14 @@ val networkModule = module {
 
 val repositoryModule = module {
     single { TafseerDownloadRepository(androidContext()) }
+    single<NisabRateRepository> {
+        val prefs = androidContext().getSharedPreferences("sakinah_nisab_rates", android.content.Context.MODE_PRIVATE)
+        NisabRateRepositoryImpl(
+            client = get(),
+            json = get(),
+            cache = PreferencesNisabRateCache(SharedPreferencesNisabRateCacheStore(prefs))
+        )
+    }
 }
 
 val workerModule = module {
@@ -113,10 +125,10 @@ val workerModule = module {
 
 val viewModelModule = module {
     factory { SalahViewModel(get(), get(), get(), get(), getOrNull()) }
-    factory { QuranViewModel(get(), get()) }
-    factory { HadithViewModel() }
+    factory { QuranViewModel(get(), get(), getOrNull(), getOrNull()) }
+    factory { HadithViewModel(getOrNull()) }
     factory { TravelViewModel(get(), get(), getOrNull()) }
-    factory { WealthViewModel(get()) }
+    factory { WealthViewModel(get(), getOrNull()) }
     factory { AiScholarViewModel(get()) }
 }
 

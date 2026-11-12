@@ -39,11 +39,15 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Free Google AI Studio key. Supply via GEMINI_API_KEY env var or keystore.properties.
-        // Never commit a real key: the value is embedded in the APK and is extractable.
-        val geminiApiKey = signingValue("GEMINI_API_KEY", "GEMINI_API_KEY").orEmpty()
-        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
-        buildConfigField("String", "GEMINI_MODEL", "\"gemini-2.5-flash\"")
+        // Backend proxy URL for the Sunni AI Scholar (server-side holds the raw Gemini key).
+        // Supply via AI_PROXY_URL env var or keystore.properties. Empty disables the proxy.
+        val aiProxyUrl = signingValue("AI_PROXY_URL", "AI_PROXY_URL").orEmpty()
+        buildConfigField("String", "AI_PROXY_URL", "\"$aiProxyUrl\"")
+
+        // Public metal-price endpoint used for the live nisab threshold. Empty disables
+        // fetching, in which case the last cached rate is used.
+        val nisabRateUrl = signingValue("NISAB_RATE_URL", "NISAB_RATE_URL").orEmpty()
+        buildConfigField("String", "NISAB_RATE_URL", "\"$nisabRateUrl\"")
     }
 
     signingConfigs {
@@ -139,6 +143,11 @@ dependencies {
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.kotlinx.serialization.json)
+
+    // Unit tests
+    testImplementation("junit:junit:4.13.2")
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.ktor.client.mock)
 }
 
 // ---------------------------------------------------------------------------

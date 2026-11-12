@@ -5,7 +5,6 @@ import com.sakinah.deen.network.model.ProofSourceDto
 import com.sakinah.deen.network.model.RagQueryRequest
 import com.sakinah.deen.network.model.RagStreamChunk
 import io.ktor.client.HttpClient
-import io.ktor.client.request.parameter
 import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
@@ -29,23 +28,21 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 
 /**
- * Direct streaming client for Google AI Studio's free Gemini Flash tier.
+ * Streaming client for the AI Scholar backend proxy.
  *
- * The API key is injected at build time (GEMINI_API_KEY). Embedding a key in an APK
- * is extractable, so the key must be restricted to the Generative Language API in
- * Google AI Studio and rotated if leaked. For multi-user distribution, route this
- * call through a server proxy instead.
+ * No model API key is compiled into the APK: the proxy URL comes from
+ * `BuildConfig.AI_PROXY_URL` and the upstream provider credential stays on the server.
+ * The proxy is expected to answer with the same server-sent-event shape the Gemini
+ * streaming endpoint uses (`data: {"candidates": [...]}`), which keeps the existing
+ * citation and madhhab extraction below unchanged.
  */
 class SunniAiClient(
     private val httpClient: HttpClient,
     private val json: Json,
-    private val apiKey: String = BuildConfig.GEMINI_API_KEY,
-    private val model: String = BuildConfig.GEMINI_MODEL
+    private val proxyUrl: String = BuildConfig.AI_PROXY_URL
 ) {
 
     companion object {
-        const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
-
         /** Guardrails required by the product: Ahl al-Sunnah sources only, cited proofs. */
         val SYSTEM_PROMPT = """
             You are an authentic Sunni Islamic Scholar Assistant within the Sakinah app.
@@ -91,9 +88,8 @@ class SunniAiClient(
     }
 
     val isConfigured: Boolean
-        get() = apiKey.isNotBlank() &&
-            !apiKey.equals("MY_GEMINI_API_KEY", ignoreCase = true) &&
-            !apiKey.startsWith("MY_")
+        get() = proxyUrl.isNotBlank() &&
+            !proxyUrl.startsWith("MY_")
 
     /**
      * Streams a grounded answer as text deltas, source citations, and madhhab
@@ -102,11 +98,9 @@ class SunniAiClient(
     fun streamScholar(request: RagQueryRequest): Flow<RagStreamChunk> = flow {
         check(isConfigured) { "Gemini API key is not configured" }
 
-        val url = "$BASE_URL/models/$model:streamGenerateContent"
+        val url = proxyUrl
         httpClient.preparePost(url) {
             contentType(ContentType.Application.Json)
-            parameter("alt", "sse")
-            parameter("key", apiKey)
             setBody(buildRequestBody(request).toString())
         }.execute { httpResponse ->
             if (!httpResponse.status.isSuccess()) {

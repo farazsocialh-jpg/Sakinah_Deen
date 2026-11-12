@@ -44,6 +44,47 @@ class AiScholarViewModel(
     private val scholarRepository: SunniAiScholarRepository
 ) : ViewModel() {
 
+    companion object {
+        private val HTTP_5XX = Regex("HTTP 5\\d{2}")
+        private val HTTP_429 = Regex("HTTP 429")
+
+        /**
+         * Turns transport failures into one plain-language message per cause so the UI
+         * never surfaces a raw stack-trace fragment:
+         *  - 429 / quota → rate limited, retry shortly
+         *  - 5xx → upstream proxy unavailable
+         *  - no connectivity / timeout → offline, cached content still works
+         */
+        internal fun describeScholarFailure(error: Throwable): String {
+            val message = error.localizedMessage.orEmpty()
+            val lower = message.lowercase()
+            return when {
+                HTTP_429.containsMatchIn(message) ||
+                    lower.contains("rate limit") ||
+                    lower.contains("quota") ->
+                    "The AI Scholar is receiving too many requests (rate limited). " +
+                        "Please try again in a minute."
+
+                HTTP_5XX.containsMatchIn(message) ||
+                    lower.contains("service unavailable") ||
+                    lower.contains("bad gateway") ->
+                    "The AI Scholar proxy is temporarily unavailable (server error). " +
+                        "Please retry shortly; your cached Quran and hadith are unaffected."
+
+                error is java.io.IOException ||
+                    lower.contains("unable to resolve host") ||
+                    lower.contains("connect") ||
+                    lower.contains("timeout") ||
+                    lower.contains("timed out") ||
+                    lower.contains("offline") ->
+                    "No connection to the AI Scholar. Check your network — the Quran, " +
+                        "hadith and nisab caches keep working offline."
+
+                else -> message.ifBlank { "Failed to connect to the Sunni Scholar service." }
+            }
+        }
+    }
+
     private val _uiState = MutableStateFlow(
         AiScholarUiState(
             messages = listOf(
@@ -172,11 +213,13 @@ class AiScholarViewModel(
                         }
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
                         isStreaming = false,
-                        error = e.localizedMessage ?: "Failed to connect to Sunni Scholar service."
+                        error = describeScholarFailure(e)
                     )
                 }
             }

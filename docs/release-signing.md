@@ -31,7 +31,8 @@ Create exactly these:
 | `KEYSTORE_PASSWORD` | Keystore password |
 | `KEY_ALIAS` | `sakinah_key` (or your alias) |
 | `KEY_PASSWORD` | Key password |
-| `GEMINI_API_KEY` | Optional — free Google AI Studio key baked into `BuildConfig` |
+| `AI_PROXY_URL` | Optional — backend proxy for the AI Scholar (raw Gemini key stays server-side) |
+| `NISAB_RATE_URL` | Optional — metal-price endpoint for live nisab rates |
 
 Encode the keystore:
 
@@ -52,7 +53,7 @@ gh secret set KEYSTORE_BASE64 < /tmp/keystore.b64
 gh secret set KEYSTORE_PASSWORD
 gh secret set KEY_ALIAS --body "sakinah_key"
 gh secret set KEY_PASSWORD
-gh secret set GEMINI_API_KEY
+gh secret set AI_PROXY_URL
 ```
 
 > A leaked `KEYSTORE_BASE64` plus passwords lets someone publish as you. Treat them

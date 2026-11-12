@@ -2,6 +2,7 @@ package com.sakinah.deen.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +32,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -48,15 +50,37 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sakinah.deen.ui.theme.EmeraldDeep
 import com.sakinah.deen.ui.theme.MintGreen
+import com.sakinah.deen.ui.viewmodel.WealthUiIntent
+import com.sakinah.deen.ui.viewmodel.WealthViewModel
+import org.koin.androidx.compose.koinViewModel
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+/** Honest freshness label: an unset timestamp means the built-in estimate is in use. */
+internal fun formatNisabTimestamp(epochMillis: Long): String {
+    if (epochMillis <= 0L) return "Nisab rates: built-in estimate · update when online"
+    val date = Instant.ofEpochMilli(epochMillis)
+        .atZone(ZoneId.systemDefault())
+        .toLocalDate()
+        .format(DateTimeFormatter.ISO_LOCAL_DATE)
+    return "Nisab rates last updated: $date"
+}
 
 @Composable
 fun WealthScreen(
     modifier: Modifier = Modifier
 ) {
+    val viewModel: WealthViewModel = koinViewModel()
+    val zakatState by viewModel.uiState.collectAsState()
+
     var isGoldStandard by remember { mutableStateOf(true) }
-    val goldPricePerGram = 88.40f
-    val silverPricePerGram = 1.15f
+    val goldPricePerGram = zakatState.goldPricePerGram
+    val silverPricePerGram = zakatState.silverPricePerGram
     val nisabThreshold = if (isGoldStandard) 85f * goldPricePerGram else 595f * silverPricePerGram
+    val ratesUpdatedLabel = remember(zakatState.nisabLastUpdatedEpochMillis) {
+        formatNisabTimestamp(zakatState.nisabLastUpdatedEpochMillis)
+    }
 
     var cashInBank by remember { mutableFloatStateOf(14200f) }
     var goldHeld by remember { mutableFloatStateOf(4500f) }
@@ -139,6 +163,29 @@ fun WealthScreen(
                     fontWeight = FontWeight.SemiBold,
                     color = EmeraldDeep
                 )
+
+                // Freshness of the nisab rate so the threshold is never presented as live
+                // when it is actually a cached or built-in estimate.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = ratesUpdatedLabel,
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                    )
+                    Text(
+                        text = "Refresh rates",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = EmeraldDeep,
+                        modifier = Modifier.clickable {
+                            viewModel.onIntent(WealthUiIntent.RefreshNisabRates)
+                        }
+                    )
+                }
 
                 // Status Banner
                 Surface(

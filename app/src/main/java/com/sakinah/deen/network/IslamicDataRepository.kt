@@ -139,6 +139,10 @@ class IslamicDataRepository(
 
     fun observeSurahs(): Flow<List<SurahMetadataEntity>> = quranDao.observeSurahs()
 
+    /** Full-text search over the locally cached Uthmani text and its translation. */
+    fun searchAyahs(query: String, limit: Int = 100): Flow<List<QuranAyahEntity>> =
+        quranDao.searchAyahs(query, limit)
+
     suspend fun isSurahAvailable(surahNumber: Int): Boolean =
         quranDao.countAyahs(surahNumber) > 0
 
@@ -185,6 +189,13 @@ class IslamicDataRepository(
         limit: Int = 200,
         offset: Int = 0
     ): Flow<List<HadithEntryEntity>> = hadithDao.observeHadiths(bookKey, limit, offset)
+
+    /** Every locally seeded/ downloaded collection, used for the "All Books" filter. */
+    fun observeAllHadiths(limit: Int = 500, offset: Int = 0): Flow<List<HadithEntryEntity>> =
+        hadithDao.observeAllHadiths(limit, offset)
+
+    fun searchHadiths(query: String, limit: Int = 200): Flow<List<HadithEntryEntity>> =
+        hadithDao.searchHadiths(query, limit)
 
     suspend fun getHadith(bookKey: String, hadithNumber: Int): HadithEntryEntity? =
         hadithDao.getHadith(bookKey, hadithNumber)

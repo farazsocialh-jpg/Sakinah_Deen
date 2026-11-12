@@ -3,16 +3,31 @@ package com.sakinah.deen.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sakinah.deen.data.database.dao.HifzDao
+import com.sakinah.deen.data.database.dao.QuranDao
 import com.sakinah.deen.data.database.entity.HifzMistakeEntity
+import com.sakinah.deen.data.database.entity.QuranAyahEntity
+import com.sakinah.deen.data.database.entity.SurahMetadataEntity
 import com.sakinah.deen.data.model.AyahModel
 import com.sakinah.deen.data.model.SurahModel
 import com.sakinah.deen.data.repository.TafseerDownloadRepository
 import com.sakinah.deen.data.repository.TafseerPackage
+import com.sakinah.deen.network.IslamicDataRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/** A local full-text hit over the encrypted Quran cache. */
+data class AyahSearchResult(
+    val surahNumber: Int,
+    val surahName: String,
+    val ayahNumber: Int,
+    val textUthmani: String,
+    val translation: String
+)
 
 data class QuranUiState(
     val currentSurah: SurahModel,
@@ -24,7 +39,12 @@ data class QuranUiState(
     val selectedTafseerContent: String = "",
     val selectedScholar: String = "Ibn Kathir",
     val hifzMistakes: Map<Pair<Int, Int>, String> = emptyMap(),
-    val isDownloadingTafseer: Boolean = false
+    val isDownloadingTafseer: Boolean = false,
+    val searchQuery: String = "",
+    val searchResults: List<AyahSearchResult> = emptyList(),
+    val isSearching: Boolean = false,
+    /** Honest status when the requested content is not in the local database yet. */
+    val contentNotice: String? = null
 )
 
 sealed class QuranUiIntent {
@@ -33,14 +53,19 @@ sealed class QuranUiIntent {
     data class SelectScholar(val scholarName: String) : QuranUiIntent()
     data class SetHifzMistakeTag(val surah: Int, val ayah: Int, val wordPos: Int, val tag: String) : QuranUiIntent()
     data class DownloadTafseerPack(val packageId: String) : QuranUiIntent()
+    data class SearchAyahs(val query: String) : QuranUiIntent()
+    data object ClearSearch : QuranUiIntent()
     data object ToggleLayoutMode : QuranUiIntent()
 }
 
 class QuranViewModel(
-    private val hifzDao: HifzDao,
-    private val tafseerRepository: TafseerDownloadRepository
+    private val hifzDao: HifzDao? = null,
+    private val tafseerRepository: TafseerDownloadRepository? = null,
+    private val islamicRepository: IslamicDataRepository? = null,
+    private val quranDao: QuranDao? = null
 ) : ViewModel() {
 
+    /** Only used before the encrypted database has been seeded/reached. */
     private val sampleSurah = SurahModel(
         number = 1,
         nameEnglish = "Al-Fatihah",
@@ -60,10 +85,16 @@ class QuranViewModel(
         )
     )
 
+    private val selectedSurahNumber = MutableStateFlow(1)
+    private var searchJob: Job? = null
+
+    /** True once Room has supplied chapter metadata, i.e. the offline library is usable. */
+    private var hasDatabaseSurahs = false
+
     private val _uiState = MutableStateFlow(
         QuranUiState(
             currentSurah = sampleSurah,
-            surahs = listOf(sampleSurah),
+            surahs = listOf(sampleSurah.copy(ayahs = emptyList())),
             selectedTafseerContent = sampleSurah.ayahs[0].tafseerIbnKathir
         )
     )
@@ -71,49 +102,213 @@ class QuranViewModel(
 
     init {
         observeTafseerPackages()
+        observeRoomSurahs()
+        observeSelectedSurahAyahs()
     }
 
     fun onIntent(intent: QuranUiIntent) {
         when (intent) {
-            is QuranUiIntent.SelectSurah -> {
-                val found = _uiState.value.surahs.find { it.number == intent.surahNumber } ?: sampleSurah
-                _uiState.update {
-                    it.copy(
-                        currentSurah = found,
-                        activeHighlightedAyah = 1,
-                        selectedTafseerContent = found.ayahs.firstOrNull()?.tafseerIbnKathir ?: ""
-                    )
-                }
-            }
-            is QuranUiIntent.SelectAyahForTafseer -> {
-                val ayah = _uiState.value.currentSurah.ayahs.find { it.numberInSurah == intent.ayahNumber }
-                val content = when (_uiState.value.selectedScholar) {
-                    "Al-Tabari" -> ayah?.tafseerTabari
-                    "Al-Qurtubi" -> ayah?.tafseerQurtubi
-                    "Al-Sa'di" -> ayah?.tafseerSadi
-                    "Ma'ariful Quran" -> ayah?.tafseerMaarifulQuran
-                    else -> ayah?.tafseerIbnKathir
-                } ?: ""
-                _uiState.update {
-                    it.copy(
-                        activeHighlightedAyah = intent.ayahNumber,
-                        selectedTafseerContent = content
-                    )
-                }
-            }
+            is QuranUiIntent.SelectSurah -> selectSurah(intent.surahNumber)
+            is QuranUiIntent.SelectAyahForTafseer -> selectAyahForTafseer(intent.ayahNumber)
             is QuranUiIntent.SelectScholar -> {
                 _uiState.update { it.copy(selectedScholar = intent.scholarName) }
                 onIntent(QuranUiIntent.SelectAyahForTafseer(_uiState.value.activeHighlightedAyah))
             }
             is QuranUiIntent.SetHifzMistakeTag -> setHifzMistakeTag(intent.surah, intent.ayah, intent.wordPos, intent.tag)
             is QuranUiIntent.DownloadTafseerPack -> downloadTafseerPack(intent.packageId)
+            is QuranUiIntent.SearchAyahs -> searchAyahs(intent.query)
+            is QuranUiIntent.ClearSearch -> {
+                searchJob?.cancel()
+                _uiState.update { it.copy(searchQuery = "", searchResults = emptyList(), isSearching = false) }
+            }
             is QuranUiIntent.ToggleLayoutMode -> _uiState.update { it.copy(isStudyMode = !it.isStudyMode) }
         }
     }
 
-    private fun observeTafseerPackages() {
+    // ------------------------------------------------------------------ Room wiring
+
+    private fun observeRoomSurahs() {
+        val repo = islamicRepository ?: return
         viewModelScope.launch {
-            tafseerRepository.packages.collect { pkgs ->
+            repo.observeSurahs().collectLatest { metadata ->
+                if (metadata.isEmpty()) return@collectLatest
+                hasDatabaseSurahs = true
+                _uiState.update { it.copy(surahs = metadata.map { entity -> entity.toSurahModel() }) }
+            }
+        }
+    }
+
+    private fun observeSelectedSurahAyahs() {
+        val repo = islamicRepository ?: return
+        viewModelScope.launch {
+            selectedSurahNumber.collectLatest { surahNumber ->
+                repo.observeSurah(surahNumber).collect { ayahs ->
+                    if (ayahs.isEmpty()) {
+                        if (!hasDatabaseSurahs) return@collect
+                        _uiState.update {
+                            if (it.currentSurah.number == surahNumber) {
+                                it.copy(
+                                    contentNotice = "Surah $surahNumber is not in the offline database yet. " +
+                                        "Download it from the Quran library while online."
+                                )
+                            } else it
+                        }
+                        return@collect
+                    }
+                    applyAyahs(surahNumber, ayahs)
+                }
+            }
+        }
+    }
+
+    private fun applyAyahs(surahNumber: Int, ayahs: List<QuranAyahEntity>) {
+        val mapped = ayahs.map { it.toAyahModel() }
+        val metadata = _uiState.value.surahs.find { it.number == surahNumber }
+        val chapter = (metadata ?: SurahModel(
+            number = surahNumber,
+            nameEnglish = ayahs.first().surahNameEnglish.orEmpty(),
+            nameArabic = ayahs.first().surahNameArabic.orEmpty(),
+            englishMeaning = "",
+            revelationType = ayahs.first().revelationPlace.orEmpty(),
+            ayahCount = ayahs.size,
+            juzNumber = 0,
+            ayahs = emptyList()
+        )).copy(ayahCount = ayahs.size, ayahs = mapped)
+
+        val highlighted = mapped.firstOrNull { it.numberInSurah == _uiState.value.activeHighlightedAyah }
+            ?: mapped.first()
+
+        _uiState.update {
+            it.copy(
+                currentSurah = chapter,
+                activeHighlightedAyah = highlighted.numberInSurah,
+                selectedTafseerContent = highlighted.tafseerIbnKathir,
+                contentNotice = null
+            )
+        }
+    }
+
+    private fun selectSurah(surahNumber: Int) {
+        val state = _uiState.value
+        val listing = state.surahs.find { it.number == surahNumber }
+        selectedSurahNumber.value = surahNumber
+
+        if (listing == null) {
+            // Before the encrypted database is reachable the bundled Al-Fatihah keeps the
+            // reader useful; once it is, never substitute unrelated verses for a request.
+            val fallback = if (hasDatabaseSurahs) {
+                SurahModel(
+                    number = surahNumber,
+                    nameEnglish = "Surah $surahNumber",
+                    nameArabic = "",
+                    englishMeaning = "",
+                    revelationType = "",
+                    ayahCount = 0,
+                    juzNumber = 0,
+                    ayahs = emptyList()
+                )
+            } else {
+                sampleSurah
+            }
+            _uiState.update {
+                it.copy(
+                    currentSurah = fallback,
+                    activeHighlightedAyah = 1,
+                    selectedTafseerContent = fallback.ayahs.firstOrNull()?.tafseerIbnKathir.orEmpty(),
+                    contentNotice = if (hasDatabaseSurahs) {
+                        "Surah $surahNumber is not in the offline library yet. Download it while online."
+                    } else null
+                )
+            }
+            return
+        }
+
+        _uiState.update {
+            it.copy(
+                currentSurah = listing.copy(ayahs = emptyList()),
+                activeHighlightedAyah = 1,
+                selectedTafseerContent = "",
+                contentNotice = "Loading surah ${listing.nameEnglish}…"
+            )
+        }
+    }
+
+    /**
+     * Tafseer is only shown when it is actually cached (downloaded or bundled). The
+     * encrypted database is the single source of truth; unsupported scholars show a
+     * download prompt instead of invented commentary.
+     */
+    private fun selectAyahForTafseer(ayahNumber: Int) {
+        val ayah = _uiState.value.currentSurah.ayahs.find { it.numberInSurah == ayahNumber }
+            ?: return
+
+        _uiState.update { it.copy(activeHighlightedAyah = ayahNumber) }
+
+        val cached = when (_uiState.value.selectedScholar) {
+            "Ibn Kathir" -> ayah.tafseerIbnKathir
+            "Al-Tabari" -> ayah.tafseerTabari
+            "Al-Qurtubi" -> ayah.tafseerQurtubi
+            "Al-Sa'di" -> ayah.tafseerSadi
+            "Ma'ariful Quran" -> ayah.tafseerMaarifulQuran
+            else -> ayah.tafseerIbnKathir
+        }
+
+        if (cached.isNotBlank()) {
+            _uiState.update { it.copy(selectedTafseerContent = cached, contentNotice = null) }
+            return
+        }
+
+        val repo = islamicRepository ?: return
+        viewModelScope.launch {
+            val tafsir = runCatching { repo.getTafsir(ayahNumber = ayahNumber, surahNumber = _uiState.value.currentSurah.number) }
+                .getOrNull()
+            _uiState.update { state ->
+                if (tafsir != null) {
+                    state.copy(selectedTafseerContent = tafsir.text, contentNotice = null)
+                } else {
+                    state.copy(
+                        selectedTafseerContent = "",
+                        contentNotice = "No cached tafseer for ${state.currentSurah.nameEnglish} " +
+                            "$ayahNumber. Download the tafseer pack to read ${state.selectedScholar} offline."
+                    )
+                }
+            }
+        }
+    }
+
+    private fun searchAyahs(query: String) {
+        searchJob?.cancel()
+        val trimmed = query.trim()
+        _uiState.update { it.copy(searchQuery = query, isSearching = trimmed.isNotBlank()) }
+
+        if (trimmed.isBlank()) {
+            _uiState.update { it.copy(searchResults = emptyList(), isSearching = false) }
+            return
+        }
+
+        val repo = islamicRepository ?: run {
+            _uiState.update { it.copy(isSearching = false) }
+            return
+        }
+
+        searchJob = viewModelScope.launch {
+            repo.searchAyahs(trimmed).collect { rows ->
+                _uiState.update {
+                    it.copy(
+                        searchResults = rows.map { row -> row.toSearchResult() },
+                        isSearching = false
+                    )
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ Auxiliary
+
+    private fun observeTafseerPackages() {
+        val repo = tafseerRepository ?: return
+        viewModelScope.launch {
+            repo.packages.collect { pkgs ->
                 _uiState.update {
                     it.copy(
                         downloadedTafseers = pkgs.filter { p -> p.isDownloaded },
@@ -126,7 +321,7 @@ class QuranViewModel(
 
     private fun setHifzMistakeTag(surah: Int, ayah: Int, wordPos: Int, tag: String) {
         viewModelScope.launch {
-            hifzDao.upsertMistake(
+            hifzDao?.upsertMistake(
                 HifzMistakeEntity(
                     surahNumber = surah,
                     ayahNumber = ayah,
@@ -142,10 +337,50 @@ class QuranViewModel(
     }
 
     private fun downloadTafseerPack(packageId: String) {
+        val repo = tafseerRepository ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isDownloadingTafseer = true) }
-            tafseerRepository.downloadTafseerPackage(packageId)
+            repo.downloadTafseerPackage(packageId)
             _uiState.update { it.copy(isDownloadingTafseer = false) }
         }
     }
+
+    // ------------------------------------------------------------------ Mapping
+
+    private fun SurahMetadataEntity.toSurahModel(): SurahModel = SurahModel(
+        number = surahNumber,
+        nameEnglish = nameSimple,
+        nameArabic = nameArabic,
+        englishMeaning = translatedName,
+        revelationType = revelationPlace.orEmpty(),
+        ayahCount = versesCount,
+        juzNumber = 0,
+        ayahs = emptyList()
+    )
+
+    /**
+     * Bundled/seed content carries only the Uthmani text and translation; classical
+     * commentary is left blank so the UI reports a missing download instead of
+     * displaying fabricated tafseer.
+     */
+    private fun QuranAyahEntity.toAyahModel(): AyahModel = AyahModel(
+        numberInSurah = ayahNumber,
+        arabicText = textUthmani,
+        transliteration = transliteration.orEmpty(),
+        translation = translation.orEmpty(),
+        tafseerIbnKathir = "",
+        tafseerTabari = "",
+        tafseerQurtubi = "",
+        tafseerSadi = "",
+        tafseerMaarifulQuran = "",
+        hadithProofQuote = null
+    )
+
+    private fun QuranAyahEntity.toSearchResult(): AyahSearchResult = AyahSearchResult(
+        surahNumber = surahNumber,
+        surahName = surahNameEnglish.orEmpty(),
+        ayahNumber = ayahNumber,
+        textUthmani = textUthmani,
+        translation = translation.orEmpty()
+    )
 }

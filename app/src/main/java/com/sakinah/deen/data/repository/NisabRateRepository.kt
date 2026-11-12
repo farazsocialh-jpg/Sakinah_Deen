@@ -1,0 +1,159 @@
+package com.sakinah.deen.data.repository
+
+import com.sakinah.deen.BuildConfig
+import io.ktor.client.HttpClient
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
+import io.ktor.http.isSuccess
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+
+data class NisabRates(
+    val goldPricePerGram: Float,
+    val silverPricePerGram: Float,
+    val lastUpdatedEpochMillis: Long
+) {
+    companion object {
+        /** Conservative last-resort values used only before the first successful fetch. */
+        val FALLBACK = NisabRates(
+            goldPricePerGram = 88.40f,
+            silverPricePerGram = 1.15f,
+            lastUpdatedEpochMillis = 0L
+        )
+    }
+}
+
+interface NisabRateRepository {
+    val rates: StateFlow<NisabRates>
+
+    /** Fetches fresh metal prices. Never throws: on any failure the cached rate is kept. */
+    suspend fun refresh()
+}
+
+/** Last successful rate persisted so the nisab threshold survives process death offline. */
+interface NisabRateCache {
+    fun read(): NisabRates?
+    fun write(rates: NisabRates)
+}
+
+/**
+ * Fetches current gold/silver prices per gram from a configurable endpoint
+ * ([BuildConfig.NISAB_RATE_URL]) and caches the last successful response.
+ *
+ * The endpoint is expected to return JSON with any of the accepted key spellings, e.g.
+ * `{"gold": 88.4, "silver": 1.15, "updatedAt": 1763000000000}`.
+ */
+class NisabRateRepositoryImpl(
+    private val client: HttpClient,
+    private val json: Json,
+    private val endpointUrl: String = BuildConfig.NISAB_RATE_URL,
+    private val cache: NisabRateCache? = null,
+    private val initial: NisabRates = NisabRates.FALLBACK
+) : NisabRateRepository {
+
+    companion object {
+        private const val USER_AGENT = "Sakinah-Android/1.0 (offline-first Islamic companion)"
+        private val GOLD_KEYS = listOf("gold", "goldPerGram", "goldPricePerGram")
+        private val SILVER_KEYS = listOf("silver", "silverPerGram", "silverPricePerGram")
+        private val TIMESTAMP_KEYS = listOf("updatedAt", "timestamp", "lastUpdated")
+    }
+
+    private val _rates = MutableStateFlow(cache?.read() ?: initial)
+    override val rates: StateFlow<NisabRates> = _rates.asStateFlow()
+
+    override suspend fun refresh() {
+        val fresh = runCatching { fetchRemote() }.getOrNull() ?: return
+        if (fresh.goldPricePerGram <= 0f && fresh.silverPricePerGram <= 0f) return
+        cache?.write(fresh)
+        _rates.value = fresh
+    }
+
+    private suspend fun fetchRemote(): NisabRates? {
+        if (endpointUrl.isBlank() || endpointUrl.startsWith("MY_")) return null
+
+        val response = client.get(endpointUrl) {
+            header(HttpHeaders.UserAgent, USER_AGENT)
+            header(HttpHeaders.Accept, "application/json")
+        }
+        if (!response.status.isSuccess()) return null
+
+        val root = json.parseToJsonElement(response.bodyAsText()) as? JsonObject ?: return null
+        val gold = numberOf(root, GOLD_KEYS)?.toFloat()
+        val silver = numberOf(root, SILVER_KEYS)?.toFloat()
+        if (gold == null && silver == null) return null
+
+        return NisabRates(
+            goldPricePerGram = gold ?: _rates.value.goldPricePerGram,
+            silverPricePerGram = silver ?: _rates.value.silverPricePerGram,
+            lastUpdatedEpochMillis = timestampOf(root) ?: System.currentTimeMillis()
+        )
+    }
+
+    private fun numberOf(root: JsonObject, keys: List<String>): Double? = keys.firstNotNullOfOrNull { key ->
+        val element = root[key] as? JsonPrimitive ?: return@firstNotNullOfOrNull null
+        element.doubleOrNull ?: element.contentOrNull?.trim()?.toDoubleOrNull()
+    }
+
+    /** The endpoint may send seconds or milliseconds; normalise to epoch millis. */
+    private fun timestampOf(root: JsonObject): Long? {
+        val raw = keysFirstLong(root, TIMESTAMP_KEYS) ?: return null
+        return if (raw in 1..9_999_999_999L) raw * 1000L else raw
+    }
+
+    private fun keysFirstLong(root: JsonObject, keys: List<String>): Long? = keys.firstNotNullOfOrNull { key ->
+        val element = root[key] as? JsonPrimitive ?: return@firstNotNullOfOrNull null
+        element.doubleOrNull?.toLong() ?: element.contentOrNull?.trim()?.toLongOrNull()
+    }
+}
+
+/** SharedPreferences-backed cache: the app already treats this store as its offline ledger. */
+class PreferencesNisabRateCache(private val prefs: NisabRateCacheStore) : NisabRateCache {
+
+    override fun read(): NisabRates? {
+        val gold = prefs.getFloat(KEY_GOLD, -1f)
+        val silver = prefs.getFloat(KEY_SILVER, -1f)
+        if (gold <= 0f && silver <= 0f) return null
+        return NisabRates(
+            goldPricePerGram = if (gold > 0f) gold else NisabRates.FALLBACK.goldPricePerGram,
+            silverPricePerGram = if (silver > 0f) silver else NisabRates.FALLBACK.silverPricePerGram,
+            lastUpdatedEpochMillis = prefs.getLong(KEY_TIMESTAMP, 0L)
+        )
+    }
+
+    override fun write(rates: NisabRates) {
+        prefs.putFloat(KEY_GOLD, rates.goldPricePerGram)
+        prefs.putFloat(KEY_SILVER, rates.silverPricePerGram)
+        prefs.putLong(KEY_TIMESTAMP, rates.lastUpdatedEpochMillis)
+    }
+
+    private companion object {
+        const val KEY_GOLD = "nisab_gold_per_gram"
+        const val KEY_SILVER = "nisab_silver_per_gram"
+        const val KEY_TIMESTAMP = "nisab_rates_updated_at"
+    }
+}
+
+/** Thin seam so the cache can be unit-tested without an Android context. */
+interface NisabRateCacheStore {
+    fun getFloat(key: String, default: Float): Float
+    fun putFloat(key: String, value: Float)
+    fun getLong(key: String, default: Long): Long
+    fun putLong(key: String, value: Long)
+}
+
+class SharedPreferencesNisabRateCacheStore(
+    private val prefs: android.content.SharedPreferences
+) : NisabRateCacheStore {
+    override fun getFloat(key: String, default: Float): Float = prefs.getFloat(key, default)
+    override fun putFloat(key: String, value: Float) = prefs.edit().putFloat(key, value).apply()
+    override fun getLong(key: String, default: Long): Long = prefs.getLong(key, default)
+    override fun putLong(key: String, value: Long) = prefs.edit().putLong(key, value).apply()
+}

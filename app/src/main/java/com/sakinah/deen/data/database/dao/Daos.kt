@@ -129,6 +129,13 @@ interface QuranDao {
     @Query("SELECT * FROM quran_ayahs WHERE surahNumber = :surahNumber ORDER BY ayahNumber ASC")
     fun observeSurah(surahNumber: Int): Flow<List<QuranAyahEntity>>
 
+    @Query(
+        "SELECT * FROM quran_ayahs WHERE textUthmani LIKE '%' || :query || '%' " +
+            "OR translation LIKE '%' || :query || '%' " +
+            "ORDER BY surahNumber ASC, ayahNumber ASC LIMIT :limit"
+    )
+    fun searchAyahs(query: String, limit: Int = 100): Flow<List<QuranAyahEntity>>
+
     @Query("SELECT * FROM quran_ayahs WHERE surahNumber = :surahNumber AND ayahNumber = :ayahNumber LIMIT 1")
     suspend fun getAyah(surahNumber: Int, ayahNumber: Int): QuranAyahEntity?
 
@@ -155,6 +162,19 @@ interface HadithDao {
             "ORDER BY hadithNumber ASC LIMIT :limit OFFSET :offset"
     )
     fun observeHadiths(bookKey: String, limit: Int = 200, offset: Int = 0): Flow<List<HadithEntryEntity>>
+
+    @Query(
+        "SELECT * FROM hadith_entries " +
+            "ORDER BY bookKey ASC, hadithNumber ASC LIMIT :limit OFFSET :offset"
+    )
+    fun observeAllHadiths(limit: Int = 300, offset: Int = 0): Flow<List<HadithEntryEntity>>
+
+    @Query(
+        "SELECT * FROM hadith_entries WHERE englishText LIKE '%' || :query || '%' " +
+            "OR arabicText LIKE '%' || :query || '%' OR chapterTitle LIKE '%' || :query || '%' " +
+            "ORDER BY bookKey ASC, hadithNumber ASC LIMIT :limit"
+    )
+    fun searchHadiths(query: String, limit: Int = 200): Flow<List<HadithEntryEntity>>
 
     @Query("SELECT * FROM hadith_entries WHERE bookKey = :bookKey AND hadithNumber = :hadithNumber LIMIT 1")
     suspend fun getHadith(bookKey: String, hadithNumber: Int): HadithEntryEntity?
