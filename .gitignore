@@ -14,3 +14,7 @@ keystore.properties
 *.keystore
 keystore/
 app/release/
+
+# Gradle local caches / Kotlin session data
+.gradle/
+.kotlin/

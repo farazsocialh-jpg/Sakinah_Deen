@@ -88,7 +88,7 @@ class SunniAiScholarRepositoryImpl(
                         delay(25)
                     }
                 }
-            } catch {
+            } catch (e: Exception) {
                 connected = false
             }
 
