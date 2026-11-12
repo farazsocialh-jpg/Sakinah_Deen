@@ -20,6 +20,11 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     )
 
+    init {
+        // Existing installs may have inherited a London default Home; drop it once.
+        migrateLondonHomeIfNeeded()
+    }
+
     companion object {
         const val DEFAULT_LATITUDE = 51.5074
         const val DEFAULT_LONGITUDE = -0.1278
@@ -34,6 +39,7 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         private const val KEY_HOME_LATITUDE = "home_latitude"
         private const val KEY_HOME_LONGITUDE = "home_longitude"
         private const val KEY_HOME_CITY = "home_city"
+        private const val KEY_HOME_EXPLICITLY_SET = "home_explicitly_set"
         private const val KEY_CALCULATION_METHOD = "calculation_method"
         private const val KEY_MADHHAB = "madhhab"
         private const val KEY_CAR_ADDRESS = "car_bluetooth_address"
@@ -113,6 +119,11 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
             return SafarPolicy.sanitize(Pair(lat, lon))
         }
 
+    /** True only when the user explicitly chose a Home Location. */
+    var homeExplicitlySet: Boolean
+        get() = prefs.getBoolean(KEY_HOME_EXPLICITLY_SET, false)
+        set(value) = prefs.edit().putBoolean(KEY_HOME_EXPLICITLY_SET, value).apply()
+
     var calculationMethod: CalculationMethod
         get() = runCatching {
             CalculationMethod.valueOf(
@@ -186,6 +197,7 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         travelModeActive = false
         qasrActive = false
         lastDistanceFromHomeKm = 0f
+        homeExplicitlySet = true
         HomeAnchorStore.publish(home)
     }
 
@@ -197,7 +209,21 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         travelModeActive = false
         qasrActive = false
         lastDistanceFromHomeKm = 0f
+        homeExplicitlySet = false
         HomeAnchorStore.publish(null)
+    }
+
+    private fun migrateLondonHomeIfNeeded() {
+        if (homeExplicitlySet) return
+        val lat = homeLatitude ?: return
+        val lon = homeLongitude ?: return
+        val label = homeCityName
+        if (lat == DEFAULT_LATITUDE && lon == DEFAULT_LONGITUDE &&
+            (label == null || label == DEFAULT_LOCATION_LABEL || label == "London, UK")
+        ) {
+            // Drop the inherited London default so existing installs stop showing 5225 km.
+            clearHomeAnchor()
+        }
     }
 
     fun saveCarDevice(address: String, name: String?) {
