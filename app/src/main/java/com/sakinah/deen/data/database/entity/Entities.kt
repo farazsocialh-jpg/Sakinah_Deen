@@ -1,6 +1,7 @@
 package com.sakinah.deen.data.database.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(
@@ -116,6 +117,40 @@ data class AdhkarEntity(
     val translation: String,
     val reference: String,
     val orderIndex: Int = 0
+)
+
+/**
+ * One day of authoritative (online) prayer timings for a single calculation context.
+ *
+ * A monthly AlAdhan calendar is cached as ~30 rows sharing one [cacheKey], which encodes
+ * the coordinates, calculation method, Asr school and month. Changing any of those (or
+ * moving into a new month) therefore misses the cache and triggers a refresh instead of
+ * silently serving timings computed for a different place.
+ *
+ * Times are stored as `HH:mm` wall-clock strings in [timeZone]. [source] is
+ * [com.sakinah.deen.data.prayer.PrayerTimeSource.name]: `ONLINE` rows came from AlAdhan,
+ * `OFFLINE_FALLBACK` rows are the local astronomical calculation written while offline.
+ */
+@Entity(
+    tableName = "prayer_timetable",
+    primaryKeys = ["cacheKey", "dateEpochDay"],
+    indices = [Index("dateEpochDay")]
+)
+data class PrayerTimetableEntity(
+    val cacheKey: String,
+    val dateEpochDay: Long,
+    val fajr: String,
+    val sunrise: String,
+    val dhuhr: String,
+    val asr: String,
+    val maghrib: String,
+    val isha: String,
+    val methodName: String,
+    val methodId: Int,
+    val schoolId: Int,
+    val timeZone: String = "",
+    val source: String = "ONLINE",
+    val fetchedAt: Long = System.currentTimeMillis()
 )
 
 @Entity(

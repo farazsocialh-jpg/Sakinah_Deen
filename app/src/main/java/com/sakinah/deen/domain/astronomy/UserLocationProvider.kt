@@ -20,7 +20,9 @@ data class ResolvedLocation(
     val longitude: Double,
     val cityName: String,
     val countryName: String,
-    val isFromGps: Boolean
+    val isFromGps: Boolean,
+    /** ISO 3166-1 alpha-2 code, used to pick the country's Sunni calculation authority. */
+    val countryCode: String = ""
 )
 
 class UserLocationProvider(private val context: Context) {
@@ -31,6 +33,7 @@ class UserLocationProvider(private val context: Context) {
         private const val KEY_LON = "saved_longitude"
         private const val KEY_CITY = "saved_city"
         private const val KEY_COUNTRY = "saved_country"
+        private const val KEY_COUNTRY_CODE = "saved_country_code"
 
         // Defaults to Makkah al-Mukarramah if permissions are denied and no cache exists
         val DEFAULT_MAKKAH = ResolvedLocation(
@@ -38,7 +41,8 @@ class UserLocationProvider(private val context: Context) {
             longitude = 39.8262,
             cityName = "Makkah",
             countryName = "Saudi Arabia",
-            isFromGps = false
+            isFromGps = false,
+            countryCode = "SA"
         )
     }
 
@@ -99,13 +103,14 @@ class UserLocationProvider(private val context: Context) {
 
         return if (freshCoords != null) {
             val (lat, lon) = freshCoords
-            val (city, country) = resolveCityName(lat, lon)
+            val area = resolveArea(lat, lon)
             val resolved = ResolvedLocation(
                 latitude = lat,
                 longitude = lon,
-                cityName = city,
-                countryName = country,
-                isFromGps = true
+                cityName = area.city,
+                countryName = area.countryName,
+                isFromGps = true,
+                countryCode = area.countryCode
             )
             saveCachedLocation(resolved)
             resolved
@@ -114,26 +119,30 @@ class UserLocationProvider(private val context: Context) {
         }
     }
 
-    suspend fun resolveCityName(latitude: Double, longitude: Double): Pair<String, String> =
+    suspend fun resolveCityName(latitude: Double, longitude: Double): Pair<String, String> {
+        val area = resolveArea(latitude, longitude)
+        return Pair(area.city, area.countryName)
+    }
+
+    /** City, country name and ISO country code for a coordinate pair. */
+    suspend fun resolveArea(latitude: Double, longitude: Double): AreaNames =
         withContext(Dispatchers.IO) {
             try {
                 val geocoder = Geocoder(context, Locale.getDefault())
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    val addresses = geocoder.getFromLocation(latitude, longitude, 1)
-                    val address = addresses?.firstOrNull()
-                    val city = address?.locality ?: address?.subAdminArea ?: address?.adminArea ?: "Local Area"
-                    val country = address?.countryName ?: ""
-                    Pair(city, country)
+                val address = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    geocoder.getFromLocation(latitude, longitude, 1)?.firstOrNull()
                 } else {
                     @Suppress("DEPRECATION")
-                    val addresses = geocoder.getFromLocation(latitude, longitude, 1)
-                    val address = addresses?.firstOrNull()
-                    val city = address?.locality ?: address?.subAdminArea ?: address?.adminArea ?: "Local Area"
-                    val country = address?.countryName ?: ""
-                    Pair(city, country)
+                    geocoder.getFromLocation(latitude, longitude, 1)?.firstOrNull()
                 }
+                val city = address?.locality ?: address?.subAdminArea ?: address?.adminArea ?: "Local Area"
+                AreaNames(
+                    city = city,
+                    countryName = address?.countryName ?: "",
+                    countryCode = address?.countryCode.orEmpty().uppercase(Locale.US)
+                )
             } catch (e: Exception) {
-                Pair("Detected Location", "")
+                AreaNames(city = "Detected Location", countryName = "", countryCode = "")
             }
         }
 
@@ -143,7 +152,8 @@ class UserLocationProvider(private val context: Context) {
         val lon = prefs.getFloat(KEY_LON, 0f).toDouble()
         val city = prefs.getString(KEY_CITY, "Saved Location") ?: "Saved Location"
         val country = prefs.getString(KEY_COUNTRY, "") ?: ""
-        return ResolvedLocation(lat, lon, city, country, isFromGps = false)
+        val countryCode = prefs.getString(KEY_COUNTRY_CODE, "") ?: ""
+        return ResolvedLocation(lat, lon, city, country, isFromGps = false, countryCode = countryCode)
     }
 
     fun saveCachedLocation(location: ResolvedLocation) {
@@ -152,6 +162,14 @@ class UserLocationProvider(private val context: Context) {
             .putFloat(KEY_LON, location.longitude.toFloat())
             .putString(KEY_CITY, location.cityName)
             .putString(KEY_COUNTRY, location.countryName)
+            .putString(KEY_COUNTRY_CODE, location.countryCode)
             .apply()
     }
 }
+
+/** Reverse-geocoded place names for a coordinate pair. */
+data class AreaNames(
+    val city: String,
+    val countryName: String,
+    val countryCode: String
+)

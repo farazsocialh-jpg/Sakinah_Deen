@@ -19,6 +19,8 @@ class SakinahPreferences(context: Context) {
         private const val KEY_LATITUDE = "location_latitude"
         private const val KEY_LONGITUDE = "location_longitude"
         private const val KEY_LOCATION_LABEL = "location_label"
+        private const val KEY_LOCATION_COUNTRY_CODE = "location_country_code"
+        private const val KEY_CALCULATION_METHOD_OVERRIDE = "calculation_method_override"
         private const val KEY_HOME_LATITUDE = "home_latitude"
         private const val KEY_HOME_LONGITUDE = "home_longitude"
         private const val KEY_CALCULATION_METHOD = "calculation_method"
@@ -58,6 +60,24 @@ class SakinahPreferences(context: Context) {
             val lon = locationLongitude ?: return null
             return Pair(lat, lon)
         }
+
+    /** ISO 3166-1 alpha-2 code of the last resolved location (e.g. "QA"). */
+    var locationCountryCode: String?
+        get() = prefs.getString(KEY_LOCATION_COUNTRY_CODE, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().apply {
+            if (value.isNullOrBlank()) remove(KEY_LOCATION_COUNTRY_CODE) else putString(KEY_LOCATION_COUNTRY_CODE, value.uppercase())
+        }.apply()
+
+    /**
+     * A calculation method the user picked by hand. `null` means "follow the country's
+     * Sunni authority automatically".
+     */
+    var calculationMethodOverride: CalculationMethod?
+        get() = prefs.getString(KEY_CALCULATION_METHOD_OVERRIDE, null)
+            ?.let { name -> runCatching { CalculationMethod.valueOf(name) }.getOrNull() }
+        set(value) = prefs.edit().apply {
+            if (value == null) remove(KEY_CALCULATION_METHOD_OVERRIDE) else putString(KEY_CALCULATION_METHOD_OVERRIDE, value.name)
+        }.apply()
 
     var homeLatitude: Double?
         get() = if (prefs.contains(KEY_HOME_LATITUDE)) Double.fromBits(prefs.getLong(KEY_HOME_LATITUDE, 0L)) else null

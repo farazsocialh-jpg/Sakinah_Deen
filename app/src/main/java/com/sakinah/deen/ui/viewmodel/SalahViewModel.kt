@@ -11,6 +11,8 @@ import com.sakinah.deen.data.model.NaflType
 import com.sakinah.deen.data.model.PrayerAdjustments
 import com.sakinah.deen.data.model.PrayerModel
 import com.sakinah.deen.data.model.PrayerType
+import com.sakinah.deen.data.prayer.SunniMethodMapper
+import com.sakinah.deen.data.repository.PrayerTimeRepository
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
 import com.sakinah.deen.domain.astronomy.PrayerCountdownInfo
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
@@ -29,6 +31,7 @@ import kotlinx.datetime.LocalDate as KLocalDate
 import kotlinx.datetime.todayIn
 import kotlinx.datetime.LocalTime as KLocalTime
 import kotlinx.datetime.TimeZone as KTimeZone
+import kotlinx.datetime.toJavaLocalDate
 import kotlinx.datetime.toJavaLocalTime
 import kotlinx.datetime.toLocalDateTime
 
@@ -49,7 +52,13 @@ data class SalahUiState(
     val locationName: String = "Detecting Location...",
     val isLocationPermissionGranted: Boolean = false,
     val showLocationWarningBanner: Boolean = false,
-    val userCoordinates: Pair<Double, Double> = Pair(21.4225, 39.8262) // Default to Makkah
+    val userCoordinates: Pair<Double, Double> = Pair(21.4225, 39.8262), // Default to Makkah
+    /** Concise provenance of the timings, e.g. "Qatar Awqaf (Online)" / "Offline Calculation". */
+    val sourceLabel: String = "Offline Calculation",
+    /** Short name of the authority the timings follow (country-mapped or manual). */
+    val authorityName: String = "Muslim World League",
+    /** True when no method was picked by hand, so the country's authority is followed. */
+    val isAutomaticMethod: Boolean = true
 )
 
 sealed class SalahUiIntent {
@@ -62,7 +71,15 @@ sealed class SalahUiIntent {
     data class UpdatePrayerAdjustments(val adjustments: PrayerAdjustments) : SalahUiIntent()
     data class LocationPermissionResult(val isGranted: Boolean) : SalahUiIntent()
     data object RefreshLocation : SalahUiIntent()
-    data class SetManualLocation(val lat: Double, val lon: Double, val name: String) : SalahUiIntent()
+    data class SetManualLocation(
+        val lat: Double,
+        val lon: Double,
+        val name: String,
+        val countryCode: String? = null
+    ) : SalahUiIntent()
+
+    /** Clears a manual calculation-method choice and follows the country's authority again. */
+    data object UseAutomaticMethod : SalahUiIntent()
 }
 
 class SalahViewModel(
@@ -70,13 +87,21 @@ class SalahViewModel(
     private val qadhaDao: QadhaDao,
     private val astronomyEngine: PrayerCalculationEngine,
     private val travelManager: TravelStatusManager,
-    private val locationProvider: UserLocationProvider? = null
+    private val locationProvider: UserLocationProvider? = null,
+    private val prayerTimes: PrayerTimeRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SalahUiState())
     val uiState: StateFlow<SalahUiState> = _uiState.asStateFlow()
 
+    /** ISO code of the last resolved location, driving the country → authority mapping. */
+    private var countryCode: String? = null
+
+    /** Guards against a slow online resolution overwriting a newer one. */
+    private var scheduleRequest = 0
+
     init {
+        syncAuthority()
         checkAndRefreshLocation()
         observeQadhaLedger()
     }
@@ -88,7 +113,20 @@ class SalahViewModel(
             is SalahUiIntent.IncrementQadha -> incrementQadha(intent.prayerType)
             is SalahUiIntent.DecrementQadha -> decrementQadha(intent.prayerType)
             is SalahUiIntent.ChangeCalculationMethod -> {
-                _uiState.update { it.copy(calculationMethod = intent.method) }
+                // A manual choice is persisted so it also wins for background alarm scheduling.
+                prayerTimes?.updateOverride(intent.method)
+                _uiState.update {
+                    it.copy(
+                        calculationMethod = intent.method,
+                        authorityName = SunniMethodMapper.fromOverride(intent.method).displayName,
+                        isAutomaticMethod = false
+                    )
+                }
+                loadDailySchedule()
+            }
+            is SalahUiIntent.UseAutomaticMethod -> {
+                prayerTimes?.updateOverride(null)
+                syncAuthority()
                 loadDailySchedule()
             }
             is SalahUiIntent.ChangeMadhhab -> {
@@ -112,6 +150,7 @@ class SalahViewModel(
                 checkAndRefreshLocation()
             }
             is SalahUiIntent.SetManualLocation -> {
+                countryCode = intent.countryCode?.takeIf { it.isNotBlank() } ?: countryCode
                 _uiState.update {
                     it.copy(
                         userCoordinates = Pair(intent.lat, intent.lon),
@@ -119,6 +158,7 @@ class SalahViewModel(
                         showLocationWarningBanner = false
                     )
                 }
+                syncAuthority()
                 loadDailySchedule()
             }
         }
@@ -140,6 +180,7 @@ class SalahViewModel(
 
         viewModelScope.launch {
             val resolved = locationProvider.getFreshOrCachedLocation()
+            countryCode = resolved.countryCode.takeIf { it.isNotBlank() } ?: countryCode
             _uiState.update {
                 it.copy(
                     userCoordinates = Pair(resolved.latitude, resolved.longitude),
@@ -147,23 +188,81 @@ class SalahViewModel(
                     showLocationWarningBanner = !resolved.isFromGps && !hasPermission
                 )
             }
+            syncAuthority()
             loadDailySchedule()
+        }
+    }
+
+    /**
+     * Applies the effective Sunni authority: a manual settings choice if one exists, otherwise
+     * the authority of the detected country. The local engine uses the matching twilight
+     * angles so the offline fallback stays consistent with the online timetable.
+     */
+    private fun syncAuthority() {
+        val authority = prayerTimes?.effectiveAuthority(countryCode)
+            ?: SunniMethodMapper.resolve(countryCode, null)
+        val override = prayerTimes?.currentOverride()
+        _uiState.update {
+            it.copy(
+                calculationMethod = SunniMethodMapper.localCalculationMethod(authority),
+                authorityName = authority.displayName,
+                isAutomaticMethod = override == null
+            )
         }
     }
 
     private fun loadDailySchedule() {
         val today = Clock.System.todayIn(KTimeZone.currentSystemDefault())
+        val state = _uiState.value
+        val request = ++scheduleRequest
+
+        // Always render an instant answer first: the on-device astronomical calculation.
+        renderTimes(
+            times = astronomyEngine.getPrayerTimes(
+                coordinates = state.userCoordinates,
+                date = today,
+                method = state.calculationMethod,
+                madhhab = state.madhhab,
+                timeZone = KTimeZone.currentSystemDefault(),
+                adjustments = state.adjustments
+            ),
+            sourceLabel = "Offline Calculation"
+        )
+
+        val repository = prayerTimes ?: return
+        viewModelScope.launch {
+            // Cache first (instant, offline), then AlAdhan, then local calculation internally.
+            val resolved = repository.resolveDay(
+                date = today.toJavaLocalDate(),
+                coordinates = state.userCoordinates,
+                madhhab = state.madhhab,
+                zoneId = ZoneId.systemDefault(),
+                adjustments = state.adjustments,
+                countryCode = countryCode
+            )
+            if (request != scheduleRequest) return@launch
+
+            if (resolved.times.isEmpty()) {
+                _uiState.update { it.copy(sourceLabel = resolved.label) }
+                return@launch
+            }
+            renderTimes(
+                times = resolved.times.mapValues { (_, time) ->
+                    KLocalTime(time.hour, time.minute, time.second)
+                },
+                sourceLabel = resolved.label,
+                authorityName = resolved.authority.displayName
+            )
+        }
+    }
+
+    private fun renderTimes(
+        times: Map<PrayerType, KLocalTime>,
+        sourceLabel: String,
+        authorityName: String? = null
+    ) {
         val userZone = KTimeZone.currentSystemDefault()
         val coords = _uiState.value.userCoordinates
-
-        val times = astronomyEngine.getPrayerTimes(
-            coordinates = coords,
-            date = today,
-            method = _uiState.value.calculationMethod,
-            madhhab = _uiState.value.madhhab,
-            timeZone = userZone,
-            adjustments = _uiState.value.adjustments
-        )
 
         val countdown: PrayerCountdownInfo = astronomyEngine.calculateCountdown(times, Clock.System.now().toLocalDateTime(userZone).time)
         val travel = travelManager.evaluateTravelState(coords)
@@ -187,7 +286,9 @@ class SalahViewModel(
                 countdownText = "${countdown.remainingMinutes}m ${countdown.remainingSeconds}s",
                 elapsedWindowRatio = countdown.elapsedRatio,
                 prayersList = prayerModels,
-                isTraveler = travel.isTraveler
+                isTraveler = travel.isTraveler,
+                sourceLabel = sourceLabel,
+                authorityName = authorityName ?: it.authorityName
             )
         }
     }

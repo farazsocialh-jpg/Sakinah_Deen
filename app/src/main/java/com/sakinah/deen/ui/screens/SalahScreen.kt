@@ -147,7 +147,8 @@ fun SalahScreen(
                     )
                     Spacer(modifier = Modifier.width(3.dp))
                     Text(
-                        text = "${state.locationName} · ${state.calculationMethod.name.replace("_", " ")}",
+                        // Provenance of these timings: e.g. "Qatar Awqaf (Online)" / "Offline Calculation".
+                        text = "${state.locationName} · ${state.sourceLabel}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                         fontSize = 11.sp
@@ -531,6 +532,25 @@ fun SalahScreen(
                         color = EmeraldDeep
                     )
 
+                    // Country-mapped authority unless the user pinned a method by hand.
+                    val isAutomatic = state.isAutomaticMethod
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isAutomatic) MintGreen.copy(alpha = 0.2f) else Color.Transparent,
+                        border = if (isAutomatic) BorderStroke(1.dp, MintGreen) else null,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel?.onIntent(SalahUiIntent.UseAutomaticMethod) }
+                    ) {
+                        Text(
+                            text = "Automatic — ${state.authorityName} (by country)",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            fontSize = 12.sp,
+                            fontWeight = if (isAutomatic) FontWeight.Bold else FontWeight.Normal,
+                            color = EmeraldDeep
+                        )
+                    }
+
                     // Presets selection
                     val methods = listOf(
                         CalculationMethod.UMM_AL_QURA to "Umm Al-Qura (Makkah & Gulf)",
@@ -634,26 +654,33 @@ fun SalahScreen(
                         color = EmeraldDeep
                     )
                     listOf(
-                        Triple(25.2854, 51.5310, "Doha, Qatar"),
-                        Triple(21.4225, 39.8262, "Makkah, Saudi Arabia"),
-                        Triple(24.4686, 39.6142, "Madinah, Saudi Arabia"),
-                        Triple(25.2048, 55.2708, "Dubai, UAE"),
-                        Triple(24.8607, 67.0011, "Karachi, Pakistan"),
-                        Triple(51.5074, -0.1278, "London, UK"),
-                        Triple(40.7128, -74.0060, "New York, USA")
-                    ).forEach { (lat, lon, name) ->
+                        CityPreset(25.2854, 51.5310, "Doha, Qatar", "QA"),
+                        CityPreset(21.4225, 39.8262, "Makkah, Saudi Arabia", "SA"),
+                        CityPreset(24.4686, 39.6142, "Madinah, Saudi Arabia", "SA"),
+                        CityPreset(25.2048, 55.2708, "Dubai, UAE", "AE"),
+                        CityPreset(24.8607, 67.0011, "Karachi, Pakistan", "PK"),
+                        CityPreset(51.5074, -0.1278, "London, UK", "GB"),
+                        CityPreset(40.7128, -74.0060, "New York, USA", "US")
+                    ).forEach { preset ->
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = EmeraldDeep.copy(alpha = 0.05f),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    viewModel?.onIntent(SalahUiIntent.SetManualLocation(lat, lon, name))
+                                    viewModel?.onIntent(
+                                        SalahUiIntent.SetManualLocation(
+                                            lat = preset.lat,
+                                            lon = preset.lon,
+                                            name = preset.name,
+                                            countryCode = preset.countryCode
+                                        )
+                                    )
                                     showManualCityDialog = false
                                 }
                         ) {
                             Text(
-                                text = name,
+                                text = preset.name,
                                 modifier = Modifier.padding(12.dp),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Medium,
@@ -744,3 +771,11 @@ fun SalahScreen(
         }
     }
 }
+
+/** A quick manual city choice plus its ISO country code, used to map the Sunni authority. */
+private data class CityPreset(
+    val lat: Double,
+    val lon: Double,
+    val name: String,
+    val countryCode: String
+)

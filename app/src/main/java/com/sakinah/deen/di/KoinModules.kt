@@ -3,9 +3,14 @@ package com.sakinah.deen.di
 import com.sakinah.deen.data.database.DatabaseSeeder
 import com.sakinah.deen.data.database.OfflineContentSeeder
 import com.sakinah.deen.data.database.SakinahEncryptedDatabase
+import com.sakinah.deen.data.prayer.AlAdhanApiClient
+import com.sakinah.deen.data.prayer.PrayerMethodSettings
+import com.sakinah.deen.data.prefs.PreferencesPrayerMethodSettings
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.NisabRateRepository
 import com.sakinah.deen.data.repository.NisabRateRepositoryImpl
+import com.sakinah.deen.data.repository.PrayerTimeRepository
+import com.sakinah.deen.data.repository.PrayerTimeRepositoryImpl
 import com.sakinah.deen.data.repository.PreferencesNisabRateCache
 import com.sakinah.deen.data.repository.SharedPreferencesNisabRateCacheStore
 import com.sakinah.deen.data.repository.TafseerDownloadRepository
@@ -54,6 +59,7 @@ val databaseModule = module {
     single { get<SakinahEncryptedDatabase>().hadithDao() }
     single { get<SakinahEncryptedDatabase>().tafsirDao() }
     single { get<SakinahEncryptedDatabase>().adhkarDao() }
+    single { get<SakinahEncryptedDatabase>().prayerTimetableDao() }
     single {
         OfflineContentSeeder(
             readAsset = DatabaseSeeder.assetReader(androidContext()),
@@ -120,6 +126,19 @@ val networkModule = module {
     }
 }
 
+val prayerTimeModule = module {
+    single<PrayerMethodSettings> { PreferencesPrayerMethodSettings(get()) }
+    single { AlAdhanApiClient(client = get(), json = get()) }
+    single<PrayerTimeRepository> {
+        PrayerTimeRepositoryImpl(
+            dao = get(),
+            apiClient = get(),
+            engine = get(),
+            settings = get()
+        )
+    }
+}
+
 val repositoryModule = module {
     single { TafseerDownloadRepository(androidContext()) }
     single<NisabRateRepository> {
@@ -137,7 +156,7 @@ val workerModule = module {
 }
 
 val viewModelModule = module {
-    factory { SalahViewModel(get(), get(), get(), get(), getOrNull()) }
+    factory { SalahViewModel(get(), get(), get(), get(), getOrNull(), getOrNull()) }
     factory { QuranViewModel(get(), get(), getOrNull(), getOrNull()) }
     factory { HadithViewModel(getOrNull()) }
     factory { TravelViewModel(get(), get(), getOrNull()) }
@@ -152,6 +171,7 @@ val appModules = listOf(
     astronomyModule,
     travelModule,
     networkModule,
+    prayerTimeModule,
     repositoryModule,
     workerModule,
     viewModelModule

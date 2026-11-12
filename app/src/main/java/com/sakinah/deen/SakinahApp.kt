@@ -4,11 +4,16 @@ import android.app.Application
 import androidx.work.Configuration
 import com.sakinah.deen.data.database.OfflineContentSeeder
 import com.sakinah.deen.data.prefs.SakinahPreferences
+import com.sakinah.deen.data.repository.PrayerTimeRepository
 import com.sakinah.deen.di.appModules
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
 import com.sakinah.deen.service.NotificationChannels
 import com.sakinah.deen.service.PrayerAlarmScheduler
 import com.sakinah.deen.work.KoinWorkerFactory
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import net.sqlcipher.database.SQLiteDatabase
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
@@ -22,6 +27,10 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
     private val workerFactory: KoinWorkerFactory by inject()
     private val astronomyEngine: PrayerCalculationEngine by inject()
     private val contentSeeder: OfflineContentSeeder by inject()
+    private val prayerTimeRepository: PrayerTimeRepository by inject()
+
+    /** Outlives the Activity: background refresh of the cached prayer timetable. */
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -52,7 +61,13 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
         val coordinates = preferences.locationCoordinates
             ?: Pair(SakinahPreferences.DEFAULT_LATITUDE, SakinahPreferences.DEFAULT_LONGITUDE)
 
-        PrayerAlarmScheduler(this, astronomyEngine, preferences)
-            .scheduleAllDailyAlarms(coordinates = coordinates)
+        val scheduler = PrayerAlarmScheduler(this, astronomyEngine, preferences, prayerTimeRepository)
+
+        // Register alarms immediately from the local astronomical table so reminders exist
+        // even in airplane mode, then upgrade to the cached/online authority timetable.
+        scheduler.scheduleAllDailyAlarms(coordinates = coordinates)
+        applicationScope.launch {
+            runCatching { scheduler.scheduleAllDailyAlarmsRefreshed(coordinates = coordinates) }
+        }
     }
 }

@@ -8,24 +8,25 @@ import android.os.Build
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
 import com.sakinah.deen.data.model.PrayerType
+import com.sakinah.deen.data.prayer.PrayerTimeSnapshot
+import com.sakinah.deen.data.prayer.SunniMethodMapper
 import com.sakinah.deen.data.prefs.SakinahPreferences
+import com.sakinah.deen.data.repository.PrayerTimeRepository
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
 import java.time.LocalDate as JLocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime as JLocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate as KLocalDate
-import kotlinx.datetime.todayIn
-import kotlinx.datetime.TimeZone as KTimeZone
-import kotlinx.datetime.toJavaLocalDate
 import kotlinx.datetime.toJavaLocalTime
 
 class PrayerAlarmScheduler(
     private val context: Context,
     private val astronomyEngine: PrayerCalculationEngine,
-    private val preferences: SakinahPreferences = SakinahPreferences(context)
+    private val preferences: SakinahPreferences = SakinahPreferences(context),
+    /** Optional resolver (Room cache → AlAdhan → local). Without it the local table is used. */
+    private val prayerTimes: PrayerTimeRepository? = null
 ) {
 
     companion object {
@@ -39,6 +40,14 @@ class PrayerAlarmScheduler(
         private const val BASE_REQUEST_CODE = 1000
         private const val SNOOZE_REQUEST_CODE = 9500
         private const val SNOOZE_MINUTES = 10
+
+        private val PRAYERS_TO_SCHEDULE = listOf(
+            PrayerType.FAJR,
+            PrayerType.DHUHR,
+            PrayerType.ASR,
+            PrayerType.MAGHRIB,
+            PrayerType.ISHA
+        )
     }
 
     private val alarmManager: AlarmManager? =
@@ -46,7 +55,11 @@ class PrayerAlarmScheduler(
 
     /**
      * Registers one exact alarm for each of the five obligatory prayers, rolling
-     * today's elapsed prayers onto tomorrow's astronomical table.
+     * today's elapsed prayers onto tomorrow's table.
+     *
+     * Resolution order: the timings already resolved for this place/method (cache or online,
+     * see [PrayerTimeSnapshot]), then the local astronomical calculation. Callers that can
+     * suspend should prefer [scheduleAllDailyAlarmsRefreshed], which can go to the network.
      */
     fun scheduleAllDailyAlarms(
         coordinates: Pair<Double, Double>? = null,
@@ -55,36 +68,59 @@ class PrayerAlarmScheduler(
     ) {
         if (alarmManager == null) return
         val coords = coordinates ?: preferences.locationCoordinates ?: return
-        val calculationMethod = method ?: preferences.calculationMethod
         val school = madhhab ?: preferences.madhhab
+        val authority = authorityFor(method)
 
-        val todayK = Clock.System.todayIn(KTimeZone.currentSystemDefault())
+        val today = JLocalDate.now()
+        val todayTimes = resolvedTimes(today, coords, authority, school) ?: engineTimes(today, coords, school)
+        val tomorrow = today.plusDays(1)
+        val tomorrowTimes = resolvedTimes(tomorrow, coords, authority, school) ?: engineTimes(tomorrow, coords, school)
+
+        scheduleTable(todayTimes, tomorrowTimes)
+    }
+
+    /**
+     * Resolves today's and tomorrow's timings through the offline-first repository (Room cache,
+     * then AlAdhan, then a local calculation) and re-registers the alarm table from them. Safe
+     * to call at startup: it never throws and a failure leaves the existing alarms untouched.
+     */
+    suspend fun scheduleAllDailyAlarmsRefreshed(coordinates: Pair<Double, Double>? = null) {
+        if (alarmManager == null) return
+        val repository = prayerTimes ?: return scheduleAllDailyAlarms(coordinates)
+        val coords = coordinates ?: preferences.locationCoordinates ?: return
+        val school = preferences.madhhab
+        val zone = ZoneId.systemDefault()
+
+        val today = JLocalDate.now()
+        val tomorrow = today.plusDays(1)
+
+        val todayTimes = runCatching {
+            repository.resolveDay(today, coords, school, zone).times
+        }.getOrDefault(emptyMap()).ifEmpty { engineTimes(today, coords, school) }
+
+        val tomorrowTimes = runCatching {
+            repository.resolveDay(tomorrow, coords, school, zone).times
+        }.getOrDefault(emptyMap()).ifEmpty { engineTimes(tomorrow, coords, school) }
+
+        scheduleTable(todayTimes, tomorrowTimes)
+    }
+
+    /** Registers the five prayers, rolling elapsed ones onto tomorrow's table. */
+    private fun scheduleTable(
+        todayTimes: Map<PrayerType, JLocalTime>,
+        tomorrowTimes: Map<PrayerType, JLocalTime>
+    ) {
         val nowJ = JLocalTime.now()
+        val todayJ = JLocalDate.now()
         val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a")
 
-        val timesToday = astronomyEngine.getPrayerTimes(coords, todayK, calculationMethod, school)
-        val timesTomorrow = astronomyEngine.getPrayerTimes(
-            coords,
-            KLocalDate.parse(JLocalDate.now().plusDays(1).toString()),
-            calculationMethod,
-            school
-        )
+        for (prayer in PRAYERS_TO_SCHEDULE) {
+            val todayTime = todayTimes[prayer] ?: continue
+            val isFutureToday = todayTime.isAfter(nowJ)
+            val triggerDate = if (isFutureToday) todayJ else todayJ.plusDays(1)
+            val effectiveTime = if (isFutureToday) todayTime else (tomorrowTimes[prayer] ?: todayTime)
 
-        val prayersToSchedule = listOf(
-            PrayerType.FAJR,
-            PrayerType.DHUHR,
-            PrayerType.ASR,
-            PrayerType.MAGHRIB,
-            PrayerType.ISHA
-        )
-
-        for (prayer in prayersToSchedule) {
-            val todayTime = timesToday[prayer] ?: continue
-            val isFutureToday = todayTime.toJavaLocalTime().isAfter(nowJ)
-            val triggerDateJava = if (isFutureToday) JLocalDate.now() else JLocalDate.now().plusDays(1)
-            val effectiveTimeK = if (isFutureToday) todayTime else (timesTomorrow[prayer] ?: todayTime)
-
-            val triggerMillis = LocalDateTime.of(triggerDateJava, effectiveTimeK.toJavaLocalTime())
+            val triggerMillis = LocalDateTime.of(triggerDate, effectiveTime)
                 .atZone(ZoneId.systemDefault())
                 .toInstant()
                 .toEpochMilli()
@@ -92,10 +128,49 @@ class PrayerAlarmScheduler(
             scheduleSingleAlarm(
                 prayerType = prayer,
                 prayerName = prayer.name.lowercase().replaceFirstChar { it.uppercase() },
-                timeFormatted = effectiveTimeK.toJavaLocalTime().format(timeFormatter),
+                timeFormatted = effectiveTime.format(timeFormatter),
                 triggerEpochMillis = triggerMillis
             )
         }
+    }
+
+    /** Authority the repository would use for these settings (manual override or country). */
+    private fun authorityFor(method: CalculationMethod?): com.sakinah.deen.data.prayer.SunniAuthority =
+        SunniMethodMapper.resolve(
+            countryCode = preferences.locationCountryCode,
+            override = method ?: preferences.calculationMethodOverride
+        )
+
+    /** Timings already resolved from Room/network for this context, if still memoised. */
+    private fun resolvedTimes(
+        date: JLocalDate,
+        coordinates: Pair<Double, Double>,
+        authority: com.sakinah.deen.data.prayer.SunniAuthority,
+        school: Madhhab
+    ): Map<PrayerType, JLocalTime>? = PrayerTimeSnapshot.timesFor(
+        PrayerTimeSnapshot.keyOf(
+            date = date,
+            coordinates = coordinates,
+            methodId = authority.methodId,
+            schoolId = SunniMethodMapper.schoolId(school)
+        )
+    )
+
+    /** Local astronomical table for one day, using the authority's twilight angles. */
+    private fun engineTimes(
+        date: JLocalDate,
+        coordinates: Pair<Double, Double>,
+        school: Madhhab
+    ): Map<PrayerType, JLocalTime> {
+        val authority = authorityFor(null)
+        val method = preferences.calculationMethodOverride
+            ?: SunniMethodMapper.localCalculationMethod(authority)
+        return astronomyEngine.getPrayerTimes(
+            coordinates = coordinates,
+            date = KLocalDate.parse(date.toString()),
+            method = method,
+            madhhab = school
+        ).mapValues { (_, time) -> time.toJavaLocalTime() }
     }
 
     fun scheduleSingleAlarm(

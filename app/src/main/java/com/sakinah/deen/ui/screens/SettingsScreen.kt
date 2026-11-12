@@ -10,6 +10,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import com.sakinah.deen.data.model.CalculationMethod as AppMethod
+import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.settings.*
 import com.sakinah.deen.ui.rememberInject
 import kotlinx.coroutines.launch
@@ -21,7 +24,6 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val settings by repo.settings.collectAsState()
     val scope = rememberCoroutineScope()
 
-    val calcMethods = CalculationMethod.entries
     val themes = ThemeMode.entries
     val adhanChoices = AdhanChoice.entries
 
@@ -39,19 +41,34 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             // Prayer & Qibla
             Text("Prayer & Qibla", style = MaterialTheme.typography.titleMedium)
             var calcExpanded by remember { mutableStateOf(false) }
+            // Android resolves the country's Sunni authority (Umm Al-Qura, Qatar Awqaf, ...) by
+            // default; a choice here is an explicit override that also drives online timings.
+            val context = LocalContext.current
+            val appPrefs = remember { SakinahPreferences(context) }
+            var methodOverride by remember { mutableStateOf(appPrefs.calculationMethodOverride) }
             ExposedDropdownMenuBox(expanded = calcExpanded, onExpandedChange = { calcExpanded = it }) {
                 OutlinedTextField(
-                    value = settings.prayer.calculationMethod.name,
+                    value = methodOverride?.name?.replace('_', ' ') ?: "Automatic (by country)",
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Calculation method") },
+                    supportingText = { Text("Automatic uses your country's Sunni authority.") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = calcExpanded) },
                     modifier = Modifier.menuAnchor().fillMaxWidth()
                 )
                 ExposedDropdownMenu(expanded = calcExpanded, onDismissRequest = { calcExpanded = false }) {
-                    calcMethods.forEach { m ->
-                        DropdownMenuItem(text = { Text(m.name) }, onClick = {
-                            scope.launch { repo.updatePrayer(settings.prayer.copy(calculationMethod = m)) }
+                    DropdownMenuItem(text = { Text("Automatic (by country)") }, onClick = {
+                        appPrefs.calculationMethodOverride = null
+                        methodOverride = null
+                        calcExpanded = false
+                    })
+                    AppMethod.entries.forEach { m ->
+                        DropdownMenuItem(text = { Text(m.name.replace('_', ' ')) }, onClick = {
+                            appPrefs.calculationMethodOverride = m
+                            methodOverride = m
+                            sharedMethodFor(m)?.let { shared ->
+                                scope.launch { repo.updatePrayer(settings.prayer.copy(calculationMethod = shared)) }
+                            }
                             calcExpanded = false
                         })
                     }
@@ -180,4 +197,13 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             TextButton(onClick = onBack) { Text("Back") }
         }
     }
+}
+
+/** Mirrors an Android override into the shared settings store (closest equivalent authority). */
+private fun sharedMethodFor(method: AppMethod): CalculationMethod? = when (method) {
+    AppMethod.UMM_AL_QURA, AppMethod.QATAR, AppMethod.DUBAI -> CalculationMethod.UMM_AL_QURA
+    AppMethod.EGYPTIAN -> CalculationMethod.EGYPTIAN
+    AppMethod.KARACHI -> CalculationMethod.KARACHI
+    AppMethod.NORTH_AMERICA -> CalculationMethod.ISNA
+    AppMethod.MUSLIM_WORLD_LEAGUE -> CalculationMethod.MWL
 }

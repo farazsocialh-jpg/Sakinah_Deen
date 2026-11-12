@@ -9,6 +9,7 @@ import androidx.room.Update
 import com.sakinah.deen.data.database.entity.AdhkarEntity
 import com.sakinah.deen.data.database.entity.HadithEntryEntity
 import com.sakinah.deen.data.database.entity.HifzMistakeEntity
+import com.sakinah.deen.data.database.entity.PrayerTimetableEntity
 import com.sakinah.deen.data.database.entity.QadhaLedgerEntity
 import com.sakinah.deen.data.database.entity.QuranAyahEntity
 import com.sakinah.deen.data.database.entity.SadaqahLogEntity
@@ -199,6 +200,43 @@ interface AdhkarDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(entries: List<AdhkarEntity>)
+}
+
+/**
+ * 30-day cache of authoritative prayer timings. Rows are addressed by [cacheKey] (place,
+ * method, school and month) plus the day, so a stale context never leaks into a new one.
+ */
+@Dao
+interface PrayerTimetableDao {
+    @Query(
+        "SELECT * FROM prayer_timetable WHERE cacheKey = :cacheKey AND dateEpochDay = :epochDay LIMIT 1"
+    )
+    suspend fun getForDay(cacheKey: String, epochDay: Long): PrayerTimetableEntity?
+
+    @Query("SELECT * FROM prayer_timetable WHERE cacheKey = :cacheKey ORDER BY dateEpochDay ASC")
+    suspend fun getForKey(cacheKey: String): List<PrayerTimetableEntity>
+
+    @Query("SELECT COUNT(*) FROM prayer_timetable WHERE cacheKey = :cacheKey")
+    suspend fun countForKey(cacheKey: String): Int
+
+    @Query("SELECT MAX(fetchedAt) FROM prayer_timetable WHERE cacheKey = :cacheKey")
+    suspend fun lastFetchedAt(cacheKey: String): Long?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(rows: List<PrayerTimetableEntity>)
+
+    @Query("DELETE FROM prayer_timetable WHERE cacheKey = :cacheKey")
+    suspend fun deleteForKey(cacheKey: String)
+
+    /** Keeps one place/method/month only, so switching city or authority cannot accumulate. */
+    @Query("DELETE FROM prayer_timetable WHERE cacheKey != :keepKey")
+    suspend fun deleteAllExcept(keepKey: String)
+
+    @Transaction
+    suspend fun replaceMonth(cacheKey: String, rows: List<PrayerTimetableEntity>) {
+        deleteForKey(cacheKey)
+        upsertAll(rows)
+    }
 }
 
 @Dao
