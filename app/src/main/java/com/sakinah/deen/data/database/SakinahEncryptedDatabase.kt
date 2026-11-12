@@ -6,14 +6,21 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.sakinah.deen.data.database.converter.SakinahTypeConverters
+import com.sakinah.deen.data.database.dao.HadithDao
 import com.sakinah.deen.data.database.dao.HifzDao
 import com.sakinah.deen.data.database.dao.QadhaDao
+import com.sakinah.deen.data.database.dao.QuranDao
 import com.sakinah.deen.data.database.dao.SadaqahDao
 import com.sakinah.deen.data.database.dao.SalahDao
+import com.sakinah.deen.data.database.dao.TafsirDao
+import com.sakinah.deen.data.database.entity.HadithEntryEntity
 import com.sakinah.deen.data.database.entity.HifzMistakeEntity
 import com.sakinah.deen.data.database.entity.QadhaLedgerEntity
+import com.sakinah.deen.data.database.entity.QuranAyahEntity
 import com.sakinah.deen.data.database.entity.SadaqahLogEntity
 import com.sakinah.deen.data.database.entity.SalahRecordEntity
+import com.sakinah.deen.data.database.entity.SurahMetadataEntity
+import com.sakinah.deen.data.database.entity.TafsirEntryEntity
 import net.sqlcipher.database.SupportFactory
 
 @Database(
@@ -21,9 +28,13 @@ import net.sqlcipher.database.SupportFactory
         SalahRecordEntity::class,
         QadhaLedgerEntity::class,
         HifzMistakeEntity::class,
-        SadaqahLogEntity::class
+        SadaqahLogEntity::class,
+        QuranAyahEntity::class,
+        SurahMetadataEntity::class,
+        HadithEntryEntity::class,
+        TafsirEntryEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(SakinahTypeConverters::class)
@@ -32,6 +43,9 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
     abstract fun qadhaDao(): QadhaDao
     abstract fun hifzDao(): HifzDao
     abstract fun sadaqahDao(): SadaqahDao
+    abstract fun quranDao(): QuranDao
+    abstract fun hadithDao(): HadithDao
+    abstract fun tafsirDao(): TafsirDao
 
     companion object {
         private const val DB_NAME = "sakinah_encrypted.db"
@@ -48,6 +62,9 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
                     DB_NAME
                 )
                     .openHelperFactory(factory)
+                    // Version 2 introduces the offline Quran/Hadith/Tafsir cache. No
+                    // user-authored content exists in v1 tables, so destructive migration
+                    // is acceptable here; switch to explicit migrations before shipping.
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

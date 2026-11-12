@@ -5,21 +5,36 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
-import android.media.AudioFocusRequest
-import android.media.AudioManager
-import android.media.MediaPlayer
-import android.os.Build
+import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaSession
 import com.sakinah.deen.MainActivity
+import com.sakinah.deen.data.model.PrayerType
+import com.sakinah.deen.data.prefs.SakinahPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-class AdhanPlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
+/**
+ * Foreground Adhan playback built on Media3/ExoPlayer.
+ *
+ * The notification exposes Stop and Snooze (10 min); playback fades in over 5
+ * seconds, pauses on transient audio-focus loss (phone calls, navigation prompts)
+ * and ducks when the system requests it.
+ */
+class AdhanPlaybackService : Service() {
 
     companion object {
         const val ACTION_PLAY_ADHAN = "com.sakinah.deen.ACTION_PLAY_ADHAN"
@@ -29,18 +44,33 @@ class AdhanPlaybackService : Service(), AudioManager.OnAudioFocusChangeListener 
         const val ACTION_PLAY_DUA_SAFAR = "com.sakinah.deen.ACTION_PLAY_DUA_SAFAR"
 
         const val EXTRA_PRAYER_NAME = "extra_prayer_name"
+        const val EXTRA_PRAYER_TYPE = "extra_prayer_type"
         const val NOTIFICATION_ID = 4001
+
+        private const val FADE_STEPS = 20
+        private const val FADE_STEP_MS = 250L
+        private const val SNOOZE_MINUTES = 10
+        private const val MISSING_AUDIO_STOP_DELAY_MS = 4000L
     }
 
-    private var mediaPlayer: MediaPlayer? = null
-    private var audioManager: AudioManager? = null
-    private var audioFocusRequest: AudioFocusRequest? = null
-    private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
-    private var currentPrayerName: String = "Prayer"
+    private enum class PlaybackSource(val rawResourceName: String) {
+        ADHAN("adhan_call"),
+        DUA_SAFAR("dua_safar")
+    }
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var player: ExoPlayer? = null
+    private var mediaSession: MediaSession? = null
+    private var fadeJob: Job? = null
+
+    private var currentPrayerName: String = "Salah"
+    private var currentPrayerType: PrayerType = PrayerType.DHUHR
+    private var isDuaSafar: Boolean = false
+    private lateinit var preferences: SakinahPreferences
 
     override fun onCreate() {
         super.onCreate()
-        audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        preferences = SakinahPreferences(this)
         NotificationChannels.createChannels(this)
     }
 
@@ -50,224 +80,182 @@ class AdhanPlaybackService : Service(), AudioManager.OnAudioFocusChangeListener 
         when (action) {
             ACTION_PLAY_ADHAN -> {
                 currentPrayerName = intent.getStringExtra(EXTRA_PRAYER_NAME) ?: "Salah"
-                startForeground(NOTIFICATION_ID, buildAdhanNotification(currentPrayerName))
-                requestAudioFocusAndPlay(isDuaSafar = false)
+                currentPrayerType = intent.getStringExtra(EXTRA_PRAYER_TYPE)
+                    ?.let { name -> runCatching { PrayerType.valueOf(name) }.getOrNull() }
+                    ?: PrayerType.DHUHR
+                isDuaSafar = false
+
+                startPlaybackForeground(buildAdhanNotification(currentPrayerName))
+                playCue(PlaybackSource.ADHAN)
             }
+
             ACTION_PLAY_DUA_SAFAR -> {
-                startForeground(NOTIFICATION_ID, buildDuaSafarNotification())
-                requestAudioFocusAndPlay(isDuaSafar = true)
+                isDuaSafar = true
+                startPlaybackForeground(buildDuaSafarNotification())
+                playCue(PlaybackSource.DUA_SAFAR)
             }
-            ACTION_STOP_ADHAN -> {
-                stopPlayback()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-            }
-            ACTION_MUTE_ADHAN -> {
-                mediaPlayer?.setVolume(0f, 0f)
-            }
+
             ACTION_SNOOZE -> {
-                stopPlayback()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                PrayerAlarmScheduler(this, com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl(), preferences)
+                    .scheduleSnooze(
+                        prayerType = currentPrayerType,
+                        prayerName = currentPrayerName,
+                        minutes = SNOOZE_MINUTES
+                    )
+                finishPlayback()
             }
+
+            ACTION_MUTE_ADHAN -> {
+                player?.volume = 0f
+            }
+
+            ACTION_STOP_ADHAN -> finishPlayback()
         }
 
         return START_NOT_STICKY
     }
 
-    private fun requestAudioFocusAndPlay(isDuaSafar: Boolean) {
-        val am = audioManager ?: return
+    private fun startPlaybackForeground(notification: Notification) {
+        ServiceCompat.startForeground(
+            this,
+            NOTIFICATION_ID,
+            notification,
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+        )
+    }
 
-        val audioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_MEDIA)
-            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+    private fun playCue(source: PlaybackSource) {
+        val uri = resolveCueUri(source)
+        if (uri == null) {
+            // Keep the notification (and therefore the user-visible reminder) alive briefly,
+            // then release the foreground slot instead of crashing on an empty data source.
+            scope.launch {
+                delay(MISSING_AUDIO_STOP_DELAY_MS)
+                finishPlayback()
+            }
+            return
+        }
+
+        val exo = ensurePlayer()
+        exo.setMediaItem(MediaItem.fromUri(uri))
+        exo.volume = 0f
+        exo.prepare()
+        exo.play()
+
+        fadeJob?.cancel()
+        fadeJob = scope.launch {
+            for (step in 1..FADE_STEPS) {
+                delay(FADE_STEP_MS)
+                val target = player ?: break
+                target.volume = step.toFloat() / FADE_STEPS.toFloat()
+            }
+        }
+    }
+
+    private fun ensurePlayer(): ExoPlayer {
+        player?.let { return it }
+
+        val exoPlayer = ExoPlayer.Builder(this)
+            .build()
+            .apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                        .setUsage(C.USAGE_MEDIA)
+                        .build(),
+                    /* handleAudioFocus = */ true
+                )
+                setHandleAudioBecomingNoisy(true)
+                addListener(object : Player.Listener {
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_ENDED) {
+                            finishPlayback()
+                        }
+                    }
+                })
+            }
+
+        mediaSession = MediaSession.Builder(this, exoPlayer)
+            .setSessionActivity(contentPendingIntent())
             .build()
 
-        val focusGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-                .setAudioAttributes(audioAttributes)
-                .setOnAudioFocusChangeListener(this)
-                .setAcceptsDelayedFocusGain(true)
-                .build()
-            audioFocusRequest = req
-            am.requestAudioFocus(req) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-        } else {
-            @Suppress("DEPRECATION")
-            am.requestAudioFocus(
-                this,
-                AudioManager.STREAM_MUSIC,
-                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
-            ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-        }
-
-        if (focusGranted) {
-            startMediaWithFadeIn(isDuaSafar)
-        }
+        player = exoPlayer
+        return exoPlayer
     }
 
-    private fun startMediaWithFadeIn(isDuaSafar: Boolean) {
-        stopPlayback()
+    private fun resolveCueUri(source: PlaybackSource): Uri? {
+        val bundled = NotificationChannels.resolveRawSound(this, source.rawResourceName)
+        if (bundled != null) return bundled
 
-        // Synthesize an auditory playback tone or load raw audio
-        mediaPlayer = MediaPlayer().apply {
-            setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .build()
-            )
-            setOnCompletionListener {
-                stopPlayback()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-            }
+        val override = when (source) {
+            PlaybackSource.ADHAN -> preferences.adhanSoundUri
+            PlaybackSource.DUA_SAFAR -> preferences.duaSafarSoundUri
         }
+        return override?.takeIf { it.isNotBlank() }?.let(Uri::parse)
+    }
 
-        // Start at low volume (10%) and progressively fade in to 100% over 5 seconds
-        mediaPlayer?.setVolume(0.1f, 0.1f)
+    private fun finishPlayback() {
+        fadeJob?.cancel()
+        fadeJob = null
         try {
-            // If bundled raw audio exists it will play; otherwise it completes cleanly
-            mediaPlayer?.start()
+            player?.stop()
         } catch (e: Exception) {
-            // Audio hardware fallback
+            // Ignore release races.
         }
-
-        serviceScope.launch {
-            for (step in 1..10) {
-                delay(500)
-                val vol = (step * 0.1f).coerceIn(0.1f, 1.0f)
-                try {
-                    mediaPlayer?.setVolume(vol, vol)
-                } catch (e: Exception) {
-                    break
-                }
-            }
-        }
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
-    private fun stopPlayback() {
-        try {
-            if (mediaPlayer?.isPlaying == true) {
-                mediaPlayer?.stop()
-            }
-            mediaPlayer?.release()
-            mediaPlayer = null
-        } catch (e: Exception) {
-            // Ignore clean release failures
-        }
+    private fun contentPendingIntent(): PendingIntent = PendingIntent.getActivity(
+        this,
+        0,
+        Intent(this, MainActivity::class.java),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && audioFocusRequest != null) {
-            audioFocusRequest?.let { audioManager?.abandonAudioFocusRequest(it) }
-        } else {
-            @Suppress("DEPRECATION")
-            audioManager?.abandonAudioFocus(this)
-        }
-    }
-
-    override fun onAudioFocusChange(focusChange: Int) {
-        when (focusChange) {
-            AudioManager.AUDIOFOCUS_LOSS -> {
-                // Another app started non-interruptible audio (phone call, navigation)
-                stopPlayback()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-            }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                // Short interruption (notification chime, short voice direction)
-                try {
-                    mediaPlayer?.pause()
-                } catch (e: Exception) {
-                    // Safe guard
-                }
-            }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                // Duck volume down while background noise plays
-                try {
-                    mediaPlayer?.setVolume(0.2f, 0.2f)
-                } catch (e: Exception) {
-                    // Safe guard
-                }
-            }
-            AudioManager.AUDIOFOCUS_GAIN -> {
-                // Regained full audio focus, restore volume
-                try {
-                    mediaPlayer?.setVolume(1.0f, 1.0f)
-                    if (mediaPlayer?.isPlaying == false) {
-                        mediaPlayer?.start()
-                    }
-                } catch (e: Exception) {
-                    // Safe guard
-                }
-            }
-        }
-    }
-
-    private fun buildAdhanNotification(prayerName: String): Notification {
-        val contentIntent = PendingIntent.getActivity(
+    private fun actionPendingIntent(requestCode: Int, action: String): PendingIntent =
+        PendingIntent.getService(
             this,
-            0,
-            Intent(this, MainActivity::class.java),
+            requestCode,
+            Intent(this, AdhanPlaybackService::class.java).apply { this.action = action },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val stopIntent = PendingIntent.getService(
-            this,
-            1,
-            Intent(this, AdhanPlaybackService::class.java).apply { action = ACTION_STOP_ADHAN },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val muteIntent = PendingIntent.getService(
-            this,
-            2,
-            Intent(this, AdhanPlaybackService::class.java).apply { action = ACTION_MUTE_ADHAN },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val snoozeIntent = PendingIntent.getService(
-            this,
-            3,
-            Intent(this, AdhanPlaybackService::class.java).apply { action = ACTION_SNOOZE },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        return NotificationCompat.Builder(this, NotificationChannels.CHANNEL_SALAH_ADHAN)
+    private fun buildAdhanNotification(prayerName: String): Notification =
+        NotificationCompat.Builder(this, NotificationChannels.CHANNEL_SALAH_ADHAN)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle("Adhan: Time for $prayerName Prayer")
             .setContentText("حي على الصلاة ، حي على الفلاح — Come to Prayer, Come to Success")
-            .setContentIntent(contentIntent)
+            .setContentIntent(contentPendingIntent())
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .addAction(android.R.drawable.ic_media_pause, "Stop", stopIntent)
-            .addAction(android.R.drawable.ic_lock_silent_mode, "Mute", muteIntent)
-            .addAction(android.R.drawable.ic_menu_recent_history, "Snooze 10m", snoozeIntent)
+            .addAction(android.R.drawable.ic_media_pause, "Stop", actionPendingIntent(1, ACTION_STOP_ADHAN))
+            .addAction(android.R.drawable.ic_lock_silent_mode, "Mute", actionPendingIntent(2, ACTION_MUTE_ADHAN))
+            .addAction(android.R.drawable.ic_menu_recent_history, "Snooze 10m", actionPendingIntent(3, ACTION_SNOOZE))
             .build()
-    }
 
-    private fun buildDuaSafarNotification(): Notification {
-        val stopIntent = PendingIntent.getService(
-            this,
-            1,
-            Intent(this, AdhanPlaybackService::class.java).apply { action = ACTION_STOP_ADHAN },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        return NotificationCompat.Builder(this, NotificationChannels.CHANNEL_TRAVEL_SAFAR)
+    private fun buildDuaSafarNotification(): Notification =
+        NotificationCompat.Builder(this, NotificationChannels.CHANNEL_TRAVEL_SAFAR)
             .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentTitle("Vehicle Audio: Playing Dua al-Safar")
+            .setContentTitle("Safar: Dua al-Safar")
             .setContentText("سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَٰذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ")
+            .setContentIntent(contentPendingIntent())
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .addAction(android.R.drawable.ic_media_pause, "Stop", stopIntent)
+            .addAction(android.R.drawable.ic_media_pause, "Stop", actionPendingIntent(1, ACTION_STOP_ADHAN))
             .build()
-    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        stopPlayback()
+        fadeJob?.cancel()
+        mediaSession?.release()
+        mediaSession = null
+        player?.release()
+        player = null
+        scope.cancel()
         super.onDestroy()
     }
 }

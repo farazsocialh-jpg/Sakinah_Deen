@@ -8,10 +8,11 @@
     <!-- Location & Astronomical Qibla/Prayer Times -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <!-- Bluetooth & In-Vehicle Handshake -->
-    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <!-- Alarms, Doze-Bypass & Reboot Restoration -->
@@ -25,6 +26,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
+    <!-- Compass is genuinely optional: many budget handsets lack a magnetometer -->
+    <uses-feature
+        android:name="android.hardware.sensor.compass"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.sensor.accelerometer"
+        android:required="true" />
 
     <application
         android:name=".SakinahApp"
@@ -45,21 +54,30 @@
             </intent-filter>
         </activity>
 
-        <!-- Adhan Audio Playback Foreground Service -->
+        <!-- Adhan Audio Playback Foreground Service (Media3 / ExoPlayer) -->
         <service
             android:name=".service.AdhanPlaybackService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
-        <!-- Prayer Alarm Receiver (Exact Alarms & Reboot Restoration) -->
+        <!-- Prayer Alarm Receiver: fires the Adhan, scheduling handled elsewhere -->
         <receiver
             android:name=".service.PrayerAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.sakinah.deen.ACTION_PRAYER_ALARM" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Boot / clock / timezone restoration of exact alarms -->
+        <receiver
+            android:name=".service.BootAndAlarmReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
                 <action android:name="android.intent.action.TIME_SET" />
-                <action android:name="com.sakinah.deen.ACTION_PRAYER_ALARM" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 

@@ -47,3 +47,71 @@ data class SadaqahLogEntity(
     val note: String? = null,
     val timestamp: Long = System.currentTimeMillis()
 )
+
+/**
+ * Cached Quran text. Populated from the free Quran.com v4 API so the reader works
+ * offline once a surah has been downloaded.
+ */
+@Entity(
+    tableName = "quran_ayahs",
+    primaryKeys = ["surahNumber", "ayahNumber"]
+)
+data class QuranAyahEntity(
+    val surahNumber: Int,
+    val ayahNumber: Int,
+    val verseKey: String,
+    val textUthmani: String,
+    val translation: String? = null,
+    val transliteration: String? = null,
+    val audioUrl: String? = null,
+    val surahNameEnglish: String? = null,
+    val surahNameArabic: String? = null,
+    val revelationPlace: String? = null,
+    val downloadedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "surah_metadata")
+data class SurahMetadataEntity(
+    @PrimaryKey
+    val surahNumber: Int,
+    val nameSimple: String,
+    val nameArabic: String,
+    val translatedName: String,
+    val versesCount: Int,
+    val revelationPlace: String? = null
+)
+
+/**
+ * Hadith text ingested from the free fawazahmed0 CDN editions (Sahih al-Bukhari,
+ * Sahih Muslim, 40 Hadith Nawawi, and the remaining Kutub al-Tis'ah sources).
+ */
+@Entity(
+    tableName = "hadith_entries",
+    primaryKeys = ["bookKey", "hadithNumber"]
+)
+data class HadithEntryEntity(
+    val bookKey: String,
+    val hadithNumber: Int,
+    val bookTitle: String,
+    val sectionNumber: Int = 0,
+    val chapterTitle: String = "",
+    val arabicText: String = "",
+    val englishText: String = "",
+    val grade: String = "",
+    val gradingScholar: String = "",
+    val downloadedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "tafsir_entries",
+    primaryKeys = ["sourceKey", "surahNumber", "ayahNumber"]
+)
+data class TafsirEntryEntity(
+    val sourceKey: String,
+    val sourceName: String,
+    val surahNumber: Int,
+    val ayahNumber: Int,
+    val languageCode: String = "en",
+    val text: String,
+    val downloadedAt: Long = System.currentTimeMillis()
+)

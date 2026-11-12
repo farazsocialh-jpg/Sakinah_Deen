@@ -56,6 +56,7 @@ class QiblaSensorManager(
     private var hasAccelerometer = false
     private var hasMagnetometer = false
     private var smoothedAzimuth = 0f
+    private var sensorAccuracy = SensorManager.SENSOR_STATUS_ACCURACY_HIGH
 
     // Location state for GeomagneticField declination and Kaaba bearing
     private var lastKnownLocation: Location? = null
@@ -181,7 +182,7 @@ class QiblaSensorManager(
             azimuthTrueNorthDeg = headingTrueNorth,
             kaabaBearingDeg = kaabaBearing,
             needleRelativeAngleDeg = relativeNeedleAngle,
-            accuracy = SensorManager.SENSOR_STATUS_ACCURACY_HIGH,
+            accuracy = sensorAccuracy,
             isVehicularTrajectoryActive = isVehicular,
             magneticDeclinationDeg = magneticDeclination
         )
@@ -199,6 +200,7 @@ class QiblaSensorManager(
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        sensorAccuracy = accuracy
         _compassFlow.value = _compassFlow.value.copy(accuracy = accuracy)
     }
 }

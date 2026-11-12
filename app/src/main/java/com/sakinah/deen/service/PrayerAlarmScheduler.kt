@@ -8,6 +8,7 @@ import android.os.Build
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
 import com.sakinah.deen.data.model.PrayerType
+import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -17,7 +18,8 @@ import java.time.format.DateTimeFormatter
 
 class PrayerAlarmScheduler(
     private val context: Context,
-    private val astronomyEngine: PrayerCalculationEngine
+    private val astronomyEngine: PrayerCalculationEngine,
+    private val preferences: SakinahPreferences = SakinahPreferences(context)
 ) {
 
     companion object {
@@ -26,22 +28,41 @@ class PrayerAlarmScheduler(
         const val EXTRA_PRAYER_TYPE = "extra_prayer_type"
         const val EXTRA_PRAYER_TIME_FORMATTED = "extra_prayer_time_formatted"
         const val EXTRA_TRIGGER_MILLIS = "extra_trigger_millis"
+        const val EXTRA_IS_SNOOZE = "extra_is_snooze"
+
+        private const val BASE_REQUEST_CODE = 1000
+        private const val SNOOZE_REQUEST_CODE = 9500
+        private const val SNOOZE_MINUTES = 10
     }
 
     private val alarmManager: AlarmManager? =
         context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
 
+    /**
+     * Registers one exact alarm for each of the five obligatory prayers, rolling
+     * today's elapsed prayers onto tomorrow's astronomical table.
+     */
     fun scheduleAllDailyAlarms(
-        coordinates: Pair<Double, Double>,
-        method: CalculationMethod = CalculationMethod.MUSLIM_WORLD_LEAGUE,
-        madhhab: Madhhab = Madhhab.HANAFI
+        coordinates: Pair<Double, Double>? = null,
+        method: CalculationMethod? = null,
+        madhhab: Madhhab? = null
     ) {
         if (alarmManager == null) return
+        val coords = coordinates ?: preferences.locationCoordinates ?: return
+        val calculationMethod = method ?: preferences.calculationMethod
+        val school = madhhab ?: preferences.madhhab
 
         val today = LocalDate.now()
-        val timesToday = astronomyEngine.getPrayerTimes(coordinates, today, method, madhhab)
         val now = LocalTime.now()
         val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a")
+
+        val timesToday = astronomyEngine.getPrayerTimes(coords, today, calculationMethod, school)
+        val timesTomorrow = astronomyEngine.getPrayerTimes(
+            coords,
+            today.plusDays(1),
+            calculationMethod,
+            school
+        )
 
         val prayersToSchedule = listOf(
             PrayerType.FAJR,
@@ -52,19 +73,15 @@ class PrayerAlarmScheduler(
         )
 
         for (prayer in prayersToSchedule) {
-            val prayerTime = timesToday[prayer] ?: continue
-            val isFutureToday = prayerTime.isAfter(now)
-
+            val todayTime = timesToday[prayer] ?: continue
+            val isFutureToday = todayTime.isAfter(now)
             val triggerDate = if (isFutureToday) today else today.plusDays(1)
-            val effectiveTime = if (isFutureToday) {
-                prayerTime
-            } else {
-                val timesTomorrow = astronomyEngine.getPrayerTimes(coordinates, triggerDate, method, madhhab)
-                timesTomorrow[prayer] ?: prayerTime
-            }
+            val effectiveTime = if (isFutureToday) todayTime else (timesTomorrow[prayer] ?: todayTime)
 
-            val triggerDateTime = LocalDateTime.of(triggerDate, effectiveTime)
-            val triggerMillis = triggerDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val triggerMillis = LocalDateTime.of(triggerDate, effectiveTime)
+                .atZone(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
 
             scheduleSingleAlarm(
                 prayerType = prayer,
@@ -83,71 +100,96 @@ class PrayerAlarmScheduler(
     ) {
         if (alarmManager == null) return
 
+        val pendingIntent = buildPrayerPendingIntent(
+            requestCode = BASE_REQUEST_CODE + prayerType.ordinal,
+            prayerName = prayerName,
+            prayerType = prayerType,
+            timeFormatted = timeFormatted,
+            triggerEpochMillis = triggerEpochMillis,
+            isSnooze = false
+        )
+        setExactCompat(triggerEpochMillis, pendingIntent)
+    }
+
+    /** Re-fires a prayer reminder once, [minutes] from now. */
+    fun scheduleSnooze(
+        prayerType: PrayerType = PrayerType.DHUHR,
+        prayerName: String = "Salah",
+        minutes: Int = SNOOZE_MINUTES,
+        timeFormatted: String = ""
+    ) {
+        if (alarmManager == null) return
+        val triggerAt = System.currentTimeMillis() + minutes * 60_000L
+        val pendingIntent = buildPrayerPendingIntent(
+            requestCode = SNOOZE_REQUEST_CODE,
+            prayerName = prayerName,
+            prayerType = prayerType,
+            timeFormatted = timeFormatted,
+            triggerEpochMillis = triggerAt,
+            isSnooze = true
+        )
+        setExactCompat(triggerAt, pendingIntent)
+    }
+
+    fun cancelAllAlarms() {
+        val am = alarmManager ?: return
+        for (prayer in PrayerType.entries) {
+            val intent = Intent(context, PrayerAlarmReceiver::class.java).apply {
+                action = ACTION_PRAYER_ALARM
+            }
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                BASE_REQUEST_CODE + prayer.ordinal,
+                intent,
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+            )
+            if (pendingIntent != null) {
+                am.cancel(pendingIntent)
+                pendingIntent.cancel()
+            }
+        }
+    }
+
+    private fun buildPrayerPendingIntent(
+        requestCode: Int,
+        prayerName: String,
+        prayerType: PrayerType,
+        timeFormatted: String,
+        triggerEpochMillis: Long,
+        isSnooze: Boolean
+    ): PendingIntent {
         val intent = Intent(context, PrayerAlarmReceiver::class.java).apply {
             action = ACTION_PRAYER_ALARM
             putExtra(EXTRA_PRAYER_NAME, prayerName)
             putExtra(EXTRA_PRAYER_TYPE, prayerType.name)
             putExtra(EXTRA_PRAYER_TIME_FORMATTED, timeFormatted)
             putExtra(EXTRA_TRIGGER_MILLIS, triggerEpochMillis)
+            putExtra(EXTRA_IS_SNOOZE, isSnooze)
         }
-
-        val requestCode = 1000 + prayerType.ordinal
-        val pendingIntent = PendingIntent.getBroadcast(
+        return PendingIntent.getBroadcast(
             context,
             requestCode,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+    }
 
-        val canScheduleExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            alarmManager.canScheduleExactAlarms()
-        } else {
-            true
-        }
+    /**
+     * Exact alarms are a runtime grant on Android 12+. When the user revokes it,
+     * fall back to an inexact idle-safe alarm instead of losing the reminder.
+     */
+    private fun setExactCompat(triggerAtMillis: Long, pendingIntent: PendingIntent) {
+        val am = alarmManager ?: return
+        val canScheduleExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()
 
         if (canScheduleExact) {
             try {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerEpochMillis,
-                    pendingIntent
-                )
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                return
             } catch (e: SecurityException) {
-                // Runtime permission was revoked; fallback gracefully to inexact trigger
-                alarmManager.setAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerEpochMillis,
-                    pendingIntent
-                )
-            }
-        } else {
-            // Android 12+ runtime fallback when SCHEDULE_EXACT_ALARM is not granted
-            alarmManager.setAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                triggerEpochMillis,
-                pendingIntent
-            )
-        }
-    }
-
-    fun cancelAllAlarms() {
-        if (alarmManager == null) return
-
-        for (prayer in PrayerType.entries) {
-            val intent = Intent(context, PrayerAlarmReceiver::class.java).apply {
-                action = ACTION_PRAYER_ALARM
-            }
-            val requestCode = 1000 + prayer.ordinal
-            val pendingIntent = PendingIntent.getBroadcast(
-                context,
-                requestCode,
-                intent,
-                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-            )
-            if (pendingIntent != null) {
-                alarmManager.cancel(pendingIntent)
-                pendingIntent.cancel()
+                // Permission revoked between the check and the call.
             }
         }
+        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
     }
 }

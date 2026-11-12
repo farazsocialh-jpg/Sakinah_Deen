@@ -6,3 +6,11 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Local release signing material must never be committed
+local.properties
+keystore.properties
+*.jks
+*.keystore
+keystore/
+app/release/

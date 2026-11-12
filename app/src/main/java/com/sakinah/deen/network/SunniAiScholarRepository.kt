@@ -3,6 +3,7 @@ package com.sakinah.deen.network
 import com.sakinah.deen.network.model.ProofSourceDto
 import com.sakinah.deen.network.model.RagQueryRequest
 import com.sakinah.deen.network.model.RagStreamChunk
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -20,7 +21,8 @@ interface SunniAiScholarRepository {
 }
 
 class SunniAiScholarRepositoryImpl(
-    private val backendBaseUrl: String = "http://localhost:3000/api/scholar"
+    private val aiClient: SunniAiClient? = null,
+    private val backendBaseUrl: String? = null
 ) : SunniAiScholarRepository {
 
     override fun streamAskScholar(request: RagQueryRequest): Flow<RagStreamChunk> = flow {
@@ -31,11 +33,36 @@ class SunniAiScholarRepositoryImpl(
             )
         )
 
+        // 2. Preferred path: stream directly from the free Gemini Flash tier.
+        if (aiClient?.isConfigured == true) {
+            var receivedText = false
+            try {
+                aiClient.streamScholar(request).collect { chunk ->
+                    if (chunk is RagStreamChunk.TextDelta && chunk.delta.isNotBlank()) {
+                        receivedText = true
+                    }
+                    emit(chunk)
+                }
+                return@flow
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Partial answer delivered: finish cleanly instead of appending fallback text.
+                if (receivedText) {
+                    emit(RagStreamChunk.Complete)
+                    return@flow
+                }
+                // Otherwise fall through to the offline grounded answer below.
+            }
+        }
+
         try {
-            // Attempt HTTP connection to backend proxy
+            // 3. Optional self-hosted proxy, then the offline-first grounded fallback.
             var connected = false
             try {
-                val url = URL(backendBaseUrl)
+                val configuredBackend = backendBaseUrl
+                    ?: throw IllegalStateException("No backend proxy configured")
+                val url = URL(configuredBackend)
                 val connection = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
                     connectTimeout = 4000

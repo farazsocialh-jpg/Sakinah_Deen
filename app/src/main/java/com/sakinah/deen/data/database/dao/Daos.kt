@@ -6,10 +6,14 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.sakinah.deen.data.database.entity.HadithEntryEntity
 import com.sakinah.deen.data.database.entity.HifzMistakeEntity
 import com.sakinah.deen.data.database.entity.QadhaLedgerEntity
+import com.sakinah.deen.data.database.entity.QuranAyahEntity
 import com.sakinah.deen.data.database.entity.SadaqahLogEntity
 import com.sakinah.deen.data.database.entity.SalahRecordEntity
+import com.sakinah.deen.data.database.entity.SurahMetadataEntity
+import com.sakinah.deen.data.database.entity.TafsirEntryEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -117,4 +121,64 @@ interface SadaqahDao {
 
     @Query("DELETE FROM sadaqah_logs WHERE id = :id")
     suspend fun deleteLog(id: String)
+}
+
+@Dao
+interface QuranDao {
+    @Query("SELECT * FROM quran_ayahs WHERE surahNumber = :surahNumber ORDER BY ayahNumber ASC")
+    fun observeSurah(surahNumber: Int): Flow<List<QuranAyahEntity>>
+
+    @Query("SELECT * FROM quran_ayahs WHERE surahNumber = :surahNumber AND ayahNumber = :ayahNumber LIMIT 1")
+    suspend fun getAyah(surahNumber: Int, ayahNumber: Int): QuranAyahEntity?
+
+    @Query("SELECT COUNT(*) FROM quran_ayahs WHERE surahNumber = :surahNumber")
+    suspend fun countAyahs(surahNumber: Int): Int
+
+    @Query("SELECT * FROM surah_metadata ORDER BY surahNumber ASC")
+    fun observeSurahs(): Flow<List<SurahMetadataEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAyahs(ayahs: List<QuranAyahEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSurahs(surahs: List<SurahMetadataEntity>)
+
+    @Query("DELETE FROM quran_ayahs WHERE surahNumber = :surahNumber")
+    suspend fun deleteSurah(surahNumber: Int)
+}
+
+@Dao
+interface HadithDao {
+    @Query(
+        "SELECT * FROM hadith_entries WHERE bookKey = :bookKey " +
+            "ORDER BY hadithNumber ASC LIMIT :limit OFFSET :offset"
+    )
+    fun observeHadiths(bookKey: String, limit: Int = 200, offset: Int = 0): Flow<List<HadithEntryEntity>>
+
+    @Query("SELECT * FROM hadith_entries WHERE bookKey = :bookKey AND hadithNumber = :hadithNumber LIMIT 1")
+    suspend fun getHadith(bookKey: String, hadithNumber: Int): HadithEntryEntity?
+
+    @Query("SELECT COUNT(*) FROM hadith_entries WHERE bookKey = :bookKey")
+    suspend fun countForBook(bookKey: String): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(entries: List<HadithEntryEntity>)
+
+    @Query("DELETE FROM hadith_entries WHERE bookKey = :bookKey")
+    suspend fun clearBook(bookKey: String)
+}
+
+@Dao
+interface TafsirDao {
+    @Query(
+        "SELECT * FROM tafsir_entries WHERE sourceKey = :sourceKey " +
+            "AND surahNumber = :surahNumber AND ayahNumber = :ayahNumber LIMIT 1"
+    )
+    suspend fun getTafsir(sourceKey: String, surahNumber: Int, ayahNumber: Int): TafsirEntryEntity?
+
+    @Query("SELECT COUNT(*) FROM tafsir_entries WHERE sourceKey = :sourceKey AND surahNumber = :surahNumber")
+    suspend fun countForSurah(sourceKey: String, surahNumber: Int): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(entries: List<TafsirEntryEntity>)
 }

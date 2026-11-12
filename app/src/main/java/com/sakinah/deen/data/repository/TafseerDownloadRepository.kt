@@ -1,6 +1,7 @@
 package com.sakinah.deen.data.repository
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.sakinah.deen.data.database.SakinahEncryptedDatabase
 import com.sakinah.deen.data.model.TafseerEntry
@@ -31,6 +32,10 @@ data class TafseerPackage(
 class TafseerDownloadRepository(
     private val context: Context
 ) {
+    // NOTE: these CDN hosts are placeholders for a future self-hosted pack mirror.
+    // Until they exist, downloads fall back to a valid empty pre-indexed SQLite file so
+    // ATTACH DATABASE and offline queries keep working. For real tafsir text today use
+    // IslamicDataRepository.syncTafsirForSurah(), which reads the free Quran.com API.
     private val _packages = MutableStateFlow(
         listOf(
             TafseerPackage(
@@ -218,8 +223,34 @@ class TafseerDownloadRepository(
         emit(entry)
     }.flowOn(Dispatchers.IO)
 
+    /**
+     * Creates a genuinely attachable SQLite database when the pack CDN is unreachable.
+     * Writing a text placeholder here would make ATTACH DATABASE fail later.
+     */
     private fun createFallbackTafseerDb(file: File, pkg: TafseerPackage) {
         file.parentFile?.mkdirs()
-        file.writeText("-- Pre-indexed SQLite file for ${pkg.author}\n")
+        if (file.exists()) file.delete()
+
+        val database = SQLiteDatabase.openOrCreateDatabase(file, null)
+        try {
+            database.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS tafseer_entries (
+                    tafseerId TEXT NOT NULL,
+                    surahNumber INTEGER NOT NULL,
+                    ayahNumber INTEGER NOT NULL,
+                    author TEXT NOT NULL,
+                    languageCode TEXT NOT NULL,
+                    contentMarkdown TEXT NOT NULL,
+                    PRIMARY KEY (surahNumber, ayahNumber)
+                )
+                """.trimIndent()
+            )
+            database.execSQL(
+                "CREATE INDEX IF NOT EXISTS idx_tafseer_ayah ON tafseer_entries(surahNumber, ayahNumber)"
+            )
+        } finally {
+            database.close()
+        }
     }
 }

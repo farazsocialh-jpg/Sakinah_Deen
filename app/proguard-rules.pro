@@ -77,3 +77,16 @@
     public static int d(...);
     public static int i(...);
 }
+
+# ------------------------------------------------------------------------------
+# 7. Media3 / ExoPlayer Adhan Playback
+# ------------------------------------------------------------------------------
+-keep class androidx.media3.** { *; }
+-dontwarn androidx.media3.**
+-keep class androidx.work.** { *; }
+-dontwarn androidx.work.**
+
+# Sakinah background components resolved by name from the manifest
+-keep class com.sakinah.deen.service.** { *; }
+-keep class com.sakinah.deen.receiver.** { *; }
+-keep class com.sakinah.deen.work.** { *; }
