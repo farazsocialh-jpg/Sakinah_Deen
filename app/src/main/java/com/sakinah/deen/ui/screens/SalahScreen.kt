@@ -116,7 +116,7 @@ fun SalahScreen(
     var showQadhaDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showManualCityDialog by remember { mutableStateOf(false) }
-    var expandedId by remember { mutableStateOf<String?>("asr") }
+    var expandedId by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     var isRefreshing by remember { mutableStateOf(false) }
     val refreshScope = rememberCoroutineScope()
@@ -145,7 +145,7 @@ fun SalahScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = state.hijriDate,
                     fontWeight = FontWeight.Bold,
@@ -168,7 +168,8 @@ fun SalahScreen(
                         text = "${state.locationName} · ${state.sourceLabel}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        fontSize = 11.sp
+                        fontSize = 11.sp,
+                        maxLines = 2
                     )
                 }
             }
@@ -357,7 +358,7 @@ fun SalahScreen(
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = EmeraldDeep
+                                    color = Color(0xFFD1FAE5)
                                 )
                             }
                         }
