@@ -4,6 +4,7 @@ import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.domain.travel.TravelStatusManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -60,12 +61,35 @@ class TravelStatusManagerTest {
     @Test
     fun exactlyAtThresholdBoundary() {
         val manager = TravelStatusManager()
-        manager.setHomeAnchor(Pair(0.0, 0.0))
-        // 80 km north
-        val km80Lat = 80.0 / 111.0
+        manager.setHomeAnchor(Pair(10.0, 0.0))
+        // 80 km north of Home
+        val homeLat = 10.0
+        val km80Lat = homeLat + 80.0 / 111.0
         val state = manager.evaluateTravelState(Pair(km80Lat, 0.0))
         assertTrue(state.distanceKm >= TravelStatusManager.TRAVEL_THRESHOLD_KM)
         assertTrue(state.isQasrActive)
+    }
+
+    @Test
+    fun zeroCoordinatesAnchor_isIgnored() {
+        val manager = TravelStatusManager()
+        manager.setHomeAnchor(Pair(0.0, 0.0))
+
+        assertFalse(manager.hasHomeAnchor)
+        assertNull(manager.getHomeAnchor())
+
+        val state = manager.evaluateTravelState(Pair(32.0, 35.0))
+        assertFalse(state.isTraveler)
+        assertFalse(state.isQasrActive)
+        assertEquals(4, state.shortenedRakats[PrayerType.DHUHR])
+        assertEquals(4, state.shortenedRakats[PrayerType.ASR])
+        assertEquals(4, state.shortenedRakats[PrayerType.ISHA])
+    }
+
+    @Test
+    fun constructorRejectsZeroCoordinates() {
+        val manager = TravelStatusManager(Pair(0.0, 0.0))
+        assertFalse(manager.hasHomeAnchor)
     }
 
     @Test

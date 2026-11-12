@@ -79,11 +79,9 @@ val astronomyModule = module {
 
 val travelModule = module {
     single {
-        val preferences = get<SakinahPreferences>()
-        TravelStatusManager(
-            preferences.homeCoordinates
-                ?: Pair(SakinahPreferences.DEFAULT_LATITUDE, SakinahPreferences.DEFAULT_LONGITUDE)
-        )
+        // No saved Home means no Qasr. Never fall back to a placeholder city, or a
+        // user far from that city would see 2-rakat Safar without ever setting Home.
+        TravelStatusManager(get<SakinahPreferences>().homeCoordinates)
     }
     single { QiblaSensorManager(androidContext()) }
 }

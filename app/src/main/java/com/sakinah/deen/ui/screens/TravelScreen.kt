@@ -1,5 +1,8 @@
 package com.sakinah.deen.ui.screens
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -34,14 +37,17 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,18 +60,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.sakinah.deen.data.prefs.SakinahPreferences
+import com.sakinah.deen.domain.astronomy.UserLocationProvider
+import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
 import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.EmeraldDeep
 import com.sakinah.deen.ui.theme.EmeraldSurface
 import com.sakinah.deen.ui.theme.MintGreen
+import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
 @Composable
 fun TravelScreen(
-    onChangeHome: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var distanceKm by remember { mutableFloatStateOf(74f) }
@@ -75,10 +84,38 @@ fun TravelScreen(
     val kaabaAzimuth = 118f // Kaaba bearing
     val relativeAngle = (kaabaAzimuth - vehicleHeading + 360f) % 360f
 
-    // Saved Home Location is the source of truth for the Qasr distance check
+    // Saved Home Location is the source of truth for the Qasr distance check.
     val appPrefs = rememberInject<SakinahPreferences>()
-    val homeCoordinates = appPrefs.homeCoordinates
-    val homeCity = appPrefs.homeCityName
+    val locationProvider = rememberInject<UserLocationProvider>()
+    val scope = rememberCoroutineScope()
+    var homeCoordinates by remember { mutableStateOf(appPrefs.homeCoordinates) }
+    var homeCity by remember { mutableStateOf(appPrefs.homeCityName) }
+    var showHomeOptions by remember { mutableStateOf(false) }
+    var showHomeCityPicker by remember { mutableStateOf(false) }
+    var gpsHomeRequested by remember { mutableStateOf(false) }
+
+    fun saveCurrentGpsAsHome() {
+        scope.launch {
+            val resolved = locationProvider.getFreshOrCachedLocation()
+            val label = listOf(resolved.cityName, resolved.countryName)
+                .filter { it.isNotBlank() }
+                .joinToString(", ")
+                .ifBlank { "Saved Location" }
+            // Invalid fixes are ignored and any stale Travel Mode is cleared.
+            appPrefs.saveHomeAnchor(resolved.latitude, resolved.longitude, label)
+            homeCoordinates = appPrefs.homeCoordinates
+            homeCity = appPrefs.homeCityName
+        }
+    }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val isGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (isGranted && gpsHomeRequested) saveCurrentGpsAsHome()
+        gpsHomeRequested = false
+    }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -172,9 +209,9 @@ fun TravelScreen(
             }
         }
 
-        // Add Change Home button below the banner
+        // Change Home opens the same GPS / city picker options as Settings.
         FilledTonalButton(
-            onClick = onChangeHome,
+            onClick = { showHomeOptions = true },
             modifier = Modifier.widthIn(280.dp),
             shape = RoundedCornerShape(12.dp)
         ) {
@@ -356,4 +393,94 @@ fun TravelScreen(
             }
         }
     }
+
+
+    // Home Location options — same GPS / city picker as Settings.
+    if (showHomeOptions) {
+        Dialog(onDismissRequest = { showHomeOptions = false }) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Home Location",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = EmeraldDeep
+                    )
+                    Text(
+                        text = homeCity
+                            ?: if (homeCoordinates != null) "Saved location" else "Not set (normal 4 rakat)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    Button(
+                        onClick = {
+                            gpsHomeRequested = true
+                            locationPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldDeep),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Use Current GPS as Home", color = Color.White, fontSize = 12.sp)
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            showHomeOptions = false
+                            showHomeCityPicker = true
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Choose Home City", fontSize = 12.sp)
+                    }
+                    if (homeCoordinates != null) {
+                        TextButton(
+                            onClick = {
+                                appPrefs.clearHomeAnchor()
+                                homeCoordinates = null
+                                homeCity = null
+                                showHomeOptions = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Clear Home Location", fontSize = 12.sp)
+                        }
+                    }
+                    TextButton(
+                        onClick = { showHomeOptions = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Cancel", fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+    }
+
+    if (showHomeCityPicker) {
+        HomeLocationCityPickerDialog(
+            onDismiss = { showHomeCityPicker = false },
+            onCitySelected = { city ->
+                appPrefs.saveHomeAnchor(city.latitude, city.longitude, city.name)
+                homeCoordinates = appPrefs.homeCoordinates
+                homeCity = appPrefs.homeCityName
+                showHomeCityPicker = false
+            }
+        )
+    }
+
 }
