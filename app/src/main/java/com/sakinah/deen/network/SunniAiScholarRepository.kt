@@ -33,7 +33,15 @@ class SunniAiScholarRepositoryImpl(
             )
         )
 
-        // 2. Preferred path: stream directly from the free Gemini Flash tier.
+        // 2. No Scholar backend in this build: state that plainly instead of letting a
+        //    request fail on a blank URL or inventing an answer locally.
+        if (aiClient?.isConfigured != true && backendBaseUrl == null) {
+            emit(RagStreamChunk.TextDelta(SunniAiClient.NOT_CONFIGURED_MESSAGE))
+            emit(RagStreamChunk.Complete)
+            return@flow
+        }
+
+        // 3. Preferred path: stream from the configured AI proxy.
         if (aiClient?.isConfigured == true) {
             var receivedText = false
             try {
@@ -57,7 +65,7 @@ class SunniAiScholarRepositoryImpl(
         }
 
         try {
-            // 3. Optional self-hosted proxy, then the offline-first grounded fallback.
+            // 4. Optional self-hosted proxy, then the offline-first grounded fallback.
             var connected = false
             try {
                 val configuredBackend = backendBaseUrl

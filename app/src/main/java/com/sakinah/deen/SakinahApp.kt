@@ -2,6 +2,7 @@ package com.sakinah.deen
 
 import android.app.Application
 import androidx.work.Configuration
+import com.sakinah.deen.data.database.OfflineContentSeeder
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.di.appModules
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
@@ -20,6 +21,7 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
     private val preferences: SakinahPreferences by inject()
     private val workerFactory: KoinWorkerFactory by inject()
     private val astronomyEngine: PrayerCalculationEngine by inject()
+    private val contentSeeder: OfflineContentSeeder by inject()
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -37,6 +39,10 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
             androidContext(this@SakinahApp)
             modules(appModules)
         }
+
+        // Seed the bundled Quran/hadith/adhkar content before the first screen query so a
+        // fresh install works in airplane mode. Data reads wait on this (bounded).
+        contentSeeder.start()
 
         NotificationChannels.createChannels(this)
 

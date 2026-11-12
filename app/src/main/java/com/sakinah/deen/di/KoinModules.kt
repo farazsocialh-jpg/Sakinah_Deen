@@ -1,5 +1,7 @@
 package com.sakinah.deen.di
 
+import com.sakinah.deen.data.database.DatabaseSeeder
+import com.sakinah.deen.data.database.OfflineContentSeeder
 import com.sakinah.deen.data.database.SakinahEncryptedDatabase
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.NisabRateRepository
@@ -52,6 +54,16 @@ val databaseModule = module {
     single { get<SakinahEncryptedDatabase>().hadithDao() }
     single { get<SakinahEncryptedDatabase>().tafsirDao() }
     single { get<SakinahEncryptedDatabase>().adhkarDao() }
+    single {
+        OfflineContentSeeder(
+            readAsset = DatabaseSeeder.assetReader(androidContext()),
+            content = {
+                runCatching { get<SakinahEncryptedDatabase>() }
+                    .getOrNull()
+                    ?.let(DatabaseSeeder::seedContentOf)
+            }
+        )
+    }
 }
 
 val astronomyModule = module {
@@ -99,7 +111,8 @@ val networkModule = module {
             hadithDao = get(),
             tafsirDao = get(),
             client = get(),
-            json = get()
+            json = get(),
+            offlineContent = getOrNull()
         )
     }
     single<SunniAiScholarRepository> {

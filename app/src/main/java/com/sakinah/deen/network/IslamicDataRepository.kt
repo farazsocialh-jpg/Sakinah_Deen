@@ -1,5 +1,6 @@
 package com.sakinah.deen.network
 
+import com.sakinah.deen.data.database.OfflineContentSeeder
 import com.sakinah.deen.data.database.dao.HadithDao
 import com.sakinah.deen.data.database.dao.QuranDao
 import com.sakinah.deen.data.database.dao.TafsirDao
@@ -20,6 +21,8 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -43,7 +46,12 @@ class IslamicDataRepository(
     private val hadithDao: HadithDao,
     private val tafsirDao: TafsirDao,
     private val client: HttpClient,
-    private val json: Json
+    private val json: Json,
+    /**
+     * First-launch seeding gate. When present, reads wait for the bundled Quran/hadith
+     * content to be inserted, so a fresh install offline already has data (bounded wait).
+     */
+    private val offlineContent: OfflineContentSeeder? = null
 ) {
 
     companion object {
@@ -135,13 +143,13 @@ class IslamicDataRepository(
     }
 
     fun observeSurah(surahNumber: Int): Flow<List<QuranAyahEntity>> =
-        quranDao.observeSurah(surahNumber)
+        afterSeeding(quranDao.observeSurah(surahNumber))
 
-    fun observeSurahs(): Flow<List<SurahMetadataEntity>> = quranDao.observeSurahs()
+    fun observeSurahs(): Flow<List<SurahMetadataEntity>> = afterSeeding(quranDao.observeSurahs())
 
     /** Full-text search over the locally cached Uthmani text and its translation. */
     fun searchAyahs(query: String, limit: Int = 100): Flow<List<QuranAyahEntity>> =
-        quranDao.searchAyahs(query, limit)
+        afterSeeding(quranDao.searchAyahs(query, limit))
 
     suspend fun isSurahAvailable(surahNumber: Int): Boolean =
         quranDao.countAyahs(surahNumber) > 0
@@ -188,14 +196,27 @@ class IslamicDataRepository(
         bookKey: String,
         limit: Int = 200,
         offset: Int = 0
-    ): Flow<List<HadithEntryEntity>> = hadithDao.observeHadiths(bookKey, limit, offset)
+    ): Flow<List<HadithEntryEntity>> =
+        afterSeeding(hadithDao.observeHadiths(bookKey, limit, offset))
 
     /** Every locally seeded/ downloaded collection, used for the "All Books" filter. */
     fun observeAllHadiths(limit: Int = 500, offset: Int = 0): Flow<List<HadithEntryEntity>> =
-        hadithDao.observeAllHadiths(limit, offset)
+        afterSeeding(hadithDao.observeAllHadiths(limit, offset))
 
     fun searchHadiths(query: String, limit: Int = 200): Flow<List<HadithEntryEntity>> =
-        hadithDao.searchHadiths(query, limit)
+        afterSeeding(hadithDao.searchHadiths(query, limit))
+
+    /**
+     * Waits for bundled offline content before the first Room emission. Without a seeder
+     * (unit tests, tools) the source is returned untouched.
+     */
+    private fun <T> afterSeeding(source: Flow<T>): Flow<T> {
+        val seeder = offlineContent ?: return source
+        return flow {
+            seeder.awaitReady()
+            emitAll(source)
+        }
+    }
 
     suspend fun getHadith(bookKey: String, hadithNumber: Int): HadithEntryEntity? =
         hadithDao.getHadith(bookKey, hadithNumber)

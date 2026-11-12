@@ -15,6 +15,11 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
 data class NisabRates(
     val goldPricePerGram: Float,
@@ -48,8 +53,11 @@ interface NisabRateCache {
  * Fetches current gold/silver prices per gram from a configurable endpoint
  * ([BuildConfig.NISAB_RATE_URL]) and caches the last successful response.
  *
- * The endpoint is expected to return JSON with any of the accepted key spellings, e.g.
- * `{"gold": 88.4, "silver": 1.15, "updatedAt": 1763000000000}`.
+ * The documented endpoint contract is
+ * `{"goldPerGram": 88.4, "silverPerGram": 1.15, "date": "2026-11-12"}`, where `date`
+ * may also be an ISO-8601 instant (`2026-11-12T06:00:00Z`). Tolerant aliases
+ * (`gold`, `goldPricePerGram`, numeric `updatedAt` seconds or millis) are accepted so an
+ * existing price feed can be pointed at without reshaping it.
  */
 class NisabRateRepositoryImpl(
     private val client: HttpClient,
@@ -64,6 +72,7 @@ class NisabRateRepositoryImpl(
         private val GOLD_KEYS = listOf("gold", "goldPerGram", "goldPricePerGram")
         private val SILVER_KEYS = listOf("silver", "silverPerGram", "silverPricePerGram")
         private val TIMESTAMP_KEYS = listOf("updatedAt", "timestamp", "lastUpdated")
+        private val DATE_KEYS = listOf("date", "updatedAtDate", "lastUpdatedDate")
     }
 
     private val _rates = MutableStateFlow(cache?.read() ?: initial)
@@ -104,9 +113,27 @@ class NisabRateRepositoryImpl(
 
     /** The endpoint may send seconds or milliseconds; normalise to epoch millis. */
     private fun timestampOf(root: JsonObject): Long? {
-        val raw = keysFirstLong(root, TIMESTAMP_KEYS) ?: return null
-        return if (raw in 1..9_999_999_999L) raw * 1000L else raw
+        val raw = keysFirstLong(root, TIMESTAMP_KEYS)
+        if (raw != null) return if (raw in 1..9_999_999_999L) raw * 1000L else raw
+        return dateOf(root)
     }
+
+    /**
+     * Parses the documented `date` field. A bare calendar date is anchored to UTC midnight
+     * so the freshness label is stable regardless of the device time zone.
+     */
+    private fun dateOf(root: JsonObject): Long? = DATE_KEYS.firstNotNullOfOrNull { key ->
+        val raw = (root[key] as? JsonPrimitive)?.contentOrNull?.trim()
+        if (raw.isNullOrBlank()) null else parseIsoDate(raw)
+    }
+
+    internal fun parseIsoDate(raw: String): Long? = runCatching {
+        runCatching { Instant.parse(raw).toEpochMilli() }.getOrNull()
+            ?: runCatching { OffsetDateTime.parse(raw).toInstant().toEpochMilli() }.getOrNull()
+            ?: runCatching { LocalDateTime.parse(raw).toInstant(ZoneOffset.UTC).toEpochMilli() }.getOrNull()
+            ?: runCatching { LocalDate.parse(raw).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }
+                .getOrNull()
+    }.getOrNull()
 
     private fun keysFirstLong(root: JsonObject, keys: List<String>): Long? = keys.firstNotNullOfOrNull { key ->
         val element = root[key] as? JsonPrimitive ?: return@firstNotNullOfOrNull null

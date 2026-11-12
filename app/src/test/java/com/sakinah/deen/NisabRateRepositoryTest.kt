@@ -63,6 +63,43 @@ class NisabRateRepositoryTest {
     }
 
     @Test
+    fun refresh_parsesDocumentedSchemaWithDateString() = runTest {
+        val cache = RecordingCache()
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"goldPerGram": 92.75, "silverPerGram": 1.28, "date": "2026-11-12"}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf("Content-Type", "application/json")
+            )
+        }
+        val repo = repository(cache = cache, engine = engine)
+
+        repo.refresh()
+
+        assertEquals(92.75f, repo.rates.value.goldPricePerGram, 0.001f)
+        assertEquals(1.28f, repo.rates.value.silverPricePerGram, 0.001f)
+        // "2026-11-12" is anchored to UTC midnight, not "now".
+        assertEquals(1_794_441_600_000L, repo.rates.value.lastUpdatedEpochMillis)
+        assertEquals(1, cache.writeCount)
+    }
+
+    @Test
+    fun refresh_parsesIsoInstantDate() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"goldPerGram": 90.0, "silverPerGram": 1.2, "date": "2026-11-12T06:30:00Z"}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf("Content-Type", "application/json")
+            )
+        }
+        val repo = repository(engine = engine)
+
+        repo.refresh()
+
+        assertEquals(1_794_465_000_000L, repo.rates.value.lastUpdatedEpochMillis)
+    }
+
+    @Test
     fun refresh_onHttpError_keepsCachedRate() = runTest {
         val cached = NisabRates(86.0f, 1.05f, 1_700_000_000_000L)
         val cache = RecordingCache(cached)

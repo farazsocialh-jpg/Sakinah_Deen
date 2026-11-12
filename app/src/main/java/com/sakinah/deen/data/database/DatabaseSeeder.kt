@@ -4,7 +4,6 @@ import android.content.Context
 import android.util.Log
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.sakinah.deen.content.SeedAdhkar
 import com.sakinah.deen.content.SeedAyah
 import com.sakinah.deen.content.SeedCategory
 import com.sakinah.deen.content.SeedHadith
@@ -12,6 +11,9 @@ import com.sakinah.deen.content.SeedHadithDocument
 import com.sakinah.deen.content.SeedHisnDocument
 import com.sakinah.deen.content.SeedQuranDocument
 import com.sakinah.deen.content.SeedSurah
+import com.sakinah.deen.data.database.dao.AdhkarDao
+import com.sakinah.deen.data.database.dao.HadithDao
+import com.sakinah.deen.data.database.dao.QuranDao
 import com.sakinah.deen.data.database.entity.AdhkarEntity
 import com.sakinah.deen.data.database.entity.HadithEntryEntity
 import com.sakinah.deen.data.database.entity.QuranAyahEntity
@@ -21,14 +23,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.serialization.Serializable
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 
 /**
  * Loads the bundled offline seed datasets (Quran Juz Amma + Al-Fatihah, the 40
- * Nawawi hadith, and essential adhkar) into the encrypted database the first
- * time it is created, so no screen is empty before any download.
+ * Nawawi hadith, and essential adhkar) into the encrypted database so no screen is
+ * empty before any download — including on a fresh install with no connectivity.
  *
  * Text provenance is recorded in `docs/resources.md`; nothing here is typed from
  * memory — the assets are generated from Quran.com and the hadith CDN.
@@ -37,9 +40,38 @@ object DatabaseSeeder {
 
     private const val TAG = "SakinahSeeder"
 
-    private const val QURAN_ASSET = "seed_quran_juz_amma.json"
-    private const val HADITH_ASSET = "seed_hadith_nawawi.json"
-    private const val HISN_ASSET = "seed_hisn_muslim.json"
+    const val QURAN_ASSET = "seed_quran_juz_amma.json"
+    const val HADITH_ASSET = "seed_hadith_nawawi.json"
+    const val HISN_ASSET = "seed_hisn_muslim.json"
+
+    /** Book key the bundled hadith asset is written under. */
+    const val NAWAWI_BOOK_KEY = "nawawi"
+
+    /** Proxy of exactly the DAOs seeding touches, so the logic is testable off-device. */
+    data class SeedContent(
+        val quranDao: QuranDao,
+        val hadithDao: HadithDao,
+        val adhkarDao: AdhkarDao
+    )
+
+    /** What a seeding pass actually did. `skipped` is true when content was already present. */
+    data class SeedSummary(
+        val surahs: Int = 0,
+        val ayahs: Int = 0,
+        val hadiths: Int = 0,
+        val adhkar: Int = 0,
+        val skipped: Boolean = false
+    ) {
+        val rowsWritten: Int get() = ayahs + hadiths + adhkar
+        override fun toString(): String = if (skipped) {
+            "already seeded"
+        } else {
+            "$surahs surahs / $ayahs ayahs, $hadiths hadith, $adhkar adhkar"
+        }
+    }
+
+    /** Serialises the Room `onCreate` callback and the eager startup pass. */
+    private val seedMutex = Mutex()
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -48,6 +80,116 @@ object DatabaseSeeder {
         explicitNulls = false
     }
 
+    /**
+     * Seeds whatever is missing and returns what was written. Idempotent: a second call
+     * after a successful pass writes nothing, and a partially seeded database only fills
+     * the empty datasets. Never throws — failures are returned as an empty summary.
+     */
+    suspend fun seedOnce(
+        readAsset: (String) -> String?,
+        content: () -> SeedContent?
+    ): SeedSummary = seedMutex.withLock {
+        // Resolving the database can fail (encryption factory, corrupt file); never let
+        // that escape into the Room open callback or the startup coroutine.
+        val target = runCatching { content() }.getOrNull() ?: return@withLock SeedSummary()
+        runCatching {
+            val needsQuran = target.quranDao.countAyahs(1) <= 0
+            val needsHadith = target.hadithDao.countForBook(NAWAWI_BOOK_KEY) <= 0
+            val needsAdhkar = target.adhkarDao.count() <= 0
+
+            if (!needsQuran && !needsHadith && !needsAdhkar) {
+                return@runCatching SeedSummary(skipped = true)
+            }
+
+            var surahs = 0
+            var ayahs = 0
+            if (needsQuran) {
+                readAsset(QURAN_ASSET)?.let { text ->
+                    applyQuranSeed(text, target.quranDao).let { (surahCount, ayahCount) ->
+                        surahs = surahCount
+                        ayahs = ayahCount
+                    }
+                }
+            }
+
+            val hadiths = if (needsHadith) {
+                readAsset(HADITH_ASSET)?.let { applyHadithSeed(it, target.hadithDao) } ?: 0
+            } else {
+                0
+            }
+
+            val adhkar = if (needsAdhkar) {
+                readAsset(HISN_ASSET)?.let { applyAdhkarSeed(it, target.adhkarDao) } ?: 0
+            } else {
+                0
+            }
+
+            SeedSummary(surahs = surahs, ayahs = ayahs, hadiths = hadiths, adhkar = adhkar)
+        }.getOrElse { error ->
+            Log.w(TAG, "Offline seed failed: ${error.message}")
+            SeedSummary()
+        }
+    }
+
+    /** Kept for callers that want the whole bundle in one go. */
+    suspend fun seed(context: Context, database: SakinahEncryptedDatabase): String =
+        seedOnce(
+            readAsset = assetReader(context),
+            content = { seedContentOf(database) }
+        ).toString()
+
+    suspend fun applyQuranSeed(jsonText: String, quranDao: QuranDao): Pair<Int, Int> {
+        val document = runCatching { json.decodeFromString<SeedQuranDocument>(jsonText) }
+            .getOrElse {
+                Log.w(TAG, "Unreadable Quran seed: ${it.message}")
+                return 0 to 0
+            }
+
+        val ayahs = document.surahs.flatMap { surah -> surah.toAyahEntities() }
+        if (ayahs.isNotEmpty()) {
+            quranDao.upsertAyahs(ayahs)
+        }
+
+        val surahs = document.surahs.map { surah -> surah.toMetadataEntity() }
+        if (surahs.isNotEmpty()) {
+            quranDao.upsertSurahs(surahs)
+        }
+        return document.surahs.size to ayahs.size
+    }
+
+    suspend fun applyHadithSeed(jsonText: String, hadithDao: HadithDao): Int {
+        val document = runCatching { json.decodeFromString<SeedHadithDocument>(jsonText) }
+            .getOrElse {
+                Log.w(TAG, "Unreadable hadith seed: ${it.message}")
+                return 0
+            }
+
+        val entries = document.hadiths.mapNotNull { hadith -> hadith.toEntity(document) }
+        if (entries.isNotEmpty()) {
+            hadithDao.upsertAll(entries)
+        }
+        return entries.size
+    }
+
+    suspend fun applyAdhkarSeed(jsonText: String, adhkarDao: AdhkarDao): Int {
+        val document = runCatching { json.decodeFromString<SeedHisnDocument>(jsonText) }
+            .getOrElse {
+                Log.w(TAG, "Unreadable adhkar seed: ${it.message}")
+                return 0
+            }
+
+        val entries = document.categories.flatMap { category -> category.toEntities() }
+        if (entries.isNotEmpty()) {
+            adhkarDao.upsertAll(entries)
+        }
+        return entries.size
+    }
+
+    /**
+     * Room's `onCreate` hook. The eager startup pass ([OfflineContentSeeder]) covers the
+     * same ground and is what the UI waits on; this callback just avoids leaving a brand
+     * new database empty if some other entry point opens it first.
+     */
     fun createCallback(
         context: Context,
         databaseProvider: () -> SakinahEncryptedDatabase?
@@ -60,9 +202,12 @@ object DatabaseSeeder {
                 // rather than touching DAOs mid-open.
                 repeat(10) { attempt ->
                     val database = databaseProvider() ?: return@launch
-                    val result = runCatching { seed(appContext, database) }
-                    if (result.isSuccess) {
-                        Log.i(TAG, "Offline seed complete: ${result.getOrNull()}")
+                    val summary = seedOnce(
+                        readAsset = assetReader(appContext),
+                        content = { seedContentOf(database) }
+                    )
+                    if (summary.skipped || summary.rowsWritten > 0) {
+                        Log.i(TAG, "Offline seed complete: $summary")
                         return@launch
                     }
                     delay(250L * (attempt + 1))
@@ -72,102 +217,65 @@ object DatabaseSeeder {
         }
     }
 
-    /** Inserts all bundled content. Safe to call again: every insert is a REPLACE upsert. */
-    suspend fun seed(context: Context, database: SakinahEncryptedDatabase): String {
-        val surahCount = seedQuran(context, database)
-        val hadithCount = seedHadith(context, database)
-        val adhkarCount = seedAdhkar(context, database)
-        return "$surahCount surahs, $hadithCount hadith, $adhkarCount adhkar"
+    /** The DAOs seeding writes through. */
+    fun seedContentOf(database: SakinahEncryptedDatabase): SeedContent =
+        SeedContent(database.quranDao(), database.hadithDao(), database.adhkarDao())
+
+    /** Reads a bundled asset by name, or null when it is missing/unreadable. */
+    fun assetReader(context: Context): (String) -> String? {
+        val appContext = context.applicationContext
+        return { name -> readAsset(appContext, name) }
     }
 
-    private suspend fun seedQuran(context: Context, database: SakinahEncryptedDatabase): Int {
-        val document = readAsset(context, QURAN_ASSET)
-            ?.let { json.decodeFromString<SeedQuranDocument>(it) }
-            ?: return 0
-
-        val ayahs = document.surahs.flatMap { surah ->
-            surah.ayahs.map { ayah ->
-                QuranAyahEntity(
-                    surahNumber = surah.number,
-                    ayahNumber = ayah.number,
-                    verseKey = "${surah.number}:${ayah.number}",
-                    textUthmani = ayah.arabic,
-                    translation = ayah.translation,
-                    surahNameEnglish = surah.nameEnglish,
-                    surahNameArabic = surah.nameArabic,
-                    revelationPlace = surah.revelationPlace
-                )
-            }
-        }
-        if (ayahs.isNotEmpty()) {
-            database.quranDao().upsertAyahs(ayahs)
-        }
-
-        val surahs = document.surahs.map { surah ->
-            SurahMetadataEntity(
-                surahNumber = surah.number,
-                nameSimple = surah.nameEnglish,
-                nameArabic = surah.nameArabic,
-                translatedName = surah.meaning,
-                versesCount = surah.versesCount.takeIf { it > 0 } ?: surah.ayahs.size,
-                revelationPlace = surah.revelationPlace
-            )
-        }
-        if (surahs.isNotEmpty()) {
-            database.quranDao().upsertSurahs(surahs)
-        }
-        return document.surahs.size
+    private fun SeedSurah.toAyahEntities(): List<QuranAyahEntity> = ayahs.map { ayah: SeedAyah ->
+        QuranAyahEntity(
+            surahNumber = number,
+            ayahNumber = ayah.number,
+            verseKey = "$number:${ayah.number}",
+            textUthmani = ayah.arabic,
+            translation = ayah.translation,
+            surahNameEnglish = nameEnglish,
+            surahNameArabic = nameArabic,
+            revelationPlace = revelationPlace
+        )
     }
 
-    private suspend fun seedHadith(context: Context, database: SakinahEncryptedDatabase): Int {
-        val document = readAsset(context, HADITH_ASSET)
-            ?.let { json.decodeFromString<SeedHadithDocument>(it) }
-            ?: return 0
+    private fun SeedSurah.toMetadataEntity(): SurahMetadataEntity = SurahMetadataEntity(
+        surahNumber = number,
+        nameSimple = nameEnglish,
+        nameArabic = nameArabic,
+        translatedName = meaning,
+        versesCount = versesCount.takeIf { it > 0 } ?: ayahs.size,
+        revelationPlace = revelationPlace
+    )
 
-        val entries = document.hadiths.mapNotNull { hadith ->
-            val number = hadith.number ?: return@mapNotNull null
-            HadithEntryEntity(
-                bookKey = document.bookKey.ifBlank { "nawawi" },
-                hadithNumber = number,
-                bookTitle = document.title,
-                sectionNumber = 0,
-                chapterTitle = "",
-                arabicText = hadith.arabic,
-                englishText = hadith.english,
-                grade = hadith.grade,
-                gradingScholar = hadith.gradingScholar
-            )
-        }
-        if (entries.isNotEmpty()) {
-            database.hadithDao().upsertAll(entries)
-        }
-        return entries.size
+    private fun SeedHadith.toEntity(document: SeedHadithDocument): HadithEntryEntity? {
+        val hadithNumber = number ?: return null
+        return HadithEntryEntity(
+            bookKey = document.bookKey.ifBlank { NAWAWI_BOOK_KEY },
+            hadithNumber = hadithNumber,
+            bookTitle = document.title,
+            sectionNumber = 0,
+            chapterTitle = "",
+            arabicText = arabic,
+            englishText = english,
+            grade = grade,
+            gradingScholar = gradingScholar
+        )
     }
 
-    private suspend fun seedAdhkar(context: Context, database: SakinahEncryptedDatabase): Int {
-        val document = readAsset(context, HISN_ASSET)
-            ?.let { json.decodeFromString<SeedHisnDocument>(it) }
-            ?: return 0
-
-        val entries = document.categories.flatMap { category ->
-            category.items.mapIndexedNotNull { index, item ->
-                if (item.arabic.isBlank()) return@mapIndexedNotNull null
-                AdhkarEntity(
-                    id = item.id.ifBlank { "${category.key}_$index" },
-                    categoryKey = category.key,
-                    categoryTitle = category.title,
-                    title = item.title,
-                    arabic = item.arabic,
-                    translation = item.translation,
-                    reference = item.reference,
-                    orderIndex = index
-                )
-            }
-        }
-        if (entries.isNotEmpty()) {
-            database.adhkarDao().upsertAll(entries)
-        }
-        return entries.size
+    private fun SeedCategory.toEntities(): List<AdhkarEntity> = items.mapIndexedNotNull { index, item ->
+        if (item.arabic.isBlank()) return@mapIndexedNotNull null
+        AdhkarEntity(
+            id = item.id.ifBlank { "${key}_$index" },
+            categoryKey = key,
+            categoryTitle = title,
+            title = item.title,
+            arabic = item.arabic,
+            translation = item.translation,
+            reference = item.reference,
+            orderIndex = index
+        )
     }
 
     private fun readAsset(context: Context, name: String): String? = runCatching {
@@ -176,5 +284,4 @@ object DatabaseSeeder {
         Log.w(TAG, "Missing bundled asset $name: ${it.message}")
         null
     }
-
 }

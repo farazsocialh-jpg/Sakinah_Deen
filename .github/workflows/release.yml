@@ -89,7 +89,8 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          AI_PROXY_URL: ${{ secrets.AI_PROXY_URL }}
+          NISAB_RATE_URL: ${{ secrets.NISAB_RATE_URL }}
         run: ./gradlew :app:bundleRelease :app:assembleRelease --stacktrace --no-daemon
 
       - name: Verify AAB signature

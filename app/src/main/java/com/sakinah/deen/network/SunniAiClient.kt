@@ -85,8 +85,13 @@ class SunniAiClient(
 
         private const val MAX_CITATIONS = 8
         private const val MAX_HISTORY_MESSAGES = 8
+
+        /** Shown instead of an HTTP/connection error when the proxy URL was never set. */
+        const val NOT_CONFIGURED_MESSAGE =
+            "AI Scholar is not configured yet. Please check back soon."
     }
 
+    /** A blank (or placeholder) proxy URL means the build has no Scholar backend. */
     val isConfigured: Boolean
         get() = proxyUrl.isNotBlank() &&
             !proxyUrl.startsWith("MY_")
@@ -94,9 +99,17 @@ class SunniAiClient(
     /**
      * Streams a grounded answer as text deltas, source citations, and madhhab
      * comparison chips. Emits [RagStreamChunk.Complete] exactly once on success.
+     *
+     * With a blank [BuildConfig.AI_PROXY_URL] no request is attempted at all: the flow
+     * emits one plain-language status message so the UI never shows a malformed-URL or
+     * connection failure for what is really a configuration gap.
      */
     fun streamScholar(request: RagQueryRequest): Flow<RagStreamChunk> = flow {
-        check(isConfigured) { "Gemini API key is not configured" }
+        if (!isConfigured) {
+            emit(RagStreamChunk.TextDelta(NOT_CONFIGURED_MESSAGE))
+            emit(RagStreamChunk.Complete)
+            return@flow
+        }
 
         val url = proxyUrl
         httpClient.preparePost(url) {

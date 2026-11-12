@@ -1,6 +1,7 @@
 package com.sakinah.deen
 
 import com.sakinah.deen.fakes.FakeSunniAiScholarRepository
+import com.sakinah.deen.network.SunniAiClient
 import com.sakinah.deen.network.model.RagStreamChunk
 import com.sakinah.deen.ui.viewmodel.AiScholarUiIntent
 import com.sakinah.deen.ui.viewmodel.AiScholarViewModel
@@ -90,6 +91,23 @@ class AiScholarViewModelTest {
 
         val answer = vm.uiState.value.messages.last()
         assertEquals("Two prostrations of forgetfulness.", answer.content)
+        assertFalse(vm.uiState.value.isStreaming)
+    }
+
+    @Test
+    fun unconfiguredProxy_showsStatusMessageWithoutError() = runTest(testDispatcher) {
+        val repo = FakeSunniAiScholarRepository(
+            chunks = listOf(
+                RagStreamChunk.TextDelta(SunniAiClient.NOT_CONFIGURED_MESSAGE),
+                RagStreamChunk.Complete
+            )
+        )
+        val vm = AiScholarViewModel(repo)
+        vm.onIntent(AiScholarUiIntent.SendQuery("What is the nisab of gold?"))
+        advanceUntilIdle()
+
+        assertEquals(SunniAiClient.NOT_CONFIGURED_MESSAGE, vm.uiState.value.messages.last().content)
+        assertEquals(null, vm.uiState.value.error)
         assertFalse(vm.uiState.value.isStreaming)
     }
 
