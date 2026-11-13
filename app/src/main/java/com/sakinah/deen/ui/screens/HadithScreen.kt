@@ -1,6 +1,7 @@
 package com.sakinah.deen.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -51,6 +55,7 @@ import com.sakinah.deen.ui.theme.MintGreen
 import com.sakinah.deen.ui.theme.SahihGreen
 import com.sakinah.deen.ui.viewmodel.HadithUiIntent
 import com.sakinah.deen.ui.viewmodel.HadithViewModel
+import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -65,6 +70,7 @@ fun HadithScreen(
     val vm: HadithViewModel = viewModel ?: koinViewModel()
     val state by vm.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+    var highlightedHadithId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(initialBookKey, initialHadithNumber, deepLinkNonce) {
         if (initialHadithNumber > 0 && initialBookKey != "all") {
@@ -83,7 +89,10 @@ fun HadithScreen(
         val idx = state.filteredHadiths.indexOfFirst { it.id == targetId }
         if (idx >= 0) {
             listState.animateScrollToItem(idx)
+            highlightedHadithId = targetId
             vm.onIntent(HadithUiIntent.ClearDeepLinkTarget)
+            delay(2000)
+            if (highlightedHadithId == targetId) highlightedHadithId = null
         }
     }
 
@@ -358,6 +367,7 @@ fun HadithScreen(
             items(state.filteredHadiths, key = { it.id }) { hadith ->
                 HadithCard(
                     hadith = hadith,
+                    isTargetHighlighted = highlightedHadithId == hadith.id,
                     onToggleBookmark = { vm.onIntent(HadithUiIntent.ToggleBookmark(hadith.id)) }
                 )
             }
@@ -368,6 +378,7 @@ fun HadithScreen(
 @Composable
 private fun HadithCard(
     hadith: HadithModel,
+    isTargetHighlighted: Boolean = false,
     onToggleBookmark: () -> Unit
 ) {
     val gradeAccent = when {
@@ -377,7 +388,23 @@ private fun HadithCard(
         else -> MaterialTheme.colorScheme.primary
     }
 
-    SakinahCard(contentPadding = 16.dp) {
+    SakinahCard(
+        modifier = if (isTargetHighlighted) {
+            Modifier.border(
+                width = 2.5.dp,
+                color = MaterialTheme.colorScheme.primary,
+                shape = RoundedCornerShape(16.dp)
+            )
+        } else {
+            Modifier
+        },
+        containerColor = if (isTargetHighlighted) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.40f)
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        contentPadding = 16.dp
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),

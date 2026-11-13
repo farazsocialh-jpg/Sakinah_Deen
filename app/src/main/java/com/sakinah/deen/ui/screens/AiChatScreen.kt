@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.ui.components.CitationChip
+import com.sakinah.deen.ui.components.ClickableCitationText
 import com.sakinah.deen.ui.components.SakinahCard
 import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.theme.EmeraldDeep
@@ -184,12 +185,35 @@ fun AiChatScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                            } else {
+                            } else if (isUser) {
                                 Text(
                                     text = msg.content,
-                                    color = if (isUser) Color.White else MaterialTheme.colorScheme.onSurface,
+                                    color = Color.White,
                                     fontSize = 13.sp,
                                     lineHeight = 19.sp
+                                )
+                            } else {
+                                ClickableCitationText(
+                                    text = msg.content,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 13.sp,
+                                        lineHeight = 19.sp
+                                    ),
+                                    onQuranClick = { surah, ayah ->
+                                        if (onNavigateToQuranDetail != null) {
+                                            onNavigateToQuranDetail(surah, ayah)
+                                        } else {
+                                            onNavigateToQuran()
+                                        }
+                                    },
+                                    onHadithClick = { bookKey, number ->
+                                        if (onNavigateToHadithDetail != null) {
+                                            onNavigateToHadithDetail(bookKey, number)
+                                        } else {
+                                            onNavigateToHadith()
+                                        }
+                                    }
                                 )
                             }
 

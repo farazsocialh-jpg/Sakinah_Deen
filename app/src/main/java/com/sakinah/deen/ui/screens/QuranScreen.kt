@@ -73,6 +73,7 @@ import com.sakinah.deen.ui.viewmodel.AyahSearchResult
 import com.sakinah.deen.ui.viewmodel.QuranUiIntent
 import com.sakinah.deen.ui.viewmodel.QuranViewModel
 import com.sakinah.deen.util.ArabicNormalizer
+import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -92,6 +93,7 @@ fun QuranScreen(
     var studioSheetTab by remember { mutableIntStateOf(-1) } // -1 closed; 0=Surah, 1=Translation, 2=Tafsir
     var translationQuery by remember { mutableStateOf("") }
     var selectedAyahNumber by remember { mutableIntStateOf(initialAyahNumber) }
+    var highlightedAyahNumber by remember { mutableIntStateOf(0) }
     var hifzOverlayActive by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
@@ -113,15 +115,20 @@ fun QuranScreen(
         }
     }
 
-    LaunchedEffect(state.scrollTargetAyah, surah.number, surah.ayahs.size) {
+    LaunchedEffect(state.scrollTargetAyah, surah.number, surah.ayahs.size, state.isStudyMode) {
         val target = state.scrollTargetAyah ?: return@LaunchedEffect
+        if (!state.isStudyMode) {
+            vm.onIntent(QuranUiIntent.ToggleLayoutMode)
+            return@LaunchedEffect
+        }
         val idx = surah.ayahs.indexOfFirst { it.numberInSurah == target }
         if (idx >= 0) {
             selectedAyahNumber = target
-            if (state.isStudyMode) {
-                listState.animateScrollToItem(idx)
-            }
+            listState.animateScrollToItem(idx)
+            highlightedAyahNumber = target
             vm.onIntent(QuranUiIntent.ClearScrollTarget)
+            delay(2000)
+            if (highlightedAyahNumber == target) highlightedAyahNumber = 0
         }
     }
 
@@ -328,6 +335,7 @@ fun QuranScreen(
                     AyahCard(
                         ayah = ayah,
                         isSelected = selectedAyahNumber == ayah.numberInSurah,
+                        isTargetHighlighted = highlightedAyahNumber == ayah.numberInSurah,
                         translationIsRtl = isRtlLanguage(state.selectedTranslationIsoCode),
                         hifzOverlayActive = hifzOverlayActive && !focusMode,
                         hifzTag = hifzTag,
@@ -740,6 +748,7 @@ private fun SearchResults(
 private fun AyahCard(
     ayah: AyahModel,
     isSelected: Boolean,
+    isTargetHighlighted: Boolean = false,
     translationIsRtl: Boolean = false,
     hifzOverlayActive: Boolean = false,
     hifzTag: String? = null,
@@ -754,15 +763,21 @@ private fun AyahCard(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
-            } else {
-                MaterialTheme.colorScheme.surface
+            containerColor = when {
+                isTargetHighlighted -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
+                else -> MaterialTheme.colorScheme.surface
             }
         ),
         border = BorderStroke(
-            width = if (isSelected) 1.5.dp else 1.dp,
-            color = if (isSelected) MintGreen else MaterialTheme.colorScheme.outline.copy(alpha = 0.65f)
+            width = if (isTargetHighlighted) 2.5.dp else if (isSelected) 1.5.dp else 1.dp,
+            color = if (isTargetHighlighted) {
+                MaterialTheme.colorScheme.primary
+            } else if (isSelected) {
+                MintGreen
+            } else {
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.65f)
+            }
         )
     ) {
         Column(
