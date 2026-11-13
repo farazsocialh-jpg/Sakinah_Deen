@@ -3,22 +3,29 @@ package com.sakinah.deen.ui.screens
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -38,6 +45,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.data.model.CalculationMethod as AppMethod
 import com.sakinah.deen.data.model.Madhhab as AppMadhhab
+import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
 import com.sakinah.deen.settings.AdhanChoice
@@ -54,18 +63,31 @@ import com.sakinah.deen.settings.SettingsRepository
 import com.sakinah.deen.settings.ThemeMode
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
 import com.sakinah.deen.ui.components.SakinahCard
+import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.rememberInject
+import com.sakinah.deen.ui.theme.FontScalePreset
+import com.sakinah.deen.ui.theme.SakinahPalette
+import com.sakinah.deen.ui.theme.ThemeMode as UiThemeMode
 import kotlinx.coroutines.launch
+import org.koin.core.context.GlobalContext
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    onRerunOnboarding: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
     val repo = rememberInject<SettingsRepository>()
     val settings by repo.settings.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val appPrefs = remember { SakinahPreferences(context) }
+    val appearancePrefs = remember(context) {
+        GlobalContext.getOrNull()?.getOrNull<AppearancePreferences>() ?: AppearancePreferences(context)
+    }
+    val appearanceConfig by appearancePrefs.config.collectAsStateWithLifecycle()
     val locationProvider = rememberInject<UserLocationProvider>()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -97,7 +119,6 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         gpsHomeRequested = false
     }
 
-    val themes = ThemeMode.entries
     val adhanChoices = AdhanChoice.entries
 
     Scaffold(
@@ -313,35 +334,145 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     })
                 }
 
-                // Appearance
-                Text("Appearance", style = MaterialTheme.typography.titleMedium)
-                var themeExpanded by remember { mutableStateOf(false) }
-                ExposedDropdownMenuBox(expanded = themeExpanded, onExpandedChange = { themeExpanded = it }) {
-                    OutlinedTextField(
-                        value = settings.appearance.theme.name,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Theme") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = themeExpanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(expanded = themeExpanded, onDismissRequest = { themeExpanded = false }) {
-                        themes.forEach { t ->
-                            DropdownMenuItem(text = { Text(t.name) }, onClick = {
-                                scope.launch { repo.updateAppearance(settings.appearance.copy(theme = t)) }
-                                themeExpanded = false
-                            })
+                // Appearance & Focus
+                Text("Appearance & Focus", style = MaterialTheme.typography.titleMedium)
+                SakinahCard(contentPadding = 14.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = "Theme Mode",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        SegmentedPillBar(
+                            options = UiThemeMode.entries,
+                            selected = appearanceConfig.themeMode,
+                            labelProvider = { it.label },
+                            onSelect = { mode ->
+                                appearancePrefs.update { it.copy(themeMode = mode) }
+                                val sharedMode = when (mode) {
+                                    UiThemeMode.LIGHT -> ThemeMode.LIGHT
+                                    UiThemeMode.DARK -> ThemeMode.DARK
+                                    UiThemeMode.SYSTEM -> ThemeMode.SYSTEM
+                                }
+                                scope.launch {
+                                    repo.updateAppearance(settings.appearance.copy(theme = sharedMode))
+                                }
+                            }
+                        )
+
+                        Text(
+                            text = "Color Palette",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            SakinahPalette.entries.forEach { palette ->
+                                val selected = appearanceConfig.palette == palette
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = { appearancePrefs.update { it.copy(palette = palette) } },
+                                    label = { Text(palette.label, fontSize = 12.sp) },
+                                    leadingIcon = {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(14.dp)
+                                                .clip(CircleShape)
+                                                .background(palette.lightPreviewPrimary)
+                                        )
+                                    }
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "App & Typography Scale",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        SegmentedPillBar(
+                            options = FontScalePreset.entries,
+                            selected = appearanceConfig.fontScale,
+                            labelProvider = { it.label },
+                            onSelect = { preset ->
+                                appearancePrefs.update { it.copy(fontScale = preset) }
+                            }
+                        )
+
+                        Text("Arabic font size: ${settings.appearance.arabicFontSize}")
+                        Slider(
+                            value = settings.appearance.arabicFontSize.toFloat(),
+                            onValueChange = { v ->
+                                scope.launch { repo.updateAppearance(settings.appearance.copy(arabicFontSize = v.toInt())) }
+                            },
+                            valueRange = 16f..40f
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Focus Mode",
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Distraction-free Mus-haf and minimal Salah view",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = appearanceConfig.focusModeHideDistractions,
+                                onCheckedChange = { enabled ->
+                                    appearancePrefs.update { it.copy(focusModeHideDistractions = enabled) }
+                                }
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Auto-Hide Bars on Scroll",
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Hide top & bottom navigation while scrolling down",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = appearanceConfig.autoHideBarsOnScroll,
+                                onCheckedChange = { enabled ->
+                                    appearancePrefs.update { it.copy(autoHideBarsOnScroll = enabled) }
+                                }
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                appearancePrefs.resetOnboarding()
+                                onRerunOnboarding()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Re-run Personalized Onboarding")
                         }
                     }
                 }
-                Text("Arabic font size: ${settings.appearance.arabicFontSize}")
-                Slider(
-                    value = settings.appearance.arabicFontSize.toFloat(),
-                    onValueChange = { v ->
-                        scope.launch { repo.updateAppearance(settings.appearance.copy(arabicFontSize = v.toInt())) }
-                    },
-                    valueRange = 16f..40f
-                )
 
                 // Quran translation
                 Text("Quran Translation", style = MaterialTheme.typography.titleMedium)

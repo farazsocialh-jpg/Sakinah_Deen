@@ -22,6 +22,12 @@ val NightBorder = Color(0xFF1E493B)
 val NightTextPrimary = Color(0xFFF1F5F9)
 val NightTextSecondary = Color(0xFF94A3B8)
 
+val NightMintAccent = NightPrimary
+val NightMintSubtle = NightSurfaceVariant
+val NightSurfaceElevated = NightSurfaceVariant
+val NightTextMuted = NightTextSecondary
+val NightBorderHairline = NightBorder
+
 // Authenticity grading colors
 val SahihGreen = Color(0xFF059669)
 val HasanTeal = Color(0xFF0D9488)

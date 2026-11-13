@@ -14,7 +14,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import net.sqlcipher.database.SQLiteDatabase
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.component.KoinComponent
@@ -56,7 +55,7 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
         }
 
         // SQLCipher native libraries must be loaded before Room opens any encrypted database.
-        SQLiteDatabase.loadLibs(this)
+        System.loadLibrary("sqlcipher")
 
         startKoin {
             androidLogger()

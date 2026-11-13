@@ -3,9 +3,15 @@ package com.sakinah.deen.ui.navigation
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -23,19 +29,33 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.R
+import com.sakinah.deen.data.prefs.AppearancePreferences
+import com.sakinah.deen.settings.SettingsRepository
+import com.sakinah.deen.settings.ThemeMode as SharedThemeMode
 import com.sakinah.deen.ui.screens.AboutScreen
 import com.sakinah.deen.ui.screens.AiChatScreen
 import com.sakinah.deen.ui.screens.AuthScreen
@@ -43,6 +63,7 @@ import com.sakinah.deen.ui.screens.DataSourcesScreen
 import com.sakinah.deen.ui.screens.HadithScreen
 import com.sakinah.deen.ui.screens.HelpScreen
 import com.sakinah.deen.ui.screens.OnboardingScreen
+import com.sakinah.deen.ui.screens.PersonalizedOnboardingScreen
 import com.sakinah.deen.ui.screens.PrivacyScreen
 import com.sakinah.deen.ui.screens.ProfileScreen
 import com.sakinah.deen.ui.screens.QuranScreen
@@ -52,10 +73,13 @@ import com.sakinah.deen.ui.screens.ToolsHubScreen
 import com.sakinah.deen.ui.screens.TravelScreen
 import com.sakinah.deen.ui.screens.VisualSalahGuideScreen
 import com.sakinah.deen.ui.screens.WealthScreen
+import com.sakinah.deen.ui.theme.ThemeMode as UiThemeMode
+import com.sakinah.deen.ui.theme.UserObjective
 import com.sakinah.deen.ui.viewmodel.AiScholarViewModel
 import com.sakinah.deen.ui.viewmodel.HadithViewModel
 import com.sakinah.deen.ui.viewmodel.QuranViewModel
 import com.sakinah.deen.ui.viewmodel.SalahViewModel
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.context.GlobalContext
 
@@ -78,10 +102,37 @@ enum class SakinahScreen(@StringRes val titleRes: Int) {
     About(R.string.app_name)
 }
 
+private fun startScreenForObjective(objective: UserObjective): SakinahScreen =
+    when (objective.recommendedStartTab) {
+        "Quran" -> SakinahScreen.Quran
+        "Hadith" -> SakinahScreen.Hadith
+        else -> SakinahScreen.DailySalah
+    }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RootNavHost() {
-    var currentScreen by rememberSaveable { mutableStateOf(SakinahScreen.DailySalah) }
+    val koinStarted = remember { GlobalContext.getOrNull() != null }
+    val context = LocalContext.current
+    val appearancePrefs = remember(koinStarted, context) {
+        if (koinStarted) {
+            GlobalContext.get().get<AppearancePreferences>()
+        } else {
+            AppearancePreferences(context)
+        }
+    }
+    val appearanceConfig by appearancePrefs.config.collectAsStateWithLifecycle()
+    val settingsRepo: SettingsRepository? = remember(koinStarted) {
+        if (koinStarted) GlobalContext.get().getOrNull<SettingsRepository>() else null
+    }
+    val scope = rememberCoroutineScope()
+
+    var rerunOnboarding by rememberSaveable { mutableStateOf(false) }
+    val showOnboarding = !appearanceConfig.onboardingCompleted || rerunOnboarding
+
+    var currentScreen by rememberSaveable {
+        mutableStateOf(startScreenForObjective(appearanceConfig.objective))
+    }
     val backStack = remember { mutableStateListOf<SakinahScreen>() }
 
     var targetSurahNumber by rememberSaveable { mutableIntStateOf(1) }
@@ -97,11 +148,47 @@ fun RootNavHost() {
     var guideTotalRakats by rememberSaveable { mutableIntStateOf(2) }
 
     // Hoist primary ViewModels so tab switches retain loaded schedules, timelines, and chat streams.
-    val koinStarted = remember { GlobalContext.getOrNull() != null }
     val salahVm: SalahViewModel? = if (koinStarted) koinViewModel() else null
     val quranVm: QuranViewModel? = if (koinStarted) koinViewModel() else null
     val hadithVm: HadithViewModel? = if (koinStarted) koinViewModel() else null
     val aiScholarVm: AiScholarViewModel? = if (koinStarted) koinViewModel() else null
+
+    if (showOnboarding) {
+        BackHandler(enabled = rerunOnboarding) {
+            appearancePrefs.setPreview(null)
+            rerunOnboarding = false
+        }
+        PersonalizedOnboardingScreen(
+            initialConfig = appearanceConfig,
+            onConfigPreviewChange = { draft -> appearancePrefs.setPreview(draft) },
+            onDismiss = if (rerunOnboarding) {
+                {
+                    appearancePrefs.setPreview(null)
+                    rerunOnboarding = false
+                }
+            } else {
+                null
+            },
+            onComplete = { completedDraft ->
+                val savedConfig = completedDraft.copy(onboardingCompleted = true)
+                appearancePrefs.saveConfig(savedConfig)
+                settingsRepo?.let { repo ->
+                    val mappedTheme = when (savedConfig.themeMode) {
+                        UiThemeMode.LIGHT -> SharedThemeMode.LIGHT
+                        UiThemeMode.DARK -> SharedThemeMode.DARK
+                        UiThemeMode.SYSTEM -> SharedThemeMode.SYSTEM
+                    }
+                    scope.launch {
+                        repo.updateAppearance(repo.settings.value.appearance.copy(theme = mappedTheme))
+                    }
+                }
+                rerunOnboarding = false
+                backStack.clear()
+                currentScreen = startScreenForObjective(savedConfig.objective)
+            }
+        )
+        return
+    }
 
     val topLevelTabs = remember {
         setOf(
@@ -135,6 +222,48 @@ fun RootNavHost() {
         navigateBack()
     }
 
+    val autoHideBars = appearanceConfig.autoHideBarsOnScroll
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    var bottomBarHidden by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(currentScreen, autoHideBars) {
+        bottomBarHidden = false
+        scrollBehavior.state.heightOffset = 0f
+    }
+
+    val bottomBarScrollConnection = remember(autoHideBars) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (!autoHideBars) return Offset.Zero
+                if (available.y < -10f) {
+                    bottomBarHidden = true
+                } else if (available.y > 10f) {
+                    bottomBarHidden = false
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    val revealOnTapModifier = if (autoHideBars && bottomBarHidden) {
+        Modifier.pointerInput(Unit) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                val up = waitForUpOrCancellation(pass = PointerEventPass.Initial)
+                if (up != null) {
+                    val dx = up.position.x - down.position.x
+                    val dy = up.position.y - down.position.y
+                    if (dx * dx + dy * dy < 400f) {
+                        bottomBarHidden = false
+                        scrollBehavior.state.heightOffset = 0f
+                    }
+                }
+            }
+        }
+    } else {
+        Modifier
+    }
+
     val salahLabel = stringResource(R.string.nav_salah)
     val quranLabel = stringResource(R.string.nav_quran)
     val hadithLabel = stringResource(R.string.nav_hadith)
@@ -160,7 +289,17 @@ fun RootNavHost() {
         SakinahScreen.Onboarding -> "Welcome to Sakinah"
     }
 
+    val scaffoldScrollModifier = if (autoHideBars) {
+        Modifier
+            .nestedScroll(scrollBehavior.nestedScrollConnection)
+            .nestedScroll(bottomBarScrollConnection)
+            .then(revealOnTapModifier)
+    } else {
+        Modifier
+    }
+
     Scaffold(
+        modifier = scaffoldScrollModifier,
         topBar = {
             if (currentScreen != SakinahScreen.Onboarding) {
                 TopAppBar(
@@ -181,12 +320,17 @@ fun RootNavHost() {
                                 )
                             }
                         }
-                    }
+                    },
+                    scrollBehavior = if (autoHideBars) scrollBehavior else null
                 )
             }
         },
         bottomBar = {
-            if (currentScreen in topLevelTabs) {
+            AnimatedVisibility(
+                visible = currentScreen in topLevelTabs && (!autoHideBars || !bottomBarHidden),
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+            ) {
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.surface
                 ) {
@@ -251,6 +395,7 @@ fun RootNavHost() {
                             guideTotalRakats = rakats.coerceAtLeast(2)
                             navigateTo(SakinahScreen.VisualGuide)
                         },
+                        focusMode = appearanceConfig.focusModeHideDistractions,
                         viewModel = salahVm
                     )
                 }
@@ -266,6 +411,7 @@ fun RootNavHost() {
                         initialSurahNumber = targetSurahNumber,
                         initialAyahNumber = targetAyahNumber,
                         deepLinkNonce = quranDeepLinkNonce,
+                        focusMode = appearanceConfig.focusModeHideDistractions,
                         viewModel = quranVm
                     )
                 }
@@ -327,7 +473,10 @@ fun RootNavHost() {
                     ProfileScreen(onBack = { navigateBack() })
                 }
                 SakinahScreen.Settings -> {
-                    SettingsScreen(onBack = { navigateBack() })
+                    SettingsScreen(
+                        onBack = { navigateBack() },
+                        onRerunOnboarding = { rerunOnboarding = true }
+                    )
                 }
                 SakinahScreen.DataSources -> {
                     DataSourcesScreen(onBack = { navigateBack() })

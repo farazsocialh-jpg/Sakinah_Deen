@@ -81,6 +81,7 @@ fun QuranScreen(
     initialSurahNumber: Int = 1,
     initialAyahNumber: Int = 1,
     deepLinkNonce: Int = 0,
+    focusMode: Boolean = false,
     viewModel: QuranViewModel? = null,
     modifier: Modifier = Modifier
 ) {
@@ -95,6 +96,15 @@ fun QuranScreen(
 
     val listState = rememberLazyListState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    LaunchedEffect(focusMode) {
+        if (focusMode && state.isStudyMode) {
+            vm.onIntent(QuranUiIntent.ToggleLayoutMode)
+        }
+        if (focusMode) {
+            hifzOverlayActive = false
+        }
+    }
 
     LaunchedEffect(initialSurahNumber, initialAyahNumber, deepLinkNonce) {
         if (deepLinkNonce > 0 || initialSurahNumber != 1 || initialAyahNumber != 1) {
@@ -201,64 +211,66 @@ fun QuranScreen(
             return@Column
         }
 
-        // 3. Controls Row: Translation Chip + Hifz Mode + Studio Shortcut
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { studioSheetTab = 1 }
+        // 3. Controls Row: Translation Chip + Hifz Mode + Studio Shortcut (hidden in Focus Mode)
+        if (!focusMode) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { studioSheetTab = 1 }
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Translate,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = state.selectedTranslationLanguage,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    if (state.isLoadingTranslation) {
-                        Spacer(Modifier.width(8.dp))
-                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Translate,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = state.selectedTranslationLanguage,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (state.isLoadingTranslation) {
+                            Spacer(Modifier.width(8.dp))
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                        }
                     }
                 }
-            }
 
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = if (hifzOverlayActive) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant
-                },
-                modifier = Modifier.clickable { hifzOverlayActive = !hifzOverlayActive }
-            ) {
-                Text(
-                    text = if (hifzOverlayActive) "Hifz: On" else "Hifz: Off",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
                     color = if (hifzOverlayActive) {
-                        MaterialTheme.colorScheme.onPrimary
+                        MaterialTheme.colorScheme.primary
                     } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    modifier = Modifier.clickable { hifzOverlayActive = !hifzOverlayActive }
+                ) {
+                    Text(
+                        text = if (hifzOverlayActive) "Hifz: On" else "Hifz: Off",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (hifzOverlayActive) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
             }
         }
 
@@ -287,16 +299,18 @@ fun QuranScreen(
             }
         }
 
-        state.contentNotice?.let { notice ->
-            SakinahCard(
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
-                contentPadding = 12.dp
-            ) {
-                Text(
-                    text = notice,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+        if (!focusMode) {
+            state.contentNotice?.let { notice ->
+                SakinahCard(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                    contentPadding = 12.dp
+                ) {
+                    Text(
+                        text = notice,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
         }
 
@@ -315,8 +329,9 @@ fun QuranScreen(
                         ayah = ayah,
                         isSelected = selectedAyahNumber == ayah.numberInSurah,
                         translationIsRtl = isRtlLanguage(state.selectedTranslationIsoCode),
-                        hifzOverlayActive = hifzOverlayActive,
+                        hifzOverlayActive = hifzOverlayActive && !focusMode,
                         hifzTag = hifzTag,
+                        showTafseerAction = !focusMode,
                         onTagMistake = { tag ->
                             vm.onIntent(
                                 QuranUiIntent.SetHifzMistakeTag(
@@ -402,31 +417,33 @@ fun QuranScreen(
                     }
                 }
 
-                // Quick Ayah Tafsir selector strip under Mus-haf page
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    surah.ayahs.forEach { ayah ->
-                        val active = ayah.numberInSurah == selectedAyahNumber
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.clickable {
-                                selectedAyahNumber = ayah.numberInSurah
-                                vm.onIntent(QuranUiIntent.SelectAyahForTafseer(ayah.numberInSurah))
-                                studioSheetTab = 2
+                // Quick Ayah Tafsir selector strip under Mus-haf page (hidden in Focus Mode)
+                if (!focusMode) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        surah.ayahs.forEach { ayah ->
+                            val active = ayah.numberInSurah == selectedAyahNumber
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.clickable {
+                                    selectedAyahNumber = ayah.numberInSurah
+                                    vm.onIntent(QuranUiIntent.SelectAyahForTafseer(ayah.numberInSurah))
+                                    studioSheetTab = 2
+                                }
+                            ) {
+                                Text(
+                                    text = "Ayah ${ayah.numberInSurah}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
                             }
-                        ) {
-                            Text(
-                                text = "Ayah ${ayah.numberInSurah}",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            )
                         }
                     }
                 }
@@ -726,6 +743,7 @@ private fun AyahCard(
     translationIsRtl: Boolean = false,
     hifzOverlayActive: Boolean = false,
     hifzTag: String? = null,
+    showTafseerAction: Boolean = true,
     onTagMistake: (String) -> Unit = {},
     onClick: () -> Unit,
     onTafseerClick: () -> Unit
@@ -772,10 +790,12 @@ private fun AyahCard(
                     }
                 }
 
-                FilledTonalButton(onClick = onTafseerClick) {
-                    Icon(Icons.Default.Book, contentDescription = null, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Tafseer", fontSize = 11.sp)
+                if (showTafseerAction) {
+                    FilledTonalButton(onClick = onTafseerClick) {
+                        Icon(Icons.Default.Book, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Tafseer", fontSize = 11.sp)
+                    }
                 }
             }
 

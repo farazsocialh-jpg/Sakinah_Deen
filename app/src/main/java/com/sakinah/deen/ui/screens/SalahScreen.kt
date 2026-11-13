@@ -98,6 +98,7 @@ import kotlinx.coroutines.launch
 fun SalahScreen(
     onOpenGuide: () -> Unit,
     onOpenPrayerGuide: ((String, Int) -> Unit)? = null,
+    focusMode: Boolean = false,
     viewModel: SalahViewModel? = null,
     modifier: Modifier = Modifier
 ) {
@@ -124,6 +125,11 @@ fun SalahScreen(
     }
 
     var selectedSegment by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(focusMode) {
+        if (focusMode) {
+            selectedSegment = 0
+        }
+    }
     var showQadhaDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showManualCityDialog by remember { mutableStateOf(false) }
@@ -229,36 +235,38 @@ fun SalahScreen(
                             }
                         }
 
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(
-                                onClick = { showSettingsDialog = true },
-                                modifier = Modifier.size(36.dp)
+                        if (!focusMode) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Tune,
-                                    contentDescription = "Prayer Settings",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            Button(
-                                onClick = { showQadhaDialog = true },
-                                shape = RoundedCornerShape(20.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            ) {
-                                Text("Qadha Ledger", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                IconButton(
+                                    onClick = { showSettingsDialog = true },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Tune,
+                                        contentDescription = "Prayer Settings",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Button(
+                                    onClick = { showQadhaDialog = true },
+                                    shape = RoundedCornerShape(20.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                ) {
+                                    Text("Qadha Ledger", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                }
                             }
                         }
                     }
 
                     // 2. Location Permission Warning Banner
-                    if (state.showLocationWarningBanner) {
+                    if (!focusMode && state.showLocationWarningBanner) {
                         Surface(
                             shape = RoundedCornerShape(16.dp),
                             color = Color(0xFFFEF3C7),
@@ -382,19 +390,21 @@ fun SalahScreen(
                                         color = Color.White,
                                         modifier = Modifier.weight(1f)
                                     )
-                                    val nextRakats = state.prayersList
-                                        .firstOrNull { it.nameEnglish.equals(state.nextPrayer.name, ignoreCase = true) }
-                                        ?.fardRakats
-                                        ?: 2
-                                    Button(
-                                        onClick = { launchPrayerGuide(state.nextPrayer.name, nextRakats) },
-                                        shape = RoundedCornerShape(16.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = Color.White.copy(alpha = 0.16f),
-                                            contentColor = Color.White
-                                        )
-                                    ) {
-                                        Text("Visual Guide", fontSize = 11.sp)
+                                    if (!focusMode) {
+                                        val nextRakats = state.prayersList
+                                            .firstOrNull { it.nameEnglish.equals(state.nextPrayer.name, ignoreCase = true) }
+                                            ?.fardRakats
+                                            ?: 2
+                                        Button(
+                                            onClick = { launchPrayerGuide(state.nextPrayer.name, nextRakats) },
+                                            shape = RoundedCornerShape(16.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = Color.White.copy(alpha = 0.16f),
+                                                contentColor = Color.White
+                                            )
+                                        ) {
+                                            Text("Visual Guide", fontSize = 11.sp)
+                                        }
                                     }
                                 }
 
@@ -427,19 +437,26 @@ fun SalahScreen(
                     }
 
                     // 4. Unified Sub-Mode Switcher (Times | Qibla | Guide)
-                    SegmentedPillBar(
-                        options = listOf("Times", "Qibla", "Guide"),
-                        selectedIndex = selectedSegment,
-                        onSelect = { selectedSegment = it }
-                    )
+                    if (!focusMode) {
+                        SegmentedPillBar(
+                            options = listOf("Times", "Qibla", "Guide"),
+                            selectedIndex = selectedSegment,
+                            onSelect = { selectedSegment = it }
+                        )
+                    }
                 }
             }
 
             when (selectedSegment) {
                 0 -> {
-                    // Daily Prayer Matrix
-                    items(state.prayersList, key = { it.id }) { prayer ->
-                        val isExpanded = expandedId == prayer.id
+                    // Daily Prayer Matrix (5-prayer checklist in Focus Mode)
+                    val visiblePrayers = if (focusMode) {
+                        state.prayersList.filter { it.id != "sunrise" }
+                    } else {
+                        state.prayersList
+                    }
+                    items(visiblePrayers, key = { it.id }) { prayer ->
+                        val isExpanded = !focusMode && expandedId == prayer.id
                         val isSunrise = prayer.id == "sunrise"
 
                         SakinahCard(contentPadding = 14.dp) {
@@ -504,15 +521,17 @@ fun SalahScreen(
                                             }
                                         }
                                     }
-                                    IconButton(
-                                        onClick = { expandedId = if (isExpanded) null else prayer.id },
-                                        modifier = Modifier.size(28.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                            contentDescription = "Expand",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                    if (!focusMode && !isSunrise) {
+                                        IconButton(
+                                            onClick = { expandedId = if (isExpanded) null else prayer.id },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                                contentDescription = "Expand",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 }
                             }

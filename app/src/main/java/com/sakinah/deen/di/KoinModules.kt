@@ -5,6 +5,7 @@ import com.sakinah.deen.data.database.OfflineContentSeeder
 import com.sakinah.deen.data.database.SakinahEncryptedDatabase
 import com.sakinah.deen.data.prayer.AlAdhanApiClient
 import com.sakinah.deen.data.prayer.PrayerMethodSettings
+import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.PreferencesPrayerMethodSettings
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.NisabRateRepository
@@ -41,6 +42,7 @@ import org.koin.dsl.module
 
 val preferencesModule = module {
     single { SakinahPreferences(androidContext()) }
+    single { AppearancePreferences(androidContext()) }
 }
 
 val databaseModule = module {

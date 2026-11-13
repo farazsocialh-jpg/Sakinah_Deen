@@ -15,12 +15,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.service.AdhanPlaybackService
-import com.sakinah.deen.settings.SettingsRepository
-import com.sakinah.deen.settings.ThemeMode
 import com.sakinah.deen.ui.navigation.RootNavHost
 import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.SakinahTheme
+import com.sakinah.deen.ui.theme.ThemeMode
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -28,9 +28,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            val settingsRepo = rememberInject<SettingsRepository>()
-            val appSettings by settingsRepo.settings.collectAsStateWithLifecycle()
-            val darkTheme = when (appSettings.appearance.theme) {
+            val appearancePrefs = rememberInject<AppearancePreferences>()
+            val appearanceConfig by appearancePrefs.effectiveConfig.collectAsStateWithLifecycle()
+            val darkTheme = when (appearanceConfig.themeMode) {
                 ThemeMode.DARK -> true
                 ThemeMode.LIGHT -> false
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
@@ -52,7 +52,11 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
-            SakinahTheme(darkTheme = darkTheme) {
+            SakinahTheme(
+                darkTheme = darkTheme,
+                palette = appearanceConfig.palette,
+                fontScaleMultiplier = appearanceConfig.fontScale.multiplier
+            ) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     RootNavHost()
                 }

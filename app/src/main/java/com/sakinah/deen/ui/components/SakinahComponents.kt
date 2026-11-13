@@ -115,6 +115,28 @@ fun SegmentedPillBar(
 }
 
 /**
+ * Type-safe segmented control overload mapping domain/theme enums to labels cleanly.
+ */
+@Composable
+fun <T> SegmentedPillBar(
+    options: List<T>,
+    selected: T,
+    labelProvider: (T) -> String,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val selectedIndex = options.indexOf(selected).coerceAtLeast(0)
+    SegmentedPillBar(
+        options = options.map(labelProvider),
+        selectedIndex = selectedIndex,
+        onSelect = { index ->
+            options.getOrNull(index)?.let(onSelect)
+        },
+        modifier = modifier
+    )
+}
+
+/**
  * Compact semantic status chip used for authenticity grades, method sources, and travel flags.
  */
 @Composable

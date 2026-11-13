@@ -27,12 +27,12 @@ val releaseStoreFile = signingValue("storeFile", "KEYSTORE_PATH")?.let { configu
 
 android {
     namespace = "com.sakinah.deen"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.sakinah.deen"
         minSdk = 28
-        targetSdk = 35
+        targetSdk = 36
         // CI overrides these from the git tag / run number; local builds keep the defaults.
         versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1
         versionName = System.getenv("VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.0.0"

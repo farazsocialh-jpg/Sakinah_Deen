@@ -25,15 +25,14 @@
     <!-- Android 14/15/16 Foreground Service Types -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
-    <!-- Compass is genuinely optional: many budget handsets lack a magnetometer -->
+    <!-- Compass & accelerometer are optional: do not exclude tablets/foldables/budget handsets -->
     <uses-feature
         android:name="android.hardware.sensor.compass"
         android:required="false" />
     <uses-feature
         android:name="android.hardware.sensor.accelerometer"
-        android:required="true" />
+        android:required="false" />
 
     <application
         android:name=".SakinahApp"

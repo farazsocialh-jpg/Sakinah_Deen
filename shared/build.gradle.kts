@@ -9,7 +9,7 @@ plugins {
 kotlin {
     android {
         namespace = "com.sakinah.deen.shared"
-        compileSdk = 35
+        compileSdk = 36
         minSdk = 28
 
         withHostTestBuilder {}.configure {}

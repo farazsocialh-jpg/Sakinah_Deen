@@ -28,7 +28,7 @@ import com.sakinah.deen.data.database.entity.SadaqahLogEntity
 import com.sakinah.deen.data.database.entity.SalahRecordEntity
 import com.sakinah.deen.data.database.entity.SurahMetadataEntity
 import com.sakinah.deen.data.database.entity.TafsirEntryEntity
-import net.sqlcipher.database.SupportFactory
+import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
     entities = [
@@ -102,7 +102,7 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
 
         fun getInstance(context: Context, passphraseBytes: ByteArray): SakinahEncryptedDatabase {
             return INSTANCE ?: synchronized(this) {
-                val factory = SupportFactory(passphraseBytes)
+                val factory = SupportOpenHelperFactory(passphraseBytes)
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     SakinahEncryptedDatabase::class.java,
