@@ -3,8 +3,10 @@ package com.sakinah.deen.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sakinah.deen.data.database.entity.HadithEntryEntity
+import com.sakinah.deen.data.model.HadithBookCatalog
 import com.sakinah.deen.data.model.HadithModel
 import com.sakinah.deen.network.IslamicDataRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,11 +22,16 @@ data class HadithBookInfo(
 data class HadithUiState(
     val books: List<HadithBookInfo> = emptyList(),
     val selectedBookKey: String = "all",
+    val selectedLanguageCode: String = "eng",
+    val availableLanguages: List<String> = listOf("eng", "ara"),
+    val sections: List<Pair<Int, String>> = emptyList(),
+    val selectedSectionNumber: Int = 0,
     val searchQuery: String = "",
     val filterGrade: String = "all",
     val hadiths: List<HadithModel> = emptyList(),
     val filteredHadiths: List<HadithModel> = emptyList(),
     val isLoading: Boolean = false,
+    val downloadProgress: Float? = null,
     val bookmarkedIds: Set<String> = emptySet(),
     val targetDeepLinkId: String? = null,
     /** True once the encrypted database has supplied at least one hadith. */
@@ -35,6 +42,8 @@ data class HadithUiState(
 
 sealed class HadithUiIntent {
     data class SelectBook(val bookKey: String) : HadithUiIntent()
+    data class SelectLanguage(val languageCode: String) : HadithUiIntent()
+    data class SelectSection(val sectionNumber: Int) : HadithUiIntent()
     data class SearchQueryChanged(val query: String) : HadithUiIntent()
     data class FilterGradeChanged(val grade: String) : HadithUiIntent()
     data class ToggleBookmark(val hadithId: String) : HadithUiIntent()
@@ -43,12 +52,6 @@ sealed class HadithUiIntent {
     data object RetrySync : HadithUiIntent()
 }
 
-/**
- * Hadith reader backed by the encrypted Room tables seeded from
- * `seed_hadith_nawawi.json` / `seed_hisn_muslim.json` and by any downloaded
- * Kutub al-Tis'ah editions. The bundled canon below is used only as a placeholder
- * until the database emits rows (for example on the very first cold start).
- */
 class HadithViewModel(
     private val islamicRepository: IslamicDataRepository? = null
 ) : ViewModel() {
@@ -61,8 +64,7 @@ class HadithViewModel(
         HadithBookInfo("nasai", "Sunan an-Nasa'i", "5,760 Hadiths"),
         HadithBookInfo("ibnmajah", "Sunan Ibn Majah", "4,341 Hadiths"),
         HadithBookInfo("muwatta", "Muwatta Malik", "1,858 Hadiths"),
-        HadithBookInfo("ahmad", "Musnad Ahmad", "27,647 Hadiths"),
-        HadithBookInfo("darimi", "Sunan al-Darimi", "3,500 Hadiths")
+        HadithBookInfo("nawawi", "40 Hadith Nawawi", "42 Hadiths")
     )
 
     private val placeholderCorpus = listOf(
@@ -107,75 +109,70 @@ class HadithViewModel(
             sanad = "Abdullah ibn Umar (r.a) narrated from the Messenger of Allah (ﷺ):",
             matnTranslation = "Islam is founded upon five pillars: testifying there is no deity worthy of worship except Allah and Muhammad is His servant and messenger, establishing prayer, giving Zakat, Hajj, and fasting Ramadan.",
             bookmarked = true
-        ),
-        HadithModel(
-            id = "muslim-571",
-            bookKey = "muslim",
-            bookTitle = "Sahih Muslim",
-            bookTotalCount = 7500,
-            hadithNumber = 571,
-            chapterTitle = "Book of Mosques & Places of Prayer (Kitab al-Masajid)",
-            grade = "SAHIH",
-            gradingScholar = "Imam Muslim",
-            arabicText = "إِذَا شَكَّ أَحَدُكُمْ فِي صَلاَتِهِ فَلَمْ يَدْرِ كَمْ صَلَّى ثَلاَثًا أَمْ أَرْبَعًا فَلْيَطْرَحِ الشَّكَّ وَلْيَبْنِ عَلَى مَا اسْتَيْقَنَ ثُمَّ يَسْجُدُ سَجْدَتَيْنِ قَبْلَ أَنْ يُسَلِّمَ.",
-            sanad = "Abu Sa'id al-Khudri (r.a) narrated from the Messenger of Allah (ﷺ):",
-            matnTranslation = "When any of you is in doubt during his prayer and does not know how much he prayed—three or four—let him discard doubt and build upon certainty, then prostrate twice before giving Salam.",
-            bookmarked = false
-        ),
-        HadithModel(
-            id = "abudawud-1205",
-            bookKey = "abudawud",
-            bookTitle = "Sunan Abi Dawud",
-            bookTotalCount = 5274,
-            hadithNumber = 1205,
-            chapterTitle = "Book of Prayer (Kitab al-Salah) - Travel",
-            grade = "SAHIH",
-            gradingScholar = "Al-Albani",
-            arabicText = "كَانَ رَسُولُ اللَّهِ صلى الله عليه وسلم إِذَا ارْتَحَلَ قَبْلَ أَنْ تَزِيغَ الشَّمْسُ أَخَّرَ الظُّهْرَ إِلَى وَقْتِ الْعَصْرِ ثُمَّ نَزَلَ فَجَمَعَ بَيْنَهُمَا.",
-            sanad = "Anas ibn Malik (r.a) narrated:",
-            matnTranslation = "If the Messenger of Allah (ﷺ) set out on a journey before the sun declined, he would delay Dhuhr until the time of Asr, then halt and combine them.",
-            bookmarked = false
-        ),
-        HadithModel(
-            id = "tirmidhi-1987",
-            bookKey = "tirmidhi",
-            bookTitle = "Jami‘ at-Tirmidhi",
-            bookTotalCount = 3956,
-            hadithNumber = 1987,
-            chapterTitle = "Chapters on Righteousness & Good Relations",
-            grade = "HASAN SAHIH",
-            gradingScholar = "Abu Isa at-Tirmidhi",
-            arabicText = "تَبَسُّمُكَ فِي وَجْهِ أَخِيكَ لَكَ صَدَقَةٌ.",
-            sanad = "Abu Dharr (r.a) narrated from the Prophet (ﷺ):",
-            matnTranslation = "Your smiling in the face of your brother is an act of charity (Sadaqah) for you.",
-            bookmarked = true
         )
     )
+
+    private var hadithCatalog: List<HadithBookCatalog> = emptyList()
+    private var databaseJob: Job? = null
 
     private val _uiState = MutableStateFlow(
         HadithUiState(
             books = canonicalBooks,
             hadiths = placeholderCorpus,
             filteredHadiths = placeholderCorpus,
-            bookmarkedIds = setOf("bukhari-1", "muslim-140", "tirmidhi-1987")
+            bookmarkedIds = setOf("bukhari-1", "muslim-140")
         )
     )
     val uiState: StateFlow<HadithUiState> = _uiState.asStateFlow()
 
     init {
         observeDatabaseHadiths()
+        loadCatalog()
     }
 
     fun onIntent(intent: HadithUiIntent) {
         when (intent) {
             is HadithUiIntent.SelectBook -> {
-                _uiState.update { it.copy(selectedBookKey = intent.bookKey, isLoading = true) }
+                _uiState.update {
+                    it.copy(
+                        selectedBookKey = intent.bookKey,
+                        selectedSectionNumber = 0,
+                        isLoading = true,
+                        errorMessage = null,
+                        downloadProgress = null
+                    )
+                }
+                updateDerivedFromCatalog(intent.bookKey)
                 applyFilterAndSearch()
-                if (intent.bookKey != "all" && intent.bookKey in com.sakinah.deen.network.IslamicDataRepository.SUPPORTED_HADITH_BOOKS) {
-                    syncBook(intent.bookKey)
+                if (intent.bookKey != "all") {
+                    syncBook(intent.bookKey, _uiState.value.selectedLanguageCode)
                 } else {
                     _uiState.update { it.copy(isLoading = false) }
                 }
+                observeDatabaseHadiths()
+            }
+            is HadithUiIntent.SelectLanguage -> {
+                _uiState.update {
+                    it.copy(
+                        selectedLanguageCode = intent.languageCode,
+                        selectedSectionNumber = 0,
+                        isLoading = true,
+                        errorMessage = null,
+                        downloadProgress = null
+                    )
+                }
+                updateDerivedFromCatalog(_uiState.value.selectedBookKey)
+                applyFilterAndSearch()
+                if (_uiState.value.selectedBookKey != "all") {
+                    syncBook(_uiState.value.selectedBookKey, intent.languageCode)
+                } else {
+                    _uiState.update { it.copy(isLoading = false) }
+                }
+                observeDatabaseHadiths()
+            }
+            is HadithUiIntent.SelectSection -> {
+                _uiState.update { it.copy(selectedSectionNumber = intent.sectionNumber) }
+                observeDatabaseHadiths()
             }
             is HadithUiIntent.SearchQueryChanged -> {
                 _uiState.update { it.copy(searchQuery = intent.query) }
@@ -193,26 +190,28 @@ class HadithViewModel(
             }
             is HadithUiIntent.RetrySync -> {
                 val bookKey = _uiState.value.selectedBookKey
-                if (bookKey != "all") syncBook(bookKey)
+                if (bookKey != "all") syncBook(bookKey, _uiState.value.selectedLanguageCode)
             }
         }
     }
 
-    private fun syncBook(bookKey: String) {
+    private fun syncBook(bookKey: String, languageCode: String) {
         val repo = islamicRepository ?: run {
             _uiState.update { it.copy(isLoading = false) }
             return
         }
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            _uiState.update { it.copy(isLoading = true, errorMessage = null, downloadProgress = 0f) }
             try {
-                val available = repo.isBookAvailable(bookKey)
+                val available = repo.isBookAvailable(bookKey, languageCode)
                 if (!available) {
-                    val result = repo.syncHadithBook(bookKey)
+                    val result = repo.syncHadithBook(bookKey, languageCode) { progress ->
+                        _uiState.update { it.copy(downloadProgress = progress) }
+                    }
                     result.exceptionOrNull()?.let { error ->
                         if (error is kotlinx.coroutines.CancellationException) throw error
                         _uiState.update {
-                            it.copy(errorMessage = "Could not load $bookKey: ${error.message ?: "network error"}")
+                            it.copy(errorMessage = "Could not load $bookKey ($languageCode): ${error.message ?: "network error"}")
                         }
                     }
                 }
@@ -220,30 +219,72 @@ class HadithViewModel(
                 throw e
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(errorMessage = "Could not load $bookKey: ${e.message ?: "network error"}")
+                    it.copy(errorMessage = "Could not load $bookKey ($languageCode): ${e.message ?: "network error"}")
                 }
             } finally {
-                _uiState.update { it.copy(isLoading = false) }
+                _uiState.update { it.copy(isLoading = false, downloadProgress = null) }
             }
         }
     }
 
-    // ------------------------------------------------------------------ Room wiring
-
-    private fun observeDatabaseHadiths() {
+    private fun loadCatalog() {
         val repo = islamicRepository ?: return
         viewModelScope.launch {
+            val catalog = repo.fetchHadithCatalog()
+            hadithCatalog = catalog
+            _uiState.update { state ->
+                val selectedCatalog = catalog.firstOrNull { it.bookKey == state.selectedBookKey }
+                state.copy(
+                    books = if (catalog.isNotEmpty()) {
+                        catalog.map { info ->
+                            HadithBookInfo(
+                                key = info.bookKey,
+                                title = info.bookTitle.ifBlank { info.bookKey },
+                                totalCount = "${info.editions.size} editions"
+                            )
+                        }
+                    } else {
+                        state.books
+                    },
+                    availableLanguages = selectedCatalog?.editions?.map { it.languageCode }?.distinct()?.ifEmpty { state.availableLanguages }
+                        ?: state.availableLanguages,
+                    sections = selectedCatalog?.sections?.toList()?.sortedBy { it.first } ?: state.sections
+                )
+            }
+        }
+    }
+
+    private fun updateDerivedFromCatalog(bookKey: String) {
+        val selectedCatalog = hadithCatalog.firstOrNull { it.bookKey == bookKey } ?: return
+        _uiState.update { state ->
+            state.copy(
+                availableLanguages = selectedCatalog.editions.map { it.languageCode }.distinct().ifEmpty { state.availableLanguages },
+                sections = selectedCatalog.sections.toList().sortedBy { it.first }
+            )
+        }
+    }
+
+    private fun observeDatabaseHadiths() {
+        databaseJob?.cancel()
+        val repo = islamicRepository ?: return
+        val bookKey = _uiState.value.selectedBookKey
+        val languageCode = _uiState.value.selectedLanguageCode
+        val sectionNumber = _uiState.value.selectedSectionNumber
+        databaseJob = viewModelScope.launch {
+            val flow = when {
+                bookKey == "all" -> repo.observeAllHadiths()
+                sectionNumber > 0 -> repo.observeHadithsBySection(bookKey, languageCode, sectionNumber)
+                else -> repo.observeHadiths(bookKey, languageCode)
+            }
             try {
-                repo.observeAllHadiths(limit = 500).collect { entries ->
+                flow.collect { entries ->
                     if (entries.isEmpty()) return@collect
                     val bookmarked = _uiState.value.bookmarkedIds
                     val mapped = entries.map { entry ->
                         entry.toModel(bookmarked.contains("${entry.bookKey}-${entry.hadithNumber}"))
                     }
-
                     _uiState.update {
                         it.copy(
-                            books = buildBooks(entries),
                             hadiths = mapped,
                             isFromDatabase = true,
                             isLoading = false,
@@ -278,7 +319,7 @@ class HadithViewModel(
             .sortedBy { it.key }
 
     private fun HadithEntryEntity.toModel(bookmarked: Boolean): HadithModel = HadithModel(
-        id = "$bookKey-$hadithNumber",
+        id = "$bookKey-$languageCode-$hadithNumber",
         bookKey = bookKey,
         bookTitle = bookTitle,
         bookTotalCount = 0,
@@ -291,8 +332,6 @@ class HadithViewModel(
         matnTranslation = englishText,
         bookmarked = bookmarked
     )
-
-    // ------------------------------------------------------------------ Filtering
 
     private fun applyFilterAndSearch() {
         val current = _uiState.value
@@ -340,7 +379,6 @@ class HadithViewModel(
     }
 
     private fun navigateToDeepLink(hadithIdOrSlug: String) {
-        // Handle formats like "bukhari-5063", "hadith/bukhari/5063", or "bukhari 5063"
         val normalized = hadithIdOrSlug.replace("/", "-").replace(" ", "-").replace("hadith-", "")
         val target = _uiState.value.hadiths.find {
             it.id.equals(normalized, ignoreCase = true) ||

@@ -15,6 +15,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.ModalDrawerSheet
@@ -109,6 +110,25 @@ fun RootNavHost() {
                 } else {
                     Text("Guest mode — sign in to sync", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp))
                 }
+                NavigationDrawerItem(
+                    label = { Text(safarLabel) },
+                    selected = currentScreen == SakinahScreen.Travel,
+                    icon = { Icon(Icons.Default.Explore, contentDescription = null) },
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        currentScreen = SakinahScreen.Travel
+                    }
+                )
+                NavigationDrawerItem(
+                    label = { Text(zakatLabel) },
+                    selected = currentScreen == SakinahScreen.Wealth,
+                    icon = { Icon(Icons.Default.MonetizationOn, contentDescription = null) },
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        currentScreen = SakinahScreen.Wealth
+                    }
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
                 NavigationDrawerItem(label = { Text(if (signedInUser != null) "Profile & Account" else "Sign In / Create Account") }, selected = false, onClick = { scope.launch { drawerState.close() }; currentScreen = if (signedInUser != null) SakinahScreen.Profile else SakinahScreen.Auth })
                 NavigationDrawerItem(label = { Text("App Settings") }, selected = false, onClick = { scope.launch { drawerState.close() }; currentScreen = SakinahScreen.Settings })
                 NavigationDrawerItem(label = { Text("Islamic Data Sources") }, selected = false, onClick = { scope.launch { drawerState.close() }; currentScreen = SakinahScreen.DataSources })
@@ -158,18 +178,6 @@ fun RootNavHost() {
                     onClick = { if (currentScreen != SakinahScreen.Hadith) currentScreen = SakinahScreen.Hadith },
                     icon = { Icon(Icons.Default.LibraryBooks, contentDescription = hadithLabel) },
                     label = { Text(hadithLabel) }
-                )
-                NavigationBarItem(
-                    selected = currentScreen == SakinahScreen.Travel,
-                    onClick = { if (currentScreen != SakinahScreen.Travel) currentScreen = SakinahScreen.Travel },
-                    icon = { Icon(Icons.Default.Explore, contentDescription = safarLabel) },
-                    label = { Text(safarLabel) }
-                )
-                NavigationBarItem(
-                    selected = currentScreen == SakinahScreen.Wealth,
-                    onClick = { if (currentScreen != SakinahScreen.Wealth) currentScreen = SakinahScreen.Wealth },
-                    icon = { Icon(Icons.Default.MonetizationOn, contentDescription = zakatLabel) },
-                    label = { Text(zakatLabel) }
                 )
                 NavigationBarItem(
                     selected = currentScreen == SakinahScreen.AiScholar,

@@ -8,15 +8,20 @@ import com.sakinah.deen.data.database.entity.HifzMistakeEntity
 import com.sakinah.deen.data.database.entity.QuranAyahEntity
 import com.sakinah.deen.data.database.entity.SurahMetadataEntity
 import com.sakinah.deen.data.model.AyahModel
+import com.sakinah.deen.data.model.QuranTranslationResource
 import com.sakinah.deen.data.model.SurahModel
+import com.sakinah.deen.data.prefs.SakinahPreferences
+import com.sakinah.deen.network.IslamicDataRepository
+import com.sakinah.deen.settings.SettingsRepository
 import com.sakinah.deen.data.repository.TafseerDownloadRepository
 import com.sakinah.deen.data.repository.TafseerPackage
-import com.sakinah.deen.network.IslamicDataRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -46,7 +51,12 @@ data class QuranUiState(
     /** Honest status when the requested content is not in the local database yet. */
     val contentNotice: String? = null,
     /** Surfaced failure for a download/search, with [QuranUiIntent.RetrySync] as retry. */
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val selectedTranslationId: Int = IslamicDataRepository.DEFAULT_TRANSLATION_ID,
+    val selectedTranslationLanguage: String = "English",
+    val selectedTranslationIsoCode: String = "en",
+    val availableTranslations: List<QuranTranslationResource> = emptyList(),
+    val isLoadingTranslation: Boolean = false
 )
 
 sealed class QuranUiIntent {
@@ -59,13 +69,21 @@ sealed class QuranUiIntent {
     data object ClearSearch : QuranUiIntent()
     data object RetrySync : QuranUiIntent()
     data object ToggleLayoutMode : QuranUiIntent()
+    data class SelectTranslation(
+        val translationId: Int,
+        val languageName: String = "",
+        val isoCode: String = ""
+    ) : QuranUiIntent()
+    data object LoadTranslations : QuranUiIntent()
 }
 
 class QuranViewModel(
     private val hifzDao: HifzDao? = null,
     private val tafseerRepository: TafseerDownloadRepository? = null,
     private val islamicRepository: IslamicDataRepository? = null,
-    private val quranDao: QuranDao? = null
+    private val quranDao: QuranDao? = null,
+    private val sakinahPreferences: SakinahPreferences? = null,
+    private val settingsRepository: SettingsRepository? = null
 ) : ViewModel() {
 
     /** Only used before the encrypted database has been seeded/reached. */
@@ -89,6 +107,11 @@ class QuranViewModel(
     )
 
     private val selectedSurahNumber = MutableStateFlow(1)
+    private val selectedTranslationIdFlow = MutableStateFlow(
+        sakinahPreferences?.quranTranslationId
+            ?: settingsRepository?.settings?.value?.appearance?.translationId
+            ?: IslamicDataRepository.DEFAULT_TRANSLATION_ID
+    )
     private var searchJob: Job? = null
 
     /** True once Room has supplied chapter metadata, i.e. the offline library is usable. */
@@ -104,9 +127,22 @@ class QuranViewModel(
     val uiState: StateFlow<QuranUiState> = _uiState.asStateFlow()
 
     init {
+        val selectedId = selectedTranslationIdFlow.value
+        _uiState.update {
+            it.copy(
+                selectedTranslationId = selectedId,
+                selectedTranslationLanguage = sakinahPreferences?.quranTranslationLanguage
+                    ?: settingsRepository?.settings?.value?.appearance?.translationName
+                    ?: "English",
+                selectedTranslationIsoCode = settingsRepository?.settings?.value?.appearance?.translationLanguage ?: "en"
+            )
+        }
         observeTafseerPackages()
         observeRoomSurahs()
         observeSelectedSurahAyahs()
+        if (islamicRepository != null) {
+            viewModelScope.launch { loadTranslationCatalog() }
+        }
     }
 
     fun onIntent(intent: QuranUiIntent) {
@@ -126,6 +162,12 @@ class QuranViewModel(
             }
             is QuranUiIntent.RetrySync -> retrySync()
             is QuranUiIntent.ToggleLayoutMode -> _uiState.update { it.copy(isStudyMode = !it.isStudyMode) }
+            is QuranUiIntent.SelectTranslation -> selectTranslation(
+                intent.translationId,
+                intent.languageName,
+                intent.isoCode
+            )
+            is QuranUiIntent.LoadTranslations -> viewModelScope.launch { loadTranslationCatalog() }
         }
     }
 
@@ -142,25 +184,29 @@ class QuranViewModel(
         }
     }
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     private fun observeSelectedSurahAyahs() {
         val repo = islamicRepository ?: return
         viewModelScope.launch {
-            selectedSurahNumber.collectLatest { surahNumber ->
-                repo.observeSurah(surahNumber).collect { ayahs ->
-                    if (ayahs.isEmpty()) {
-                        if (!hasDatabaseSurahs) return@collect
-                        _uiState.update {
-                            if (it.currentSurah.number == surahNumber) {
-                                it.copy(
-                                    contentNotice = "Surah $surahNumber is not in the offline database yet. " +
-                                        "Download it from the Quran library while online."
-                                )
-                            } else it
-                        }
-                        return@collect
+            combine(selectedSurahNumber, selectedTranslationIdFlow) { surah, translation ->
+                surah to translation
+            }.flatMapLatest { (surahNumber, translationId) ->
+                repo.observeSurah(surahNumber, translationId)
+            }.collect { ayahs ->
+                val surahNumber = selectedSurahNumber.value
+                if (ayahs.isEmpty()) {
+                    if (!hasDatabaseSurahs) return@collect
+                    _uiState.update {
+                        if (it.currentSurah.number == surahNumber) {
+                            it.copy(
+                                contentNotice = "Surah $surahNumber is not in the offline database yet. " +
+                                    "Download it from the Quran library while online."
+                            )
+                        } else it
                     }
-                    applyAyahs(surahNumber, ayahs)
+                    return@collect
                 }
+                applyAyahs(surahNumber, ayahs)
             }
         }
     }
@@ -237,20 +283,21 @@ class QuranViewModel(
         }
 
         // Fetch ayahs on demand for any uncached surah.
-        if (islamicRepository != null) syncSurah(surahNumber)
+        if (islamicRepository != null) syncSurah(surahNumber, selectedTranslationIdFlow.value)
     }
 
     private fun retrySync() {
         val surahNumber = _uiState.value.currentSurah.number
         _uiState.update { it.copy(errorMessage = null) }
-        syncSurah(surahNumber)
+        syncSurah(surahNumber, selectedTranslationIdFlow.value)
     }
 
-    private fun syncSurah(surahNumber: Int) {
+    private fun syncSurah(surahNumber: Int, translationId: Int = selectedTranslationIdFlow.value) {
         val repo = islamicRepository ?: return
         viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingTranslation = true, errorMessage = null) }
             try {
-                val result = repo.syncSurah(surahNumber)
+                val result = repo.syncSurah(surahNumber, translationId)
                 result.exceptionOrNull()?.let { error ->
                     if (error is kotlinx.coroutines.CancellationException) throw error
                     _uiState.update {
@@ -263,7 +310,45 @@ class QuranViewModel(
                 _uiState.update {
                     it.copy(errorMessage = "Could not load surah $surahNumber: ${e.message ?: "network error"}")
                 }
+            } finally {
+                _uiState.update { it.copy(isLoadingTranslation = false) }
             }
+        }
+    }
+
+    private fun selectTranslation(translationId: Int, languageName: String, isoCode: String) {
+        selectedTranslationIdFlow.value = translationId
+        val language = languageName.ifBlank { _uiState.value.selectedTranslationLanguage }
+        val iso = isoCode.ifBlank { _uiState.value.selectedTranslationIsoCode }
+        _uiState.update {
+            it.copy(
+                selectedTranslationId = translationId,
+                selectedTranslationLanguage = language,
+                selectedTranslationIsoCode = iso,
+                isLoadingTranslation = true
+            )
+        }
+        sakinahPreferences?.quranTranslationId = translationId
+        sakinahPreferences?.quranTranslationLanguage = language
+        settingsRepository?.let { repo ->
+            viewModelScope.launch {
+                repo.updateAppearance(
+                    repo.settings.value.appearance.copy(
+                        translationId = translationId,
+                        translationName = language,
+                        translationLanguage = iso.ifBlank { repo.settings.value.appearance.translationLanguage }
+                    )
+                )
+            }
+        }
+        syncSurah(_uiState.value.currentSurah.number, translationId)
+    }
+
+    private fun loadTranslationCatalog() {
+        val repo = islamicRepository ?: return
+        viewModelScope.launch {
+            val catalog = repo.fetchTranslationCatalog()
+            _uiState.update { it.copy(availableTranslations = catalog) }
         }
     }
 

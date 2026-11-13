@@ -32,6 +32,9 @@ data class AppearanceSettings(
     val theme: ThemeMode = ThemeMode.SYSTEM,
     val arabicFontSize: Int = 24,
     val translationLanguage: String = "en",
+    val translationId: Int = 20,
+    val translationName: String = "English",
+    val hadithLanguageCode: String = "eng",
 )
 
 data class AppSettings(
@@ -76,6 +79,9 @@ class SettingsRepositoryImpl(
             theme = ThemeMode.valueOf(prefs.getString("theme", ThemeMode.SYSTEM.name)),
             arabicFontSize = prefs.getInt("arabicFontSize", 24),
             translationLanguage = prefs.getString("translationLang", "en"),
+            translationId = prefs.getInt("quranTranslationId", 20),
+            translationName = prefs.getString("quranTranslationName", "English") ?: "English",
+            hadithLanguageCode = prefs.getString("hadithLanguageCode", "eng") ?: "eng",
         ),
     )
 
@@ -102,6 +108,9 @@ class SettingsRepositoryImpl(
         prefs.putString("theme", settings.theme.name)
         prefs.putInt("arabicFontSize", settings.arabicFontSize)
         prefs.putString("translationLang", settings.translationLanguage)
+        prefs.putInt("quranTranslationId", settings.translationId)
+        prefs.putString("quranTranslationName", settings.translationName)
+        prefs.putString("hadithLanguageCode", settings.hadithLanguageCode)
         _settings.value = _settings.value.copy(appearance = settings)
     }
 

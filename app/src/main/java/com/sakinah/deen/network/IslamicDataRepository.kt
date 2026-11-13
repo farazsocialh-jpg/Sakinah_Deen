@@ -6,6 +6,10 @@ import com.sakinah.deen.data.database.dao.QuranDao
 import com.sakinah.deen.data.database.dao.TafsirDao
 import com.sakinah.deen.data.database.entity.HadithEntryEntity
 import com.sakinah.deen.data.database.entity.QuranAyahEntity
+import com.sakinah.deen.data.database.entity.QuranTranslationEntity
+import com.sakinah.deen.data.model.HadithBookCatalog
+import com.sakinah.deen.data.model.HadithEditionResource
+import com.sakinah.deen.data.model.QuranTranslationResource
 import com.sakinah.deen.data.database.entity.SurahMetadataEntity
 import com.sakinah.deen.data.database.entity.TafsirEntryEntity
 import com.sakinah.deen.network.model.ChapterAudioResponse
@@ -13,6 +17,7 @@ import com.sakinah.deen.network.model.ChaptersResponse
 import com.sakinah.deen.network.model.TafsirResponse
 import com.sakinah.deen.network.model.TranslationsResponse
 import com.sakinah.deen.network.model.UthmaniVersesResponse
+import com.sakinah.deen.network.model.VerseByChapterResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -21,6 +26,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.decodeFromString
@@ -51,7 +57,9 @@ class IslamicDataRepository(
      * First-launch seeding gate. When present, reads wait for the bundled Quran/hadith
      * content to be inserted, so a fresh install offline already has data (bounded wait).
      */
-    private val offlineContent: OfflineContentSeeder? = null
+    private val offlineContent: OfflineContentSeeder? = null,
+    /** Optional context used to cache the translation catalog for offline use. */
+    private val appContext: android.content.Context? = null
 ) {
 
     companion object {
@@ -71,11 +79,110 @@ class IslamicDataRepository(
         private const val USER_AGENT = "Sakinah-Android/1.0 (offline-first Islamic companion)"
         private val HTML_TAG = Regex("<[^>]+>")
         private val WHITESPACE = Regex("\\s+")
-    }
 
+        private fun cleanText(raw: String): String =
+            raw.replace(HTML_TAG, " ")
+                .replace("&quot;", "\"")
+                .replace("&amp;", "&")
+                .replace("&#39;", "'")
+                .replace(WHITESPACE, " ")
+                .trim()
+
+        private val defaultJson = Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            coerceInputValues = true
+            explicitNulls = false
+        }
+
+        fun parseQuranComTranslations(
+            body: String,
+            json: Json = defaultJson
+        ): List<QuranTranslationResource> {
+            val root = runCatching { json.parseToJsonElement(body) as? JsonObject }.getOrNull() ?: return emptyList()
+            val translations = root["translations"] as? JsonArray ?: return emptyList()
+            return translations.mapNotNull { element ->
+                val obj = element as? JsonObject ?: return@mapNotNull null
+                val id = (obj["id"] as? JsonPrimitive)?.intOrNull ?: return@mapNotNull null
+                QuranTranslationResource(
+                    id = id,
+                    name = (obj["name"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                    authorName = (obj["author_name"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                    languageName = (obj["language_name"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                    isoCode = (obj["iso_code"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+                )
+            }
+        }
+
+        fun parseAlQuranCloudTranslations(
+            body: String,
+            json: Json = defaultJson
+        ): List<QuranTranslationResource> {
+            val root = runCatching { json.parseToJsonElement(body) as? JsonObject }.getOrNull() ?: return emptyList()
+            val editions = root["data"] as? JsonArray ?: return emptyList()
+            return editions.mapNotNull { element ->
+                val obj = element as? JsonObject ?: return@mapNotNull null
+                val format = (obj["format"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+                val type = (obj["type"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+                if (format != "text" || type != "translation") return@mapNotNull null
+                QuranTranslationResource(
+                    id = 0,
+                    name = (obj["englishName"] as? JsonPrimitive)?.contentOrNull
+                        ?.ifBlank { (obj["name"] as? JsonPrimitive)?.contentOrNull.orEmpty() }
+                        .orEmpty(),
+                    authorName = (obj["name"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                    languageName = (obj["language"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                    isoCode = (obj["language"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+                )
+            }
+        }
+        fun parseHadithCatalog(
+            editionsBody: String,
+            infoBody: String? = null,
+            json: Json = defaultJson
+        ): List<HadithBookCatalog> {
+            val editionsRoot = runCatching { json.parseToJsonElement(editionsBody) as? JsonObject }.getOrNull() ?: return emptyList()
+            val infoRoot = infoBody?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
+            return editionsRoot.mapNotNull { (bookKey, value) ->
+                val obj = value as? JsonObject ?: return@mapNotNull null
+                val bookTitle = (obj["name"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+                val collection = obj["collection"] as? JsonArray ?: JsonArray(emptyList())
+                val editions = collection.mapNotNull { element ->
+                    val edition = element as? JsonObject ?: return@mapNotNull null
+                    val editionName = (edition["name"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+                    if (editionName.isBlank()) return@mapNotNull null
+                    HadithEditionResource(
+                        editionName = editionName,
+                        bookKey = (edition["book"] as? JsonPrimitive)?.contentOrNull.orEmpty().ifBlank { bookKey },
+                        bookTitle = bookTitle,
+                        languageCode = editionName.substringBefore('-'),
+                        languageName = (edition["language"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                        hasSections = (edition["has_sections"] as? JsonPrimitive)?.contentOrNull == "true",
+                        direction = (edition["direction"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                        link = (edition["linkmin"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+                    )
+                }
+                val sectionsObject = ((infoRoot?.get(bookKey) as? JsonObject)
+                    ?.get("metadata") as? JsonObject)
+                    ?.get("sections") as? JsonObject
+                val sections = sectionsObject?.mapNotNull { (key, value) ->
+                    val name = (value as? JsonPrimitive)?.contentOrNull?.let(::cleanText).orEmpty()
+                    val number = key.toIntOrNull() ?: return@mapNotNull null
+                    if (name.isBlank()) null else number to name
+                }?.toMap().orEmpty()
+                HadithBookCatalog(
+                    bookKey = bookKey,
+                    bookTitle = bookTitle,
+                    editions = editions,
+                    sections = sections
+                )
+            }
+        }
+
+    }
     // ------------------------------------------------------------------ Quran
 
-    /** Downloads one surah (Uthmani text + translation + optional audio) into Room. */
+    /** Downloads one surah (Uthmani text + selected translation + optional audio) into Room. */
     suspend fun syncSurah(
         surahNumber: Int,
         translationId: Int = DEFAULT_TRANSLATION_ID,
@@ -90,20 +197,15 @@ class IslamicDataRepository(
             .firstOrNull { it.id == surahNumber }
         onProgress(0.20f)
 
-        val verses = json.decodeFromString<UthmaniVersesResponse>(
-            fetch("$QURAN_API_BASE/quran/verses/uthmani?chapter_number=$surahNumber")
-        ).verses
+        val response = json.decodeFromString<VerseByChapterResponse>(
+            fetch(
+                "$QURAN_API_BASE/verses/by_chapter/$surahNumber" +
+                    "?translations=$translationId&fields=text_uthmani&per_page=300"
+            )
+        )
+        val verses = response.verses
         if (verses.isEmpty()) error("Quran.com returned no verses for surah $surahNumber")
         onProgress(0.55f)
-
-        // The translations endpoint returns the chapter in order, without verse keys,
-        // so it is index-aligned with the Uthmani verse list above.
-        val translations = runCatching {
-            json.decodeFromString<TranslationsResponse>(
-                fetch("$QURAN_API_BASE/quran/translations/$translationId?chapter_number=$surahNumber")
-            ).translations
-        }.getOrDefault(emptyList())
-        onProgress(0.80f)
 
         val audioUrl = if (withAudio) {
             runCatching {
@@ -115,13 +217,13 @@ class IslamicDataRepository(
             null
         }
 
-        val ayahs = verses.mapIndexed { index, verse ->
+        val ayahs = verses.map { verse ->
             QuranAyahEntity(
                 surahNumber = surahNumber,
-                ayahNumber = index + 1,
-                verseKey = verse.verseKey.ifBlank { "$surahNumber:${index + 1}" },
+                ayahNumber = verse.verseNumber,
+                verseKey = verse.verseKey.ifBlank { "$surahNumber:${verse.verseNumber}" },
                 textUthmani = verse.textUthmani,
-                translation = translations.getOrNull(index)?.text?.let(::cleanText),
+                translation = verse.translations.firstOrNull()?.text?.let(::cleanText),
                 audioUrl = audioUrl,
                 surahNameEnglish = chapter?.nameSimple,
                 surahNameArabic = chapter?.nameArabic,
@@ -129,7 +231,18 @@ class IslamicDataRepository(
             )
         }
 
+        val translations = verses.mapNotNull { verse ->
+            val text = verse.translations.firstOrNull()?.text?.let(::cleanText).orEmpty()
+            if (text.isBlank()) null else QuranTranslationEntity(
+                surahNumber = surahNumber,
+                ayahNumber = verse.verseNumber,
+                translationId = translationId,
+                translation = text
+            )
+        }
+
         quranDao.replaceSurah(surahNumber, ayahs)
+        if (translations.isNotEmpty()) quranDao.upsertTranslations(translations)
         chapter?.let { quranDao.upsertSurahs(listOf(it.toEntity())) }
         onProgress(1f)
         ayahs.size
@@ -142,7 +255,18 @@ class IslamicDataRepository(
     }
 
     fun observeSurah(surahNumber: Int): Flow<List<QuranAyahEntity>> =
-        afterSeeding(quranDao.observeSurah(surahNumber))
+        observeSurah(surahNumber, DEFAULT_TRANSLATION_ID)
+
+    fun observeSurah(surahNumber: Int, translationId: Int): Flow<List<QuranAyahEntity>> =
+        combine(
+            afterSeeding(quranDao.observeSurah(surahNumber)),
+            afterSeeding(quranDao.observeTranslations(surahNumber, translationId))
+        ) { ayahs, translations ->
+            val byAyah = translations.associateBy { it.ayahNumber }
+            ayahs.map { ayah ->
+                ayah.copy(translation = byAyah[ayah.ayahNumber]?.translation ?: ayah.translation)
+            }
+        }
 
     fun observeSurahs(): Flow<List<SurahMetadataEntity>> = afterSeeding(quranDao.observeSurahs())
 
@@ -153,6 +277,57 @@ class IslamicDataRepository(
     suspend fun isSurahAvailable(surahNumber: Int): Boolean =
         quranDao.countAyahs(surahNumber) > 0
 
+    // ------------------------------------------------------------------ Translation catalog
+
+    suspend fun fetchTranslationCatalog(): List<QuranTranslationResource> {
+        return runCatching {
+            val parsed = parseQuranComTranslations(
+                fetch("$QURAN_API_BASE/resources/translations"),
+                json
+            )
+            cacheCatalog(parsed)
+            parsed
+        }.getOrElse {
+            runCatching {
+                val parsed = parseAlQuranCloudTranslations(
+                    fetch("https://api.alquran.cloud/v1/edition/type/translation"),
+                    json
+                )
+                cacheCatalog(parsed)
+                parsed
+            }.getOrElse {
+                loadCachedCatalog()
+            }
+        }
+    }
+
+    fun parseQuranComTranslations(body: String): List<QuranTranslationResource> =
+        Companion.parseQuranComTranslations(body, json)
+
+    fun parseAlQuranCloudTranslations(body: String): List<QuranTranslationResource> =
+        Companion.parseAlQuranCloudTranslations(body, json)
+
+    private fun cacheCatalog(catalog: List<QuranTranslationResource>) {
+        val context = appContext ?: return
+        val prefs = context.getSharedPreferences("sakinah_quran_translations", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putString("catalog_json", json.encodeToString(
+            kotlinx.serialization.builtins.ListSerializer(QuranTranslationResource.serializer()),
+            catalog
+        )).apply()
+    }
+
+    private fun loadCachedCatalog(): List<QuranTranslationResource> {
+        val context = appContext ?: return emptyList()
+        val prefs = context.getSharedPreferences("sakinah_quran_translations", android.content.Context.MODE_PRIVATE)
+        val raw = prefs.getString("catalog_json", null) ?: return emptyList()
+        return runCatching {
+            json.decodeFromString(
+                kotlinx.serialization.builtins.ListSerializer(QuranTranslationResource.serializer()),
+                raw
+            )
+        }.getOrDefault(emptyList())
+    }
+
     // ------------------------------------------------------------------ Hadith
 
     /**
@@ -161,45 +336,50 @@ class IslamicDataRepository(
      */
     suspend fun syncHadithBook(
         bookKey: String,
-        languagePrefix: String = "eng",
+        languageCode: String = "eng",
         onProgress: (Float) -> Unit = {}
     ): Result<Int> = runCatching {
-        require(bookKey in SUPPORTED_HADITH_BOOKS) { "Unsupported hadith book: $bookKey" }
         onProgress(0.05f)
 
-        val primaryBody = runCatching {
-            fetch("$HADITH_CDN_BASE/editions/$languagePrefix-$bookKey.json")
-        }.getOrElse {
-            fetch("$HADITH_CDN_BASE/editions/ara-$bookKey.json")
-        }
+        val primaryBody = fetch("$HADITH_CDN_BASE/editions/$languageCode-$bookKey.min.json")
         onProgress(0.45f)
 
-        val arabicByNumber = if (languagePrefix == "ara") {
+        val arabicByNumber = if (languageCode == "ara") {
             emptyMap()
         } else {
             runCatching {
-                parseArabicTexts(fetch("$HADITH_CDN_BASE/editions/ara-$bookKey.json"))
+                parseArabicTexts(fetch("$HADITH_CDN_BASE/editions/ara-$bookKey.min.json"))
             }.getOrDefault(emptyMap())
         }
         onProgress(0.70f)
 
-        val entries = parseHadithEdition(primaryBody, bookKey, arabicByNumber)
+        val entries = parseHadithEdition(primaryBody, bookKey, languageCode, arabicByNumber)
         if (entries.isEmpty()) error("No hadith parsed for $bookKey")
 
-        hadithDao.replaceBook(bookKey, entries)
+        hadithDao.replaceBook(bookKey, languageCode, entries)
         onProgress(1f)
         entries.size
     }
 
     fun observeHadiths(
         bookKey: String,
-        limit: Int = 200,
+        languageCode: String = "eng",
+        limit: Int = 100000,
         offset: Int = 0
     ): Flow<List<HadithEntryEntity>> =
-        afterSeeding(hadithDao.observeHadiths(bookKey, limit, offset))
+        afterSeeding(hadithDao.observeHadiths(bookKey, languageCode, limit, offset))
+
+    fun observeHadithsBySection(
+        bookKey: String,
+        languageCode: String = "eng",
+        sectionNumber: Int,
+        limit: Int = 100000,
+        offset: Int = 0
+    ): Flow<List<HadithEntryEntity>> =
+        afterSeeding(hadithDao.observeHadithsBySection(bookKey, languageCode, sectionNumber, limit, offset))
 
     /** Every locally seeded/ downloaded collection, used for the "All Books" filter. */
-    fun observeAllHadiths(limit: Int = 500, offset: Int = 0): Flow<List<HadithEntryEntity>> =
+    fun observeAllHadiths(limit: Int = 100000, offset: Int = 0): Flow<List<HadithEntryEntity>> =
         afterSeeding(hadithDao.observeAllHadiths(limit, offset))
 
     fun searchHadiths(query: String, limit: Int = 200): Flow<List<HadithEntryEntity>> =
@@ -217,11 +397,44 @@ class IslamicDataRepository(
         }
     }
 
-    suspend fun getHadith(bookKey: String, hadithNumber: Int): HadithEntryEntity? =
-        hadithDao.getHadith(bookKey, hadithNumber)
+    suspend fun getHadith(bookKey: String, hadithNumber: Int, languageCode: String = "eng"): HadithEntryEntity? =
+        hadithDao.getHadith(bookKey, languageCode, hadithNumber)
 
-    suspend fun isBookAvailable(bookKey: String): Boolean =
-        hadithDao.countForBook(bookKey) > 0
+    suspend fun isBookAvailable(bookKey: String, languageCode: String = "eng"): Boolean =
+        hadithDao.countForBook(bookKey, languageCode) > 0
+
+    // ------------------------------------------------------------------ Hadith catalog
+
+    suspend fun fetchHadithCatalog(): List<HadithBookCatalog> {
+        return runCatching {
+            val editionsBody = fetch("$HADITH_CDN_BASE/editions.min.json")
+            val infoBody = runCatching { fetch("$HADITH_CDN_BASE/info.min.json") }.getOrNull()
+            val parsed = Companion.parseHadithCatalog(editionsBody, infoBody, json)
+            cacheHadithCatalog(parsed)
+            parsed
+        }.getOrElse { loadCachedHadithCatalog() }
+    }
+
+    private fun cacheHadithCatalog(catalog: List<HadithBookCatalog>) {
+        val context = appContext ?: return
+        val prefs = context.getSharedPreferences("sakinah_hadith_catalog", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putString("catalog_json", json.encodeToString(
+            kotlinx.serialization.builtins.ListSerializer(HadithBookCatalog.serializer()),
+            catalog
+        )).apply()
+    }
+
+    private fun loadCachedHadithCatalog(): List<HadithBookCatalog> {
+        val context = appContext ?: return emptyList()
+        val prefs = context.getSharedPreferences("sakinah_hadith_catalog", android.content.Context.MODE_PRIVATE)
+        val raw = prefs.getString("catalog_json", null) ?: return emptyList()
+        return runCatching {
+            json.decodeFromString(
+                kotlinx.serialization.builtins.ListSerializer(HadithBookCatalog.serializer()),
+                raw
+            )
+        }.getOrDefault(emptyList())
+    }
 
     // ------------------------------------------------------------------ Tafsir
 
@@ -312,6 +525,7 @@ class IslamicDataRepository(
     private fun parseHadithEdition(
         body: String,
         bookKey: String,
+        languageCode: String,
         arabicByNumber: Map<Int, String>
     ): List<HadithEntryEntity> {
         val root = json.parseToJsonElement(body) as? JsonObject ?: return emptyList()
@@ -342,6 +556,7 @@ class IslamicDataRepository(
 
             HadithEntryEntity(
                 bookKey = bookKey,
+                languageCode = languageCode,
                 hadithNumber = number,
                 bookTitle = cleanText(bookTitle),
                 sectionNumber = sectionNumber,

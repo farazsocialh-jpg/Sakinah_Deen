@@ -28,19 +28,24 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sakinah.deen.data.model.HadithModel
+import com.sakinah.deen.ui.theme.AmiriFontFamily
 import com.sakinah.deen.ui.theme.EmeraldDeep
 import com.sakinah.deen.ui.theme.MintGreen
 import com.sakinah.deen.ui.theme.SahihGreen
@@ -121,6 +126,67 @@ fun HadithScreen(
                         )
                     }
                 }
+            }
+        }
+
+        // Language selector
+        if (state.availableLanguages.isNotEmpty()) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(state.availableLanguages) { language ->
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (state.selectedLanguageCode == language) EmeraldDeep else MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, if (state.selectedLanguageCode == language) EmeraldDeep else MaterialTheme.colorScheme.outline),
+                        modifier = Modifier.clickable { viewModel.onIntent(HadithUiIntent.SelectLanguage(language)) }
+                    ) {
+                        Text(
+                            text = language.uppercase(),
+                            color = if (state.selectedLanguageCode == language) Color.White else EmeraldDeep,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Section selector
+        if (state.sections.isNotEmpty()) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (state.selectedSectionNumber == 0) EmeraldDeep else MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, if (state.selectedSectionNumber == 0) EmeraldDeep else MaterialTheme.colorScheme.outline),
+                        modifier = Modifier.clickable { viewModel.onIntent(HadithUiIntent.SelectSection(0)) }
+                    ) {
+                        Text("All sections", color = if (state.selectedSectionNumber == 0) Color.White else EmeraldDeep, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+                    }
+                }
+                items(state.sections) { section ->
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (state.selectedSectionNumber == section.first) EmeraldDeep else MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, if (state.selectedSectionNumber == section.first) EmeraldDeep else MaterialTheme.colorScheme.outline),
+                        modifier = Modifier.clickable { viewModel.onIntent(HadithUiIntent.SelectSection(section.first)) }
+                    ) {
+                        Text(section.second, color = if (state.selectedSectionNumber == section.first) Color.White else EmeraldDeep, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+                    }
+                }
+            }
+        }
+
+        state.downloadProgress?.let { progress ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                Text("Downloading… ${(progress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        state.errorMessage?.let { message ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(message, color = Color.Red, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = { viewModel.onIntent(HadithUiIntent.RetrySync) }) { Text("Retry") }
             }
         }
 
@@ -240,15 +306,17 @@ private fun HadithCard(
             }
 
             if (hadith.arabicText.isNotBlank()) {
-                Text(
-                    text = hadith.arabicText,
-                    fontFamily = FontFamily.Serif,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = EmeraldDeep,
-                    textAlign = TextAlign.End,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    Text(
+                        text = hadith.arabicText,
+                        fontFamily = AmiriFontFamily,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = EmeraldDeep,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
 
             if (hadith.matnTranslation.isNotBlank()) {

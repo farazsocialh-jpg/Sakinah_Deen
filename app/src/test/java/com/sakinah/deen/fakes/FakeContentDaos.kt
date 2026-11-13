@@ -7,6 +7,7 @@ import com.sakinah.deen.data.database.dao.TafsirDao
 import com.sakinah.deen.data.database.entity.AdhkarEntity
 import com.sakinah.deen.data.database.entity.HadithEntryEntity
 import com.sakinah.deen.data.database.entity.QuranAyahEntity
+import com.sakinah.deen.data.database.entity.QuranTranslationEntity
 import com.sakinah.deen.data.database.entity.SurahMetadataEntity
 import com.sakinah.deen.data.database.entity.TafsirEntryEntity
 import kotlinx.coroutines.flow.Flow
@@ -18,13 +19,32 @@ import kotlinx.coroutines.flow.flow
  */
 class FakeQuranDao : QuranDao {
     val ayahs = linkedMapOf<Pair<Int, Int>, QuranAyahEntity>()
+    val translations = linkedMapOf<Triple<Int, Int, Int>, QuranTranslationEntity>()
     val surahs = linkedMapOf<Int, SurahMetadataEntity>()
     var ayahWrites = 0
+    var translationWrites = 0
 
     override fun observeSurah(surahNumber: Int): Flow<List<QuranAyahEntity>> = flow {
         emit(
             ayahs.values.filter { it.surahNumber == surahNumber }.sortedBy { it.ayahNumber }
         )
+    }
+
+    override fun observeTranslations(surahNumber: Int, translationId: Int): Flow<List<QuranTranslationEntity>> = flow {
+        emit(
+            translations.values
+                .filter { it.surahNumber == surahNumber && it.translationId == translationId }
+                .sortedBy { it.ayahNumber }
+        )
+    }
+
+    override suspend fun upsertTranslations(translations: List<QuranTranslationEntity>) {
+        this.translations += translations.associateBy { Triple(it.surahNumber, it.ayahNumber, it.translationId) }
+        translationWrites += translations.size
+    }
+
+    override suspend fun deleteTranslations(surahNumber: Int, translationId: Int) {
+        translations.keys.removeAll { it.first == surahNumber && it.third == translationId }
     }
 
     override fun searchAyahs(query: String, limit: Int): Flow<List<QuranAyahEntity>> = flow {
@@ -63,13 +83,23 @@ class FakeQuranDao : QuranDao {
 }
 
 class FakeHadithDao : HadithDao {
-    val entries = linkedMapOf<Pair<String, Int>, HadithEntryEntity>()
+    val entries = linkedMapOf<Triple<String, String, Int>, HadithEntryEntity>()
     var writes = 0
 
-    override fun observeHadiths(bookKey: String, limit: Int, offset: Int): Flow<List<HadithEntryEntity>> =
+    override fun observeHadiths(bookKey: String, languageCode: String, limit: Int, offset: Int): Flow<List<HadithEntryEntity>> =
         flow {
             emit(
-                entries.values.filter { it.bookKey == bookKey }
+                entries.values.filter { it.bookKey == bookKey && it.languageCode == languageCode }
+                    .sortedBy { it.hadithNumber }
+                    .drop(offset)
+                    .take(limit)
+            )
+        }
+
+    override fun observeHadithsBySection(bookKey: String, languageCode: String, sectionNumber: Int, limit: Int, offset: Int): Flow<List<HadithEntryEntity>> =
+        flow {
+            emit(
+                entries.values.filter { it.bookKey == bookKey && it.languageCode == languageCode && it.sectionNumber == sectionNumber }
                     .sortedBy { it.hadithNumber }
                     .drop(offset)
                     .take(limit)
@@ -78,7 +108,7 @@ class FakeHadithDao : HadithDao {
 
     override fun observeAllHadiths(limit: Int, offset: Int): Flow<List<HadithEntryEntity>> = flow {
         emit(
-            entries.values.sortedWith(compareBy({ it.bookKey }, { it.hadithNumber })).drop(offset).take(limit)
+            entries.values.sortedWith(compareBy({ it.bookKey }, { it.languageCode }, { it.hadithNumber })).drop(offset).take(limit)
         )
     }
 
@@ -94,18 +124,19 @@ class FakeHadithDao : HadithDao {
         )
     }
 
-    override suspend fun getHadith(bookKey: String, hadithNumber: Int): HadithEntryEntity? =
-        entries[bookKey to hadithNumber]
+    override suspend fun getHadith(bookKey: String, languageCode: String, hadithNumber: Int): HadithEntryEntity? =
+        entries[Triple(bookKey, languageCode, hadithNumber)]
 
-    override suspend fun countForBook(bookKey: String): Int = entries.keys.count { it.first == bookKey }
+    override suspend fun countForBook(bookKey: String, languageCode: String): Int =
+        entries.keys.count { it.first == bookKey && it.second == languageCode }
 
     override suspend fun upsertAll(entries: List<HadithEntryEntity>) {
-        this.entries += entries.associateBy { it.bookKey to it.hadithNumber }
+        this.entries += entries.associateBy { Triple(it.bookKey, it.languageCode, it.hadithNumber) }
         writes += entries.size
     }
 
-    override suspend fun clearBook(bookKey: String) {
-        entries.keys.removeAll { it.first == bookKey }
+    override suspend fun clearBook(bookKey: String, languageCode: String) {
+        entries.keys.removeAll { it.first == bookKey && it.second == languageCode }
     }
 }
 
