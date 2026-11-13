@@ -51,6 +51,7 @@ class ContentDownloadWorker(
                 Result.success() // Download succeeded even if attach deferred
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Result.retry()
         }
     }

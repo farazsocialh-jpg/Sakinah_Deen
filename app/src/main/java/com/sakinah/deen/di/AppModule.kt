@@ -13,9 +13,8 @@ import com.sakinah.deen.domain.travel.TravelStatusManager
 
 class SakinahContainer(private val context: Context) {
 
-    // Passphrase generator derived from Android Keystore or app signature
     private val dbPassphrase: ByteArray by lazy {
-        "SakinahSecureOfflineMasterKey2026".toByteArray(Charsets.UTF_8)
+        com.sakinah.deen.data.database.DatabasePassphraseProvider.getPassphrase(context)
     }
 
     val database: SakinahEncryptedDatabase by lazy {

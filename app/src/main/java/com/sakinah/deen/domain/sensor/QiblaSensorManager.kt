@@ -25,8 +25,9 @@ data class QiblaCompassData(
 )
 
 class QiblaSensorManager(
-    private val context: Context
+    context: Context
 ) : SensorEventListener {
+    private val appContext = context.applicationContext
 
     companion object {
         private const val KAABA_LATITUDE = 21.4225
@@ -36,7 +37,7 @@ class QiblaSensorManager(
     }
 
     private val sensorManager: SensorManager? =
-        context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        appContext.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
 
     private val rotationVectorSensor: Sensor? =
         sensorManager?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)

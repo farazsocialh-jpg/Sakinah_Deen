@@ -219,6 +219,7 @@ class AdhanPlaybackService : Service() {
         try {
             player?.stop()
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             // Ignore release races.
         }
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -294,6 +295,7 @@ class AdhanPlaybackService : Service() {
         try {
             registerReceiver(receiver, IntentFilter("android.media.VOLUME_CHANGED_ACTION"))
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             // Ignore registration races.
         }
     }

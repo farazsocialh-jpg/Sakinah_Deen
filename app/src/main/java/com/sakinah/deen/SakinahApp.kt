@@ -40,6 +40,21 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
     override fun onCreate() {
         super.onCreate()
 
+        if (com.sakinah.deen.BuildConfig.DEBUG) {
+            android.os.StrictMode.setThreadPolicy(
+                android.os.StrictMode.ThreadPolicy.Builder()
+                    .detectAll()
+                    .penaltyLog()
+                    .build()
+            )
+            android.os.StrictMode.setVmPolicy(
+                android.os.StrictMode.VmPolicy.Builder()
+                    .detectAll()
+                    .penaltyLog()
+                    .build()
+            )
+        }
+
         // SQLCipher native libraries must be loaded before Room opens any encrypted database.
         SQLiteDatabase.loadLibs(this)
 
@@ -51,7 +66,7 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
 
         // Seed the bundled Quran/hadith/adhkar content before the first screen query so a
         // fresh install works in airplane mode. Data reads wait on this (bounded).
-        contentSeeder.start()
+        applicationScope.launch(Dispatchers.IO) { contentSeeder.start() }
 
         NotificationChannels.createChannels(this)
 

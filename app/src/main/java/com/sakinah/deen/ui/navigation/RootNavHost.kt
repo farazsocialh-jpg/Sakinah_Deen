@@ -31,7 +31,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
@@ -81,11 +83,11 @@ enum class SakinahScreen(@StringRes val titleRes: Int) {
 fun RootNavHost() {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    var currentScreen by remember { mutableStateOf(SakinahScreen.DailySalah) }
-    var targetSurahNumber by remember { mutableStateOf(1) }
-    var targetAyahNumber by remember { mutableStateOf(1) }
-    var targetHadithBookKey by remember { mutableStateOf("all") }
-    var targetHadithSearchQuery by remember { mutableStateOf("") }
+    var currentScreen by rememberSaveable { mutableStateOf(SakinahScreen.DailySalah) }
+    var targetSurahNumber by rememberSaveable { mutableStateOf(1) }
+    var targetAyahNumber by rememberSaveable { mutableStateOf(1) }
+    var targetHadithBookKey by rememberSaveable { mutableStateOf("all") }
+    var targetHadithSearchQuery by rememberSaveable { mutableStateOf("") }
 
     val salahLabel = stringResource(R.string.nav_salah)
     val quranLabel = stringResource(R.string.nav_quran)
@@ -99,7 +101,7 @@ fun RootNavHost() {
         drawerContent = {
             ModalDrawerSheet {
                 val account = rememberInject<AuthRepository>()
-                val authState by account.authState.collectAsState()
+                val authState by account.authState.collectAsStateWithLifecycle()
                 val signedInUser = (authState as? AuthState.Authenticated)?.user
                 Text(signedInUser?.displayName ?: "Sakinah", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(16.dp))
                 if (signedInUser != null) {
@@ -141,37 +143,37 @@ fun RootNavHost() {
             NavigationBar {
                 NavigationBarItem(
                     selected = currentScreen == SakinahScreen.DailySalah,
-                    onClick = { currentScreen = SakinahScreen.DailySalah },
+                    onClick = { if (currentScreen != SakinahScreen.DailySalah) currentScreen = SakinahScreen.DailySalah },
                     icon = { Icon(Icons.Default.Mosque, contentDescription = salahLabel) },
                     label = { Text(salahLabel) }
                 )
                 NavigationBarItem(
                     selected = currentScreen == SakinahScreen.Quran,
-                    onClick = { currentScreen = SakinahScreen.Quran },
+                    onClick = { if (currentScreen != SakinahScreen.Quran) currentScreen = SakinahScreen.Quran },
                     icon = { Icon(Icons.Default.Book, contentDescription = quranLabel) },
                     label = { Text(quranLabel) }
                 )
                 NavigationBarItem(
                     selected = currentScreen == SakinahScreen.Hadith,
-                    onClick = { currentScreen = SakinahScreen.Hadith },
+                    onClick = { if (currentScreen != SakinahScreen.Hadith) currentScreen = SakinahScreen.Hadith },
                     icon = { Icon(Icons.Default.LibraryBooks, contentDescription = hadithLabel) },
                     label = { Text(hadithLabel) }
                 )
                 NavigationBarItem(
                     selected = currentScreen == SakinahScreen.Travel,
-                    onClick = { currentScreen = SakinahScreen.Travel },
+                    onClick = { if (currentScreen != SakinahScreen.Travel) currentScreen = SakinahScreen.Travel },
                     icon = { Icon(Icons.Default.Explore, contentDescription = safarLabel) },
                     label = { Text(safarLabel) }
                 )
                 NavigationBarItem(
                     selected = currentScreen == SakinahScreen.Wealth,
-                    onClick = { currentScreen = SakinahScreen.Wealth },
+                    onClick = { if (currentScreen != SakinahScreen.Wealth) currentScreen = SakinahScreen.Wealth },
                     icon = { Icon(Icons.Default.MonetizationOn, contentDescription = zakatLabel) },
                     label = { Text(zakatLabel) }
                 )
                 NavigationBarItem(
                     selected = currentScreen == SakinahScreen.AiScholar,
-                    onClick = { currentScreen = SakinahScreen.AiScholar },
+                    onClick = { if (currentScreen != SakinahScreen.AiScholar) currentScreen = SakinahScreen.AiScholar },
                     icon = { Icon(Icons.Default.Chat, contentDescription = scholarLabel) },
                     label = { Text(scholarLabel) }
                 )

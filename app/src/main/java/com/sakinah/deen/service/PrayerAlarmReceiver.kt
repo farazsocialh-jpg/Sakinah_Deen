@@ -32,6 +32,7 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         try {
             ContextCompat.startForegroundService(context, serviceIntent)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             // Background-start restrictions (Android 14+) or a revoked FGS permission:
             // fall back to a high-priority full-screen alarm notification.
             showAdhanNotificationFallback(context, prayerName, prayerTime)

@@ -41,7 +41,7 @@ import net.sqlcipher.database.SupportFactory
         PrayerTimetableEntity::class
     ],
     version = 4,
-    exportSchema = false
+    exportSchema = true
 )
 @TypeConverters(SakinahTypeConverters::class)
 abstract class SakinahEncryptedDatabase : RoomDatabase() {
@@ -70,9 +70,6 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
                     DB_NAME
                 )
                     .openHelperFactory(factory)
-                    // Bundled seed data makes a destructive schema change cheap: the
-                    // first run repopulates everything from assets.
-                    .fallbackToDestructiveMigration()
                     .addCallback(DatabaseSeeder.createCallback(context.applicationContext) { INSTANCE })
                     .build()
                 INSTANCE = instance

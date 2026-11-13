@@ -55,6 +55,7 @@ class SunniAiScholarRepositoryImpl(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
                 // Partial answer delivered: finish cleanly instead of appending fallback text.
                 if (receivedText) {
                     emit(RagStreamChunk.Complete)
@@ -97,6 +98,7 @@ class SunniAiScholarRepositoryImpl(
                     }
                 }
             } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
                 connected = false
             }
 
@@ -121,6 +123,7 @@ class SunniAiScholarRepositoryImpl(
 
             emit(RagStreamChunk.Complete)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             emit(RagStreamChunk.TextDelta("\nError: ${e.localizedMessage ?: "Unable to complete request. Please retry."}"))
             emit(RagStreamChunk.Complete)
         }
