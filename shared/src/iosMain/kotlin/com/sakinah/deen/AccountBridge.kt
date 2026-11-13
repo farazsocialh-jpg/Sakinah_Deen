@@ -21,9 +21,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
 import org.koin.core.Koin
+import org.koin.mp.KoinPlatform
 
 /**
  * Thin Swift-facing facade. Kotlin `Result` and enum types bridge poorly to
@@ -32,9 +32,8 @@ import org.koin.core.Koin
  */
 object SharedDependencies {
     private val koinApp: Koin by lazy {
-        runCatching { GlobalContext.get() }.getOrElse {
-            startKoin { modules(com.sakinah.deen.di.sharedModule) }.koin
-        }
+        KoinPlatform.getKoinOrNull()
+            ?: startKoin { modules(com.sakinah.deen.di.sharedModule) }.koin
     }
 
     val authRepository: AuthRepository get() = koinApp.get()
