@@ -124,7 +124,8 @@ val networkModule = module {
             tafsirDao = get(),
             client = get(),
             json = get(),
-            offlineContent = getOrNull()
+            offlineContent = getOrNull(),
+            appContext = androidContext()
         )
     }
     single<SunniAiScholarRepository> {
@@ -163,7 +164,7 @@ val workerModule = module {
 
 val viewModelModule = module {
     factory { SalahViewModel(get(), get(), get(), get(), getOrNull(), getOrNull()) }
-    factory { QuranViewModel(get(), get(), getOrNull(), getOrNull()) }
+    factory { QuranViewModel(getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull()) }
     factory { HadithViewModel(getOrNull()) }
     factory { TravelViewModel(get(), get(), getOrNull()) }
     factory { WealthViewModel(get(), getOrNull()) }

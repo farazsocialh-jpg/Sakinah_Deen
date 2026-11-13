@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -45,10 +46,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -75,6 +79,8 @@ fun QuranScreen(
 
     var isTafseerSheetOpen by remember { mutableStateOf(false) }
     var isSurahPickerOpen by remember { mutableStateOf(false) }
+    var isTranslationSheetOpen by remember { mutableStateOf(false) }
+    var translationQuery by remember { mutableStateOf("") }
     var selectedAyahNumber by remember { mutableStateOf(initialAyahNumber) }
     var hifzOverlayActive by remember { mutableStateOf(false) }
 
@@ -210,6 +216,38 @@ fun QuranScreen(
             }
         }
 
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                modifier = Modifier.clickable { isTranslationSheetOpen = true }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Translate, contentDescription = null, tint = EmeraldDeep, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = state.selectedTranslationLanguage,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = EmeraldDeep
+                    )
+                    if (state.isLoadingTranslation) {
+                        Spacer(Modifier.width(8.dp))
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                    }
+                }
+            }
+            state.errorMessage?.let { Text(it, color = Color.Red, fontSize = 11.sp) }
+        }
+
         state.contentNotice?.let { notice ->
             Card(
                 shape = RoundedCornerShape(14.dp),
@@ -234,6 +272,7 @@ fun QuranScreen(
                 AyahCard(
                     ayah = ayah,
                     isSelected = selectedAyahNumber == ayah.numberInSurah,
+                    translationIsRtl = isRtlLanguage(state.selectedTranslationIsoCode),
                     onClick = { selectedAyahNumber = ayah.numberInSurah },
                     onTafseerClick = {
                         selectedAyahNumber = ayah.numberInSurah
@@ -284,6 +323,62 @@ fun QuranScreen(
                             )
                         }
                         Text(text = item.nameArabic, fontSize = 14.sp, color = EmeraldDeep)
+                    }
+                }
+            }
+        }
+    }
+
+    if (isTranslationSheetOpen) {
+        val filteredTranslations = state.availableTranslations.filter { item ->
+            translationQuery.isBlank() ||
+                item.name.contains(translationQuery, true) ||
+                item.languageName.contains(translationQuery, true) ||
+                item.authorName.contains(translationQuery, true)
+        }
+        ModalBottomSheet(onDismissRequest = { isTranslationSheetOpen = false }) {
+            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Translation / Language", fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = EmeraldDeep)
+                OutlinedTextField(
+                    value = translationQuery,
+                    onValueChange = { translationQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Search language or translator") },
+                    singleLine = true
+                )
+                if (state.isLoadingTranslation) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { CircularProgressIndicator() }
+                }
+                LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                    items(filteredTranslations) { item ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.onIntent(
+                                        QuranUiIntent.SelectTranslation(
+                                            translationId = item.id,
+                                            languageName = item.languageName.ifBlank { item.name },
+                                            isoCode = item.isoCode
+                                        )
+                                    )
+                                    isTranslationSheetOpen = false
+                                }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(item.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Text(
+                                    "${item.languageName.ifBlank { item.isoCode }} · ${item.authorName}",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
+                            if (state.selectedTranslationId == item.id) {
+                                Icon(Icons.Default.Translate, contentDescription = null, tint = MintGreen)
+                            }
+                        }
                     }
                 }
             }
@@ -454,6 +549,7 @@ private fun SearchResults(
 private fun AyahCard(
     ayah: AyahModel,
     isSelected: Boolean,
+    translationIsRtl: Boolean = false,
     onClick: () -> Unit,
     onTafseerClick: () -> Unit
 ) {
@@ -518,12 +614,21 @@ private fun AyahCard(
             }
 
             if (ayah.translation.isNotBlank()) {
-                Text(
-                    text = ayah.translation,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                CompositionLocalProvider(
+                    LocalLayoutDirection provides if (translationIsRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
+                ) {
+                    Text(
+                        text = ayah.translation,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = FontFamily.Serif,
+                        textAlign = if (translationIsRtl) TextAlign.End else TextAlign.Start,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
         }
     }
 }
+
+private fun isRtlLanguage(isoCode: String): Boolean =
+    isoCode.lowercase() in setOf("ar", "ur", "fa", "ps", "sd", "ug")

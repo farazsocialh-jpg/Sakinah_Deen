@@ -283,6 +283,25 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth()
             )
 
+            // Quran translation
+            Text("Quran Translation", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Current: ${appPrefs.quranTranslationLanguage} (ID ${appPrefs.quranTranslationId})",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            OutlinedTextField(
+                value = appPrefs.quranTranslationLanguage,
+                onValueChange = { value ->
+                    appPrefs.quranTranslationLanguage = value
+                    scope.launch {
+                        repo.updateAppearance(settings.appearance.copy(translationLanguage = value, translationName = value))
+                    }
+                },
+                label = { Text("Translation language") },
+                modifier = Modifier.fillMaxWidth()
+            )
+
             // Offline storage
             Text("Offline Storage", style = MaterialTheme.typography.titleMedium)
             Text("Cache size: ${repo.cacheSizeBytes()} bytes")

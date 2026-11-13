@@ -3,6 +3,7 @@ package com.sakinah.deen.data.prefs
 import android.content.Context
 import android.content.SharedPreferences
 import com.sakinah.deen.data.model.CalculationMethod
+import com.sakinah.deen.network.IslamicDataRepository
 import com.sakinah.deen.data.model.Madhhab
 import com.sakinah.deen.domain.travel.HomeAnchorStore
 import com.sakinah.deen.domain.travel.SafarPolicy
@@ -49,6 +50,9 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         private const val KEY_LAST_DISTANCE_KM = "last_distance_from_home_km"
         private const val KEY_ADHAN_SOUND_URI = "adhan_sound_uri"
         private const val KEY_DUA_SAFAR_SOUND_URI = "dua_safar_sound_uri"
+        private const val KEY_QURAN_TRANSLATION_ID = "quran_translation_id"
+        private const val KEY_QURAN_TRANSLATION_LANGUAGE = "quran_translation_language"
+        private const val KEY_HADITH_LANGUAGE = "hadith_language_code"
     }
 
     /** Double is stored as raw bits so stored coordinates do not lose precision. */
@@ -177,6 +181,18 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         set(value) = prefs.edit().apply {
             if (value.isNullOrBlank()) remove(KEY_DUA_SAFAR_SOUND_URI) else putString(KEY_DUA_SAFAR_SOUND_URI, value)
         }.apply()
+
+    var quranTranslationId: Int
+        get() = prefs.getInt(KEY_QURAN_TRANSLATION_ID, IslamicDataRepository.DEFAULT_TRANSLATION_ID)
+        set(value) = prefs.edit().putInt(KEY_QURAN_TRANSLATION_ID, value).apply()
+
+    var quranTranslationLanguage: String
+        get() = prefs.getString(KEY_QURAN_TRANSLATION_LANGUAGE, "English") ?: "English"
+        set(value) = prefs.edit().putString(KEY_QURAN_TRANSLATION_LANGUAGE, value).apply()
+
+    var hadithLanguageCode: String
+        get() = prefs.getString(KEY_HADITH_LANGUAGE, "eng") ?: "eng"
+        set(value) = prefs.edit().putString(KEY_HADITH_LANGUAGE, value).apply()
 
     fun saveLocation(latitude: Double, longitude: Double, label: String) {
         locationLatitude = latitude

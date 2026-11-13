@@ -4,9 +4,7 @@ import android.Manifest
 import android.location.Location
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,10 +54,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
@@ -70,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
+import com.sakinah.deen.domain.sensor.QiblaCompassData
 import com.sakinah.deen.domain.sensor.QiblaSensorManager
 import com.sakinah.deen.domain.travel.TravelStatusManager
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
@@ -78,9 +75,6 @@ import com.sakinah.deen.ui.theme.EmeraldDeep
 import com.sakinah.deen.ui.theme.EmeraldSurface
 import com.sakinah.deen.ui.theme.MintGreen
 import kotlinx.coroutines.launch
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 
 @Composable
 fun TravelScreen(
@@ -94,8 +88,8 @@ fun TravelScreen(
     val compassData by qiblaManager.compassFlow.collectAsState()
 
     val haptic = LocalHapticFeedback.current
-    LaunchedEffect(compassData.isAligned) {
-        if (compassData.isAligned) {
+    LaunchedEffect(compassData.isAligned, compassData.isFlat) {
+        if (compassData.isAligned && compassData.isFlat) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         }
     }
@@ -149,15 +143,6 @@ fun TravelScreen(
     DisposableEffect(Unit) {
         onDispose { qiblaManager.stopListening() }
     }
-
-    val animatedNeedle by animateFloatAsState(
-        targetValue = compassData.needleRelativeAngleDeg,
-        label = "needle"
-    )
-    val glowAlpha by animateFloatAsState(
-        targetValue = if (compassData.isAligned) 1f else 0f,
-        label = "glow"
-    )
 
     Column(
         modifier = modifier
@@ -307,83 +292,30 @@ fun TravelScreen(
         }
 
         // Qibla Compass
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+        QiblaCompassCard(compassData)
+
+        if (compassData.isMagneticInterference) {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFC107))
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Explore, contentDescription = null, tint = EmeraldDeep)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Road Qibla Compass",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = EmeraldDeep
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = Color(0xFF4A3200)
+                    )
+                    Spacer(Modifier.width(10.dp))
                     Text(
-                        text = "Qibla: ${compassData.kaabaBearingDeg.toInt()}°",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MintGreen
+                        text = "Magnetic interference detected — move away from metal, speakers, or magnetic cases",
+                        color = Color(0xFF4A3200),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
-
-                Canvas(
-                    modifier = Modifier
-                        .size(180.dp)
-                        .padding(10.dp)
-                ) {
-                    val radius = size.minDimension / 2f
-                    val center = Offset(size.width / 2f, size.height / 2f)
-
-                    drawCircle(Color.LightGray.copy(alpha = 0.3f), radius = radius, center = center)
-                    drawCircle(Color(0xFF0B3B2C), radius = radius, center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 4f))
-
-                    // Glow when aligned
-                    if (glowAlpha > 0f) {
-                        drawCircle(MintGreen.copy(alpha = 0.35f * glowAlpha), radius = radius + 8f, center = center)
-                    }
-
-                    val angleRad = (animatedNeedle - 90f) * (PI / 180f).toFloat()
-                    val targetX = center.x + (radius - 20f) * cos(angleRad)
-                    val targetY = center.y + (radius - 20f) * sin(angleRad)
-
-                    drawLine(
-                        color = Color(0xFF10B981),
-                        start = center,
-                        end = Offset(targetX, targetY),
-                        strokeWidth = 8f,
-                        cap = StrokeCap.Round
-                    )
-                    drawCircle(Color(0xFF0B3B2C), radius = 12f, center = center)
-                }
-
-                if (compassData.isAligned) {
-                    Text(
-                        text = "Facing Qibla",
-                        fontWeight = FontWeight.Bold,
-                        color = MintGreen,
-                        fontSize = 14.sp
-                    )
-                }
-
-                Text(
-                    text = "Facing: ${compassData.azimuthTrueNorthDeg.toInt()}° · Qibla: ${compassData.kaabaBearingDeg.toInt()}°",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium
-                )
             }
         }
 

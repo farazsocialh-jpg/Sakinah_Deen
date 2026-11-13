@@ -76,6 +76,22 @@ data class QuranAyahEntity(
     val downloadedAt: Long = System.currentTimeMillis()
 )
 
+/**
+ * Per-translation cache so switching languages never overwrites Arabic or another
+ * cached translation. Addressed by (surah, ayah, translation).
+ */
+@Entity(
+    tableName = "quran_translations",
+    primaryKeys = ["surahNumber", "ayahNumber", "translationId"]
+)
+data class QuranTranslationEntity(
+    val surahNumber: Int,
+    val ayahNumber: Int,
+    val translationId: Int,
+    val translation: String,
+    val downloadedAt: Long = System.currentTimeMillis()
+)
+
 @Entity(tableName = "surah_metadata")
 data class SurahMetadataEntity(
     @PrimaryKey
@@ -93,10 +109,11 @@ data class SurahMetadataEntity(
  */
 @Entity(
     tableName = "hadith_entries",
-    primaryKeys = ["bookKey", "hadithNumber"]
+    primaryKeys = ["bookKey", "languageCode", "hadithNumber"]
 )
 data class HadithEntryEntity(
     val bookKey: String,
+    val languageCode: String = "eng",
     val hadithNumber: Int,
     val bookTitle: String,
     val sectionNumber: Int = 0,

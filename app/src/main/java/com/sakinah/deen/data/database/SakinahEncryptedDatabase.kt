@@ -23,6 +23,7 @@ import com.sakinah.deen.data.database.entity.HifzMistakeEntity
 import com.sakinah.deen.data.database.entity.PrayerTimetableEntity
 import com.sakinah.deen.data.database.entity.QadhaLedgerEntity
 import com.sakinah.deen.data.database.entity.QuranAyahEntity
+import com.sakinah.deen.data.database.entity.QuranTranslationEntity
 import com.sakinah.deen.data.database.entity.SadaqahLogEntity
 import com.sakinah.deen.data.database.entity.SalahRecordEntity
 import com.sakinah.deen.data.database.entity.SurahMetadataEntity
@@ -36,13 +37,14 @@ import net.sqlcipher.database.SupportFactory
         HifzMistakeEntity::class,
         SadaqahLogEntity::class,
         QuranAyahEntity::class,
+        QuranTranslationEntity::class,
         SurahMetadataEntity::class,
         HadithEntryEntity::class,
         TafsirEntryEntity::class,
         AdhkarEntity::class,
         PrayerTimetableEntity::class
     ],
-    version = 5,
+    version = 7,
     exportSchema = true
 )
 @TypeConverters(SakinahTypeConverters::class)
@@ -65,6 +67,27 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
          * review, monthly sadaqah totals, adhkar categories). Index names follow Room's
          * `<prefix>_<table>_<column>` convention so the generated schema matches.
          */
+        internal val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `hadith_entries_new` (`bookKey` TEXT NOT NULL, `languageCode` TEXT NOT NULL, `hadithNumber` INTEGER NOT NULL, `bookTitle` TEXT NOT NULL, `sectionNumber` INTEGER NOT NULL, `chapterTitle` TEXT NOT NULL, `arabicText` TEXT NOT NULL, `englishText` TEXT NOT NULL, `grade` TEXT NOT NULL, `gradingScholar` TEXT NOT NULL, `downloadedAt` INTEGER NOT NULL, PRIMARY KEY(`bookKey`, `languageCode`, `hadithNumber`))"
+                )
+                db.execSQL(
+                    "INSERT INTO `hadith_entries_new` (`bookKey`,`languageCode`,`hadithNumber`,`bookTitle`,`sectionNumber`,`chapterTitle`,`arabicText`,`englishText`,`grade`,`gradingScholar`,`downloadedAt`) SELECT `bookKey`,'eng',`hadithNumber`,`bookTitle`,`sectionNumber`,`chapterTitle`,`arabicText`,`englishText`,`grade`,`gradingScholar`,`downloadedAt` FROM `hadith_entries`"
+                )
+                db.execSQL("DROP TABLE `hadith_entries`")
+                db.execSQL("ALTER TABLE `hadith_entries_new` RENAME TO `hadith_entries`")
+            }
+        }
+
+        internal val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `quran_translations` (`surahNumber` INTEGER NOT NULL, `ayahNumber` INTEGER NOT NULL, `translationId` INTEGER NOT NULL, `translation` TEXT NOT NULL, `downloadedAt` INTEGER NOT NULL, PRIMARY KEY(`surahNumber`, `ayahNumber`, `translationId`))"
+                )
+            }
+        }
+
         internal val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_salah_records_isQadha` ON `salah_records` (`isQadha`)")
@@ -86,7 +109,7 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
                     DB_NAME
                 )
                     .openHelperFactory(factory)
-                    .addMigrations(MIGRATION_4_5)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .addCallback(DatabaseSeeder.createCallback(context.applicationContext) { INSTANCE })
                     .build()
                 INSTANCE = instance

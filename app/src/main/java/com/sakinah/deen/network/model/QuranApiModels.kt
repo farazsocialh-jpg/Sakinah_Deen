@@ -3,6 +3,8 @@ package com.sakinah.deen.network.model
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+typealias QuranTranslationResource = com.sakinah.deen.data.model.QuranTranslationResource
+
 /**
  * DTOs for the free Quran.com v4 API. Field names mirror the wire format exactly;
  * the JSON parser is configured with ignoreUnknownKeys so additive API changes are safe.
@@ -69,4 +71,47 @@ data class TafsirResponse(
 data class TafsirDto(
     val text: String = "",
     @SerialName("resource_name") val resourceName: String = ""
+)
+
+@Serializable
+data class TranslationCatalogResponse(
+    val translations: List<QuranTranslationCatalogDto> = emptyList()
+)
+
+@Serializable
+data class QuranTranslationCatalogDto(
+    val id: Int = 0,
+    val name: String = "",
+    @SerialName("author_name") val authorName: String = "",
+    @SerialName("language_name") val languageName: String = "",
+    @SerialName("iso_code") val isoCode: String = ""
+)
+
+@Serializable
+data class VerseByChapterResponse(
+    val verses: List<VerseByChapterDto> = emptyList()
+)
+
+@Serializable
+data class VerseByChapterDto(
+    val id: Int = 0,
+    @SerialName("verse_number") val verseNumber: Int = 0,
+    @SerialName("verse_key") val verseKey: String = "",
+    @SerialName("text_uthmani") val textUthmani: String = "",
+    val translations: List<TranslationDto> = emptyList()
+)
+
+@Serializable
+data class AlQuranCloudEditionsResponse(
+    val data: List<AlQuranCloudEditionDto> = emptyList()
+)
+
+@Serializable
+data class AlQuranCloudEditionDto(
+    val identifier: String = "",
+    val language: String = "",
+    val name: String = "",
+    @SerialName("englishName") val englishName: String = "",
+    val format: String = "",
+    val type: String = ""
 )

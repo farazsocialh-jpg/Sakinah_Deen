@@ -12,6 +12,7 @@ import com.sakinah.deen.data.database.entity.HifzMistakeEntity
 import com.sakinah.deen.data.database.entity.PrayerTimetableEntity
 import com.sakinah.deen.data.database.entity.QadhaLedgerEntity
 import com.sakinah.deen.data.database.entity.QuranAyahEntity
+import com.sakinah.deen.data.database.entity.QuranTranslationEntity
 import com.sakinah.deen.data.database.entity.SadaqahLogEntity
 import com.sakinah.deen.data.database.entity.SalahRecordEntity
 import com.sakinah.deen.data.database.entity.SurahMetadataEntity
@@ -150,6 +151,15 @@ interface QuranDao {
     @Query("SELECT COUNT(*) FROM quran_ayahs WHERE surahNumber = :surahNumber")
     suspend fun countAyahs(surahNumber: Int): Int
 
+    @Query("SELECT * FROM quran_translations WHERE surahNumber = :surahNumber AND translationId = :translationId ORDER BY ayahNumber ASC")
+    fun observeTranslations(surahNumber: Int, translationId: Int): kotlinx.coroutines.flow.Flow<List<QuranTranslationEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertTranslations(translations: List<QuranTranslationEntity>)
+
+    @Query("DELETE FROM quran_translations WHERE surahNumber = :surahNumber AND translationId = :translationId")
+    suspend fun deleteTranslations(surahNumber: Int, translationId: Int)
+
     @Query("SELECT * FROM surah_metadata ORDER BY surahNumber ASC")
     fun observeSurahs(): Flow<List<SurahMetadataEntity>>
 
@@ -176,40 +186,57 @@ interface QuranDao {
 @Dao
 interface HadithDao {
     @Query(
-        "SELECT * FROM hadith_entries WHERE bookKey = :bookKey " +
+        "SELECT * FROM hadith_entries WHERE bookKey = :bookKey AND languageCode = :languageCode " +
             "ORDER BY hadithNumber ASC LIMIT :limit OFFSET :offset"
     )
-    fun observeHadiths(bookKey: String, limit: Int = 200, offset: Int = 0): Flow<List<HadithEntryEntity>>
+    fun observeHadiths(
+        bookKey: String,
+        languageCode: String = "eng",
+        limit: Int = 100000,
+        offset: Int = 0
+    ): Flow<List<HadithEntryEntity>>
+
+    @Query(
+        "SELECT * FROM hadith_entries WHERE bookKey = :bookKey AND languageCode = :languageCode " +
+            "AND sectionNumber = :sectionNumber ORDER BY hadithNumber ASC LIMIT :limit OFFSET :offset"
+    )
+    fun observeHadithsBySection(
+        bookKey: String,
+        languageCode: String = "eng",
+        sectionNumber: Int,
+        limit: Int = 100000,
+        offset: Int = 0
+    ): Flow<List<HadithEntryEntity>>
 
     @Query(
         "SELECT * FROM hadith_entries " +
-            "ORDER BY bookKey ASC, hadithNumber ASC LIMIT :limit OFFSET :offset"
+            "ORDER BY bookKey ASC, languageCode ASC, hadithNumber ASC LIMIT :limit OFFSET :offset"
     )
-    fun observeAllHadiths(limit: Int = 300, offset: Int = 0): Flow<List<HadithEntryEntity>>
+    fun observeAllHadiths(limit: Int = 100000, offset: Int = 0): Flow<List<HadithEntryEntity>>
 
     @Query(
         "SELECT * FROM hadith_entries WHERE englishText LIKE '%' || :query || '%' " +
             "OR arabicText LIKE '%' || :query || '%' OR chapterTitle LIKE '%' || :query || '%' " +
-            "ORDER BY bookKey ASC, hadithNumber ASC LIMIT :limit"
+            "ORDER BY bookKey ASC, languageCode ASC, hadithNumber ASC LIMIT :limit"
     )
     fun searchHadiths(query: String, limit: Int = 200): Flow<List<HadithEntryEntity>>
 
-    @Query("SELECT * FROM hadith_entries WHERE bookKey = :bookKey AND hadithNumber = :hadithNumber LIMIT 1")
-    suspend fun getHadith(bookKey: String, hadithNumber: Int): HadithEntryEntity?
+    @Query("SELECT * FROM hadith_entries WHERE bookKey = :bookKey AND languageCode = :languageCode AND hadithNumber = :hadithNumber LIMIT 1")
+    suspend fun getHadith(bookKey: String, languageCode: String = "eng", hadithNumber: Int): HadithEntryEntity?
 
-    @Query("SELECT COUNT(*) FROM hadith_entries WHERE bookKey = :bookKey")
-    suspend fun countForBook(bookKey: String): Int
+    @Query("SELECT COUNT(*) FROM hadith_entries WHERE bookKey = :bookKey AND languageCode = :languageCode")
+    suspend fun countForBook(bookKey: String, languageCode: String = "eng"): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(entries: List<HadithEntryEntity>)
 
-    @Query("DELETE FROM hadith_entries WHERE bookKey = :bookKey")
-    suspend fun clearBook(bookKey: String)
+    @Query("DELETE FROM hadith_entries WHERE bookKey = :bookKey AND languageCode = :languageCode")
+    suspend fun clearBook(bookKey: String, languageCode: String = "eng")
 
-    /** Replaces a whole collection atomically after a re-download. */
+    /** Replaces one language edition of a collection atomically after a re-download. */
     @Transaction
-    suspend fun replaceBook(bookKey: String, entries: List<HadithEntryEntity>) {
-        clearBook(bookKey)
+    suspend fun replaceBook(bookKey: String, languageCode: String = "eng", entries: List<HadithEntryEntity>) {
+        clearBook(bookKey, languageCode)
         upsertAll(entries)
     }
 }
