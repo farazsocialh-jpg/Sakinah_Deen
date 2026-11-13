@@ -80,6 +80,7 @@ import com.sakinah.deen.data.model.PrayerModel
 import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.domain.sensor.QiblaSensorManager
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
+import com.sakinah.deen.ui.components.QiblaModesCard
 import com.sakinah.deen.ui.components.SakinahCard
 import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.components.StatusBadge
@@ -586,7 +587,11 @@ fun SalahScreen(
                 1 -> {
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            QiblaCompassCard(compassData)
+                            QiblaModesCard(
+                                latitude = state.userCoordinates.first,
+                                longitude = state.userCoordinates.second,
+                                cityName = state.locationName
+                            )
                             if (compassData.isMagneticInterference) {
                                 Surface(
                                     shape = RoundedCornerShape(16.dp),
