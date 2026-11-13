@@ -73,7 +73,7 @@ fun OnboardingScreen(
             fontFamily = FontFamily.Serif,
             fontSize = 34.sp,
             fontWeight = FontWeight.Bold,
-            color = EmeraldDeep
+            color = MaterialTheme.colorScheme.primary
         )
         Text(
             text = "Your Sunni Deen Companion · Step 1 of 3",
@@ -114,14 +114,14 @@ fun OnboardingScreen(
                     Icon(
                         imageVector = Icons.Outlined.Tune,
                         contentDescription = "Settings",
-                        tint = EmeraldDeep,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Calculation & Juristic Settings",
                         fontWeight = FontWeight.SemiBold,
-                        color = EmeraldDeep
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
 
@@ -200,7 +200,7 @@ private fun TrackCardItem(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (isSelected) EmeraldDeep else MaterialTheme.colorScheme.onSurface,
+                tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(28.dp)
             )
             Spacer(modifier = Modifier.width(12.dp))
@@ -208,7 +208,7 @@ private fun TrackCardItem(
                 Text(
                     text = title,
                     fontWeight = FontWeight.Bold,
-                    color = EmeraldDeep
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(

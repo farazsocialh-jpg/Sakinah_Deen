@@ -3,6 +3,7 @@ package com.sakinah.deen.ui.components
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -19,49 +20,57 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.sakinah.deen.ui.theme.EmeraldDeep
 
-/** A Home city choice with the real coordinates Safar distance is measured from. */
+/** A Home or manual city choice with coordinates, ISO country code, and IANA timezone. */
 data class HomeCity(
     val name: String,
     val latitude: Double,
-    val longitude: Double
+    val longitude: Double,
+    val countryCode: String = "",
+    val timeZoneId: String = ""
 )
 
 val homeCityPresets: List<HomeCity> = listOf(
-    HomeCity("Doha, Qatar", 25.2854, 51.5310),
-    HomeCity("Makkah, Saudi Arabia", 21.4225, 39.8262),
-    HomeCity("Madinah, Saudi Arabia", 24.4686, 39.6142),
-    HomeCity("Riyadh, Saudi Arabia", 24.7136, 46.6753),
-    HomeCity("Dubai, UAE", 25.2048, 55.2708),
-    HomeCity("Abu Dhabi, UAE", 24.4539, 54.3773),
-    HomeCity("Karachi, Pakistan", 24.8607, 67.0011),
-    HomeCity("Lahore, Pakistan", 31.5204, 74.3587),
-    HomeCity("Islamabad, Pakistan", 33.6844, 73.0479),
-    HomeCity("Istanbul, Türkiye", 41.0082, 28.9784),
-    HomeCity("Cairo, Egypt", 30.0444, 31.2357),
-    HomeCity("Kuala Lumpur, Malaysia", 3.1390, 101.6869),
-    HomeCity("Jakarta, Indonesia", -6.2088, 106.8456),
-    HomeCity("Dhaka, Bangladesh", 23.8103, 90.4125),
-    HomeCity("London, UK", 51.5074, -0.1278),
-    HomeCity("Birmingham, UK", 52.4862, -1.8904),
-    HomeCity("New York, USA", 40.7128, -74.0060),
-    HomeCity("Toronto, Canada", 43.6532, -79.3832),
-    HomeCity("Sydney, Australia", -33.8688, 151.2093),
-    HomeCity("Cape Town, South Africa", -33.9249, 18.4241)
+    HomeCity("Doha, Qatar", 25.2854, 51.5310, "QA", "Asia/Qatar"),
+    HomeCity("Makkah, Saudi Arabia", 21.4225, 39.8262, "SA", "Asia/Riyadh"),
+    HomeCity("Madinah, Saudi Arabia", 24.4686, 39.6142, "SA", "Asia/Riyadh"),
+    HomeCity("Riyadh, Saudi Arabia", 24.7136, 46.6753, "SA", "Asia/Riyadh"),
+    HomeCity("Dubai, UAE", 25.2048, 55.2708, "AE", "Asia/Dubai"),
+    HomeCity("Abu Dhabi, UAE", 24.4539, 54.3773, "AE", "Asia/Dubai"),
+    HomeCity("Karachi, Pakistan", 24.8607, 67.0011, "PK", "Asia/Karachi"),
+    HomeCity("Lahore, Pakistan", 31.5204, 74.3587, "PK", "Asia/Karachi"),
+    HomeCity("Islamabad, Pakistan", 33.6844, 73.0479, "PK", "Asia/Karachi"),
+    HomeCity("Istanbul, Türkiye", 41.0082, 28.9784, "TR", "Europe/Istanbul"),
+    HomeCity("Cairo, Egypt", 30.0444, 31.2357, "EG", "Africa/Cairo"),
+    HomeCity("Kuala Lumpur, Malaysia", 3.1390, 101.6869, "MY", "Asia/Kuala_Lumpur"),
+    HomeCity("Jakarta, Indonesia", -6.2088, 106.8456, "ID", "Asia/Jakarta"),
+    HomeCity("Dhaka, Bangladesh", 23.8103, 90.4125, "BD", "Asia/Dhaka"),
+    HomeCity("London, UK", 51.5074, -0.1278, "GB", "Europe/London"),
+    HomeCity("Birmingham, UK", 52.4862, -1.8904, "GB", "Europe/London"),
+    HomeCity("New York, USA", 40.7128, -74.0060, "US", "America/New_York"),
+    HomeCity("Los Angeles, USA", 34.0522, -118.2437, "US", "America/Los_Angeles"),
+    HomeCity("Chicago, USA", 41.8781, -87.6298, "US", "America/Chicago"),
+    HomeCity("Houston, USA", 29.7604, -95.3698, "US", "America/Chicago"),
+    HomeCity("Toronto, Canada", 43.6532, -79.3832, "CA", "America/Toronto"),
+    HomeCity("Sydney, Australia", -33.8688, 151.2093, "AU", "Australia/Sydney"),
+    HomeCity("Cape Town, South Africa", -33.9249, 18.4241, "ZA", "Africa/Johannesburg")
 )
 
 /**
- * Searchable city picker shared by Settings and Travel so both save a Home the
- * same way: a real city name plus its real coordinates.
+ * Searchable city picker shared by Salah, Settings, and Travel so manual locations and Home
+ * anchors share country codes and IANA timezones cleanly.
  */
 @Composable
 fun HomeLocationCityPickerDialog(
+    title: String = "Choose Home City",
+    subtitle: String = "Safar (Qasr) is measured from Home.",
+    onUseDeviceGps: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onCitySelected: (HomeCity) -> Unit
 ) {
@@ -85,15 +94,15 @@ fun HomeLocationCityPickerDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "Choose Home City",
+                    text = title,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
-                    color = EmeraldDeep
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "Safar (Qasr) is measured from Home.",
+                    text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 OutlinedTextField(
                     value = query,
@@ -106,34 +115,56 @@ fun HomeLocationCityPickerDialog(
                     Text(
                         text = "No matching city.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
                     LazyColumn(
-                        modifier = Modifier.heightIn(max = 320.dp),
+                        modifier = Modifier.heightIn(max = 300.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(results) { city ->
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
-                                color = EmeraldDeep.copy(alpha = 0.05f),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { onCitySelected(city) }
                             ) {
-                                Text(
-                                    text = city.name,
+                                Row(
                                     modifier = Modifier.padding(12.dp),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = EmeraldDeep
-                                )
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = city.name,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (city.timeZoneId.isNotBlank()) {
+                                        Text(
+                                            text = city.timeZoneId.substringAfter('/'),
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
-                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-                    Text("Cancel")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    if (onUseDeviceGps != null) {
+                        TextButton(onClick = onUseDeviceGps) {
+                            Text("Use Device GPS")
+                        }
+                    }
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
                 }
             }
         }

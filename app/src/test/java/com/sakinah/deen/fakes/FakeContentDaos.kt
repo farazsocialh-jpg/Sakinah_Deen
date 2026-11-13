@@ -30,6 +30,12 @@ class FakeQuranDao : QuranDao {
         )
     }
 
+    override fun observeAllAyahs(): Flow<List<QuranAyahEntity>> = flow {
+        emit(
+            ayahs.values.sortedWith(compareBy({ it.surahNumber }, { it.ayahNumber }))
+        )
+    }
+
     override fun observeTranslations(surahNumber: Int, translationId: Int): Flow<List<QuranTranslationEntity>> = flow {
         emit(
             translations.values

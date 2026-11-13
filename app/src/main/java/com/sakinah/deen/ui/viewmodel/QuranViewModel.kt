@@ -11,10 +11,10 @@ import com.sakinah.deen.data.model.AyahModel
 import com.sakinah.deen.data.model.QuranTranslationResource
 import com.sakinah.deen.data.model.SurahModel
 import com.sakinah.deen.data.prefs.SakinahPreferences
-import com.sakinah.deen.network.IslamicDataRepository
-import com.sakinah.deen.settings.SettingsRepository
 import com.sakinah.deen.data.repository.TafseerDownloadRepository
 import com.sakinah.deen.data.repository.TafseerPackage
+import com.sakinah.deen.network.IslamicDataRepository
+import com.sakinah.deen.settings.SettingsRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,6 +38,7 @@ data class QuranUiState(
     val currentSurah: SurahModel,
     val surahs: List<SurahModel> = emptyList(),
     val activeHighlightedAyah: Int = 1,
+    val scrollTargetAyah: Int? = null,
     val isStudyMode: Boolean = true,
     val downloadedTafseers: List<TafseerPackage> = emptyList(),
     val availableTafseers: List<TafseerPackage> = emptyList(),
@@ -61,6 +62,8 @@ data class QuranUiState(
 
 sealed class QuranUiIntent {
     data class SelectSurah(val surahNumber: Int) : QuranUiIntent()
+    data class SelectSurahAtAyah(val surahNumber: Int, val ayahNumber: Int) : QuranUiIntent()
+    data object ClearScrollTarget : QuranUiIntent()
     data class SelectAyahForTafseer(val ayahNumber: Int) : QuranUiIntent()
     data class SelectScholar(val scholarName: String) : QuranUiIntent()
     data class SetHifzMistakeTag(val surah: Int, val ayah: Int, val wordPos: Int, val tag: String) : QuranUiIntent()
@@ -113,6 +116,7 @@ class QuranViewModel(
             ?: IslamicDataRepository.DEFAULT_TRANSLATION_ID
     )
     private var searchJob: Job? = null
+    private var pendingTargetAyah: Int? = null
 
     /** True once Room has supplied chapter metadata, i.e. the offline library is usable. */
     private var hasDatabaseSurahs = false
@@ -147,7 +151,9 @@ class QuranViewModel(
 
     fun onIntent(intent: QuranUiIntent) {
         when (intent) {
-            is QuranUiIntent.SelectSurah -> selectSurah(intent.surahNumber)
+            is QuranUiIntent.SelectSurah -> selectSurah(intent.surahNumber, targetAyah = null)
+            is QuranUiIntent.SelectSurahAtAyah -> selectSurah(intent.surahNumber, targetAyah = intent.ayahNumber)
+            is QuranUiIntent.ClearScrollTarget -> _uiState.update { it.copy(scrollTargetAyah = null) }
             is QuranUiIntent.SelectAyahForTafseer -> selectAyahForTafseer(intent.ayahNumber)
             is QuranUiIntent.SelectScholar -> {
                 _uiState.update { it.copy(selectedScholar = intent.scholarName) }
@@ -170,8 +176,6 @@ class QuranViewModel(
             is QuranUiIntent.LoadTranslations -> viewModelScope.launch { loadTranslationCatalog() }
         }
     }
-
-    // ------------------------------------------------------------------ Room wiring
 
     private fun observeRoomSurahs() {
         val repo = islamicRepository ?: return
@@ -200,7 +204,7 @@ class QuranViewModel(
                         if (it.currentSurah.number == surahNumber) {
                             it.copy(
                                 contentNotice = "Surah $surahNumber is not in the offline database yet. " +
-                                    "Download it from the Quran library while online."
+                                    "Connect to download it or select a Juz 'Amma surah."
                             )
                         } else it
                     }
@@ -225,27 +229,42 @@ class QuranViewModel(
             ayahs = emptyList()
         )).copy(ayahCount = ayahs.size, ayahs = mapped)
 
-        val highlighted = mapped.firstOrNull { it.numberInSurah == _uiState.value.activeHighlightedAyah }
-            ?: mapped.first()
+        val desiredAyah = pendingTargetAyah ?: _uiState.value.activeHighlightedAyah
+        val highlighted = mapped.firstOrNull { it.numberInSurah == desiredAyah } ?: mapped.first()
+        val scrollTarget = pendingTargetAyah
+        pendingTargetAyah = null
 
         _uiState.update {
             it.copy(
                 currentSurah = chapter,
                 activeHighlightedAyah = highlighted.numberInSurah,
+                scrollTargetAyah = scrollTarget ?: it.scrollTargetAyah,
                 selectedTafseerContent = highlighted.tafseerIbnKathir,
-                contentNotice = null
+                contentNotice = null,
+                errorMessage = null
             )
         }
     }
 
-    private fun selectSurah(surahNumber: Int) {
+    private fun selectSurah(surahNumber: Int, targetAyah: Int?) {
         val state = _uiState.value
+        if (targetAyah != null && state.currentSurah.number == surahNumber && state.currentSurah.ayahs.any { it.numberInSurah == targetAyah }) {
+            pendingTargetAyah = null
+            _uiState.update {
+                it.copy(
+                    activeHighlightedAyah = targetAyah,
+                    scrollTargetAyah = targetAyah
+                )
+            }
+            selectAyahForTafseer(targetAyah)
+            return
+        }
+
+        pendingTargetAyah = targetAyah
         val listing = state.surahs.find { it.number == surahNumber }
         selectedSurahNumber.value = surahNumber
 
         if (listing == null) {
-            // Before the encrypted database is reachable the bundled Al-Fatihah keeps the
-            // reader useful; once it is, never substitute unrelated verses for a request.
             val fallback = if (hasDatabaseSurahs) {
                 SurahModel(
                     number = surahNumber,
@@ -263,7 +282,8 @@ class QuranViewModel(
             _uiState.update {
                 it.copy(
                     currentSurah = fallback,
-                    activeHighlightedAyah = 1,
+                    activeHighlightedAyah = targetAyah ?: 1,
+                    scrollTargetAyah = targetAyah,
                     selectedTafseerContent = fallback.ayahs.firstOrNull()?.tafseerIbnKathir.orEmpty(),
                     contentNotice = if (hasDatabaseSurahs) {
                         "Surah $surahNumber is not in the offline library yet. Download it while online."
@@ -276,13 +296,14 @@ class QuranViewModel(
         _uiState.update {
             it.copy(
                 currentSurah = listing.copy(ayahs = emptyList()),
-                activeHighlightedAyah = 1,
+                activeHighlightedAyah = targetAyah ?: 1,
+                scrollTargetAyah = targetAyah,
                 selectedTafseerContent = "",
-                contentNotice = "Loading surah ${listing.nameEnglish}…"
+                contentNotice = "Loading surah ${listing.nameEnglish}…",
+                errorMessage = null
             )
         }
 
-        // Fetch ayahs on demand for any uncached surah.
         if (islamicRepository != null) syncSurah(surahNumber, selectedTranslationIdFlow.value)
     }
 
@@ -301,18 +322,33 @@ class QuranViewModel(
                 result.exceptionOrNull()?.let { error ->
                     if (error is kotlinx.coroutines.CancellationException) throw error
                     _uiState.update {
-                        it.copy(errorMessage = "Could not load surah $surahNumber: ${error.message ?: "network error"}")
+                        it.copy(errorMessage = friendlySurahError(surahNumber, error))
                     }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(errorMessage = "Could not load surah $surahNumber: ${e.message ?: "network error"}")
+                    it.copy(errorMessage = friendlySurahError(surahNumber, e))
                 }
             } finally {
                 _uiState.update { it.copy(isLoadingTranslation = false) }
             }
+        }
+    }
+
+    private fun friendlySurahError(surahNumber: Int, error: Throwable): String {
+        val msg = error.message.orEmpty().lowercase()
+        val offline = error is java.io.IOException ||
+            msg.contains("unable to resolve") ||
+            msg.contains("unresolved") ||
+            msg.contains("connect") ||
+            msg.contains("timeout") ||
+            msg.contains("network")
+        return if (offline) {
+            "Offline: couldn't download Surah $surahNumber. Check your internet connection and tap Retry."
+        } else {
+            "Could not load Surah $surahNumber right now. Tap Retry to try again."
         }
     }
 
@@ -352,11 +388,6 @@ class QuranViewModel(
         }
     }
 
-    /**
-     * Tafseer is only shown when it is actually cached (downloaded or bundled). The
-     * encrypted database is the single source of truth; unsupported scholars show a
-     * download prompt instead of invented commentary.
-     */
     private fun selectAyahForTafseer(ayahNumber: Int) {
         val ayah = _uiState.value.currentSurah.ayahs.find { it.numberInSurah == ayahNumber }
             ?: return
@@ -434,8 +465,6 @@ class QuranViewModel(
         }
     }
 
-    // ------------------------------------------------------------------ Auxiliary
-
     private fun observeTafseerPackages() {
         val repo = tafseerRepository ?: return
         viewModelScope.launch {
@@ -491,8 +520,6 @@ class QuranViewModel(
         }
     }
 
-    // ------------------------------------------------------------------ Mapping
-
     private fun SurahMetadataEntity.toSurahModel(): SurahModel = SurahModel(
         number = surahNumber,
         nameEnglish = nameSimple,
@@ -504,11 +531,6 @@ class QuranViewModel(
         ayahs = emptyList()
     )
 
-    /**
-     * Bundled/seed content carries only the Uthmani text and translation; classical
-     * commentary is left blank so the UI reports a missing download instead of
-     * displaying fabricated tafseer.
-     */
     private fun QuranAyahEntity.toAyahModel(): AyahModel = AyahModel(
         numberInSurah = ayahNumber,
         arabicText = textUthmani,

@@ -27,4 +27,6 @@ interface AuthRepository {
     suspend fun continueAsGuest(): Result<AuthUser>
     suspend fun signOut()
     suspend fun deleteAccount(): Result<Unit>
+    suspend fun updateDisplayName(displayName: String): Result<AuthUser> =
+        Result.failure(IllegalStateException("Not supported"))
 }

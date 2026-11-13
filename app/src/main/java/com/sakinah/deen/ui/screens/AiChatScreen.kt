@@ -1,7 +1,6 @@
 package com.sakinah.deen.ui.screens
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,37 +13,43 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.sakinah.deen.data.model.ChatMessageModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sakinah.deen.ui.components.CitationChip
+import com.sakinah.deen.ui.components.SakinahCard
+import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.theme.EmeraldDeep
 import com.sakinah.deen.ui.theme.MintGreen
+import com.sakinah.deen.ui.viewmodel.AiScholarNavigationEvent
+import com.sakinah.deen.ui.viewmodel.AiScholarUiIntent
+import com.sakinah.deen.ui.viewmodel.AiScholarViewModel
+import org.koin.androidx.compose.koinViewModel
 
 @Composable
 fun AiChatScreen(
@@ -52,41 +57,39 @@ fun AiChatScreen(
     onNavigateToHadith: () -> Unit = {},
     onNavigateToQuranDetail: ((surah: Int, ayah: Int) -> Unit)? = null,
     onNavigateToHadithDetail: ((book: String, number: Int) -> Unit)? = null,
+    viewModel: AiScholarViewModel? = null,
     modifier: Modifier = Modifier
 ) {
-    var messages by remember {
-        mutableStateOf(
-            listOf(
-                ChatMessageModel(
-                    id = "1",
-                    role = "assistant",
-                    content = "As-salāmu ‘alaykum wa raḥmatullāhi wa barakātuh. I am your Sunni Deen research companion, grounded in the Holy Quran, Kutub al-Tis‘ah, and the four classical legal schools.",
-                    timestamp = "Just now",
-                    sourceTitle = "Surah An-Nisa 4:59"
-                ),
-                ChatMessageModel(
-                    id = "2",
-                    role = "user",
-                    content = "How do I perform Sujud as-Sahw (Prostration of Forgetfulness)?",
-                    timestamp = "Just now"
-                ),
-                ChatMessageModel(
-                    id = "3",
-                    role = "assistant",
-                    content = "Sujud as-Sahw (سجود السهو) consists of two prostrations performed to rectify unintentional omissions or additions in prayer, followed by Salam.\n\nGrounding Proof: In Sahih Muslim #571, the Prophet (ﷺ) instructed to build upon certainty and make two prostrations.",
-                    timestamp = "Just now",
-                    sourceTitle = "Sahih Muslim #571",
-                    hanafiStance = "Hanafi: Performed after the first Salam to the right. Make 2 Sujuds, repeat Tashahhud, then conclude with Salam.",
-                    malikiStance = "Maliki: Before Salam for omission (Qabli); after Salam for addition (Ba'di).",
-                    shafiiStance = "Shafi'i: Always performed immediately before the first Salam (Qabli).",
-                    hanbaliStance = "Hanbali: Before Salam for omission; after Salam for addition or doubt resolving on probability."
-                )
-            )
-        )
+    val vm: AiScholarViewModel = viewModel ?: koinViewModel()
+    val state by vm.uiState.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(vm) {
+        vm.navigationEvents.collect { event ->
+            when (event) {
+                is AiScholarNavigationEvent.NavigateToQuran -> {
+                    if (onNavigateToQuranDetail != null) {
+                        onNavigateToQuranDetail(event.surah, event.ayah)
+                    } else {
+                        onNavigateToQuran()
+                    }
+                }
+                is AiScholarNavigationEvent.NavigateToHadith -> {
+                    if (onNavigateToHadithDetail != null) {
+                        onNavigateToHadithDetail(event.bookKey, event.hadithNumber)
+                    } else {
+                        onNavigateToHadith()
+                    }
+                }
+            }
+        }
     }
 
-    var inputText by remember { mutableStateOf("") }
-    var activeMadhhabTab by remember { mutableStateOf("hanafi") }
+    LaunchedEffect(state.messages.size, state.messages.lastOrNull()?.content?.length) {
+        if (state.messages.isNotEmpty()) {
+            listState.animateScrollToItem(state.messages.lastIndex)
+        }
+    }
 
     Column(
         modifier = modifier
@@ -95,7 +98,7 @@ fun AiChatScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // 1. Orthodoxy & Fatwa Guardrail Disclaimer
+        // 1. Orthodoxy & Fatwa Guardrail Disclaimer + Clear Action
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = Color(0xFFFEF3C7),
@@ -103,34 +106,50 @@ fun AiChatScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
-                modifier = Modifier.padding(12.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Default.Shield,
                     contentDescription = "Guardrail",
-                    tint = EmeraldDeep,
+                    tint = Color(0xFF92400E),
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Educational Reference Notice: Sourced from verified Sunni texts (Quran, Hadith, 4 Madhhabs). For binding personal fatwas, consult a local Mufti.",
+                    text = state.guardrailNotice,
                     fontSize = 11.sp,
                     color = Color(0xFF78350F),
-                    lineHeight = 15.sp
+                    lineHeight = 15.sp,
+                    modifier = Modifier.weight(1f)
                 )
+                if (state.messages.isNotEmpty()) {
+                    IconButton(
+                        onClick = { vm.onIntent(AiScholarUiIntent.ClearConversation) },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteSweep,
+                            contentDescription = "Clear conversation",
+                            tint = Color(0xFF92400E),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
             }
         }
 
         // 2. Streaming Chat Message Feed
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(messages) { msg ->
+            items(state.messages, key = { it.id }) { msg ->
                 val isUser = msg.role == "user"
+                val isPendingStream = !isUser && msg.content.isBlank() && state.isStreaming
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -141,113 +160,121 @@ fun AiChatScreen(
                         colors = CardDefaults.cardColors(
                             containerColor = if (isUser) EmeraldDeep else MaterialTheme.colorScheme.surface
                         ),
-                        border = if (!isUser) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
-                        modifier = Modifier.fillMaxWidth(0.88f)
+                        border = if (!isUser) {
+                            BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.65f))
+                        } else null,
+                        modifier = Modifier.fillMaxWidth(0.90f)
                     ) {
                         Column(
                             modifier = Modifier.padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = msg.content,
-                                color = if (isUser) Color.White else MaterialTheme.colorScheme.onSurface,
-                                fontSize = 13.sp,
-                                lineHeight = 18.sp
-                            )
+                            if (isPendingStream) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Text(
+                                        text = "Consulting verified Sunni sources…",
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = msg.content,
+                                    color = if (isUser) Color.White else MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 13.sp,
+                                    lineHeight = 19.sp
+                                )
+                            }
 
                             // Madhhab Divergence / Consensus Box
-                            if (msg.hanafiStance != null) {
-                                Card(
-                                    shape = RoundedCornerShape(14.dp),
-                                    colors = CardDefaults.cardColors(containerColor = MintGreen.copy(alpha = 0.08f)),
-                                    border = BorderStroke(1.dp, MintGreen.copy(alpha = 0.3f))
+                            val hasMadhhabBreakdown = !msg.hanafiStance.isNullOrBlank() ||
+                                !msg.malikiStance.isNullOrBlank() ||
+                                !msg.shafiiStance.isNullOrBlank() ||
+                                !msg.hanbaliStance.isNullOrBlank()
+                            if (hasMadhhabBreakdown) {
+                                SakinahCard(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                                    contentPadding = 10.dp
                                 ) {
-                                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Text(
-                                            text = "Four Sunni Madhahib Positions:",
+                                            text = "Four Sunni Madhahib Positions",
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 11.sp,
-                                            color = EmeraldDeep
+                                            color = MaterialTheme.colorScheme.primary
                                         )
-                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            listOf("hanafi" to "Hanafi", "maliki" to "Maliki", "shafii" to "Shafi'i", "hanbali" to "Hanbali").forEach { (key, label) ->
-                                                Surface(
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    color = if (activeMadhhabTab == key) EmeraldDeep else Color.Transparent,
-                                                    modifier = Modifier.clickable { activeMadhhabTab = key }
-                                                ) {
-                                                    Text(
-                                                        text = label,
-                                                        color = if (activeMadhhabTab == key) Color.White else EmeraldDeep,
-                                                        fontSize = 10.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                                                    )
-                                                }
+                                        val tabs = listOf("hanafi" to "Hanafi", "maliki" to "Maliki", "shafii" to "Shafi'i", "hanbali" to "Hanbali")
+                                        val currentIdx = tabs.indexOfFirst { it.first == state.activeMadhhabTab }.coerceAtLeast(0)
+                                        SegmentedPillBar(
+                                            options = tabs.map { it.second },
+                                            selectedIndex = currentIdx,
+                                            onSelect = { idx ->
+                                                vm.onIntent(AiScholarUiIntent.SelectMadhhabTab(tabs[idx].first))
                                             }
-                                        }
+                                        )
+
+                                        val stanceText = when (state.activeMadhhabTab) {
+                                            "maliki" -> msg.malikiStance
+                                            "shafii" -> msg.shafiiStance
+                                            "hanbali" -> msg.hanbaliStance
+                                            else -> msg.hanafiStance
+                                        }.orEmpty().ifBlank { "No school-specific note recorded for this position." }
 
                                         Text(
-                                            text = when (activeMadhhabTab) {
-                                                "maliki" -> msg.malikiStance ?: ""
-                                                "shafii" -> msg.shafiiStance ?: ""
-                                                "hanbali" -> msg.hanbaliStance ?: ""
-                                                else -> msg.hanafiStance ?: ""
-                                            },
-                                            fontSize = 11.sp,
+                                            text = stanceText,
+                                            fontSize = 12.sp,
+                                            lineHeight = 17.sp,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                     }
                                 }
                             }
 
-                            // Clickable Source Proof Chips (Opens Page 4 or 5)
-                            if (msg.sourceTitle != null) {
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = EmeraldDeep.copy(alpha = 0.08f),
-                                    modifier = Modifier.clickable {
-                                        val title = msg.sourceTitle ?: ""
-                                        if (title.contains("Quran") || title.contains("Surah")) {
-                                            val surahNum = Regex("\\d+").find(title)?.value?.toIntOrNull() ?: 1
-                                            if (onNavigateToQuranDetail != null) {
-                                                onNavigateToQuranDetail(surahNum, 1)
-                                            } else {
-                                                onNavigateToQuran()
-                                            }
-                                        } else {
-                                            val hadithNum = Regex("\\d+").find(title)?.value?.toIntOrNull() ?: 1
-                                            val bookKey = when {
-                                                title.contains("Muslim", ignoreCase = true) -> "muslim"
-                                                title.contains("Dawud", ignoreCase = true) -> "abudawud"
-                                                title.contains("Tirmidhi", ignoreCase = true) -> "tirmidhi"
-                                                else -> "bukhari"
-                                            }
-                                            if (onNavigateToHadithDetail != null) {
-                                                onNavigateToHadithDetail(bookKey, hadithNum)
-                                            } else {
-                                                onNavigateToHadith()
-                                            }
-                                        }
+                            // Clickable Source Proof Chip
+                            msg.sourceTitle?.takeIf { it.isNotBlank() }?.let { title ->
+                                CitationChip(
+                                    sourceTitle = title,
+                                    onClick = {
+                                        vm.onIntent(AiScholarUiIntent.ClickCitation(title, msg.sourceDeepLink))
                                     }
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(Icons.Outlined.Book, contentDescription = null, tint = EmeraldDeep, modifier = Modifier.size(12.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = msg.sourceTitle!!,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = EmeraldDeep
-                                        )
-                                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = EmeraldDeep, modifier = Modifier.size(12.dp))
-                                    }
-                                }
+                                )
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // Inline Network / Timeout Error Card with Retry
+        state.error?.let { err ->
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.errorContainer,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = err,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedButton(
+                        onClick = { vm.onIntent(AiScholarUiIntent.RetryLastQuery) },
+                        enabled = !state.isStreaming
+                    ) {
+                        Text("Retry", fontSize = 11.sp)
                     }
                 }
             }
@@ -259,30 +286,25 @@ fun AiChatScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             OutlinedTextField(
-                value = inputText,
-                onValueChange = { inputText = it },
+                value = state.inputText,
+                onValueChange = { vm.onIntent(AiScholarUiIntent.InputTextChanged(it)) },
                 placeholder = { Text("Ask any Islamic question...", fontSize = 12.sp) },
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(18.dp),
                 modifier = Modifier.weight(1f),
                 singleLine = true
             )
             Spacer(modifier = Modifier.width(8.dp))
             Button(
-                onClick = {
-                    if (inputText.isNotBlank()) {
-                        messages = messages + ChatMessageModel(
-                            id = (messages.size + 1).toString(),
-                            role = "user",
-                            content = inputText,
-                            timestamp = "Just now"
-                        )
-                        inputText = ""
-                    }
-                },
+                onClick = { vm.onIntent(AiScholarUiIntent.SendQuery(state.inputText)) },
+                enabled = state.inputText.isNotBlank() && !state.isStreaming,
                 shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = EmeraldDeep)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Icon(Icons.Default.Send, contentDescription = "Send", tint = MintGreen)
+                Icon(
+                    imageVector = Icons.Default.Send,
+                    contentDescription = "Send",
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
             }
         }
     }

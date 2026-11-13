@@ -5,48 +5,48 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.data.model.HadithModel
-import com.sakinah.deen.ui.theme.AmiriFontFamily
-import com.sakinah.deen.ui.theme.EmeraldDeep
+import com.sakinah.deen.ui.components.ArabicVerseBlock
+import com.sakinah.deen.ui.components.SakinahCard
+import com.sakinah.deen.ui.components.StatusBadge
+import com.sakinah.deen.ui.theme.DaifAmber
+import com.sakinah.deen.ui.theme.HasanTeal
 import com.sakinah.deen.ui.theme.MintGreen
 import com.sakinah.deen.ui.theme.SahihGreen
 import com.sakinah.deen.ui.viewmodel.HadithUiIntent
@@ -56,18 +56,34 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun HadithScreen(
     initialBookKey: String = "all",
+    initialHadithNumber: Int = 0,
     initialSearchQuery: String = "",
+    deepLinkNonce: Int = 0,
+    viewModel: HadithViewModel? = null,
     modifier: Modifier = Modifier
 ) {
-    val viewModel: HadithViewModel = koinViewModel()
-    val state by viewModel.uiState.collectAsState()
+    val vm: HadithViewModel = viewModel ?: koinViewModel()
+    val state by vm.uiState.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
 
-    LaunchedEffect(initialBookKey) {
-        viewModel.onIntent(HadithUiIntent.SelectBook(initialBookKey))
+    LaunchedEffect(initialBookKey, initialHadithNumber, deepLinkNonce) {
+        if (initialHadithNumber > 0 && initialBookKey != "all") {
+            vm.onIntent(HadithUiIntent.NavigateToDeepLink("hadith/$initialBookKey/$initialHadithNumber"))
+        } else if (initialBookKey != "all" || deepLinkNonce > 0) {
+            vm.onIntent(HadithUiIntent.SelectBook(initialBookKey))
+        }
     }
-    LaunchedEffect(initialSearchQuery) {
+    LaunchedEffect(initialSearchQuery, deepLinkNonce) {
         if (initialSearchQuery.isNotBlank()) {
-            viewModel.onIntent(HadithUiIntent.SearchQueryChanged(initialSearchQuery))
+            vm.onIntent(HadithUiIntent.SearchQueryChanged(initialSearchQuery))
+        }
+    }
+    LaunchedEffect(state.targetDeepLinkId, state.filteredHadiths) {
+        val targetId = state.targetDeepLinkId ?: return@LaunchedEffect
+        val idx = state.filteredHadiths.indexOfFirst { it.id == targetId }
+        if (idx >= 0) {
+            listState.animateScrollToItem(idx)
+            vm.onIntent(HadithUiIntent.ClearDeepLinkTarget)
         }
     }
 
@@ -76,102 +92,167 @@ fun HadithScreen(
             .fillMaxSize()
             .imePadding()
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text(
             text = "Kutub al-Tis‘ah Encyclopedia",
             fontFamily = FontFamily.Serif,
             fontWeight = FontWeight.Bold,
-            fontSize = 22.sp,
-            color = EmeraldDeep
+            fontSize = 21.sp,
+            color = MaterialTheme.colorScheme.primary
         )
 
-        // 1. Collection carousel from the encrypted database
+        // 1. Collection Carousel
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item {
+                val allSelected = state.selectedBookKey == "all"
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (state.selectedBookKey == "all") EmeraldDeep else MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, if (state.selectedBookKey == "all") EmeraldDeep else MaterialTheme.colorScheme.outline),
-                    modifier = Modifier.clickable { viewModel.onIntent(HadithUiIntent.SelectBook("all")) }
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (allSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(
+                        1.dp,
+                        if (allSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                    ),
+                    modifier = Modifier.clickable { vm.onIntent(HadithUiIntent.SelectBook("all")) }
                 ) {
                     Text(
                         text = "All Books",
-                        color = if (state.selectedBookKey == "all") Color.White else EmeraldDeep,
+                        color = if (allSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
                     )
                 }
             }
-            items(state.books) { book ->
+            items(state.books, key = { it.key }) { book ->
                 val isSelected = state.selectedBookKey == book.key
-                Card(
-                    modifier = Modifier.clickable { viewModel.onIntent(HadithUiIntent.SelectBook(book.key)) },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isSelected) MintGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface
-                    ),
-                    border = BorderStroke(1.dp, if (isSelected) MintGreen else MaterialTheme.colorScheme.outline)
+                Surface(
+                    modifier = Modifier.clickable { vm.onIntent(HadithUiIntent.SelectBook(book.key)) },
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(
+                        1.dp,
+                        if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                    )
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                        Text(text = book.title, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = EmeraldDeep)
+                        Text(
+                            text = book.title,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                        )
                         Text(
                             text = book.totalCount,
                             fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            color = if (isSelected) {
+                                MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
                         )
                     }
                 }
             }
         }
 
-        // Language selector
-        if (state.availableLanguages.isNotEmpty()) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(state.availableLanguages) { language ->
+        // 2. Language & Authenticity Grade Filters
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (state.availableLanguages.isNotEmpty()) {
+                LazyRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(state.availableLanguages) { language ->
+                        val selected = state.selectedLanguageCode.equals(language, ignoreCase = true)
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.clickable { vm.onIntent(HadithUiIntent.SelectLanguage(language)) }
+                        ) {
+                            Text(
+                                text = language.uppercase(),
+                                color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(listOf("all" to "All", "sahih" to "Sahih", "hasan" to "Hasan")) { (key, label) ->
+                    val selected = state.filterGrade.equals(key, ignoreCase = true)
                     Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = if (state.selectedLanguageCode == language) EmeraldDeep else MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, if (state.selectedLanguageCode == language) EmeraldDeep else MaterialTheme.colorScheme.outline),
-                        modifier = Modifier.clickable { viewModel.onIntent(HadithUiIntent.SelectLanguage(language)) }
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (selected) MintGreen.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(
+                            1.dp,
+                            if (selected) MintGreen else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+                        ),
+                        modifier = Modifier.clickable { vm.onIntent(HadithUiIntent.FilterGradeChanged(key)) }
                     ) {
                         Text(
-                            text = language.uppercase(),
-                            color = if (state.selectedLanguageCode == language) Color.White else EmeraldDeep,
-                            fontWeight = FontWeight.Bold,
+                            text = label,
+                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.SemiBold,
                             fontSize = 11.sp,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                         )
                     }
                 }
             }
         }
 
-        // Section selector
+        // 3. Chapter / Section Carousel (only when book has sections)
         if (state.sections.isNotEmpty()) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 item {
+                    val selected = state.selectedSectionNumber == 0
                     Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = if (state.selectedSectionNumber == 0) EmeraldDeep else MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, if (state.selectedSectionNumber == 0) EmeraldDeep else MaterialTheme.colorScheme.outline),
-                        modifier = Modifier.clickable { viewModel.onIntent(HadithUiIntent.SelectSection(0)) }
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(
+                            1.dp,
+                            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                        ),
+                        modifier = Modifier.clickable { vm.onIntent(HadithUiIntent.SelectSection(0)) }
                     ) {
-                        Text("All sections", color = if (state.selectedSectionNumber == 0) Color.White else EmeraldDeep, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+                        Text(
+                            text = "All sections",
+                            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                        )
                     }
                 }
-                items(state.sections) { section ->
+                items(state.sections, key = { it.first }) { section ->
+                    val selected = state.selectedSectionNumber == section.first
                     Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = if (state.selectedSectionNumber == section.first) EmeraldDeep else MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, if (state.selectedSectionNumber == section.first) EmeraldDeep else MaterialTheme.colorScheme.outline),
-                        modifier = Modifier.clickable { viewModel.onIntent(HadithUiIntent.SelectSection(section.first)) }
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(
+                            1.dp,
+                            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                        ),
+                        modifier = Modifier.clickable { vm.onIntent(HadithUiIntent.SelectSection(section.first)) }
                     ) {
-                        Text(section.second, color = if (state.selectedSectionNumber == section.first) Color.White else EmeraldDeep, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+                        Text(
+                            text = section.second,
+                            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                        )
                     }
                 }
             }
@@ -183,25 +264,50 @@ fun HadithScreen(
                 Text("Downloading… ${(progress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
             }
         }
+
         state.errorMessage?.let { message ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(message, color = Color.Red, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                TextButton(onClick = { viewModel.onIntent(HadithUiIntent.RetrySync) }) { Text("Retry") }
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.errorContainer,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = message,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedButton(onClick = { vm.onIntent(HadithUiIntent.RetrySync) }) {
+                        Text("Retry", fontSize = 11.sp)
+                    }
+                }
             }
         }
 
-        // 2. Full-text search
+        // 4. Full-Text Arabic (diacritic-insensitive) & Translation Search
         OutlinedTextField(
             value = state.searchQuery,
-            onValueChange = { viewModel.onIntent(HadithUiIntent.SearchQueryChanged(it)) },
+            onValueChange = { vm.onIntent(HadithUiIntent.SearchQueryChanged(it)) },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search Hadith by Arabic or English meaning...", fontSize = 12.sp) },
+            placeholder = { Text("Search Hadith by Arabic, meaning, or number…", fontSize = 12.sp) },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-            shape = RoundedCornerShape(18.dp),
+            trailingIcon = {
+                if (state.searchQuery.isNotBlank()) {
+                    IconButton(onClick = { vm.onIntent(HadithUiIntent.ClearSearch) }) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear search")
+                    }
+                }
+            },
+            shape = RoundedCornerShape(16.dp),
             singleLine = true
         )
 
-        // 3. Results
+        // 5. Results Feed
         if (state.filteredHadiths.isEmpty()) {
             if (state.isLoading) {
                 Row(
@@ -211,34 +317,48 @@ fun HadithScreen(
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                     Text(
-                        text = "Downloading hadith collection…",
+                        text = "Loading hadith collection…",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
-                Text(
-                    text = if (state.isFromDatabase) {
-                        "No hadith match this filter in the offline library."
-                    } else {
-                        "Preparing the offline hadith library…"
-                    },
-                    modifier = Modifier.padding(vertical = 16.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                )
+                val fallbackLang = state.availableLanguages.firstOrNull {
+                    !it.equals(state.selectedLanguageCode, ignoreCase = true)
+                }
+                SakinahCard(contentPadding = 14.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = if (state.isFromDatabase) {
+                                "No hadiths matched this filter in ${state.selectedLanguageCode.uppercase()}."
+                            } else {
+                                "Preparing the offline hadith library…"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (fallbackLang != null && state.searchQuery.isBlank()) {
+                            TextButton(onClick = { vm.onIntent(HadithUiIntent.SelectLanguage(fallbackLang)) }) {
+                                Text("Switch to ${fallbackLang.uppercase()} edition")
+                            }
+                        }
+                    }
+                }
             }
             return@Column
         }
 
         LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
+            state = listState,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(state.filteredHadiths) { hadith ->
+            items(state.filteredHadiths, key = { it.id }) { hadith ->
                 HadithCard(
                     hadith = hadith,
-                    onToggleBookmark = { viewModel.onIntent(HadithUiIntent.ToggleBookmark(hadith.id)) }
+                    onToggleBookmark = { vm.onIntent(HadithUiIntent.ToggleBookmark(hadith.id)) }
                 )
             }
         }
@@ -250,16 +370,15 @@ private fun HadithCard(
     hadith: HadithModel,
     onToggleBookmark: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+    val gradeAccent = when {
+        hadith.grade.contains("SAHIH", ignoreCase = true) -> SahihGreen
+        hadith.grade.contains("HASAN", ignoreCase = true) -> HasanTeal
+        hadith.grade.contains("DAIF", ignoreCase = true) || hadith.grade.contains("WEAK", ignoreCase = true) -> DaifAmber
+        else -> MaterialTheme.colorScheme.primary
+    }
+
+    SakinahCard(contentPadding = 16.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -270,30 +389,23 @@ private fun HadithCard(
                         text = "${hadith.bookTitle} #${hadith.hadithNumber}",
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
-                        color = EmeraldDeep
+                        color = MaterialTheme.colorScheme.primary
                     )
                     if (hadith.chapterTitle.isNotBlank()) {
                         Text(
                             text = hadith.chapterTitle,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = SahihGreen.copy(alpha = 0.15f)
-                ) {
-                    Text(
-                        text = listOf(hadith.grade, hadith.gradingScholar)
-                            .filter { it.isNotBlank() }
-                            .joinToString(" · "),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SahihGreen
-                    )
-                }
+                Spacer(Modifier.width(8.dp))
+                StatusBadge(
+                    text = listOf(hadith.grade, hadith.gradingScholar)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" · "),
+                    accentColor = gradeAccent
+                )
             }
 
             if (hadith.sanad.isNotBlank()) {
@@ -301,22 +413,17 @@ private fun HadithCard(
                     text = "Sanad: ${hadith.sanad}",
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Serif,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             if (hadith.arabicText.isNotBlank()) {
-                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                    Text(
-                        text = hadith.arabicText,
-                        fontFamily = AmiriFontFamily,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = EmeraldDeep,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+                ArabicVerseBlock(
+                    arabicText = hadith.arabicText,
+                    fontSizeSp = 21,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    isQuran = false
+                )
             }
 
             if (hadith.matnTranslation.isNotBlank()) {
@@ -334,8 +441,8 @@ private fun HadithCard(
                 IconButton(onClick = onToggleBookmark) {
                     Icon(
                         imageVector = if (hadith.bookmarked) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
-                        contentDescription = if (hadith.bookmarked) "Remove bookmark" else "Save",
-                        tint = EmeraldDeep
+                        contentDescription = if (hadith.bookmarked) "Remove bookmark" else "Save bookmark",
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
             }

@@ -54,16 +54,23 @@ interface SettingsRepository {
 
 class SettingsRepositoryImpl(
     private val prefs: Settings = Settings(),
+    private val cacheBytesProvider: () -> Long = { 0L },
+    private val onClearCache: suspend () -> Unit = {},
 ) : SettingsRepository {
 
     private val _settings = MutableStateFlow(load())
     override val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
+    private inline fun <reified T : Enum<T>> safeEnum(key: String, default: T): T {
+        val raw = prefs.getString(key, default.name)
+        return runCatching { enumValueOf<T>(raw) }.getOrDefault(default)
+    }
+
     private fun load(): AppSettings = AppSettings(
         prayer = PrayerSettings(
-            calculationMethod = CalculationMethod.valueOf(prefs.getString("calc", CalculationMethod.MWL.name)),
-            asrMethod = AsrMethod.valueOf(prefs.getString("asr", AsrMethod.SHAFI.name)),
-            highLatitudeRule = HighLatitudeRule.valueOf(prefs.getString("highLat", HighLatitudeRule.MIDDLE_OF_NIGHT.name)),
+            calculationMethod = safeEnum("calc", CalculationMethod.MWL),
+            asrMethod = safeEnum("asr", AsrMethod.SHAFI),
+            highLatitudeRule = safeEnum("highLat", HighLatitudeRule.MIDDLE_OF_NIGHT),
             hijriOffset = prefs.getInt("hijriOffset", 0),
         ),
         adhan = AdhanSettings(
@@ -72,11 +79,11 @@ class SettingsRepositoryImpl(
             asrEnabled = prefs.getBoolean("asrEnabled", true),
             maghribEnabled = prefs.getBoolean("maghribEnabled", true),
             ishaEnabled = prefs.getBoolean("ishaEnabled", true),
-            adhanChoice = AdhanChoice.valueOf(prefs.getString("adhanChoice", AdhanChoice.MAKKAH.name)),
+            adhanChoice = safeEnum("adhanChoice", AdhanChoice.MAKKAH),
             carBluetoothAutoPlay = prefs.getBoolean("carBt", false),
         ),
         appearance = AppearanceSettings(
-            theme = ThemeMode.valueOf(prefs.getString("theme", ThemeMode.SYSTEM.name)),
+            theme = safeEnum("theme", ThemeMode.SYSTEM),
             arabicFontSize = prefs.getInt("arabicFontSize", 24),
             translationLanguage = prefs.getString("translationLang", "en"),
             translationId = prefs.getInt("quranTranslationId", 20),
@@ -114,7 +121,9 @@ class SettingsRepositoryImpl(
         _settings.value = _settings.value.copy(appearance = settings)
     }
 
-    override fun cacheSizeBytes(): Long = 0L
+    override fun cacheSizeBytes(): Long = cacheBytesProvider()
 
-    override suspend fun clearCache() { /* no-op */ }
+    override suspend fun clearCache() {
+        onClearCache()
+    }
 }

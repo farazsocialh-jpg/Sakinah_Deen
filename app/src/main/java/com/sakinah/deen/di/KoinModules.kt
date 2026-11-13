@@ -28,7 +28,6 @@ import com.sakinah.deen.ui.viewmodel.HadithViewModel
 import com.sakinah.deen.ui.viewmodel.QuranViewModel
 import com.sakinah.deen.ui.viewmodel.SalahViewModel
 import com.sakinah.deen.ui.viewmodel.TravelViewModel
-import com.sakinah.deen.di.sharedModule
 import com.sakinah.deen.ui.viewmodel.WealthViewModel
 import com.sakinah.deen.work.KoinWorkerFactory
 import io.ktor.client.HttpClient
@@ -162,17 +161,50 @@ val workerModule = module {
     single { KoinWorkerFactory(get()) }
 }
 
+val accountModule = module {
+    single<com.russhwolf.settings.Settings>(qualifier = org.koin.core.qualifier.named("account_settings")) {
+        com.russhwolf.settings.SharedPreferencesSettings(
+            androidContext().getSharedPreferences("sakinah_account_settings", android.content.Context.MODE_PRIVATE)
+        )
+    }
+    single<com.sakinah.deen.auth.AuthRepository> {
+        com.sakinah.deen.auth.PersistentAuthRepository(
+            prefs = get(org.koin.core.qualifier.named("account_settings"))
+        )
+    }
+    single<com.sakinah.deen.profile.UserProfileRepository> {
+        com.sakinah.deen.profile.PersistentUserProfileRepository(
+            prefs = get(org.koin.core.qualifier.named("account_settings"))
+        )
+    }
+    single<com.sakinah.deen.settings.SettingsRepository> {
+        com.sakinah.deen.settings.SettingsRepositoryImpl(
+            prefs = get(org.koin.core.qualifier.named("account_settings")),
+            cacheBytesProvider = {
+                runCatching {
+                    androidContext().cacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+                }.getOrDefault(0L)
+            },
+            onClearCache = {
+                runCatching {
+                    androidContext().cacheDir.listFiles()?.forEach { it.deleteRecursively() }
+                }
+            }
+        )
+    }
+}
+
 val viewModelModule = module {
-    factory { SalahViewModel(get(), get(), get(), get(), getOrNull(), getOrNull()) }
+    factory { SalahViewModel(get(), get(), get(), get(), getOrNull(), getOrNull(), getOrNull(), getOrNull()) }
     factory { QuranViewModel(getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull()) }
-    factory { HadithViewModel(getOrNull()) }
+    factory { HadithViewModel(getOrNull(), getOrNull(), getOrNull()) }
     factory { TravelViewModel(get(), get(), getOrNull()) }
     factory { WealthViewModel(get(), getOrNull()) }
     factory { AiScholarViewModel(get()) }
 }
 
 val appModules = listOf(
-    sharedModule,
+    accountModule,
     preferencesModule,
     databaseModule,
     astronomyModule,

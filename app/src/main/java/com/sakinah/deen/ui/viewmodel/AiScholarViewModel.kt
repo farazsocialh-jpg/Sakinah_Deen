@@ -8,6 +8,7 @@ import com.sakinah.deen.network.model.ChatMessageDto
 import com.sakinah.deen.network.model.RagQueryRequest
 import com.sakinah.deen.network.model.RagStreamChunk
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import java.util.UUID
 
 data class AiScholarUiState(
@@ -32,6 +34,7 @@ sealed class AiScholarUiIntent {
     data class SendQuery(val query: String) : AiScholarUiIntent()
     data class SelectMadhhabTab(val tab: String) : AiScholarUiIntent()
     data class ClickCitation(val sourceTitle: String, val deepLink: String? = null) : AiScholarUiIntent()
+    data object RetryLastQuery : AiScholarUiIntent()
     data object ClearConversation : AiScholarUiIntent()
 }
 
@@ -45,20 +48,19 @@ class AiScholarViewModel(
 ) : ViewModel() {
 
     companion object {
+        private const val STREAM_TIMEOUT_MS = 45_000L
         private val HTTP_5XX = Regex("HTTP 5\\d{2}")
         private val HTTP_429 = Regex("HTTP 429")
+        private val SURAH_AYAH_REGEX = Regex("(\\d{1,3})\\s*:\\s*(\\d{1,3})")
+        private val HADITH_NUMBER_REGEX = Regex("#?(\\d{1,5})")
 
-        /**
-         * Turns transport failures into one plain-language message per cause so the UI
-         * never surfaces a raw stack-trace fragment:
-         *  - 429 / quota → rate limited, retry shortly
-         *  - 5xx → upstream proxy unavailable
-         *  - no connectivity / timeout → offline, cached content still works
-         */
         internal fun describeScholarFailure(error: Throwable): String {
             val message = error.localizedMessage.orEmpty()
             val lower = message.lowercase()
             return when {
+                error is TimeoutCancellationException || lower.contains("timeout") || lower.contains("timed out") ->
+                    "The AI Scholar request timed out. Check your connection and tap Retry."
+
                 HTTP_429.containsMatchIn(message) ||
                     lower.contains("rate limit") ||
                     lower.contains("quota") ->
@@ -74,8 +76,6 @@ class AiScholarViewModel(
                 error is java.io.IOException ||
                     lower.contains("unable to resolve host") ||
                     lower.contains("connect") ||
-                    lower.contains("timeout") ||
-                    lower.contains("timed out") ||
                     lower.contains("offline") ->
                     "No connection to the AI Scholar. Check your network — the Quran, " +
                         "hadith and nisab caches keep working offline."
@@ -93,7 +93,8 @@ class AiScholarViewModel(
                     role = "assistant",
                     content = "As-salāmu ‘alaykum wa raḥmatullāhi wa barakātuh. I am your Sunni Deen research companion, grounded in the Holy Quran, Kutub al-Tis‘ah, and the four classical legal schools.",
                     timestamp = "Just now",
-                    sourceTitle = "Surah An-Nisa 4:59"
+                    sourceTitle = "Surah An-Nisa 4:59",
+                    sourceDeepLink = "quran/4/59"
                 ),
                 ChatMessageModel(
                     id = "sample-1",
@@ -104,13 +105,14 @@ class AiScholarViewModel(
                 ChatMessageModel(
                     id = "sample-2",
                     role = "assistant",
-                    content = "Sujud as-Sahw (سجود السهو) consists of two prostrations performed to rectify unintentional omissions or additions in prayer, followed by Salam.\n\nGrounding Proof: In Sahih Muslim #571, the Prophet (ﷺ) instructed to build upon certainty and make two prostrations.",
+                    content = "Sujud as-Sahw (سجود السهو) consists of two prostrations performed to rectify unintentional omissions or additions in prayer, followed by Salam.\n\nGrounding Proof: In Sahih Muslim #1271 (Kitab al-Masajid), the Prophet (ﷺ) instructed to build upon certainty and make two prostrations before concluding the prayer.",
                     timestamp = "Just now",
-                    sourceTitle = "Sahih Muslim #571",
+                    sourceTitle = "Sahih Muslim #1271",
                     hanafiStance = "Hanafi: Performed after the first Salam to the right. Make 2 Sujuds, repeat Tashahhud, then conclude with Salam.",
                     malikiStance = "Maliki: Before Salam for omission (Qabli); after Salam for addition (Ba'di).",
                     shafiiStance = "Shafi'i: Always performed immediately before the first Salam (Qabli).",
-                    hanbaliStance = "Hanbali: Before Salam for omission; after Salam for addition or doubt resolving on probability."
+                    hanbaliStance = "Hanbali: Before Salam for omission; after Salam for addition or doubt resolving on probability.",
+                    sourceDeepLink = "hadith/muslim/1271"
                 )
             )
         )
@@ -121,6 +123,7 @@ class AiScholarViewModel(
     val navigationEvents: SharedFlow<AiScholarNavigationEvent> = _navigationEvents.asSharedFlow()
 
     private var streamJob: Job? = null
+    private var lastSubmittedQuery: String? = null
 
     fun onIntent(intent: AiScholarUiIntent) {
         when (intent) {
@@ -136,9 +139,16 @@ class AiScholarViewModel(
             is AiScholarUiIntent.ClickCitation -> {
                 handleCitationClick(intent.sourceTitle, intent.deepLink)
             }
+            is AiScholarUiIntent.RetryLastQuery -> {
+                val last = lastSubmittedQuery ?: _uiState.value.messages.lastOrNull { it.role == "user" }?.content
+                if (!last.isNullOrBlank()) {
+                    sendQuery(last)
+                }
+            }
             is AiScholarUiIntent.ClearConversation -> {
                 streamJob?.cancel()
                 streamJob = null
+                lastSubmittedQuery = null
                 _uiState.update {
                     it.copy(
                         messages = emptyList(),
@@ -151,13 +161,12 @@ class AiScholarViewModel(
     }
 
     private fun sendQuery(queryText: String) {
-        // A new query always supersedes the previous stream so two collectors can never
-        // interleave deltas into the same message list.
         streamJob?.cancel()
         streamJob = null
 
         val trimmed = queryText.trim()
         if (trimmed.isBlank()) return
+        lastSubmittedQuery = trimmed
 
         val userMessageId = UUID.randomUUID().toString()
         val assistantMessageId = UUID.randomUUID().toString()
@@ -187,7 +196,7 @@ class AiScholarViewModel(
             )
         }
 
-        val historyDto = _uiState.value.messages.takeLast(6).map {
+        val historyDto = updatedMessages.filter { it.content.isNotBlank() }.takeLast(6).map {
             ChatMessageDto(role = it.role, content = it.content)
         }
 
@@ -200,24 +209,40 @@ class AiScholarViewModel(
 
         streamJob = viewModelScope.launch {
             try {
-                scholarRepository.streamAskScholar(request).collect { chunk ->
-                    when (chunk) {
-                        is RagStreamChunk.TextDelta -> {
-                            appendStreamingDelta(assistantMessageId, chunk.delta)
-                        }
-                        is RagStreamChunk.SourceCitation -> {
-                            attachCitation(assistantMessageId, chunk.source.title)
-                        }
-                        is RagStreamChunk.MadhhabBreakdown -> {
-                            attachMadhhabPosition(assistantMessageId, chunk.school, chunk.summary)
-                        }
-                        is RagStreamChunk.GuardrailDisclaimer -> {
-                            _uiState.update { it.copy(guardrailNotice = chunk.notice) }
-                        }
-                        is RagStreamChunk.Complete -> {
-                            _uiState.update { it.copy(isStreaming = false) }
+                withTimeout(STREAM_TIMEOUT_MS) {
+                    scholarRepository.streamAskScholar(request).collect { chunk ->
+                        when (chunk) {
+                            is RagStreamChunk.TextDelta -> {
+                                appendStreamingDelta(assistantMessageId, chunk.delta)
+                            }
+                            is RagStreamChunk.SourceCitation -> {
+                                attachCitation(
+                                    assistantMessageId,
+                                    chunk.source.title,
+                                    chunk.source.navigationDeepLink
+                                )
+                            }
+                            is RagStreamChunk.MadhhabBreakdown -> {
+                                attachMadhhabPosition(assistantMessageId, chunk.school, chunk.summary)
+                            }
+                            is RagStreamChunk.GuardrailDisclaimer -> {
+                                _uiState.update { it.copy(guardrailNotice = chunk.notice) }
+                            }
+                            is RagStreamChunk.Complete -> {
+                                _uiState.update { it.copy(isStreaming = false) }
+                            }
                         }
                     }
+                }
+                if (streamJob == coroutineContext[Job]) {
+                    _uiState.update { it.copy(isStreaming = false) }
+                }
+            } catch (e: TimeoutCancellationException) {
+                _uiState.update {
+                    it.copy(
+                        isStreaming = false,
+                        error = describeScholarFailure(e)
+                    )
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -229,8 +254,6 @@ class AiScholarViewModel(
                     )
                 }
             } finally {
-                // Only clear the handle if this coroutine still owns it; a newer query may
-                // already have replaced it.
                 if (streamJob == coroutineContext[Job]) streamJob = null
             }
         }
@@ -245,10 +268,10 @@ class AiScholarViewModel(
         _uiState.update { it.copy(messages = updated) }
     }
 
-    private fun attachCitation(messageId: String, citationTitle: String) {
+    private fun attachCitation(messageId: String, citationTitle: String, deepLink: String?) {
         val updated = _uiState.value.messages.map { msg ->
             if (msg.id == messageId) {
-                msg.copy(sourceTitle = citationTitle)
+                msg.copy(sourceTitle = citationTitle, sourceDeepLink = deepLink)
             } else msg
         }
         _uiState.update { it.copy(messages = updated) }
@@ -271,21 +294,43 @@ class AiScholarViewModel(
 
     private fun handleCitationClick(sourceTitle: String, deepLink: String?) {
         viewModelScope.launch {
-            if (deepLink != null && deepLink.startsWith("quran/")) {
+            if (!deepLink.isNullOrBlank() && deepLink.startsWith("quran/")) {
                 val parts = deepLink.removePrefix("quran/").split("/")
-                val surah = parts.getOrNull(0)?.toIntOrNull() ?: 1
-                val ayah = parts.getOrNull(1)?.toIntOrNull() ?: 1
+                val surah = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(1, 114) ?: 1
+                val ayah = parts.getOrNull(1)?.toIntOrNull()?.coerceAtLeast(1) ?: 1
                 _navigationEvents.emit(AiScholarNavigationEvent.NavigateToQuran(surah, ayah))
-            } else if (deepLink != null && deepLink.startsWith("hadith/")) {
+                return@launch
+            }
+            if (!deepLink.isNullOrBlank() && deepLink.startsWith("hadith/")) {
                 val parts = deepLink.removePrefix("hadith/").split("/")
-                val book = parts.getOrNull(0) ?: "bukhari"
+                val book = parts.getOrNull(0)?.lowercase() ?: "bukhari"
                 val num = parts.getOrNull(1)?.toIntOrNull() ?: 1
                 _navigationEvents.emit(AiScholarNavigationEvent.NavigateToHadith(book, num))
-            } else if (sourceTitle.contains("Quran") || sourceTitle.contains("Surah")) {
-                _navigationEvents.emit(AiScholarNavigationEvent.NavigateToQuran(1, 1))
-            } else {
-                _navigationEvents.emit(AiScholarNavigationEvent.NavigateToHadith("bukhari", 1))
+                return@launch
             }
+
+            val quranMatch = SURAH_AYAH_REGEX.find(sourceTitle)
+            if (quranMatch != null || sourceTitle.contains("Quran", true) || sourceTitle.contains("Surah", true)) {
+                val surah = quranMatch?.groupValues?.getOrNull(1)?.toIntOrNull()?.coerceIn(1, 114) ?: 1
+                val ayah = quranMatch?.groupValues?.getOrNull(2)?.toIntOrNull()?.coerceAtLeast(1) ?: 1
+                _navigationEvents.emit(AiScholarNavigationEvent.NavigateToQuran(surah, ayah))
+                return@launch
+            }
+
+            val lower = sourceTitle.lowercase()
+            val bookKey = when {
+                lower.contains("muslim") -> "muslim"
+                lower.contains("bukhari") -> "bukhari"
+                lower.contains("dawud") -> "abudawud"
+                lower.contains("tirmidhi") -> "tirmidhi"
+                lower.contains("nasai") || lower.contains("nasa'i") -> "nasai"
+                lower.contains("majah") -> "ibnmajah"
+                lower.contains("nawawi") -> "nawawi"
+                lower.contains("malik") || lower.contains("muwatta") -> "malik"
+                else -> "bukhari"
+            }
+            val num = HADITH_NUMBER_REGEX.findAll(sourceTitle).lastOrNull()?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
+            _navigationEvents.emit(AiScholarNavigationEvent.NavigateToHadith(bookKey, num))
         }
     }
 }

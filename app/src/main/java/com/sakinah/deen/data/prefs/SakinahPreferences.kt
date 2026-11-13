@@ -36,6 +36,8 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         private const val KEY_LONGITUDE = "location_longitude"
         private const val KEY_LOCATION_LABEL = "location_label"
         private const val KEY_LOCATION_COUNTRY_CODE = "location_country_code"
+        private const val KEY_LOCATION_TIMEZONE_ID = "location_timezone_id"
+        private const val KEY_IS_MANUAL_LOCATION = "is_manual_location"
         private const val KEY_CALCULATION_METHOD_OVERRIDE = "calculation_method_override"
         private const val KEY_HOME_LATITUDE = "home_latitude"
         private const val KEY_HOME_LONGITUDE = "home_longitude"
@@ -53,6 +55,8 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         private const val KEY_QURAN_TRANSLATION_ID = "quran_translation_id"
         private const val KEY_QURAN_TRANSLATION_LANGUAGE = "quran_translation_language"
         private const val KEY_HADITH_LANGUAGE = "hadith_language_code"
+        private const val KEY_BOOKMARKED_HADITH_IDS = "bookmarked_hadith_ids"
+        private const val KEY_HADITH_BOOKMARKS_INITIALIZED = "hadith_bookmarks_initialized"
     }
 
     /** Double is stored as raw bits so stored coordinates do not lose precision. */
@@ -85,6 +89,18 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         set(value) = prefs.edit().apply {
             if (value.isNullOrBlank()) remove(KEY_LOCATION_COUNTRY_CODE) else putString(KEY_LOCATION_COUNTRY_CODE, value.uppercase())
         }.apply()
+
+    /** IANA timezone ID for the active prayer location (e.g. "America/Los_Angeles"). */
+    var locationTimeZoneId: String?
+        get() = prefs.getString(KEY_LOCATION_TIMEZONE_ID, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().apply {
+            if (value.isNullOrBlank()) remove(KEY_LOCATION_TIMEZONE_ID) else putString(KEY_LOCATION_TIMEZONE_ID, value)
+        }.apply()
+
+    /** True when the user explicitly chose a city manually (prevents GPS overwrite on restart). */
+    var isManualLocation: Boolean
+        get() = prefs.getBoolean(KEY_IS_MANUAL_LOCATION, false)
+        set(value) = prefs.edit().putBoolean(KEY_IS_MANUAL_LOCATION, value).apply()
 
     /**
      * A calculation method the user picked by hand. `null` means "follow the country's
@@ -194,10 +210,54 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         get() = prefs.getString(KEY_HADITH_LANGUAGE, "eng") ?: "eng"
         set(value) = prefs.edit().putString(KEY_HADITH_LANGUAGE, value).apply()
 
+    var hasInitializedHadithBookmarks: Boolean
+        get() = prefs.getBoolean(KEY_HADITH_BOOKMARKS_INITIALIZED, false)
+        set(value) = prefs.edit().putBoolean(KEY_HADITH_BOOKMARKS_INITIALIZED, value).apply()
+
+    var bookmarkedHadithIds: Set<String>
+        get() {
+            val raw = prefs.getString(KEY_BOOKMARKED_HADITH_IDS, "") ?: ""
+            if (raw.isBlank()) return emptySet()
+            return raw.split("|").mapNotNull { it.takeIf(String::isNotBlank) }.toSet()
+        }
+        set(value) {
+            prefs.edit().putString(KEY_BOOKMARKED_HADITH_IDS, value.joinToString("|")).apply()
+        }
+
     fun saveLocation(latitude: Double, longitude: Double, label: String) {
         locationLatitude = latitude
         locationLongitude = longitude
         locationLabel = label
+    }
+
+    fun saveManualLocation(
+        latitude: Double,
+        longitude: Double,
+        label: String,
+        countryCode: String?,
+        timeZoneId: String?,
+    ) {
+        locationLatitude = latitude
+        locationLongitude = longitude
+        locationLabel = label
+        locationCountryCode = countryCode
+        locationTimeZoneId = timeZoneId
+        isManualLocation = true
+    }
+
+    fun saveGpsLocation(
+        latitude: Double,
+        longitude: Double,
+        label: String,
+        countryCode: String?,
+        timeZoneId: String?,
+    ) {
+        locationLatitude = latitude
+        locationLongitude = longitude
+        locationLabel = label
+        locationCountryCode = countryCode
+        locationTimeZoneId = timeZoneId
+        isManualLocation = false
     }
 
     /**

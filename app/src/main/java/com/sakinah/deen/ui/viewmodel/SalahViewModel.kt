@@ -20,36 +20,41 @@ import com.sakinah.deen.domain.astronomy.UserLocationProvider
 import com.sakinah.deen.domain.travel.HomeAnchorStore
 import com.sakinah.deen.domain.travel.SafarPolicy
 import com.sakinah.deen.domain.travel.TravelStatusManager
+import com.sakinah.deen.settings.AsrMethod
+import com.sakinah.deen.settings.SettingsRepository
+import com.sakinah.deen.util.TimeZoneResolver
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate as KLocalDate
-import kotlinx.datetime.todayIn
 import kotlinx.datetime.LocalTime as KLocalTime
 import kotlinx.datetime.TimeZone as KTimeZone
 import kotlinx.datetime.toJavaLocalDate
 import kotlinx.datetime.toJavaLocalTime
 import kotlinx.datetime.toLocalDateTime
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.chrono.HijrahDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoField
+import java.time.temporal.ChronoUnit
+import java.util.Locale
 
 data class SalahUiState(
     val hijriDate: String = "14 Jumada al-Ula 1448 AH",
-    val gregorianDate: String = "Tuesday · 11 November 2026",
+    val gregorianDate: String = "",
     val prayerTimes: Map<PrayerType, KLocalTime> = emptyMap(),
     val currentPrayer: PrayerType = PrayerType.DHUHR,
     val nextPrayer: PrayerType = PrayerType.ASR,
-    val countdownText: String = "01h 24m 12s",
-    val elapsedWindowRatio: Float = 0.65f,
+    val countdownText: String = "00m 00s",
+    val elapsedWindowRatio: Float = 0.0f,
     val prayersList: List<PrayerModel> = emptyList(),
     val qadhaDeficits: Map<PrayerType, Int> = emptyMap(),
     val calculationMethod: CalculationMethod = CalculationMethod.UMM_AL_QURA,
@@ -58,7 +63,10 @@ data class SalahUiState(
     val locationName: String = "Detecting Location...",
     val isLocationPermissionGranted: Boolean = false,
     val showLocationWarningBanner: Boolean = false,
-    val userCoordinates: Pair<Double, Double> = Pair(21.4225, 39.8262), // Default to Makkah
+    val userCoordinates: Pair<Double, Double> = Pair(21.4225, 39.8262),
+    val timeZoneId: String = ZoneId.systemDefault().id,
+    val timeZoneAbbr: String = TimeZoneResolver.shortAbbreviation(null),
+    val isManualLocation: Boolean = false,
     /** Concise provenance of the timings, e.g. "Qatar Awqaf (Online)" / "Offline Calculation". */
     val sourceLabel: String = "Offline Calculation",
     /** Short name of the authority the timings follow (country-mapped or manual). */
@@ -83,17 +91,19 @@ sealed class SalahUiIntent {
     data class UpdatePrayerAdjustments(val adjustments: PrayerAdjustments) : SalahUiIntent()
     data class LocationPermissionResult(val isGranted: Boolean) : SalahUiIntent()
     data object RefreshLocation : SalahUiIntent()
+    data object UseGpsLocation : SalahUiIntent()
     data class SetManualLocation(
         val lat: Double,
         val lon: Double,
         val name: String,
-        val countryCode: String? = null
+        val countryCode: String? = null,
+        val timeZoneId: String? = null
     ) : SalahUiIntent()
 
     /** Clears a manual calculation-method choice and follows the country's authority again. */
     data object UseAutomaticMethod : SalahUiIntent()
 
-    /** Saves the current GPS location as the user's Home location. */
+    /** Saves the current location as the user's Home location. */
     data object SetHomeLocationFromCurrent : SalahUiIntent()
 }
 
@@ -104,35 +114,87 @@ class SalahViewModel(
     private val travelManager: TravelStatusManager,
     private val locationProvider: UserLocationProvider? = null,
     private val prayerTimes: PrayerTimeRepository? = null,
-    private val preferences: SakinahPreferences? = null
+    private val preferences: SakinahPreferences? = null,
+    private val settingsRepository: SettingsRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SalahUiState())
     val uiState: StateFlow<SalahUiState> = _uiState.asStateFlow()
 
     /** ISO code of the last resolved location, driving the country → authority mapping. */
-    private var countryCode: String? = null
+    private var countryCode: String? = preferences?.locationCountryCode
 
     /** Guards against a slow online resolution overwriting a newer one. */
     private var scheduleRequest = 0
 
+    private var salahObserverJob: Job? = null
+    private var observedEpochDay: Long? = null
+    private var completedRecordsByPrayer: Map<PrayerType, SalahRecordEntity> = emptyMap()
+    private val completedNawafilPrayers = mutableSetOf<PrayerType>()
+
     init {
-        // Restore the saved Home location so Qasr only activates for real travel.
         preferences?.homeCoordinates?.let { travelManager.setHomeAnchor(it) }
+        val initialMadhhab = settingsRepository?.settings?.value?.prayer?.asrMethod?.let(::fromSettingsAsr)
+            ?: preferences?.madhhab
+            ?: Madhhab.SHAFI_HANBALI_MALIKI
+
+        val savedCoords = preferences?.locationCoordinates
+        val savedManual = preferences?.isManualLocation == true && savedCoords != null
+        val savedZone = if (savedManual) {
+            TimeZoneResolver.resolveZoneIdString(
+                explicitZoneId = preferences?.locationTimeZoneId,
+                cityLabel = preferences?.locationLabel,
+                countryCode = preferences?.locationCountryCode,
+                longitude = savedCoords?.second
+            )
+        } else {
+            preferences?.locationTimeZoneId ?: ZoneId.systemDefault().id
+        }
+
+        _uiState.update {
+            it.copy(
+                madhhab = initialMadhhab,
+                hasHomeLocation = travelManager.hasHomeAnchor,
+                isManualLocation = savedManual,
+                userCoordinates = savedCoords ?: it.userCoordinates,
+                locationName = if (savedCoords != null) preferences?.locationLabel ?: it.locationName else it.locationName,
+                timeZoneId = savedZone,
+                timeZoneAbbr = TimeZoneResolver.shortAbbreviation(savedZone)
+            )
+        }
+
         syncAuthority()
-        checkAndRefreshLocation()
+        observeSharedSettings()
+        if (savedManual) {
+            updateDateLabels(savedZone)
+            observeTodaySalahRecords(currentLocationLocalDate(savedZone).toEpochDay())
+            loadDailySchedule()
+        } else {
+            checkAndRefreshLocation()
+        }
         observeQadhaLedger()
         observeHomeAnchorChanges()
         startCountdownTicker()
     }
 
-    /**
-     * The dashboard ViewModel outlives the Settings/Travel screens, so a Home saved
-     * (or cleared) elsewhere has to reach it without a restart.
-     */
+    private fun observeSharedSettings() {
+        val repo = settingsRepository ?: return
+        viewModelScope.launch {
+            repo.settings.drop(1).collect { settings ->
+                val targetMadhhab = fromSettingsAsr(settings.prayer.asrMethod)
+                if (_uiState.value.madhhab != targetMadhhab) {
+                    preferences?.madhhab = targetMadhhab
+                    _uiState.update { it.copy(madhhab = targetMadhhab) }
+                    loadDailySchedule()
+                } else {
+                    updateDateLabels(_uiState.value.timeZoneId)
+                }
+            }
+        }
+    }
+
     private fun observeHomeAnchorChanges() {
         viewModelScope.launch {
-            // Skip the initial `null`; `init` has already restored the saved anchor.
             HomeAnchorStore.state.drop(1).collect { home ->
                 val anchor = SafarPolicy.sanitize(home)
                 if (anchor == null) travelManager.clearHomeAnchor() else travelManager.setHomeAnchor(anchor)
@@ -155,7 +217,6 @@ class SalahViewModel(
             is SalahUiIntent.IncrementQadha -> incrementQadha(intent.prayerType)
             is SalahUiIntent.DecrementQadha -> decrementQadha(intent.prayerType)
             is SalahUiIntent.ChangeCalculationMethod -> {
-                // A manual choice is persisted so it also wins for background alarm scheduling.
                 prayerTimes?.updateOverride(intent.method)
                 _uiState.update {
                     it.copy(
@@ -172,6 +233,14 @@ class SalahViewModel(
                 loadDailySchedule()
             }
             is SalahUiIntent.ChangeMadhhab -> {
+                preferences?.madhhab = intent.madhhab
+                settingsRepository?.let { repo ->
+                    viewModelScope.launch {
+                        repo.updatePrayer(
+                            repo.settings.value.prayer.copy(asrMethod = toSettingsAsr(intent.madhhab))
+                        )
+                    }
+                }
                 _uiState.update { it.copy(madhhab = intent.madhhab) }
                 loadDailySchedule()
             }
@@ -182,17 +251,34 @@ class SalahViewModel(
             is SalahUiIntent.LocationPermissionResult -> {
                 if (intent.isGranted) {
                     _uiState.update { it.copy(isLocationPermissionGranted = true, showLocationWarningBanner = false) }
-                    checkAndRefreshLocation()
+                    if (!_uiState.value.isManualLocation) {
+                        checkAndRefreshLocation()
+                    } else {
+                        loadDailySchedule()
+                    }
                 } else {
-                    _uiState.update { it.copy(isLocationPermissionGranted = false, showLocationWarningBanner = true) }
+                    _uiState.update {
+                        it.copy(
+                            isLocationPermissionGranted = false,
+                            showLocationWarningBanner = !_uiState.value.isManualLocation
+                        )
+                    }
                     loadDailySchedule()
                 }
             }
             is SalahUiIntent.RefreshLocation -> {
+                if (_uiState.value.isManualLocation) {
+                    loadDailySchedule()
+                } else {
+                    checkAndRefreshLocation()
+                }
+            }
+            is SalahUiIntent.UseGpsLocation -> {
+                preferences?.isManualLocation = false
+                _uiState.update { it.copy(isManualLocation = false) }
                 checkAndRefreshLocation()
             }
             is SalahUiIntent.SetHomeLocationFromCurrent -> {
-                // An unresolved fix (0.0, 0.0) must never become the Home anchor.
                 val coords = SafarPolicy.sanitize(_uiState.value.userCoordinates)
                 if (coords == null) {
                     loadDailySchedule()
@@ -210,14 +296,33 @@ class SalahViewModel(
                 }
             }
             is SalahUiIntent.SetManualLocation -> {
-                countryCode = intent.countryCode?.takeIf { it.isNotBlank() } ?: countryCode
+                val resolvedCountry = intent.countryCode?.takeIf { it.isNotBlank() } ?: countryCode
+                countryCode = resolvedCountry
+                val resolvedZone = TimeZoneResolver.resolveZoneIdString(
+                    explicitZoneId = intent.timeZoneId,
+                    cityLabel = intent.name,
+                    countryCode = resolvedCountry,
+                    longitude = intent.lon
+                )
+                preferences?.saveManualLocation(
+                    latitude = intent.lat,
+                    longitude = intent.lon,
+                    label = intent.name,
+                    countryCode = resolvedCountry,
+                    timeZoneId = resolvedZone
+                )
                 _uiState.update {
                     it.copy(
                         userCoordinates = Pair(intent.lat, intent.lon),
                         locationName = intent.name,
+                        timeZoneId = resolvedZone,
+                        timeZoneAbbr = TimeZoneResolver.shortAbbreviation(resolvedZone),
+                        isManualLocation = true,
                         showLocationWarningBanner = false
                     )
                 }
+                updateDateLabels(resolvedZone)
+                observeTodaySalahRecords(currentLocationLocalDate(resolvedZone).toEpochDay())
                 syncAuthority()
                 loadDailySchedule()
             }
@@ -225,6 +330,10 @@ class SalahViewModel(
     }
 
     private fun checkAndRefreshLocation() {
+        val zoneNow = _uiState.value.timeZoneId
+        updateDateLabels(zoneNow)
+        observeTodaySalahRecords(currentLocationLocalDate(zoneNow).toEpochDay())
+
         if (locationProvider == null) {
             loadDailySchedule()
             return
@@ -234,31 +343,53 @@ class SalahViewModel(
         _uiState.update {
             it.copy(
                 isLocationPermissionGranted = hasPermission,
-                showLocationWarningBanner = !hasPermission
+                showLocationWarningBanner = !hasPermission && !it.isManualLocation
             )
         }
 
         viewModelScope.launch {
             val resolved = locationProvider.getFreshOrCachedLocation()
+            // Guard against overwriting if user switched to manual city while GPS resolved.
+            if (_uiState.value.isManualLocation) {
+                loadDailySchedule()
+                return@launch
+            }
             countryCode = resolved.countryCode.takeIf { it.isNotBlank() } ?: countryCode
+            val resolvedLabel = if (resolved.countryName.isNotBlank()) {
+                "${resolved.cityName}, ${resolved.countryName}"
+            } else {
+                resolved.cityName
+            }
+            val resolvedZone = TimeZoneResolver.resolveZoneIdString(
+                cityLabel = resolvedLabel,
+                countryCode = countryCode,
+                longitude = resolved.longitude
+            )
+            preferences?.saveGpsLocation(
+                latitude = resolved.latitude,
+                longitude = resolved.longitude,
+                label = resolvedLabel,
+                countryCode = countryCode,
+                timeZoneId = resolvedZone
+            )
             _uiState.update {
                 it.copy(
                     userCoordinates = Pair(resolved.latitude, resolved.longitude),
-                    locationName = if (resolved.countryName.isNotBlank()) "${resolved.cityName}, ${resolved.countryName}" else resolved.cityName,
+                    locationName = resolvedLabel,
+                    timeZoneId = resolvedZone,
+                    timeZoneAbbr = TimeZoneResolver.shortAbbreviation(resolvedZone),
+                    isManualLocation = false,
                     showLocationWarningBanner = !resolved.isFromGps && !hasPermission,
                     hasHomeLocation = travelManager.hasHomeAnchor
                 )
             }
+            updateDateLabels(resolvedZone)
+            observeTodaySalahRecords(currentLocationLocalDate(resolvedZone).toEpochDay())
             syncAuthority()
             loadDailySchedule()
         }
     }
 
-    /**
-     * Applies the effective Sunni authority: a manual settings choice if one exists, otherwise
-     * the authority of the detected country. The local engine uses the matching twilight
-     * angles so the offline fallback stays consistent with the online timetable.
-     */
     private fun syncAuthority() {
         val authority = prayerTimes?.effectiveAuthority(countryCode)
             ?: SunniMethodMapper.resolve(countryCode, null)
@@ -272,22 +403,23 @@ class SalahViewModel(
         }
     }
 
-    /** Live 1-second countdown to the next prayer, so the UI ticks down without recomputation. */
     private var countdownJob: Job? = null
 
     private fun startCountdownTicker() {
         countdownJob?.cancel()
         countdownJob = viewModelScope.launch {
             while (isActive) {
-                val times = _uiState.value.prayerTimes
+                val state = _uiState.value
+                val times = state.prayerTimes
                 if (times.isNotEmpty()) {
-                    val now = Clock.System.now().toLocalDateTime(KTimeZone.currentSystemDefault())
+                    val zone = locationKTimeZone(state.timeZoneId)
+                    val now = Clock.System.now().toLocalDateTime(zone)
                     val countdown = astronomyEngine.calculateCountdown(times, now.time)
                     _uiState.update {
                         it.copy(
                             currentPrayer = countdown.currentPrayer,
                             nextPrayer = countdown.nextPrayer,
-                            countdownText = "${countdown.remainingMinutes}m ${countdown.remainingSeconds}s",
+                            countdownText = formatCountdown(countdown),
                             elapsedWindowRatio = countdown.elapsedRatio
                         )
                     }
@@ -298,18 +430,23 @@ class SalahViewModel(
     }
 
     private fun loadDailySchedule() {
-        val today = Clock.System.todayIn(KTimeZone.currentSystemDefault())
         val state = _uiState.value
+        val zoneId = TimeZoneResolver.resolveZoneId(state.timeZoneId)
+        val kZone = locationKTimeZone(state.timeZoneId)
+        val today = currentLocationLocalDate(state.timeZoneId)
+        val kToday = KLocalDate(today.year, today.monthValue, today.dayOfMonth)
         val request = ++scheduleRequest
 
-        // Always render an instant answer first: the on-device astronomical calculation.
+        updateDateLabels(state.timeZoneId)
+        observeTodaySalahRecords(today.toEpochDay())
+
         renderTimes(
             times = astronomyEngine.getPrayerTimes(
                 coordinates = state.userCoordinates,
-                date = today,
+                date = kToday,
                 method = state.calculationMethod,
                 madhhab = state.madhhab,
-                timeZone = KTimeZone.currentSystemDefault(),
+                timeZone = kZone,
                 adjustments = state.adjustments
             ),
             sourceLabel = "Offline Calculation"
@@ -317,12 +454,11 @@ class SalahViewModel(
 
         val repository = prayerTimes ?: return
         viewModelScope.launch {
-            // Cache first (instant, offline), then AlAdhan, then local calculation internally.
             val resolved = repository.resolveDay(
-                date = today.toJavaLocalDate(),
+                date = today,
                 coordinates = state.userCoordinates,
                 madhhab = state.madhhab,
-                zoneId = ZoneId.systemDefault(),
+                zoneId = zoneId,
                 adjustments = state.adjustments,
                 countryCode = countryCode
             )
@@ -347,14 +483,16 @@ class SalahViewModel(
         sourceLabel: String,
         authorityName: String? = null
     ) {
-        val userZone = KTimeZone.currentSystemDefault()
-        val coords = _uiState.value.userCoordinates
+        val state = _uiState.value
+        val userZone = locationKTimeZone(state.timeZoneId)
+        val coords = state.userCoordinates
 
-        val countdown: PrayerCountdownInfo = astronomyEngine.calculateCountdown(times, Clock.System.now().toLocalDateTime(userZone).time)
+        val countdown: PrayerCountdownInfo = astronomyEngine.calculateCountdown(
+            times,
+            Clock.System.now().toLocalDateTime(userZone).time
+        )
         val travel = travelManager.evaluateTravelState(coords)
 
-        // A manual Travel Mode override only survives while the user is away from Home.
-        // Back within 80 km of a saved Home it is cleared, so four rakat return immediately.
         val manualTravelMode = preferences?.travelModeActive == true
         val clearManualTravelMode = manualTravelMode &&
             SafarPolicy.shouldClearManualTravelMode(travelManager.getHomeAnchor(), coords)
@@ -362,31 +500,93 @@ class SalahViewModel(
         val isSafar = travel.isTraveler || (manualTravelMode && !clearManualTravelMode)
         val rakats = SafarPolicy.rakats(isSafar)
 
-        val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a")
-
-        val prayerModels = listOf(
-            PrayerModel("fajr", "Fajr", "الفجر", times[PrayerType.FAJR]?.toJavaLocalTime()?.format(timeFormatter) ?: "05:14 AM", rakats[PrayerType.FAJR] ?: 2, 2, 0),
-            PrayerModel("sunrise", "Sunrise", "الشروق", times[PrayerType.SUNRISE]?.toJavaLocalTime()?.format(timeFormatter) ?: "06:38 AM", 0, 0, 0),
-            PrayerModel("dhuhr", "Dhuhr", "الظهر", times[PrayerType.DHUHR]?.toJavaLocalTime()?.format(timeFormatter) ?: "12:45 PM", rakats[PrayerType.DHUHR] ?: 4, 4, 2, nawafilName = "2 Rakat Nafl"),
-            PrayerModel("asr", "Asr", "العصر", times[PrayerType.ASR]?.toJavaLocalTime()?.format(timeFormatter) ?: "03:52 PM", rakats[PrayerType.ASR] ?: 4, 4, 0),
-            PrayerModel("maghrib", "Maghrib", "المغرب", times[PrayerType.MAGHRIB]?.toJavaLocalTime()?.format(timeFormatter) ?: "06:18 PM", rakats[PrayerType.MAGHRIB] ?: 3, 0, 2, nawafilName = "Awwabin (6 Rakat)"),
-            PrayerModel("isha", "Isha", "العشاء", times[PrayerType.ISHA]?.toJavaLocalTime()?.format(timeFormatter) ?: "07:44 PM", rakats[PrayerType.ISHA] ?: 4, 4, 2, nawafilName = "Tahajjud & Witr")
-        )
+        val prayerModels = buildPrayerModels(times, rakats)
 
         _uiState.update {
             it.copy(
                 prayerTimes = times,
                 currentPrayer = countdown.currentPrayer,
                 nextPrayer = countdown.nextPrayer,
-                countdownText = "${countdown.remainingMinutes}m ${countdown.remainingSeconds}s",
+                countdownText = formatCountdown(countdown),
                 elapsedWindowRatio = countdown.elapsedRatio,
                 prayersList = prayerModels,
                 isTraveler = isSafar,
                 distanceFromHomeKm = travel.distanceKm,
                 hasHomeLocation = travelManager.hasHomeAnchor,
                 sourceLabel = sourceLabel,
-                authorityName = authorityName ?: it.authorityName
+                authorityName = authorityName ?: it.authorityName,
+                timeZoneAbbr = TimeZoneResolver.shortAbbreviation(it.timeZoneId)
             )
+        }
+    }
+
+    private fun buildPrayerModels(
+        times: Map<PrayerType, KLocalTime>,
+        rakats: Map<PrayerType, Int>
+    ): List<PrayerModel> {
+        val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a")
+        fun model(
+            id: String,
+            type: PrayerType,
+            nameEn: String,
+            nameAr: String,
+            fallbackTime: String,
+            defaultFard: Int,
+            sunnahBefore: Int,
+            sunnahAfter: Int,
+            nawafilName: String? = null
+        ): PrayerModel {
+            val record = completedRecordsByPrayer[type]
+            return PrayerModel(
+                id = id,
+                nameEnglish = nameEn,
+                nameArabic = nameAr,
+                time = times[type]?.toJavaLocalTime()?.format(timeFormatter) ?: fallbackTime,
+                fardRakats = rakats[type] ?: defaultFard,
+                sunnahBefore = sunnahBefore,
+                sunnahAfter = sunnahAfter,
+                isFardCompleted = record?.isCompleted == true,
+                isJamaah = record?.isJamaah == true,
+                isNawafilCompleted = type in completedNawafilPrayers,
+                nawafilName = nawafilName
+            )
+        }
+
+        return listOf(
+            model("fajr", PrayerType.FAJR, "Fajr", "الفجر", "05:14 AM", 2, 2, 0),
+            model("sunrise", PrayerType.SUNRISE, "Sunrise", "الشروق", "06:38 AM", 0, 0, 0),
+            model("dhuhr", PrayerType.DHUHR, "Dhuhr", "الظهر", "12:45 PM", 4, 4, 2, "2 Rakat Nafl"),
+            model("asr", PrayerType.ASR, "Asr", "العصر", "03:52 PM", 4, 4, 0),
+            model("maghrib", PrayerType.MAGHRIB, "Maghrib", "المغرب", "06:18 PM", 3, 0, 2, "Awwabin (6 Rakat)"),
+            model("isha", PrayerType.ISHA, "Isha", "العشاء", "07:44 PM", 4, 4, 2, "Tahajjud & Witr")
+        )
+    }
+
+    private fun observeTodaySalahRecords(epochDay: Long) {
+        if (observedEpochDay == epochDay && salahObserverJob?.isActive == true) return
+        observedEpochDay = epochDay
+        salahObserverJob?.cancel()
+        salahObserverJob = viewModelScope.launch {
+            salahDao.observeTodaySalah(epochDay).collect { entities ->
+                completedRecordsByPrayer = entities.mapNotNull { entity ->
+                    runCatching { PrayerType.valueOf(entity.prayerType) to entity }.getOrNull()
+                }.toMap()
+                _uiState.update { state ->
+                    if (state.prayersList.isEmpty()) state
+                    else {
+                        val updatedList = state.prayersList.map { prayer ->
+                            val type = runCatching { PrayerType.valueOf(prayer.nameEnglish.uppercase()) }.getOrNull()
+                            val record = type?.let { completedRecordsByPrayer[it] }
+                            prayer.copy(
+                                isFardCompleted = record?.isCompleted == true,
+                                isJamaah = record?.isJamaah == true,
+                                isNawafilCompleted = type != null && type in completedNawafilPrayers
+                            )
+                        }
+                        state.copy(prayersList = updatedList)
+                    }
+                }
+            }
         }
     }
 
@@ -397,7 +597,7 @@ class SalahViewModel(
                     try {
                         PrayerType.valueOf(it.prayerType) to it.totalMissed
                     } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
+                        if (e is kotlinx.coroutines.CancellationException) throw e
                         PrayerType.FAJR to it.totalMissed
                     }
                 }
@@ -408,30 +608,45 @@ class SalahViewModel(
 
     private fun toggleSalahCompletion(prayerType: PrayerType, isJamaah: Boolean) {
         viewModelScope.launch {
+            val currentlyCompleted = _uiState.value.prayersList
+                .firstOrNull { it.nameEnglish.equals(prayerType.name, ignoreCase = true) }
+                ?.isFardCompleted == true
+            val newCompleted = !currentlyCompleted
+            val newJamaah = if (newCompleted) isJamaah else false
+
+            val epochDay = currentLocationLocalDate(_uiState.value.timeZoneId).toEpochDay()
+            val entity = SalahRecordEntity(
+                dateEpochDay = epochDay,
+                prayerType = prayerType.name,
+                isCompleted = newCompleted,
+                isJamaah = newJamaah,
+                isQadha = false,
+                completedTimestamp = if (newCompleted) System.currentTimeMillis() else null
+            )
+            completedRecordsByPrayer = completedRecordsByPrayer.toMutableMap().apply {
+                put(prayerType, entity)
+            }
+
             val updated = _uiState.value.prayersList.map { p ->
-                if (p.nameEnglish.uppercase() == prayerType.name) {
-                    p.copy(isFardCompleted = !p.isFardCompleted, isJamaah = isJamaah)
+                if (p.nameEnglish.equals(prayerType.name, ignoreCase = true)) {
+                    p.copy(isFardCompleted = newCompleted, isJamaah = newJamaah)
                 } else p
             }
             _uiState.update { it.copy(prayersList = updated) }
 
-            salahDao.upsertSalahRecord(
-                SalahRecordEntity(
-                    dateEpochDay = LocalDate.now().toEpochDay(),
-                    prayerType = prayerType.name,
-                    isCompleted = true,
-                    isJamaah = isJamaah,
-                    isQadha = false,
-                    completedTimestamp = System.currentTimeMillis()
-                )
-            )
+            salahDao.upsertSalahRecord(entity)
         }
     }
 
     private fun toggleNaflCompletion(prayerType: PrayerType, nafl: NaflType) {
+        if (prayerType in completedNawafilPrayers) {
+            completedNawafilPrayers.remove(prayerType)
+        } else {
+            completedNawafilPrayers.add(prayerType)
+        }
         val updated = _uiState.value.prayersList.map { p ->
-            if (p.nameEnglish.uppercase() == prayerType.name) {
-                p.copy(isNawafilCompleted = !p.isNawafilCompleted)
+            if (p.nameEnglish.equals(prayerType.name, ignoreCase = true)) {
+                p.copy(isNawafilCompleted = prayerType in completedNawafilPrayers)
             } else p
         }
         _uiState.update { it.copy(prayersList = updated) }
@@ -447,5 +662,47 @@ class SalahViewModel(
         viewModelScope.launch {
             qadhaDao.decrementMissed(prayerType.name)
         }
+    }
+
+    private fun updateDateLabels(timeZoneId: String) {
+        val localDate = currentLocationLocalDate(timeZoneId)
+        val gregorian = localDate.format(DateTimeFormatter.ofPattern("EEEE · d MMMM yyyy", Locale.ENGLISH))
+        val offsetDays = settingsRepository?.settings?.value?.prayer?.hijriOffset ?: 0
+        val hijri = runCatching {
+            val h = HijrahDate.from(localDate).plus(offsetDays.toLong(), ChronoUnit.DAYS)
+            val day = h.get(ChronoField.DAY_OF_MONTH)
+            val month = HIJRI_MONTHS.getOrElse(h.get(ChronoField.MONTH_OF_YEAR) - 1) { "Hijri" }
+            val year = h.get(ChronoField.YEAR_OF_ERA)
+            "$day $month $year AH"
+        }.getOrDefault(_uiState.value.hijriDate)
+
+        _uiState.update { it.copy(gregorianDate = gregorian, hijriDate = hijri) }
+    }
+
+    private fun currentLocationLocalDate(timeZoneId: String): LocalDate =
+        LocalDate.now(TimeZoneResolver.resolveZoneId(timeZoneId))
+
+    private fun locationKTimeZone(timeZoneId: String): KTimeZone =
+        runCatching { KTimeZone.of(timeZoneId) }.getOrElse { KTimeZone.currentSystemDefault() }
+
+    private fun formatCountdown(info: PrayerCountdownInfo): String {
+        val hrs = info.remainingMinutes / 60
+        val mins = info.remainingMinutes % 60
+        return if (hrs > 0) "${hrs}h ${mins}m ${info.remainingSeconds}s"
+        else "${mins}m ${info.remainingSeconds}s"
+    }
+
+    private fun fromSettingsAsr(asr: AsrMethod): Madhhab =
+        if (asr == AsrMethod.HANAFI) Madhhab.HANAFI else Madhhab.SHAFI_HANBALI_MALIKI
+
+    private fun toSettingsAsr(madhhab: Madhhab): AsrMethod =
+        if (madhhab == Madhhab.HANAFI) AsrMethod.HANAFI else AsrMethod.SHAFI
+
+    companion object {
+        private val HIJRI_MONTHS = listOf(
+            "Muharram", "Safar", "Rabi' al-Awwal", "Rabi' al-Thani",
+            "Jumada al-Ula", "Jumada al-Akhirah", "Rajab", "Sha'ban",
+            "Ramadan", "Shawwal", "Dhu al-Qi'dah", "Dhu al-Hijjah"
+        )
     }
 }

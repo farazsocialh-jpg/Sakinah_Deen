@@ -1,7 +1,9 @@
 package com.sakinah.deen.ui.screens
 
+import android.media.MediaPlayer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,22 +13,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
-import androidx.compose.material.icons.outlined.CompassCalibration
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,6 +34,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -44,24 +44,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sakinah.deen.data.model.PostureStepModel
-import com.sakinah.deen.ui.theme.EmeraldDeep
-import com.sakinah.deen.ui.theme.EmeraldSurface
-import com.sakinah.deen.ui.theme.MintGreen
+import com.sakinah.deen.ui.components.ArabicVerseBlock
+import com.sakinah.deen.ui.components.SakinahCard
+import com.sakinah.deen.ui.components.StatusBadge
+import com.sakinah.deen.ui.theme.AmiriFontFamily
 
 @Composable
 fun VisualSalahGuideScreen(
     onBack: () -> Unit,
+    totalRakats: Int = 2,
+    prayerTitle: String = "Prayer",
     modifier: Modifier = Modifier
 ) {
+    val safeTotalRakats = totalRakats.coerceIn(1, 4)
     val steps = remember {
         listOf(
             PostureStepModel(
@@ -132,10 +134,30 @@ fun VisualSalahGuideScreen(
         )
     }
 
-    var currentStepIndex by remember { mutableIntStateOf(0) }
+    var currentRakat by remember(safeTotalRakats, prayerTitle) { mutableIntStateOf(1) }
+    var currentStepIndex by remember(safeTotalRakats, prayerTitle) { mutableIntStateOf(0) }
     val step = steps[currentStepIndex]
     var loopEnabled by remember { mutableStateOf(false) }
+    var isAudioPlaying by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            runCatching {
+                mediaPlayer?.stop()
+                mediaPlayer?.release()
+            }
+            mediaPlayer = null
+        }
+    }
+
+    fun rakatHasTashahhud(rakat: Int): Boolean =
+        rakat == safeTotalRakats || (safeTotalRakats >= 3 && rakat == 2)
+
+    val lastStepForCurrentRakat = if (rakatHasTashahhud(currentRakat)) 4 else 3
+    val firstStepForCurrentRakat = if (currentRakat == 1) 0 else 1
+    val isFinalAction = currentRakat == safeTotalRakats && currentStepIndex == lastStepForCurrentRakat
 
     Column(
         modifier = modifier
@@ -151,26 +173,18 @@ fun VisualSalahGuideScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
             Text(
-                text = "Rakat 1 of 2 · Step ${step.id} of ${steps.size}",
+                text = "$prayerTitle · Rakat $currentRakat of $safeTotalRakats · Step ${step.id} of ${steps.size}",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
-                color = EmeraldDeep
+                color = MaterialTheme.colorScheme.primary
             )
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MintGreen.copy(alpha = 0.2f)
-            ) {
-                Text(
-                    text = "Qibla Focus",
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    fontSize = 11.sp,
-                    color = EmeraldDeep,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            StatusBadge(
+                text = "Qibla Focus",
+                accentColor = MaterialTheme.colorScheme.primary
+            )
         }
 
         // 1. Step Indicator Carousel
@@ -182,11 +196,15 @@ fun VisualSalahGuideScreen(
                 val isCurrent = index == currentStepIndex
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = if (isCurrent) EmeraldDeep else MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, if (isCurrent) EmeraldDeep else MaterialTheme.colorScheme.outline),
+                    color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(
+                        1.dp,
+                        if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                    ),
                     modifier = Modifier
                         .weight(1f)
                         .height(36.dp)
+                        .clickable { currentStepIndex = index }
                 ) {
                     Box(
                         contentAlignment = Alignment.Center,
@@ -194,7 +212,7 @@ fun VisualSalahGuideScreen(
                     ) {
                         Text(
                             text = "${s.id}",
-                            color = if (isCurrent) Color.White else MaterialTheme.colorScheme.onSurface,
+                            color = if (isCurrent) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp
                         )
@@ -203,35 +221,35 @@ fun VisualSalahGuideScreen(
             }
         }
 
-        // 2. Posture Graphic Viewport (Pure Compose Canvas Drawing)
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // 2. Posture Graphic Viewport
+        val strokePrimary = MaterialTheme.colorScheme.primary
+        val strokeSecondary = MaterialTheme.colorScheme.secondary
+        val torsoColor = MaterialTheme.colorScheme.onSurface
+        val matNeutral = MaterialTheme.colorScheme.outline
+
+        SakinahCard(contentPadding = 16.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Orientation: Facing Qibla with calm focus",
-                        fontSize = 11.sp,
-                        color = EmeraldDeep,
-                        fontWeight = FontWeight.SemiBold,
+                        text = step.name,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f)
                     )
                     Text(
                         text = step.postureAngleText.split(",")[0],
                         fontSize = 11.sp,
                         textAlign = TextAlign.End,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f)
                     )
                 }
 
-                // Pure Vector Canvas Drawing of the Islamic Posture Figure
                 Canvas(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -244,54 +262,59 @@ fun VisualSalahGuideScreen(
 
                     // Prayer mat ground line
                     drawLine(
-                        color = Color.LightGray,
-                        start = Offset(centerX - 100f, groundY),
-                        end = Offset(centerX + 100f, groundY),
+                        color = matNeutral,
+                        start = Offset(centerX - 110f, groundY),
+                        end = Offset(centerX + 110f, groundY),
                         strokeWidth = 6f,
                         cap = StrokeCap.Round
                     )
                     drawLine(
-                        color = Color(0xFF10B981),
-                        start = Offset(centerX - 60f, groundY),
-                        end = Offset(centerX + 60f, groundY),
+                        color = strokeSecondary,
+                        start = Offset(centerX - 65f, groundY),
+                        end = Offset(centerX + 65f, groundY),
                         strokeWidth = 8f,
                         cap = StrokeCap.Round
                     )
 
                     when (step.postureKey) {
                         "takbir" -> {
-                            // Upright standing with hands raised by ears
-                            drawLine(Color(0xFF0B3B2C), Offset(centerX - 12f, groundY), Offset(centerX - 10f, groundY - 60f), 12f, StrokeCap.Round)
-                            drawLine(Color(0xFF0B3B2C), Offset(centerX + 12f, groundY), Offset(centerX + 10f, groundY - 60f), 12f, StrokeCap.Round)
-                            drawRect(Color(0xFF134E3A), Offset(centerX - 18f, groundY - 110f), Size(36f, 50f))
-                            drawCircle(Color(0xFF10B981), radius = 16f, center = Offset(centerX, groundY - 125f))
-                            // Arms raised
-                            drawLine(Color(0xFF0B3B2C), Offset(centerX - 18f, groundY - 100f), Offset(centerX - 35f, groundY - 130f), 8f, StrokeCap.Round)
-                            drawLine(Color(0xFF0B3B2C), Offset(centerX + 18f, groundY - 100f), Offset(centerX + 35f, groundY - 130f), 8f, StrokeCap.Round)
+                            drawLine(strokePrimary, Offset(centerX - 12f, groundY), Offset(centerX - 10f, groundY - 60f), 12f, StrokeCap.Round)
+                            drawLine(strokePrimary, Offset(centerX + 12f, groundY), Offset(centerX + 10f, groundY - 60f), 12f, StrokeCap.Round)
+                            drawRect(torsoColor, Offset(centerX - 18f, groundY - 110f), Size(36f, 50f))
+                            drawCircle(strokeSecondary, radius = 16f, center = Offset(centerX, groundY - 125f))
+                            drawLine(strokePrimary, Offset(centerX - 18f, groundY - 100f), Offset(centerX - 35f, groundY - 130f), 8f, StrokeCap.Round)
+                            drawLine(strokePrimary, Offset(centerX + 18f, groundY - 100f), Offset(centerX + 35f, groundY - 130f), 8f, StrokeCap.Round)
                         }
                         "ruku" -> {
-                            // 90 degree horizontal back
-                            drawLine(Color(0xFF0B3B2C), Offset(centerX + 30f, groundY), Offset(centerX + 25f, groundY - 70f), 12f, StrokeCap.Round)
-                            drawLine(Color(0xFF134E3A), Offset(centerX + 25f, groundY - 70f), Offset(centerX - 40f, groundY - 70f), 16f, StrokeCap.Round)
-                            drawCircle(Color(0xFF10B981), radius = 16f, center = Offset(centerX - 56f, groundY - 70f))
-                            // Arm bracing knee
-                            drawLine(Color(0xFF0B3B2C), Offset(centerX - 25f, groundY - 70f), Offset(centerX + 20f, groundY - 35f), 8f, StrokeCap.Round)
+                            drawLine(strokePrimary, Offset(centerX + 30f, groundY), Offset(centerX + 25f, groundY - 70f), 12f, StrokeCap.Round)
+                            drawLine(torsoColor, Offset(centerX + 25f, groundY - 70f), Offset(centerX - 40f, groundY - 70f), 16f, StrokeCap.Round)
+                            drawCircle(strokeSecondary, radius = 16f, center = Offset(centerX - 56f, groundY - 70f))
+                            drawLine(strokePrimary, Offset(centerX - 25f, groundY - 70f), Offset(centerX + 20f, groundY - 35f), 8f, StrokeCap.Round)
                         }
                         "sujud" -> {
-                            // 7 points prostration on mat
-                            drawLine(Color(0xFF0B3B2C), Offset(centerX + 50f, groundY), Offset(centerX + 10f, groundY), 10f, StrokeCap.Round)
-                            drawLine(Color(0xFF0B3B2C), Offset(centerX + 10f, groundY), Offset(centerX - 10f, groundY - 35f), 12f, StrokeCap.Round)
-                            drawLine(Color(0xFF134E3A), Offset(centerX - 10f, groundY - 35f), Offset(centerX - 45f, groundY - 10f), 14f, StrokeCap.Round)
-                            drawCircle(Color(0xFF10B981), radius = 14f, center = Offset(centerX - 60f, groundY - 10f))
+                            drawLine(strokePrimary, Offset(centerX + 52f, groundY), Offset(centerX + 12f, groundY), 10f, StrokeCap.Round)
+                            drawLine(strokePrimary, Offset(centerX + 12f, groundY), Offset(centerX - 10f, groundY - 35f), 12f, StrokeCap.Round)
+                            drawLine(torsoColor, Offset(centerX - 10f, groundY - 35f), Offset(centerX - 45f, groundY - 10f), 14f, StrokeCap.Round)
+                            drawCircle(strokeSecondary, radius = 14f, center = Offset(centerX - 60f, groundY - 10f))
+                        }
+                        "tashahhud" -> {
+                            // Seated Iftirash figure facing Qibla (left)
+                            drawLine(strokePrimary, Offset(centerX + 42f, groundY), Offset(centerX - 28f, groundY), 12f, StrokeCap.Round)
+                            drawLine(strokePrimary, Offset(centerX + 42f, groundY), Offset(centerX + 42f, groundY - 26f), 10f, StrokeCap.Round)
+                            // Upright seated torso
+                            drawLine(torsoColor, Offset(centerX + 18f, groundY - 4f), Offset(centerX + 18f, groundY - 68f), 24f, StrokeCap.Round)
+                            // Head
+                            drawCircle(strokeSecondary, radius = 15f, center = Offset(centerX + 16f, groundY - 88f))
+                            // Arm resting on thigh with pointed right index finger
+                            drawLine(strokePrimary, Offset(centerX + 14f, groundY - 52f), Offset(centerX - 14f, groundY - 26f), 8f, StrokeCap.Round)
+                            drawLine(strokeSecondary, Offset(centerX - 14f, groundY - 26f), Offset(centerX - 32f, groundY - 34f), 6f, StrokeCap.Round)
                         }
                         else -> {
-                            // Standing upright (Qiyam)
-                            drawLine(Color(0xFF0B3B2C), Offset(centerX - 12f, groundY), Offset(centerX - 10f, groundY - 60f), 12f, StrokeCap.Round)
-                            drawLine(Color(0xFF0B3B2C), Offset(centerX + 12f, groundY), Offset(centerX + 10f, groundY - 60f), 12f, StrokeCap.Round)
-                            drawRect(Color(0xFF134E3A), Offset(centerX - 18f, groundY - 110f), Size(36f, 50f))
-                            drawCircle(Color(0xFF10B981), radius = 16f, center = Offset(centerX, groundY - 125f))
-                            // Arms folded
-                            drawLine(Color(0xFF0B3B2C), Offset(centerX - 18f, groundY - 95f), Offset(centerX + 18f, groundY - 95f), 10f, StrokeCap.Round)
+                            drawLine(strokePrimary, Offset(centerX - 12f, groundY), Offset(centerX - 10f, groundY - 60f), 12f, StrokeCap.Round)
+                            drawLine(strokePrimary, Offset(centerX + 12f, groundY), Offset(centerX + 10f, groundY - 60f), 12f, StrokeCap.Round)
+                            drawRect(torsoColor, Offset(centerX - 18f, groundY - 110f), Size(36f, 50f))
+                            drawCircle(strokeSecondary, radius = 16f, center = Offset(centerX, groundY - 125f))
+                            drawLine(strokePrimary, Offset(centerX - 18f, groundY - 95f), Offset(centerX + 18f, groundY - 95f), 10f, StrokeCap.Round)
                         }
                     }
                 }
@@ -299,41 +322,32 @@ fun VisualSalahGuideScreen(
                 Text(
                     text = "Placement: ${step.handPlacement}. ${step.footPositioning}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
         // 3. Recitation & Meaning Card
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+        SakinahCard(contentPadding = 18.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     text = step.arabicTitle,
+                    fontFamily = AmiriFontFamily,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = EmeraldDeep
+                    fontSize = 15.sp,
+                    color = MaterialTheme.colorScheme.primary
                 )
 
-                // Large Arabic Text
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = MintGreen.copy(alpha = 0.08f),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = step.arabicRecitation,
-                        fontFamily = FontFamily.Serif,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = EmeraldDeep,
-                        textAlign = TextAlign.Center,
+                    ArabicVerseBlock(
+                        arabicText = step.arabicRecitation,
+                        fontSizeSp = 24,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        isQuran = false,
                         modifier = Modifier.padding(16.dp)
                     )
                 }
@@ -342,47 +356,87 @@ fun VisualSalahGuideScreen(
                     text = "Phonetic: \"${step.phoneticTransliteration}\"",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = EmeraldDeep
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Text(
                     text = "Meaning: \"${step.englishTranslation}\"",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = step.sunnahNotes,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
-                // Audio Trigger Bar
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FilledTonalButton(modifier = Modifier.weight(1f), onClick = {
-                        val resId = context.resources.getIdentifier("adhan_fajr", "raw", context.packageName)
-                        if (resId != 0) {
-                            val mp = android.media.MediaPlayer.create(context, resId)
-                            mp?.isLooping = loopEnabled
-                            mp?.start()
+                    FilledTonalButton(
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            if (isAudioPlaying) {
+                                runCatching {
+                                    mediaPlayer?.stop()
+                                    mediaPlayer?.release()
+                                }
+                                mediaPlayer = null
+                                isAudioPlaying = false
+                            } else {
+                                val resId = context.resources.getIdentifier("adhan_fajr", "raw", context.packageName)
+                                if (resId != 0) {
+                                    runCatching {
+                                        mediaPlayer?.release()
+                                        mediaPlayer = MediaPlayer.create(context, resId)?.apply {
+                                            isLooping = loopEnabled
+                                            setOnCompletionListener { isAudioPlaying = false }
+                                            start()
+                                        }
+                                        isAudioPlaying = mediaPlayer != null
+                                    }
+                                }
+                            }
                         }
-                    }) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Play")
+                    ) {
+                        Icon(
+                            imageVector = if (isAudioPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
+                            contentDescription = null
+                        )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Pronounce Audio")
+                        Text(if (isAudioPlaying) "Stop Audio" else "Pronounce Audio")
                     }
-                    IconButton(onClick = { loopEnabled = !loopEnabled }) {
-                        Icon(Icons.Default.Repeat, contentDescription = "Loop", tint = if (loopEnabled) EmeraldDeep else Color.Gray)
+                    IconButton(onClick = {
+                        loopEnabled = !loopEnabled
+                        mediaPlayer?.isLooping = loopEnabled
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Repeat,
+                            contentDescription = "Loop",
+                            tint = if (loopEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
         }
 
-        // 4. Navigation Footer
+        // 4. Navigation Footer across all Rakats
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            val canGoBack = currentRakat > 1 || currentStepIndex > 0
             OutlinedButton(
-                onClick = { if (currentStepIndex > 0) currentStepIndex-- },
-                enabled = currentStepIndex > 0,
+                onClick = {
+                    if (currentStepIndex > firstStepForCurrentRakat) {
+                        currentStepIndex--
+                    } else if (currentRakat > 1) {
+                        currentRakat--
+                        currentStepIndex = if (rakatHasTashahhud(currentRakat)) 4 else 3
+                    }
+                },
+                enabled = canGoBack,
                 modifier = Modifier.weight(1f)
             ) {
                 Icon(Icons.Default.ChevronLeft, contentDescription = null)
@@ -391,17 +445,27 @@ fun VisualSalahGuideScreen(
 
             Button(
                 onClick = {
-                    if (currentStepIndex < steps.size - 1) {
+                    if (currentStepIndex < lastStepForCurrentRakat) {
                         currentStepIndex++
+                    } else if (currentRakat < safeTotalRakats) {
+                        currentRakat++
+                        currentStepIndex = 1 // Subsequent rakats begin with Qiyam & Al-Fatihah
                     } else {
                         onBack()
                     }
                 },
                 modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = EmeraldDeep)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text(if (currentStepIndex == steps.size - 1) "Complete" else "Next Step")
-                Icon(Icons.Default.ChevronRight, contentDescription = null)
+                Text(
+                    text = if (isFinalAction) "Complete" else "Next Step",
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
             }
         }
     }

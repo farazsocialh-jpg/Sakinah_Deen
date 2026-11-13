@@ -1,11 +1,23 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
-    alias(libs.plugins.android.library)
+    alias(libs.plugins.android.kotlin.multiplatform.library)
     alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {
-    androidTarget()
+    android {
+        namespace = "com.sakinah.deen.shared"
+        compileSdk = 35
+        minSdk = 28
+
+        withHostTestBuilder {}.configure {}
+
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+        }
+    }
 
     iosArm64()
     iosSimulatorArm64()
@@ -28,7 +40,7 @@ kotlin {
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.koin.core)
-            implementation(libs.multiplatform.settings)
+            api(libs.multiplatform.settings)
             implementation(libs.multiplatform.settings.no.arg)
         }
         androidMain.dependencies {
@@ -41,17 +53,5 @@ kotlin {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
         }
-    }
-}
-
-android {
-    namespace = "com.sakinah.deen.shared"
-    compileSdk = 35
-    defaultConfig {
-        minSdk = 28
-    }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
     }
 }

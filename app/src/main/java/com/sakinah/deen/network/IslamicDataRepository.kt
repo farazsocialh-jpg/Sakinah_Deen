@@ -24,11 +24,13 @@ import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.isSuccess
+import com.sakinah.deen.util.ArabicNormalizer
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -271,8 +273,17 @@ class IslamicDataRepository(
     fun observeSurahs(): Flow<List<SurahMetadataEntity>> = afterSeeding(quranDao.observeSurahs())
 
     /** Full-text search over the locally cached Uthmani text and its translation. */
-    fun searchAyahs(query: String, limit: Int = 100): Flow<List<QuranAyahEntity>> =
-        afterSeeding(quranDao.searchAyahs(query, limit))
+    fun searchAyahs(query: String, limit: Int = 100): Flow<List<QuranAyahEntity>> {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) return flow { emit(emptyList()) }
+        return afterSeeding(quranDao.observeAllAyahs()).map { rows ->
+            rows.filter { row ->
+                ArabicNormalizer.matches(row.textUthmani, trimmed) ||
+                    ArabicNormalizer.matches(row.translation.orEmpty(), trimmed) ||
+                    row.verseKey.equals(trimmed, ignoreCase = true)
+            }.take(limit)
+        }
+    }
 
     suspend fun isSurahAvailable(surahNumber: Int): Boolean =
         quranDao.countAyahs(surahNumber) > 0
@@ -382,8 +393,19 @@ class IslamicDataRepository(
     fun observeAllHadiths(limit: Int = 100000, offset: Int = 0): Flow<List<HadithEntryEntity>> =
         afterSeeding(hadithDao.observeAllHadiths(limit, offset))
 
-    fun searchHadiths(query: String, limit: Int = 200): Flow<List<HadithEntryEntity>> =
-        afterSeeding(hadithDao.searchHadiths(query, limit))
+    fun searchHadiths(query: String, limit: Int = 200): Flow<List<HadithEntryEntity>> {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) return flow { emit(emptyList()) }
+        return afterSeeding(hadithDao.observeAllHadiths()).map { rows ->
+            rows.filter { row ->
+                ArabicNormalizer.matches(row.arabicText, trimmed) ||
+                    ArabicNormalizer.matches(row.englishText, trimmed) ||
+                    ArabicNormalizer.matches(row.chapterTitle, trimmed) ||
+                    ArabicNormalizer.matches(row.bookTitle, trimmed) ||
+                    row.hadithNumber.toString() == trimmed
+            }.take(limit)
+        }
+    }
 
     /**
      * Waits for bundled offline content before the first Room emission. Without a seeder
@@ -554,6 +576,11 @@ class IslamicDataRepository(
             val grade = (entry["grades"] as? JsonArray)
                 ?.firstOrNull() as? JsonObject
 
+            val rawText = cleanText((entry["text"] as? JsonPrimitive)?.contentOrNull.orEmpty())
+            val isArabicEdition = languageCode.equals("ara", ignoreCase = true)
+            val resolvedArabic = if (isArabicEdition) rawText else arabicByNumber[number].orEmpty()
+            val resolvedTranslation = if (isArabicEdition) "" else rawText
+
             HadithEntryEntity(
                 bookKey = bookKey,
                 languageCode = languageCode,
@@ -561,8 +588,8 @@ class IslamicDataRepository(
                 bookTitle = cleanText(bookTitle),
                 sectionNumber = sectionNumber,
                 chapterTitle = sections[sectionNumber.toString()].orEmpty(),
-                arabicText = arabicByNumber[number].orEmpty(),
-                englishText = cleanText((entry["text"] as? JsonPrimitive)?.contentOrNull.orEmpty()),
+                arabicText = resolvedArabic,
+                englishText = resolvedTranslation,
                 grade = (grade?.get("grade") as? JsonPrimitive)?.contentOrNull.orEmpty(),
                 gradingScholar = (grade?.get("name") as? JsonPrimitive)?.contentOrNull.orEmpty()
             )

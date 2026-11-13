@@ -70,4 +70,15 @@ class InMemoryAuthRepository : AuthRepository {
         _authState.value = AuthState.Guest
         return Result.success(Unit)
     }
+
+    override suspend fun updateDisplayName(displayName: String): Result<AuthUser> {
+        val c = current ?: return Result.failure(IllegalStateException("Not signed in"))
+        val clean = displayName.trim()
+        if (clean.isBlank()) return Result.failure(IllegalArgumentException("Display name cannot be blank"))
+        val updated = c.copy(displayName = clean)
+        current = updated
+        users[c.email]?.let { existing -> users[c.email] = existing.copy(displayName = clean) }
+        _authState.value = AuthState.Authenticated(updated)
+        return Result.success(updated)
+    }
 }

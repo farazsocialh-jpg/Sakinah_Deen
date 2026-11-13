@@ -6,10 +6,10 @@ import com.sakinah.deen.data.database.dao.SadaqahDao
 import com.sakinah.deen.data.database.entity.SadaqahLogEntity
 import com.sakinah.deen.data.repository.NisabRateRepository
 import com.sakinah.deen.data.repository.NisabRates
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -23,17 +23,17 @@ data class WealthUiState(
     val nisabLastUpdatedEpochMillis: Long = 0L,
     val cashInBank: Float = 14200f,
     val goldHeld: Float = 4500f,
-    val silverHeld: Float = 320f,
+    val silverHeld: Float = 0f,
     val tradeInventory: Float = 0f,
     val stocksValue: Float = 6800f,
     val shortTermDebts: Float = 1800f,
-    val sadaqahJarCollected: Float = 76f,
+    val sadaqahJarCollected: Float = 0f,
     val sadaqahGoal: Float = 100f,
     val nisabThreshold: Float = 85f * 88.40f, // 7514.0f
-    val grossAssets: Float = 14200f + 4500f + 320f + 6800f,
-    val netEligible: Float = (14200f + 4500f + 320f + 6800f) - 1800f,
+    val grossAssets: Float = 14200f + 4500f + 6800f,
+    val netEligible: Float = (14200f + 4500f + 6800f) - 1800f,
     val isEligible: Boolean = true,
-    val zakatPayable: Float = ((14200f + 4500f + 320f + 6800f) - 1800f) * 0.025f,
+    val zakatPayable: Float = ((14200f + 4500f + 6800f) - 1800f) * 0.025f,
     val recentSadaqahLogs: List<SadaqahLogEntity> = emptyList(),
     /** Surfaced failure for nisab/sadaqah work, retried through [WealthUiIntent.RefreshNisabRates]. */
     val errorMessage: String? = null
@@ -106,27 +106,27 @@ class WealthViewModel(
                 recalculateZakat()
             }
             is WealthUiIntent.UpdateCash -> {
-                _uiState.update { it.copy(cashInBank = intent.amount) }
+                _uiState.update { it.copy(cashInBank = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
             }
             is WealthUiIntent.UpdateGoldHeld -> {
-                _uiState.update { it.copy(goldHeld = intent.amount) }
+                _uiState.update { it.copy(goldHeld = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
             }
             is WealthUiIntent.UpdateSilverHeld -> {
-                _uiState.update { it.copy(silverHeld = intent.amount) }
+                _uiState.update { it.copy(silverHeld = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
             }
             is WealthUiIntent.UpdateTradeInventory -> {
-                _uiState.update { it.copy(tradeInventory = intent.amount) }
+                _uiState.update { it.copy(tradeInventory = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
             }
             is WealthUiIntent.UpdateStocksValue -> {
-                _uiState.update { it.copy(stocksValue = intent.amount) }
+                _uiState.update { it.copy(stocksValue = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
             }
             is WealthUiIntent.UpdateDebts -> {
-                _uiState.update { it.copy(shortTermDebts = intent.amount) }
+                _uiState.update { it.copy(shortTermDebts = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
             }
             is WealthUiIntent.AddMicroSadaqah -> {
@@ -176,12 +176,12 @@ class WealthViewModel(
         }
 
         viewModelScope.launch {
-            val startOfMonth = LocalDate.now().withDayOfMonth(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            val endOfMonth = System.currentTimeMillis()
+            val zone = ZoneId.systemDefault()
+            val firstDay = LocalDate.now(zone).withDayOfMonth(1)
+            val startOfMonth = firstDay.atStartOfDay(zone).toInstant().toEpochMilli()
+            val endOfMonth = firstDay.plusMonths(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1L
             sadaqahDao.observeMonthlyTotal(startOfMonth, endOfMonth).collect { monthlySum ->
-                if (monthlySum != null) {
-                    _uiState.update { it.copy(sadaqahJarCollected = monthlySum.toFloat()) }
-                }
+                _uiState.update { it.copy(sadaqahJarCollected = (monthlySum ?: 0.0).toFloat()) }
             }
         }
     }
@@ -198,12 +198,7 @@ class WealthViewModel(
                         timestamp = System.currentTimeMillis()
                     )
                 )
-                _uiState.update {
-                    it.copy(
-                        sadaqahJarCollected = it.sadaqahJarCollected + amount,
-                        errorMessage = null
-                    )
-                }
+                _uiState.update { it.copy(errorMessage = null) }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {

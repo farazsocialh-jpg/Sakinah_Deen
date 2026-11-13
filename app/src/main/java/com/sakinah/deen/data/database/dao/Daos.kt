@@ -138,6 +138,9 @@ interface QuranDao {
     @Query("SELECT * FROM quran_ayahs WHERE surahNumber = :surahNumber ORDER BY ayahNumber ASC")
     fun observeSurah(surahNumber: Int): Flow<List<QuranAyahEntity>>
 
+    @Query("SELECT * FROM quran_ayahs ORDER BY surahNumber ASC, ayahNumber ASC")
+    fun observeAllAyahs(): Flow<List<QuranAyahEntity>>
+
     @Query(
         "SELECT * FROM quran_ayahs WHERE textUthmani LIKE '%' || :query || '%' " +
             "OR translation LIKE '%' || :query || '%' " +

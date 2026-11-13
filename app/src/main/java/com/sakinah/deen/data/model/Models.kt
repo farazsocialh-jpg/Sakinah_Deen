@@ -77,7 +77,8 @@ data class HadithModel(
     val arabicText: String,
     val sanad: String,
     val matnTranslation: String,
-    val bookmarked: Boolean = false
+    val bookmarked: Boolean = false,
+    val sectionNumber: Int = 0
 )
 
 data class TravelConcessionModel(
@@ -115,5 +116,6 @@ data class ChatMessageModel(
     val hanafiStance: String? = null,
     val malikiStance: String? = null,
     val shafiiStance: String? = null,
-    val hanbaliStance: String? = null
+    val hanbaliStance: String? = null,
+    val sourceDeepLink: String? = null
 )

@@ -1,10 +1,10 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.io.File
 import java.net.URI
 import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.serialization)
@@ -83,9 +83,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
     ksp {
         arg("room.schemaLocation", "${projectDir}/schemas")
     }
@@ -96,6 +93,12 @@ android {
     androidResources {
         // Fonts and audio are already compressed formats; do not store them twice.
         noCompress += listOf("ogg", "mp3", "ttf")
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
     }
 }
 
@@ -139,6 +142,7 @@ dependencies {
     // Koin Dependency Injection
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)
+    implementation(libs.multiplatform.settings)
 
     // Ktor Client & Kotlinx Serialization
     implementation(libs.ktor.client.core)

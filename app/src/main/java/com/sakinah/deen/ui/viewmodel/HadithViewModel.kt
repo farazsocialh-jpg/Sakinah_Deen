@@ -5,7 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.sakinah.deen.data.database.entity.HadithEntryEntity
 import com.sakinah.deen.data.model.HadithBookCatalog
 import com.sakinah.deen.data.model.HadithModel
+import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.network.IslamicDataRepository
+import com.sakinah.deen.settings.SettingsRepository
+import com.sakinah.deen.util.ArabicNormalizer
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,12 +51,15 @@ sealed class HadithUiIntent {
     data class FilterGradeChanged(val grade: String) : HadithUiIntent()
     data class ToggleBookmark(val hadithId: String) : HadithUiIntent()
     data class NavigateToDeepLink(val hadithIdOrSlug: String) : HadithUiIntent()
+    data object ClearDeepLinkTarget : HadithUiIntent()
     data object ClearSearch : HadithUiIntent()
     data object RetrySync : HadithUiIntent()
 }
 
 class HadithViewModel(
-    private val islamicRepository: IslamicDataRepository? = null
+    private val islamicRepository: IslamicDataRepository? = null,
+    private val preferences: SakinahPreferences? = null,
+    private val settingsRepository: SettingsRepository? = null
 ) : ViewModel() {
 
     private val canonicalBooks = listOf(
@@ -114,13 +120,31 @@ class HadithViewModel(
 
     private var hadithCatalog: List<HadithBookCatalog> = emptyList()
     private var databaseJob: Job? = null
+    private var pendingDeepLinkTarget: Pair<String, Int>? = null
+    private var hasReceivedDatabaseRows = false
+
+    private val initialBookmarks: Set<String> = if (preferences != null) {
+        if (!preferences.hasInitializedHadithBookmarks) {
+            val seed = setOf("bukhari-1", "muslim-140")
+            preferences.bookmarkedHadithIds = seed
+            preferences.hasInitializedHadithBookmarks = true
+            seed
+        } else {
+            preferences.bookmarkedHadithIds
+        }
+    } else {
+        setOf("bukhari-1", "muslim-140")
+    }
 
     private val _uiState = MutableStateFlow(
         HadithUiState(
             books = canonicalBooks,
-            hadiths = placeholderCorpus,
-            filteredHadiths = placeholderCorpus,
-            bookmarkedIds = setOf("bukhari-1", "muslim-140")
+            selectedLanguageCode = preferences?.hadithLanguageCode
+                ?: settingsRepository?.settings?.value?.appearance?.hadithLanguageCode
+                ?: "eng",
+            hadiths = placeholderCorpus.map { h -> h.copy(bookmarked = isBookmarkMatch(h.id, h.bookKey, h.hadithNumber, initialBookmarks)) },
+            filteredHadiths = placeholderCorpus.map { h -> h.copy(bookmarked = isBookmarkMatch(h.id, h.bookKey, h.hadithNumber, initialBookmarks)) },
+            bookmarkedIds = initialBookmarks
         )
     )
     val uiState: StateFlow<HadithUiState> = _uiState.asStateFlow()
@@ -137,7 +161,7 @@ class HadithViewModel(
                     it.copy(
                         selectedBookKey = intent.bookKey,
                         selectedSectionNumber = 0,
-                        isLoading = true,
+                        isLoading = intent.bookKey != "all",
                         errorMessage = null,
                         downloadProgress = null
                     )
@@ -146,17 +170,23 @@ class HadithViewModel(
                 applyFilterAndSearch()
                 if (intent.bookKey != "all") {
                     syncBook(intent.bookKey, _uiState.value.selectedLanguageCode)
-                } else {
-                    _uiState.update { it.copy(isLoading = false) }
                 }
                 observeDatabaseHadiths()
             }
             is HadithUiIntent.SelectLanguage -> {
+                preferences?.hadithLanguageCode = intent.languageCode
+                settingsRepository?.let { repo ->
+                    viewModelScope.launch {
+                        repo.updateAppearance(
+                            repo.settings.value.appearance.copy(hadithLanguageCode = intent.languageCode)
+                        )
+                    }
+                }
                 _uiState.update {
                     it.copy(
                         selectedLanguageCode = intent.languageCode,
                         selectedSectionNumber = 0,
-                        isLoading = true,
+                        isLoading = _uiState.value.selectedBookKey != "all",
                         errorMessage = null,
                         downloadProgress = null
                     )
@@ -165,8 +195,6 @@ class HadithViewModel(
                 applyFilterAndSearch()
                 if (_uiState.value.selectedBookKey != "all") {
                     syncBook(_uiState.value.selectedBookKey, intent.languageCode)
-                } else {
-                    _uiState.update { it.copy(isLoading = false) }
                 }
                 observeDatabaseHadiths()
             }
@@ -184,6 +212,7 @@ class HadithViewModel(
             }
             is HadithUiIntent.ToggleBookmark -> toggleBookmark(intent.hadithId)
             is HadithUiIntent.NavigateToDeepLink -> navigateToDeepLink(intent.hadithIdOrSlug)
+            is HadithUiIntent.ClearDeepLinkTarget -> _uiState.update { it.copy(targetDeepLinkId = null) }
             is HadithUiIntent.ClearSearch -> {
                 _uiState.update { it.copy(searchQuery = "") }
                 applyFilterAndSearch()
@@ -248,13 +277,26 @@ class HadithViewModel(
                     },
                     availableLanguages = selectedCatalog?.editions?.map { it.languageCode }?.distinct()?.ifEmpty { state.availableLanguages }
                         ?: state.availableLanguages,
-                    sections = selectedCatalog?.sections?.toList()?.sortedBy { it.first } ?: state.sections
+                    sections = if (state.selectedBookKey == "all") {
+                        emptyList()
+                    } else {
+                        selectedCatalog?.sections?.toList()?.sortedBy { it.first } ?: state.sections
+                    }
                 )
             }
         }
     }
 
     private fun updateDerivedFromCatalog(bookKey: String) {
+        if (bookKey == "all") {
+            _uiState.update { state ->
+                state.copy(
+                    sections = emptyList(),
+                    availableLanguages = listOf("eng", "ara")
+                )
+            }
+            return
+        }
         val selectedCatalog = hadithCatalog.firstOrNull { it.bookKey == bookKey } ?: return
         _uiState.update { state ->
             state.copy(
@@ -277,18 +319,41 @@ class HadithViewModel(
                 else -> repo.observeHadiths(bookKey, languageCode)
             }
             try {
-                flow.collect { entries ->
-                    if (entries.isEmpty()) return@collect
+                flow.collect { rawEntries ->
+                    if (rawEntries.isEmpty() && !hasReceivedDatabaseRows && bookKey == "all") {
+                        return@collect
+                    }
+                    hasReceivedDatabaseRows = true
+                    val entries = if (bookKey == "all") {
+                        val langFiltered = rawEntries.filter { it.languageCode.equals(languageCode, ignoreCase = true) }
+                        if (langFiltered.isNotEmpty() || rawEntries.isEmpty()) langFiltered else rawEntries
+                    } else {
+                        rawEntries
+                    }
+
                     val bookmarked = _uiState.value.bookmarkedIds
                     val mapped = entries.map { entry ->
-                        entry.toModel(bookmarked.contains("${entry.bookKey}-${entry.hadithNumber}"))
+                        val canonicalId = "${entry.bookKey}-${entry.languageCode}-${entry.hadithNumber}"
+                        entry.toModel(isBookmarkMatch(canonicalId, entry.bookKey, entry.hadithNumber, bookmarked))
                     }
+
+                    val pending = pendingDeepLinkTarget
+                    val resolvedDeepLink = if (pending != null) {
+                        mapped.firstOrNull {
+                            it.bookKey.equals(pending.first, ignoreCase = true) && it.hadithNumber == pending.second
+                        }?.id
+                    } else {
+                        null
+                    }
+                    if (resolvedDeepLink != null) pendingDeepLinkTarget = null
+
                     _uiState.update {
                         it.copy(
                             hadiths = mapped,
-                            isFromDatabase = true,
+                            isFromDatabase = mapped.isNotEmpty() || it.isFromDatabase,
                             isLoading = false,
-                            errorMessage = null
+                            errorMessage = null,
+                            targetDeepLinkId = resolvedDeepLink ?: it.targetDeepLinkId
                         )
                     }
                     applyFilterAndSearch()
@@ -306,18 +371,6 @@ class HadithViewModel(
         }
     }
 
-    private fun buildBooks(entries: List<HadithEntryEntity>): List<HadithBookInfo> =
-        entries
-            .groupBy { it.bookKey to it.bookTitle }
-            .map { (keyAndTitle, group) ->
-                HadithBookInfo(
-                    key = keyAndTitle.first,
-                    title = keyAndTitle.second,
-                    totalCount = "${group.size} Hadiths"
-                )
-            }
-            .sortedBy { it.key }
-
     private fun HadithEntryEntity.toModel(bookmarked: Boolean): HadithModel = HadithModel(
         id = "$bookKey-$languageCode-$hadithNumber",
         bookKey = bookKey,
@@ -330,40 +383,52 @@ class HadithViewModel(
         arabicText = arabicText,
         sanad = "",
         matnTranslation = englishText,
-        bookmarked = bookmarked
+        bookmarked = bookmarked,
+        sectionNumber = sectionNumber
     )
 
     private fun applyFilterAndSearch() {
         val current = _uiState.value
-        val query = current.searchQuery.trim().lowercase()
+        val query = current.searchQuery.trim()
         val bookKey = current.selectedBookKey
+        val sectionNumber = current.selectedSectionNumber
         val gradeFilter = current.filterGrade.uppercase()
 
         val results = current.hadiths.filter { hadith ->
             val matchesBook = (bookKey == "all" || hadith.bookKey.equals(bookKey, ignoreCase = true))
+            val matchesSection = (sectionNumber == 0 || hadith.sectionNumber == 0 || hadith.sectionNumber == sectionNumber)
             val matchesGrade = (gradeFilter == "ALL" || hadith.grade.uppercase().contains(gradeFilter))
             val matchesQuery = query.isBlank() ||
-                    hadith.matnTranslation.lowercase().contains(query) ||
-                    hadith.arabicText.contains(query) ||
-                    hadith.sanad.lowercase().contains(query) ||
-                    hadith.hadithNumber.toString() == query ||
-                    hadith.chapterTitle.lowercase().contains(query)
+                ArabicNormalizer.matches(hadith.matnTranslation, query) ||
+                ArabicNormalizer.matches(hadith.arabicText, query) ||
+                ArabicNormalizer.matches(hadith.sanad, query) ||
+                ArabicNormalizer.matches(hadith.chapterTitle, query) ||
+                ArabicNormalizer.matches(hadith.bookTitle, query) ||
+                hadith.hadithNumber.toString() == query
 
-            matchesBook && matchesGrade && matchesQuery
+            matchesBook && matchesSection && matchesGrade && matchesQuery
         }
 
         _uiState.update { it.copy(filteredHadiths = results) }
     }
 
     private fun toggleBookmark(hadithId: String) {
+        val targetModel = _uiState.value.hadiths.firstOrNull { it.id == hadithId }
+        val legacyKey = targetModel?.let { "${it.bookKey}-${it.hadithNumber}" }
         val bookmarks = _uiState.value.bookmarkedIds.toMutableSet()
-        val isNowBookmarked = if (bookmarks.contains(hadithId)) {
+
+        val wasBookmarked = bookmarks.contains(hadithId) || (legacyKey != null && bookmarks.contains(legacyKey))
+        val isNowBookmarked = if (wasBookmarked) {
             bookmarks.remove(hadithId)
+            if (legacyKey != null) bookmarks.remove(legacyKey)
             false
         } else {
             bookmarks.add(hadithId)
             true
         }
+
+        preferences?.bookmarkedHadithIds = bookmarks
+        preferences?.hasInitializedHadithBookmarks = true
 
         val updatedList = _uiState.value.hadiths.map {
             if (it.id == hadithId) it.copy(bookmarked = isNowBookmarked) else it
@@ -378,22 +443,52 @@ class HadithViewModel(
         applyFilterAndSearch()
     }
 
+    private fun isBookmarkMatch(
+        canonicalId: String,
+        bookKey: String,
+        hadithNumber: Int,
+        bookmarks: Set<String>
+    ): Boolean = canonicalId in bookmarks || "$bookKey-$hadithNumber" in bookmarks
+
     private fun navigateToDeepLink(hadithIdOrSlug: String) {
-        val normalized = hadithIdOrSlug.replace("/", "-").replace(" ", "-").replace("hadith-", "")
-        val target = _uiState.value.hadiths.find {
-            it.id.equals(normalized, ignoreCase = true) ||
-                    normalized.contains(it.hadithNumber.toString())
+        val cleaned = hadithIdOrSlug.trim().removePrefix("hadith/").removePrefix("hadith-")
+        val slashParts = cleaned.replace("-", "/").split("/").filter { it.isNotBlank() }
+        val parsedBook = slashParts.firstOrNull { part -> part.all { it.isLetter() } }?.lowercase()
+        val parsedNumber = slashParts.lastOrNull { part -> part.all { it.isDigit() } }?.toIntOrNull()
+            ?: Regex("#?(\\d+)").findAll(hadithIdOrSlug).lastOrNull()?.groupValues?.getOrNull(1)?.toIntOrNull()
+
+        val target = _uiState.value.hadiths.firstOrNull { h ->
+            h.id.equals(hadithIdOrSlug, ignoreCase = true) ||
+                (parsedBook != null && parsedNumber != null && h.bookKey.equals(parsedBook, true) && h.hadithNumber == parsedNumber) ||
+                (parsedBook == null && parsedNumber != null && h.hadithNumber == parsedNumber)
         }
 
         if (target != null) {
+            pendingDeepLinkTarget = null
             _uiState.update {
                 it.copy(
                     selectedBookKey = target.bookKey,
+                    selectedSectionNumber = 0,
                     searchQuery = "",
+                    filterGrade = "all",
                     targetDeepLinkId = target.id
                 )
             }
+            updateDerivedFromCatalog(target.bookKey)
             applyFilterAndSearch()
+        } else if (parsedBook != null && parsedNumber != null) {
+            pendingDeepLinkTarget = parsedBook to parsedNumber
+            _uiState.update {
+                it.copy(
+                    selectedBookKey = parsedBook,
+                    selectedSectionNumber = 0,
+                    searchQuery = "",
+                    filterGrade = "all"
+                )
+            }
+            updateDerivedFromCatalog(parsedBook)
+            syncBook(parsedBook, _uiState.value.selectedLanguageCode)
+            observeDatabaseHadiths()
         }
     }
 }
