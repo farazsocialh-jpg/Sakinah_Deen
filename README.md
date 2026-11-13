@@ -37,5 +37,5 @@ iOS (macOS only):
 ## Setup
 
 - JDK 17, Android SDK 35.
-- Optionally copy `.env.example` to `.env` and set `AI_PROXY_URL` for the online AI Scholar proxy. Without it, the app falls back to built-in grounded answers.
+- Optionally copy `.env.example` to `.env` and set `AI_PROXY_URL` to override the AI Scholar proxy. Without it, the app uses the deployed Cloudflare Worker.
 - Never commit keystores or API keys; signing uses repository secrets.
