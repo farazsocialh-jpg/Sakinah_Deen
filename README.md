@@ -37,5 +37,5 @@ iOS (macOS only):
 ## Setup
 
 - JDK 17, Android SDK 35.
-- Copy `.env.example` to `.env` and set `SAKINAH_AI_PROXY_URL`.
+- Optionally copy `.env.example` to `.env` and set `AI_PROXY_URL` for the online AI Scholar proxy. Without it, the app falls back to built-in grounded answers.
 - Never commit keystores or API keys; signing uses repository secrets.

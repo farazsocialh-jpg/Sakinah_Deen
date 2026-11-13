@@ -33,15 +33,10 @@ class SunniAiScholarRepositoryImpl(
             )
         )
 
-        // 2. No Scholar backend in this build: state that plainly instead of letting a
-        //    request fail on a blank URL or inventing an answer locally.
-        if (aiClient?.isConfigured != true && backendBaseUrl == null) {
-            emit(RagStreamChunk.TextDelta(SunniAiClient.NOT_CONFIGURED_MESSAGE))
-            emit(RagStreamChunk.Complete)
-            return@flow
-        }
+        // 2. Preferred path: stream from the configured AI proxy. When no proxy is
+        //    configured, or it fails before producing text, the grounded offline
+        //    answer below keeps the Scholar usable instead of showing a setup error.
 
-        // 3. Preferred path: stream from the configured AI proxy.
         if (aiClient?.isConfigured == true) {
             var receivedText = false
             try {
