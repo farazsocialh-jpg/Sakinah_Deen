@@ -40,7 +40,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Backend proxy URL for the Sunni AI Scholar (server-side holds the raw Gemini key).
-        // Supply via AI_PROXY_URL env var or keystore.properties. Empty disables the proxy.
+        // Supply via AI_PROXY_URL env var or keystore.properties; otherwise use the deployed Worker.
         val aiProxyUrl = signingValue("AI_PROXY_URL", "AI_PROXY_URL")
             ?.takeIf { it.isNotBlank() }
             ?: "https://sakinahdeen.farazsocialh.workers.dev"
