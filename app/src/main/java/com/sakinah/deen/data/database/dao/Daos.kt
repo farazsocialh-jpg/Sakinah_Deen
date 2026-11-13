@@ -40,6 +40,13 @@ interface SalahDao {
 
     @Query("DELETE FROM salah_records WHERE dateEpochDay = :epochDay")
     suspend fun deleteForDay(epochDay: Long)
+
+    /** Rebuilds one day atomically (used when re-seeding or correcting a day). */
+    @Transaction
+    suspend fun replaceDay(epochDay: Long, records: List<SalahRecordEntity>) {
+        deleteForDay(epochDay)
+        insertAll(records)
+    }
 }
 
 @Dao
@@ -157,6 +164,13 @@ interface QuranDao {
 
     @Query("DELETE FROM quran_ayahs WHERE surahNumber = :surahNumber")
     suspend fun deleteSurah(surahNumber: Int)
+
+    /** Replaces a downloaded surah in one transaction so readers never see a half-surah. */
+    @Transaction
+    suspend fun replaceSurah(surahNumber: Int, ayahs: List<QuranAyahEntity>) {
+        deleteSurah(surahNumber)
+        upsertAyahs(ayahs)
+    }
 }
 
 @Dao
@@ -191,6 +205,13 @@ interface HadithDao {
 
     @Query("DELETE FROM hadith_entries WHERE bookKey = :bookKey")
     suspend fun clearBook(bookKey: String)
+
+    /** Replaces a whole collection atomically after a re-download. */
+    @Transaction
+    suspend fun replaceBook(bookKey: String, entries: List<HadithEntryEntity>) {
+        clearBook(bookKey)
+        upsertAll(entries)
+    }
 }
 
 @Dao

@@ -120,7 +120,7 @@ class AiScholarViewModel(
     private val _navigationEvents = MutableSharedFlow<AiScholarNavigationEvent>()
     val navigationEvents: SharedFlow<AiScholarNavigationEvent> = _navigationEvents.asSharedFlow()
 
-    private var streamingJob: Job? = null
+    private var streamJob: Job? = null
 
     fun onIntent(intent: AiScholarUiIntent) {
         when (intent) {
@@ -137,7 +137,8 @@ class AiScholarViewModel(
                 handleCitationClick(intent.sourceTitle, intent.deepLink)
             }
             is AiScholarUiIntent.ClearConversation -> {
-                streamingJob?.cancel()
+                streamJob?.cancel()
+                streamJob = null
                 _uiState.update {
                     it.copy(
                         messages = emptyList(),
@@ -150,8 +151,13 @@ class AiScholarViewModel(
     }
 
     private fun sendQuery(queryText: String) {
+        // A new query always supersedes the previous stream so two collectors can never
+        // interleave deltas into the same message list.
+        streamJob?.cancel()
+        streamJob = null
+
         val trimmed = queryText.trim()
-        if (trimmed.isBlank() || _uiState.value.isStreaming) return
+        if (trimmed.isBlank()) return
 
         val userMessageId = UUID.randomUUID().toString()
         val assistantMessageId = UUID.randomUUID().toString()
@@ -192,7 +198,7 @@ class AiScholarViewModel(
             schoolOfThoughtContext = "ALL"
         )
 
-        streamingJob = viewModelScope.launch {
+        streamJob = viewModelScope.launch {
             try {
                 scholarRepository.streamAskScholar(request).collect { chunk ->
                     when (chunk) {
@@ -216,13 +222,16 @@ class AiScholarViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
                 _uiState.update {
                     it.copy(
                         isStreaming = false,
                         error = describeScholarFailure(e)
                     )
                 }
+            } finally {
+                // Only clear the handle if this coroutine still owns it; a newer query may
+                // already have replaced it.
+                if (streamJob == coroutineContext[Job]) streamJob = null
             }
         }
     }

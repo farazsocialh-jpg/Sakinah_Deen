@@ -17,7 +17,7 @@ import kotlinx.serialization.json.contentOrNull
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
-import java.time.ZoneOffset
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /** One cached day of an AlAdhan monthly calendar. */
@@ -63,7 +63,8 @@ class AlAdhanApiClient(
         const val DEFAULT_BASE_URL = "https://api.aladhan.com"
         private const val USER_AGENT = "Sakinah-Android/1.0 (offline-first Islamic companion)"
         private val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy")
-        private val TIME_FORMATS = listOf("HH:mm", "H:mm")
+        private val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+        private val TIME_PATTERN = Regex("""\d{2}:\d{2}""")
 
         // Sunrise is mandatory too: the Salah screen and the cache rows both carry it.
         private val REQUIRED_PRAYERS = listOf(
@@ -114,14 +115,15 @@ class AlAdhanApiClient(
         val root = json.parseToJsonElement(body) as? JsonObject ?: return null
         val data = root["data"] as? JsonArray ?: return null
 
-        val days = data.mapNotNull { parseDay(it) }
-        if (days.isEmpty()) return null
-
         val meta = (data.firstOrNull() as? JsonObject)?.get("meta") as? JsonObject
         val methodName = ((meta?.get("method") as? JsonObject)?.get("name") as? JsonPrimitive)
             ?.contentOrNull
             .orEmpty()
         val timeZone = (meta?.get("timezone") as? JsonPrimitive)?.contentOrNull
+        val zoneId = resolveZone(timeZone)
+
+        val days = data.mapNotNull { parseDay(it, zoneId) }
+        if (days.isEmpty()) return null
 
         return AlAdhanMonthlyTimetable(
             days = days.sortedBy { it.date },
@@ -130,10 +132,14 @@ class AlAdhanApiClient(
         )
     }
 
-    private fun parseDay(element: JsonElement): AlAdhanDay? {
+    /** Timestamps are epoch seconds; resolve them on the location's clock, not UTC. */
+    private fun resolveZone(timeZone: String?): ZoneId =
+        timeZone?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: ZoneId.systemDefault()
+
+    private fun parseDay(element: JsonElement, zoneId: ZoneId): AlAdhanDay? {
         val entry = element as? JsonObject ?: return null
         val timings = entry["timings"] as? JsonObject ?: return null
-        val date = parseDate(entry) ?: return null
+        val date = parseDate(entry, zoneId) ?: return null
 
         val times = buildMap {
             PrayerType.entries.forEach { type ->
@@ -146,8 +152,8 @@ class AlAdhanApiClient(
         return AlAdhanDay(date = date, times = times)
     }
 
-    /** `date.gregorian.date` is `DD-MM-YYYY`; `date.timestamp` is a UTC fallback. */
-    private fun parseDate(entry: JsonObject): LocalDate? {
+    /** `date.gregorian.date` is `DD-MM-YYYY`; `date.timestamp` is the zoned fallback. */
+    private fun parseDate(entry: JsonObject, zoneId: ZoneId): LocalDate? {
         val gregorian = (entry["date"] as? JsonObject)?.get("gregorian") as? JsonObject
         val raw = (gregorian?.get("date") as? JsonPrimitive)?.contentOrNull?.trim()
         if (!raw.isNullOrBlank()) {
@@ -157,17 +163,15 @@ class AlAdhanApiClient(
             ?.let { (it["timestamp"] as? JsonPrimitive)?.contentOrNull }
             ?.toLongOrNull()
             ?: return null
-        return Instant.ofEpochSecond(timestamp).atZone(ZoneOffset.UTC).toLocalDate()
+        return Instant.ofEpochSecond(timestamp).atZone(zoneId).toLocalDate()
     }
 
+    /**
+     * AlAdhan usually sends `"04:24 (+03)"` but can return `"05:12(AST)"` with no space,
+     * so extract the first `HH:mm` token instead of splitting on whitespace.
+     */
     private fun parseTime(raw: String?): LocalTime? {
-        val cleaned = raw?.trim()?.substringBefore(' ')?.trim().orEmpty()
-        if (cleaned.isEmpty()) return null
-        TIME_FORMATS.forEach { format ->
-            runCatching { LocalTime.parse(cleaned, DateTimeFormatter.ofPattern(format)) }
-                .getOrNull()
-                ?.let { return it }
-        }
-        return runCatching { LocalTime.parse(cleaned) }.getOrNull()
+        val match = TIME_PATTERN.find(raw.orEmpty())?.value ?: return null
+        return runCatching { LocalTime.parse(match, TIME_FORMAT) }.getOrNull()
     }
 }
