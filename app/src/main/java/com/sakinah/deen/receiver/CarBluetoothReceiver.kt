@@ -2,6 +2,7 @@ package com.sakinah.deen.receiver
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.ForegroundServiceStartNotAllowedException
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.bluetooth.BluetoothClass
@@ -57,12 +58,39 @@ class CarBluetoothReceiver : BroadcastReceiver() {
         val travelState = updateTravelState(context, preferences)
 
         NotificationChannels.createChannels(context)
-        showVehiclePromptNotification(
-            context = context,
-            carName = carName,
-            qasrActive = travelState?.isQasrActive == true,
-            distanceKm = travelState?.distanceKm
-        )
+        val playbackStarted = startSafarPlaybackSafely(context)
+        if (!playbackStarted) {
+            showVehiclePromptNotification(
+                context = context,
+                carName = carName,
+                qasrActive = travelState?.isQasrActive == true,
+                distanceKm = travelState?.distanceKm
+            )
+        }
+    }
+
+    /**
+     * Android 12+ forbids starting a foreground service from the background, and a
+     * broadcast receiver triggered by a Bluetooth handshake counts as background.
+     * Returning false lets the caller fall back to the high-priority notification
+     * whose action starts playback from a user tap instead of crashing.
+     */
+    private fun startSafarPlaybackSafely(context: Context): Boolean {
+        val serviceIntent = Intent(context, AdhanPlaybackService::class.java).apply {
+            action = AdhanPlaybackService.ACTION_PLAY_DUA_SAFAR
+        }
+        return try {
+            ContextCompat.startForegroundService(context, serviceIntent)
+            true
+        } catch (e: Exception) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                e is ForegroundServiceStartNotAllowedException
+            ) {
+                // Expected on Android 12+: the handshake is a background start.
+            }
+            // Either way the high-priority notification action remains available.
+            false
+        }
     }
 
     private fun handleDisconnected(context: Context) {

@@ -6,7 +6,8 @@ import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "salah_records",
-    primaryKeys = ["dateEpochDay", "prayerType"]
+    primaryKeys = ["dateEpochDay", "prayerType"],
+    indices = [Index("isQadha")]
 )
 data class SalahRecordEntity(
     val dateEpochDay: Long,
@@ -29,7 +30,8 @@ data class QadhaLedgerEntity(
 
 @Entity(
     tableName = "hifz_mistakes",
-    primaryKeys = ["surahNumber", "ayahNumber", "wordPosition"]
+    primaryKeys = ["surahNumber", "ayahNumber", "wordPosition"],
+    indices = [Index("lastReviewedTimestamp")]
 )
 data class HifzMistakeEntity(
     val surahNumber: Int,
@@ -39,7 +41,10 @@ data class HifzMistakeEntity(
     val lastReviewedTimestamp: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "sadaqah_logs")
+@Entity(
+    tableName = "sadaqah_logs",
+    indices = [Index("timestamp")]
+)
 data class SadaqahLogEntity(
     @PrimaryKey
     val id: String,
@@ -106,7 +111,10 @@ data class HadithEntryEntity(
 /**
  * Bundled adhkar/du'a seeded from assets on first launch (Hisn al-Muslim essentials).
  */
-@Entity(tableName = "adhkar_entries")
+@Entity(
+    tableName = "adhkar_entries",
+    indices = [Index("categoryKey")]
+)
 data class AdhkarEntity(
     @PrimaryKey
     val id: String,

@@ -69,7 +69,6 @@ class IslamicDataRepository(
         )
 
         private const val USER_AGENT = "Sakinah-Android/1.0 (offline-first Islamic companion)"
-        private const val INSERT_CHUNK_SIZE = 400
         private val HTML_TAG = Regex("<[^>]+>")
         private val WHITESPACE = Regex("\\s+")
     }
@@ -130,7 +129,7 @@ class IslamicDataRepository(
             )
         }
 
-        quranDao.upsertAyahs(ayahs)
+        quranDao.replaceSurah(surahNumber, ayahs)
         chapter?.let { quranDao.upsertSurahs(listOf(it.toEntity())) }
         onProgress(1f)
         ayahs.size
@@ -187,7 +186,7 @@ class IslamicDataRepository(
         val entries = parseHadithEdition(primaryBody, bookKey, arabicByNumber)
         if (entries.isEmpty()) error("No hadith parsed for $bookKey")
 
-        entries.chunked(INSERT_CHUNK_SIZE).forEach { hadithDao.upsertAll(it) }
+        hadithDao.replaceBook(bookKey, entries)
         onProgress(1f)
         entries.size
     }

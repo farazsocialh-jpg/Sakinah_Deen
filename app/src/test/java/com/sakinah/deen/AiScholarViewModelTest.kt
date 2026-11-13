@@ -2,18 +2,25 @@ package com.sakinah.deen
 
 import com.sakinah.deen.fakes.FakeSunniAiScholarRepository
 import com.sakinah.deen.network.SunniAiClient
+import com.sakinah.deen.network.SunniAiScholarRepository
+import com.sakinah.deen.network.model.RagQueryRequest
 import com.sakinah.deen.network.model.RagStreamChunk
 import com.sakinah.deen.ui.viewmodel.AiScholarUiIntent
 import com.sakinah.deen.ui.viewmodel.AiScholarViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.After
 import org.junit.Before
@@ -117,5 +124,52 @@ class AiScholarViewModelTest {
         val vm = AiScholarViewModel(repo)
         vm.onIntent(AiScholarUiIntent.ClearConversation)
         assertTrue(vm.uiState.value.messages.isEmpty())
+    }
+
+    @Test
+    fun clearConversation_cancelsActiveStream() = runTest(testDispatcher) {
+        val repo = FakeSunniAiScholarRepository(
+            chunks = listOf(RagStreamChunk.TextDelta("partial answer")),
+            suspendAfterChunks = true
+        )
+        val vm = AiScholarViewModel(repo)
+        vm.onIntent(AiScholarUiIntent.SendQuery("Tell me about Sabr"))
+        runCurrent()
+        assertTrue(vm.uiState.value.isStreaming)
+
+        vm.onIntent(AiScholarUiIntent.ClearConversation)
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.messages.isEmpty())
+        assertFalse(vm.uiState.value.isStreaming)
+        assertNull(vm.uiState.value.error)
+    }
+
+    @Test
+    fun newQuery_cancelsThePreviousStreamInsteadOfInterleaving() = runTest(testDispatcher) {
+        var calls = 0
+        val repo = object : SunniAiScholarRepository {
+            override fun streamAskScholar(request: RagQueryRequest): Flow<RagStreamChunk> = flow {
+                calls++
+                if (calls == 1) {
+                    emit(RagStreamChunk.TextDelta("stale delta"))
+                    awaitCancellation()
+                } else {
+                    emit(RagStreamChunk.TextDelta("fresh answer"))
+                    emit(RagStreamChunk.Complete)
+                }
+            }
+        }
+        val vm = AiScholarViewModel(repo)
+        vm.onIntent(AiScholarUiIntent.SendQuery("First question"))
+        runCurrent()
+
+        vm.onIntent(AiScholarUiIntent.SendQuery("Second question"))
+        advanceUntilIdle()
+
+        assertEquals(2, calls)
+        assertEquals("fresh answer", vm.uiState.value.messages.last().content)
+        assertFalse(vm.uiState.value.isStreaming)
+        assertNull(vm.uiState.value.error)
     }
 }

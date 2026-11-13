@@ -44,7 +44,9 @@ data class QuranUiState(
     val searchResults: List<AyahSearchResult> = emptyList(),
     val isSearching: Boolean = false,
     /** Honest status when the requested content is not in the local database yet. */
-    val contentNotice: String? = null
+    val contentNotice: String? = null,
+    /** Surfaced failure for a download/search, with [QuranUiIntent.RetrySync] as retry. */
+    val errorMessage: String? = null
 )
 
 sealed class QuranUiIntent {
@@ -55,6 +57,7 @@ sealed class QuranUiIntent {
     data class DownloadTafseerPack(val packageId: String) : QuranUiIntent()
     data class SearchAyahs(val query: String) : QuranUiIntent()
     data object ClearSearch : QuranUiIntent()
+    data object RetrySync : QuranUiIntent()
     data object ToggleLayoutMode : QuranUiIntent()
 }
 
@@ -121,6 +124,7 @@ class QuranViewModel(
                 searchJob?.cancel()
                 _uiState.update { it.copy(searchQuery = "", searchResults = emptyList(), isSearching = false) }
             }
+            is QuranUiIntent.RetrySync -> retrySync()
             is QuranUiIntent.ToggleLayoutMode -> _uiState.update { it.copy(isStudyMode = !it.isStudyMode) }
         }
     }
@@ -233,10 +237,32 @@ class QuranViewModel(
         }
 
         // Fetch ayahs on demand for any uncached surah.
-        val repo = islamicRepository
-        if (repo != null) {
-            viewModelScope.launch {
-                runCatching { repo.syncSurah(surahNumber) }
+        if (islamicRepository != null) syncSurah(surahNumber)
+    }
+
+    private fun retrySync() {
+        val surahNumber = _uiState.value.currentSurah.number
+        _uiState.update { it.copy(errorMessage = null) }
+        syncSurah(surahNumber)
+    }
+
+    private fun syncSurah(surahNumber: Int) {
+        val repo = islamicRepository ?: return
+        viewModelScope.launch {
+            try {
+                val result = repo.syncSurah(surahNumber)
+                result.exceptionOrNull()?.let { error ->
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    _uiState.update {
+                        it.copy(errorMessage = "Could not load surah $surahNumber: ${error.message ?: "network error"}")
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(errorMessage = "Could not load surah $surahNumber: ${e.message ?: "network error"}")
+                }
             }
         }
     }
@@ -300,11 +326,23 @@ class QuranViewModel(
         }
 
         searchJob = viewModelScope.launch {
-            repo.searchAyahs(trimmed).collect { rows ->
+            try {
+                repo.searchAyahs(trimmed).collect { rows ->
+                    _uiState.update {
+                        it.copy(
+                            searchResults = rows.map { row -> row.toSearchResult() },
+                            isSearching = false,
+                            errorMessage = null
+                        )
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
-                        searchResults = rows.map { row -> row.toSearchResult() },
-                        isSearching = false
+                        isSearching = false,
+                        errorMessage = "Search failed: ${e.message ?: "database error"}"
                     )
                 }
             }
@@ -347,9 +385,24 @@ class QuranViewModel(
     private fun downloadTafseerPack(packageId: String) {
         val repo = tafseerRepository ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(isDownloadingTafseer = true) }
-            repo.downloadTafseerPackage(packageId)
-            _uiState.update { it.copy(isDownloadingTafseer = false) }
+            _uiState.update { it.copy(isDownloadingTafseer = true, errorMessage = null) }
+            try {
+                val result = repo.downloadTafseerPackage(packageId)
+                result.exceptionOrNull()?.let { error ->
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    _uiState.update {
+                        it.copy(errorMessage = "Tafseer download failed: ${error.message ?: "network error"}")
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(errorMessage = "Tafseer download failed: ${e.message ?: "network error"}")
+                }
+            } finally {
+                _uiState.update { it.copy(isDownloadingTafseer = false) }
+            }
         }
     }
 

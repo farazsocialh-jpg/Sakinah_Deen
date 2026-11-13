@@ -6,6 +6,7 @@ import androidx.work.WorkerParameters
 import com.sakinah.deen.data.database.SakinahEncryptedDatabase
 import com.sakinah.deen.data.database.entity.SalahRecordEntity
 import com.sakinah.deen.data.model.PrayerType
+import java.io.IOException
 import java.time.LocalDate
 
 class DailyHabitResetWorker(
@@ -13,6 +14,11 @@ class DailyHabitResetWorker(
     params: WorkerParameters,
     private val database: SakinahEncryptedDatabase
 ) : CoroutineWorker(appContext, params) {
+
+    companion object {
+        /** Give transient database failures a few runs before WorkManager gives up. */
+        private const val MAX_ATTEMPTS = 3
+    }
 
     override suspend fun doWork(): Result {
         return try {
@@ -44,9 +50,17 @@ class DailyHabitResetWorker(
             salahDao.insertAll(todaySlots)
 
             Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            Result.retry()
+            // Room/SQLCipher write failures are usually transient (locked or low storage).
+            if ((e is IOException || e is android.database.SQLException) &&
+                runAttemptCount < MAX_ATTEMPTS
+            ) {
+                Result.retry()
+            } else {
+                Result.failure()
+            }
         }
     }
 }

@@ -34,7 +34,9 @@ data class WealthUiState(
     val netEligible: Float = (14200f + 4500f + 320f + 6800f) - 1800f,
     val isEligible: Boolean = true,
     val zakatPayable: Float = ((14200f + 4500f + 320f + 6800f) - 1800f) * 0.025f,
-    val recentSadaqahLogs: List<SadaqahLogEntity> = emptyList()
+    val recentSadaqahLogs: List<SadaqahLogEntity> = emptyList(),
+    /** Surfaced failure for nisab/sadaqah work, retried through [WealthUiIntent.RefreshNisabRates]. */
+    val errorMessage: String? = null
 )
 
 sealed class WealthUiIntent {
@@ -78,7 +80,23 @@ class WealthViewModel(
                 recalculateZakat()
             }
         }
-        viewModelScope.launch { repo.refresh() }
+        refreshNisabRates(repo)
+    }
+
+    private fun refreshNisabRates(repo: NisabRateRepository? = nisabRateRepository) {
+        val target = repo ?: return
+        viewModelScope.launch {
+            try {
+                target.refresh()
+                _uiState.update { it.copy(errorMessage = null) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(errorMessage = "Could not refresh nisab rates: ${e.message ?: "network error"}")
+                }
+            }
+        }
     }
 
     fun onIntent(intent: WealthUiIntent) {
@@ -114,9 +132,7 @@ class WealthViewModel(
             is WealthUiIntent.AddMicroSadaqah -> {
                 addMicroSadaqah(intent.amount, intent.note)
             }
-            is WealthUiIntent.RefreshNisabRates -> {
-                viewModelScope.launch { nisabRateRepository?.refresh() }
-            }
+            is WealthUiIntent.RefreshNisabRates -> refreshNisabRates()
             is WealthUiIntent.ResetBalances -> {
                 _uiState.update {
                     it.copy(
@@ -172,16 +188,29 @@ class WealthViewModel(
 
     private fun addMicroSadaqah(amount: Float, note: String?) {
         viewModelScope.launch {
-            sadaqahDao.insertLog(
-                SadaqahLogEntity(
-                    id = UUID.randomUUID().toString(),
-                    amount = amount.toDouble(),
-                    currency = "USD",
-                    note = note ?: "Micro-Sadaqah Daily Jar",
-                    timestamp = System.currentTimeMillis()
+            try {
+                sadaqahDao.insertLog(
+                    SadaqahLogEntity(
+                        id = UUID.randomUUID().toString(),
+                        amount = amount.toDouble(),
+                        currency = "USD",
+                        note = note ?: "Micro-Sadaqah Daily Jar",
+                        timestamp = System.currentTimeMillis()
+                    )
                 )
-            )
-            _uiState.update { it.copy(sadaqahJarCollected = it.sadaqahJarCollected + amount) }
+                _uiState.update {
+                    it.copy(
+                        sadaqahJarCollected = it.sadaqahJarCollected + amount,
+                        errorMessage = null
+                    )
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(errorMessage = "Could not record sadaqah: ${e.message ?: "database error"}")
+                }
+            }
         }
     }
 }

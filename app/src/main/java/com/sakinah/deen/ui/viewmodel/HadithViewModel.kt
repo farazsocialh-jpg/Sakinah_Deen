@@ -28,7 +28,9 @@ data class HadithUiState(
     val bookmarkedIds: Set<String> = emptySet(),
     val targetDeepLinkId: String? = null,
     /** True once the encrypted database has supplied at least one hadith. */
-    val isFromDatabase: Boolean = false
+    val isFromDatabase: Boolean = false,
+    /** Surfaced failure for a collection sync, retried through [HadithUiIntent.RetrySync]. */
+    val errorMessage: String? = null
 )
 
 sealed class HadithUiIntent {
@@ -38,6 +40,7 @@ sealed class HadithUiIntent {
     data class ToggleBookmark(val hadithId: String) : HadithUiIntent()
     data class NavigateToDeepLink(val hadithIdOrSlug: String) : HadithUiIntent()
     data object ClearSearch : HadithUiIntent()
+    data object RetrySync : HadithUiIntent()
 }
 
 /**
@@ -169,14 +172,7 @@ class HadithViewModel(
                 _uiState.update { it.copy(selectedBookKey = intent.bookKey, isLoading = true) }
                 applyFilterAndSearch()
                 if (intent.bookKey != "all" && intent.bookKey in com.sakinah.deen.network.IslamicDataRepository.SUPPORTED_HADITH_BOOKS) {
-                    viewModelScope.launch {
-                        val repo = islamicRepository
-                        val available = repo?.isBookAvailable(intent.bookKey) ?: true
-                        if (!available) {
-                            repo?.syncHadithBook(intent.bookKey)
-                        }
-                        _uiState.update { it.copy(isLoading = false) }
-                    }
+                    syncBook(intent.bookKey)
                 } else {
                     _uiState.update { it.copy(isLoading = false) }
                 }
@@ -195,6 +191,40 @@ class HadithViewModel(
                 _uiState.update { it.copy(searchQuery = "") }
                 applyFilterAndSearch()
             }
+            is HadithUiIntent.RetrySync -> {
+                val bookKey = _uiState.value.selectedBookKey
+                if (bookKey != "all") syncBook(bookKey)
+            }
+        }
+    }
+
+    private fun syncBook(bookKey: String) {
+        val repo = islamicRepository ?: run {
+            _uiState.update { it.copy(isLoading = false) }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            try {
+                val available = repo.isBookAvailable(bookKey)
+                if (!available) {
+                    val result = repo.syncHadithBook(bookKey)
+                    result.exceptionOrNull()?.let { error ->
+                        if (error is kotlinx.coroutines.CancellationException) throw error
+                        _uiState.update {
+                            it.copy(errorMessage = "Could not load $bookKey: ${error.message ?: "network error"}")
+                        }
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(errorMessage = "Could not load $bookKey: ${e.message ?: "network error"}")
+                }
+            } finally {
+                _uiState.update { it.copy(isLoading = false) }
+            }
         }
     }
 
@@ -203,22 +233,34 @@ class HadithViewModel(
     private fun observeDatabaseHadiths() {
         val repo = islamicRepository ?: return
         viewModelScope.launch {
-            repo.observeAllHadiths(limit = 500).collect { entries ->
-                if (entries.isEmpty()) return@collect
-                val bookmarked = _uiState.value.bookmarkedIds
-                val mapped = entries.map { entry ->
-                    entry.toModel(bookmarked.contains("${entry.bookKey}-${entry.hadithNumber}"))
-                }
+            try {
+                repo.observeAllHadiths(limit = 500).collect { entries ->
+                    if (entries.isEmpty()) return@collect
+                    val bookmarked = _uiState.value.bookmarkedIds
+                    val mapped = entries.map { entry ->
+                        entry.toModel(bookmarked.contains("${entry.bookKey}-${entry.hadithNumber}"))
+                    }
 
+                    _uiState.update {
+                        it.copy(
+                            books = buildBooks(entries),
+                            hadiths = mapped,
+                            isFromDatabase = true,
+                            isLoading = false,
+                            errorMessage = null
+                        )
+                    }
+                    applyFilterAndSearch()
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
-                        books = buildBooks(entries),
-                        hadiths = mapped,
-                        isFromDatabase = true,
-                        isLoading = false
+                        isLoading = false,
+                        errorMessage = "Could not read the hadith library: ${e.message ?: "database error"}"
                     )
                 }
-                applyFilterAndSearch()
             }
         }
     }

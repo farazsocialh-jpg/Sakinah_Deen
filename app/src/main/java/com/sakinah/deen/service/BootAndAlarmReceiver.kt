@@ -5,6 +5,10 @@ import android.content.Context
 import android.content.Intent
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * AlarmManager pending intents do not survive a reboot, a manual clock change,
@@ -14,11 +18,25 @@ import com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl
 class BootAndAlarmReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        when (intent.action) {
-            Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_TIME_CHANGED,
-            Intent.ACTION_TIMEZONE_CHANGED,
-            Intent.ACTION_MY_PACKAGE_REPLACED -> restoreAlarms(context)
+        val action = intent.action
+        if (action != Intent.ACTION_BOOT_COMPLETED &&
+            action != Intent.ACTION_TIME_CHANGED &&
+            action != Intent.ACTION_TIMEZONE_CHANGED &&
+            action != Intent.ACTION_MY_PACKAGE_REPLACED
+        ) {
+            return
+        }
+
+        // Alarm rescheduling touches SharedPreferences and AlarmManager; keep it off the
+        // main broadcast thread while the receiver keeps its process alive.
+        val pendingResult = goAsync()
+        val appContext = context.applicationContext
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            try {
+                restoreAlarms(appContext)
+            } finally {
+                pendingResult.finish()
+            }
         }
     }
 
