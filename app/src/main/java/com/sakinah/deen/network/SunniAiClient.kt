@@ -80,7 +80,9 @@ class SunniAiClient(
             "ibn majah" to "ibnmajah",
             "ibnmajah" to "ibnmajah",
             "malik" to "malik",
-            "nawawi" to "nawawi"
+            "nawawi" to "nawawi",
+            "ahmad" to "ahmad",
+            "darimi" to "darimi"
         )
 
         private const val MAX_CITATIONS = 8
@@ -162,13 +164,6 @@ class SunniAiClient(
                 emittedAnyText = true
                 answerBuffer.append(delta)
                 emit(RagStreamChunk.TextDelta(delta))
-
-                for (citation in extractCitations(answerBuffer.toString())) {
-                    if (emittedCitations.size >= MAX_CITATIONS) break
-                    if (emittedCitations.add(citation.title)) {
-                        emit(RagStreamChunk.SourceCitation(citation))
-                    }
-                }
             }
 
             if (!emittedAnyText) {
@@ -177,6 +172,14 @@ class SunniAiClient(
                         "No answer was returned. Please retry, or consult a local qualified Mufti for a binding ruling."
                     )
                 )
+            }
+
+            // Extract citations once on completion instead of on every token delta.
+            for (citation in extractCitations(answerBuffer.toString())) {
+                if (emittedCitations.size >= MAX_CITATIONS) break
+                if (emittedCitations.add(citation.title)) {
+                    emit(RagStreamChunk.SourceCitation(citation))
+                }
             }
 
             for (breakdown in extractMadhhabBreakdown(answerBuffer.toString())) {
@@ -193,7 +196,18 @@ class SunniAiClient(
             buildJsonObject {
                 put(
                     "parts",
-                    buildJsonArray { add(buildJsonObject { put("text", SYSTEM_PROMPT) }) }
+                    buildJsonArray {
+                        add(
+                            buildJsonObject {
+                                put(
+                                    "text",
+                                    SYSTEM_PROMPT +
+                                        "\n\nRespond in language code: ${request.preferredLanguage.ifBlank { "en" }}." +
+                                        "\nSchool-of-thought context: ${request.schoolOfThoughtContext ?: "ALL"}."
+                                )
+                            }
+                        )
+                    }
                 )
             }
         )

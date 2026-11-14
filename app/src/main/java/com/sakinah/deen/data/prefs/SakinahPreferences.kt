@@ -66,6 +66,7 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         private const val KEY_ZAKAT_CASH = "zakat_cash_in_bank"
         private const val KEY_ZAKAT_GOLD = "zakat_gold_held"
         private const val KEY_ZAKAT_SILVER = "zakat_silver_held"
+        private const val KEY_ZAKAT_INVENTORY = "zakat_trade_inventory"
         private const val KEY_ZAKAT_STOCKS = "zakat_stocks_value"
         private const val KEY_ZAKAT_DEBTS = "zakat_short_term_debts"
         private const val KEY_HIFZ_ANNOTATIONS = "hifz_verse_annotations"
@@ -299,23 +300,27 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
      * closing the app never loses an entered amount.
      */
     var zakatCashInBank: Float
-        get() = prefs.getFloat(KEY_ZAKAT_CASH, 14200f)
+        get() = prefs.getFloat(KEY_ZAKAT_CASH, 0f)
         set(value) = prefs.edit().putFloat(KEY_ZAKAT_CASH, value).apply()
 
     var zakatGoldHeld: Float
-        get() = prefs.getFloat(KEY_ZAKAT_GOLD, 4500f)
+        get() = prefs.getFloat(KEY_ZAKAT_GOLD, 0f)
         set(value) = prefs.edit().putFloat(KEY_ZAKAT_GOLD, value).apply()
 
     var zakatSilverHeld: Float
         get() = prefs.getFloat(KEY_ZAKAT_SILVER, 0f)
         set(value) = prefs.edit().putFloat(KEY_ZAKAT_SILVER, value).apply()
 
+    var zakatTradeInventory: Float
+        get() = prefs.getFloat(KEY_ZAKAT_INVENTORY, 0f)
+        set(value) = prefs.edit().putFloat(KEY_ZAKAT_INVENTORY, value).apply()
+
     var zakatStocksValue: Float
-        get() = prefs.getFloat(KEY_ZAKAT_STOCKS, 6800f)
+        get() = prefs.getFloat(KEY_ZAKAT_STOCKS, 0f)
         set(value) = prefs.edit().putFloat(KEY_ZAKAT_STOCKS, value).apply()
 
     var zakatShortTermDebts: Float
-        get() = prefs.getFloat(KEY_ZAKAT_DEBTS, 1800f)
+        get() = prefs.getFloat(KEY_ZAKAT_DEBTS, 0f)
         set(value) = prefs.edit().putFloat(KEY_ZAKAT_DEBTS, value).apply()
 
     /**

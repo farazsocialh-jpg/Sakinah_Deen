@@ -74,15 +74,16 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
         val coordinates = preferences.locationCoordinates
         if (coordinates != null && preferences.alarmsEnabled) {
             val scheduler = PrayerAlarmScheduler(this, astronomyEngine, preferences, prayerTimeRepository)
-
-            // Register alarms immediately from the local astronomical table so reminders exist
-            // even in airplane mode, then upgrade to the cached/online authority timetable.
-            scheduler.scheduleAllDailyAlarms(
-                coordinates = coordinates,
-                method = preferences.calculationMethodOverride,
-                madhhab = preferences.madhhab
-            )
-            applicationScope.launch {
+            // Keep alarm registration off the main thread; it touches SharedPreferences,
+            // AlarmManager and (potentially) the network-backed timetable cache.
+            applicationScope.launch(Dispatchers.Default) {
+                runCatching {
+                    scheduler.scheduleAllDailyAlarms(
+                        coordinates = coordinates,
+                        method = preferences.calculationMethodOverride,
+                        madhhab = preferences.madhhab
+                    )
+                }
                 runCatching { scheduler.scheduleAllDailyAlarmsRefreshed(coordinates = coordinates) }
             }
         }

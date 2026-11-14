@@ -50,11 +50,10 @@ class SunniAiScholarRepositoryImpl(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-                // Partial answer delivered: finish cleanly instead of appending fallback text.
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                // Surface mid-stream failures to the caller instead of silently completing.
                 if (receivedText) {
-                    emit(RagStreamChunk.Complete)
-                    return@flow
+                    throw e
                 }
                 // Otherwise fall through to the offline grounded answer below.
             }
@@ -76,7 +75,9 @@ class SunniAiScholarRepositoryImpl(
                     setRequestProperty("Content-Type", "application/json")
                 }
 
-                val payload = """{"question": "${request.query.replace("\"", "\\\"")}"}"""
+                val payload = kotlinx.serialization.json.buildJsonObject {
+                    put("question", kotlinx.serialization.json.JsonPrimitive(request.query))
+                }.toString()
                 OutputStreamWriter(connection.outputStream).use { writer ->
                     writer.write(payload)
                     writer.flush()
@@ -93,27 +94,26 @@ class SunniAiScholarRepositoryImpl(
                     }
                 }
             } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 connected = false
             }
 
             if (!connected) {
                 // Offline-first grounded fallback generator
                 emitResilientSunniKnowledge(request.query)
-            }
 
-            // Emit Source Citations based on query topic
-            val sources = getGroundedSources(request.query)
-            for (src in sources) {
-                emit(RagStreamChunk.SourceCitation(src))
-                delay(30)
-            }
+                // Only the offline/fallback path appends these synthesized proofs.
+                val sources = getGroundedSources(request.query)
+                for (src in sources) {
+                    emit(RagStreamChunk.SourceCitation(src))
+                    delay(30)
+                }
 
-            // Emit 4-Madhhab comparative breakdown
-            val madhhabs = getMadhhabBreakdown(request.query)
-            for ((school, summary) in madhhabs) {
-                emit(RagStreamChunk.MadhhabBreakdown(school = school, summary = summary))
-                delay(20)
+                val madhhabs = getMadhhabBreakdown(request.query)
+                for ((school, summary) in madhhabs) {
+                    emit(RagStreamChunk.MadhhabBreakdown(school = school, summary = summary))
+                    delay(20)
+                }
             }
 
             emit(RagStreamChunk.Complete)

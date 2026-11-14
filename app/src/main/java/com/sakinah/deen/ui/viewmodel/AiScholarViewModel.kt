@@ -59,9 +59,12 @@ sealed class AiScholarNavigationEvent {
     ) : AiScholarNavigationEvent()
 }
 
+typealias Citation = com.sakinah.deen.data.model.Citation
+
 class AiScholarViewModel(
     private val scholarRepository: SunniAiScholarRepository,
-    private val appContext: Context? = null
+    private val appContext: Context? = null,
+    private val preferences: com.sakinah.deen.data.prefs.SakinahPreferences? = null
 ) : ViewModel() {
 
     companion object {
@@ -266,7 +269,8 @@ class AiScholarViewModel(
             timestamp = "Just now"
         )
 
-        val updatedMessages = _uiState.value.messages + userMsg + pendingAssistantMsg
+        val previousMessages = _uiState.value.messages
+        val updatedMessages = previousMessages + userMsg + pendingAssistantMsg
 
         _uiState.update {
             it.copy(
@@ -278,15 +282,17 @@ class AiScholarViewModel(
         }
         syncActiveSession(updatedMessages)
 
-        val historyDto = updatedMessages.filter { it.content.isNotBlank() }.takeLast(6).map {
+        // Build history from the prior turns only, so the current user message is not
+        // duplicated when the proxy re-appends it as the active turn.
+        val historyDto = previousMessages.filter { it.content.isNotBlank() }.takeLast(6).map {
             ChatMessageDto(role = it.role, content = it.content)
         }
 
         val request = RagQueryRequest(
             query = trimmed,
             conversationHistory = historyDto,
-            preferredLanguage = "en",
-            schoolOfThoughtContext = "ALL"
+            preferredLanguage = java.util.Locale.getDefault().language.ifBlank { "en" },
+            schoolOfThoughtContext = preferences?.madhhab?.name ?: "ALL"
         )
 
         streamJob = viewModelScope.launch {
@@ -368,7 +374,14 @@ class AiScholarViewModel(
     private fun attachCitation(messageId: String, citationTitle: String, deepLink: String?) {
         val updated = _uiState.value.messages.map { msg ->
             if (msg.id == messageId) {
-                msg.copy(sourceTitle = citationTitle, sourceDeepLink = deepLink)
+                val citation = Citation(title = citationTitle, deepLink = deepLink)
+                // Avoid duplicate citations with the same title.
+                val existing = msg.citations.filterNot { it.title == citationTitle }
+                msg.copy(
+                    sourceTitle = citationTitle,
+                    sourceDeepLink = deepLink,
+                    citations = existing + citation
+                )
             } else msg
         }
         _uiState.update { it.copy(messages = updated) }
@@ -421,6 +434,13 @@ class AiScholarViewModel(
             }
 
             val lower = sourceTitle.lowercase()
+            val recognized = lower.contains("muslim") || lower.contains("bukhari") ||
+                lower.contains("dawud") || lower.contains("tirmidhi") ||
+                lower.contains("nasai") || lower.contains("nasa'i") ||
+                lower.contains("majah") || lower.contains("nawawi") ||
+                lower.contains("malik") || lower.contains("muwatta") ||
+                lower.contains("ahmad") || lower.contains("darimi")
+            if (!recognized) return@launch
             val bookKey = when {
                 lower.contains("muslim") -> "muslim"
                 lower.contains("bukhari") -> "bukhari"
@@ -430,9 +450,12 @@ class AiScholarViewModel(
                 lower.contains("majah") -> "ibnmajah"
                 lower.contains("nawawi") -> "nawawi"
                 lower.contains("malik") || lower.contains("muwatta") -> "malik"
-                else -> "bukhari"
+                lower.contains("ahmad") -> "ahmad"
+                lower.contains("darimi") -> "darimi"
+                else -> return@launch
             }
-            val num = HADITH_NUMBER_REGEX.findAll(sourceTitle).lastOrNull()?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
+            val num = HADITH_NUMBER_REGEX.findAll(sourceTitle).lastOrNull()?.groupValues?.getOrNull(1)?.toIntOrNull()
+                ?: return@launch
             _navigationEvents.emit(
                 AiScholarNavigationEvent.NavigateToHadith(
                     bookKey = bookKey,
@@ -493,7 +516,12 @@ class AiScholarViewModel(
                     id = msg.id,
                     role = msg.role,
                     text = msg.content,
-                    timestampMs = System.currentTimeMillis()
+                    timestampMs = System.currentTimeMillis(),
+                    citations = msg.citations,
+                    hanafiStance = msg.hanafiStance,
+                    malikiStance = msg.malikiStance,
+                    shafiiStance = msg.shafiiStance,
+                    hanbaliStance = msg.hanbaliStance
                 )
             }
         val updated = ScholarChatSession(
@@ -517,7 +545,12 @@ class AiScholarViewModel(
         id = id,
         role = role,
         content = text,
-        timestamp = formatTimestamp(timestampMs)
+        timestamp = formatTimestamp(timestampMs),
+        citations = citations,
+        hanafiStance = hanafiStance,
+        malikiStance = malikiStance,
+        shafiiStance = shafiiStance,
+        hanbaliStance = hanbaliStance
     )
 
     private fun formatTimestamp(timestampMs: Long): String {

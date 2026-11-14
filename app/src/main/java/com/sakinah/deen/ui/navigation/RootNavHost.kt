@@ -42,6 +42,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -149,7 +150,15 @@ fun RootNavHost() {
     var currentScreen by rememberSaveable {
         mutableStateOf(startScreenForObjective(appearanceConfig.objective))
     }
-    val backStack = remember { mutableStateListOf<SakinahScreen>() }
+    val backStackSaver: Saver<MutableList<SakinahScreen>, List<String>> = Saver(
+        save = { it.map { screen -> screen.name } },
+        restore = { saved ->
+            mutableStateListOf<SakinahScreen>().apply {
+                addAll(saved.map { name -> SakinahScreen.valueOf(name) })
+            }
+        }
+    )
+    val backStack = rememberSaveable(saver = backStackSaver) { mutableStateListOf<SakinahScreen>() }
 
     var targetSurahNumber by rememberSaveable { mutableIntStateOf(1) }
     var targetAyahNumber by rememberSaveable { mutableIntStateOf(1) }
@@ -163,12 +172,6 @@ fun RootNavHost() {
 
     var guidePrayerTitle by rememberSaveable { mutableStateOf("Prayer") }
     var guideTotalRakats by rememberSaveable { mutableIntStateOf(2) }
-
-    // Hoist primary ViewModels so tab switches retain loaded schedules, timelines, and chat streams.
-    val salahVm: SalahViewModel? = if (koinStarted) koinViewModel() else null
-    val quranVm: QuranViewModel? = if (koinStarted) koinViewModel() else null
-    val hadithVm: HadithViewModel? = if (koinStarted) koinViewModel() else null
-    val aiScholarVm: AiScholarViewModel? = if (koinStarted) koinViewModel() else null
 
     if (showOnboarding) {
         // Cancel/X during a re-run must discard the live preview and restore the last saved
@@ -199,11 +202,16 @@ fun RootNavHost() {
                         repo.updateAppearance(repo.settings.value.appearance.copy(theme = mappedTheme))
                     }
                 }
+                val wasRerun = rerunOnboarding
                 rerunOnboarding = false
                 backStack.clear()
                 currentScreen = startScreenForObjective(savedConfig.objective)
 
-                appPrefs?.alarmsEnabled = true
+                // Preserve the user's existing alarm preference on a re-run; only enable
+                // by default for a first-time onboarding completion.
+                if (!wasRerun) {
+                    appPrefs?.alarmsEnabled = true
+                }
                 scope.launch {
                     AzaanScheduling.scheduleWithBestLocation(
                         context = context,
@@ -214,6 +222,13 @@ fun RootNavHost() {
         )
         return
     }
+
+    // Hoist primary ViewModels so tab switches retain loaded schedules, timelines, and chat streams.
+    // Deferred until after the onboarding gate so they are not instantiated for first-run users.
+    val salahVm: SalahViewModel? = if (koinStarted && !showOnboarding) koinViewModel() else null
+    val quranVm: QuranViewModel? = if (koinStarted && !showOnboarding) koinViewModel() else null
+    val hadithVm: HadithViewModel? = if (koinStarted && !showOnboarding) koinViewModel() else null
+    val aiScholarVm: AiScholarViewModel? = if (koinStarted && !showOnboarding) koinViewModel() else null
 
     val topLevelTabs = remember {
         setOf(
@@ -238,12 +253,16 @@ fun RootNavHost() {
     fun navigateBack() {
         if (backStack.isNotEmpty()) {
             currentScreen = backStack.removeAt(backStack.lastIndex)
-        } else if (currentScreen != SakinahScreen.DailySalah) {
-            currentScreen = SakinahScreen.DailySalah
+        } else {
+            val start = startScreenForObjective(appearanceConfig.objective)
+            if (currentScreen != start) {
+                currentScreen = start
+            }
         }
     }
 
-    BackHandler(enabled = backStack.isNotEmpty() || currentScreen != SakinahScreen.DailySalah) {
+    val startScreen = startScreenForObjective(appearanceConfig.objective)
+    BackHandler(enabled = backStack.isNotEmpty() || currentScreen != startScreen) {
         navigateBack()
     }
 
@@ -404,18 +423,7 @@ fun RootNavHost() {
             )
         ) { screen ->
             when (screen) {
-                SakinahScreen.Onboarding -> {
-                    OnboardingScreen(
-                        initialGender = appearanceConfig.prayerGuideGender,
-                        onContinue = { gender ->
-                            if (gender != appearanceConfig.prayerGuideGender) {
-                                appearancePrefs.update { it.copy(prayerGuideGender = gender) }
-                            }
-                            backStack.clear()
-                            currentScreen = SakinahScreen.DailySalah
-                        }
-                    )
-                }
+                SakinahScreen.Onboarding -> { }
                 SakinahScreen.DailySalah -> {
                     SalahScreen(
                         onOpenGuide = {

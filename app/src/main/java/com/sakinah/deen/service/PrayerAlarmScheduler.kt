@@ -207,6 +207,8 @@ class PrayerAlarmScheduler(
         muezzin: Muezzin = preferences.azaanSettings.muezzin
     ) {
         if (alarmManager == null) return
+        // Never arm an alarm for a time that has already passed.
+        if (triggerEpochMillis <= System.currentTimeMillis()) return
 
         val pendingIntent = buildPrayerPendingIntent(
             requestCode = BASE_REQUEST_CODE + prayerType.ordinal,
@@ -275,6 +277,22 @@ class PrayerAlarmScheduler(
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
                 BASE_REQUEST_CODE + prayer.ordinal,
+                intent,
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+            )
+            if (pendingIntent != null) {
+                am.cancel(pendingIntent)
+                pendingIntent.cancel()
+            }
+        }
+        // Snooze and test alarms also need to be cleared.
+        listOf(SNOOZE_REQUEST_CODE, TEST_REQUEST_CODE).forEach { requestCode ->
+            val intent = Intent(context, PrayerAlarmReceiver::class.java).apply {
+                action = ACTION_PRAYER_ALARM
+            }
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                requestCode,
                 intent,
                 PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
             )

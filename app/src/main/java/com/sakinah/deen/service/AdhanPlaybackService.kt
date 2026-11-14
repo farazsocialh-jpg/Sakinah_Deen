@@ -57,6 +57,10 @@ class AdhanPlaybackService : Service() {
         const val EXTRA_MUEZZIN_ID = "extra_muezzin_id"
         const val NOTIFICATION_ID = 4001
 
+        /** Observable flag so the Activity can gate volume-key handling on real playback. */
+        @Volatile
+        var isAdhanActive: Boolean = false
+
         private const val FADE_STEPS = 20
         private const val FADE_STEP_MS = 250L
         private const val SNOOZE_MINUTES = 10
@@ -87,7 +91,13 @@ class AdhanPlaybackService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action ?: return START_NOT_STICKY
+        val action = intent?.action
+        if (action == null) {
+            // Started as a foreground service without an action: promote immediately
+            // so Android does not throw ForegroundServiceDidNotStartInTimeException, then stop.
+            promoteToForegroundAndStop()
+            return START_NOT_STICKY
+        }
 
         when (action) {
             ACTION_PLAY_ADHAN -> {
@@ -102,7 +112,8 @@ class AdhanPlaybackService : Service() {
                 isDuaSafar = false
 
                 if (currentMode == PrayerAlertMode.OFF) {
-                    stopSelf()
+                    // OFF must still satisfy the foreground-service contract before stopping.
+                    promoteToForegroundAndStop()
                     return START_NOT_STICKY
                 }
 
@@ -205,6 +216,7 @@ class AdhanPlaybackService : Service() {
         exo.prepare()
         exo.play()
         isPlayingAdhan = true
+        isAdhanActive = true
         registerVolumeReceiver()
 
         fadeJob?.cancel()
@@ -280,6 +292,7 @@ class AdhanPlaybackService : Service() {
 
     private fun finishPlayback() {
         isPlayingAdhan = false
+        isAdhanActive = false
         unregisterVolumeReceiver()
         fadeJob?.cancel()
         fadeJob = null
@@ -296,6 +309,7 @@ class AdhanPlaybackService : Service() {
     /** Short tone/silent leave the prayer notification visible after foreground stops. */
     private fun finishTonePlayback() {
         isPlayingAdhan = false
+        isAdhanActive = false
         unregisterVolumeReceiver()
         fadeJob?.cancel()
         fadeJob = null
@@ -311,6 +325,28 @@ class AdhanPlaybackService : Service() {
     private fun finishFallbackNotification() {
         // A missing/corrupt recording must not crash or leave a silent foreground service.
         finishTonePlayback()
+    }
+
+    /**
+     * Satisfies Android's foreground-service start contract on early-exit paths (no action,
+     * OFF mode) without leaving a stale notification behind.
+     */
+    private fun promoteToForegroundAndStop() {
+        val notification = NotificationCompat.Builder(this, NotificationChannels.CHANNEL_SALAH_ADHAN)
+            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setContentTitle(getString(R.string.adhan_body))
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+        runCatching {
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            )
+        }
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private fun contentPendingIntent(): PendingIntent = PendingIntent.getActivity(
@@ -412,6 +448,7 @@ class AdhanPlaybackService : Service() {
 
     override fun onDestroy() {
         isPlayingAdhan = false
+        isAdhanActive = false
         unregisterVolumeReceiver()
         fadeJob?.cancel()
         mediaSession?.release()

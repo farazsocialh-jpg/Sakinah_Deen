@@ -19,10 +19,11 @@ class FakeNisabRateRepository(
     var refreshCalled = false
     var shouldFail = false
 
-    override suspend fun refresh() {
+    override suspend fun refresh(): Result<Unit> {
         refreshCalled = true
-        if (shouldFail) return
+        if (shouldFail) return Result.failure(IllegalStateException("refresh failed"))
         _rates.value = fresh
+        return Result.success(Unit)
     }
 
     fun setRates(rates: NisabRates) {

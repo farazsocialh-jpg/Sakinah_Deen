@@ -135,6 +135,8 @@ class HadithViewModel(
     private var databaseJob: Job? = null
     private var filterJob: Job? = null
     private var pendingDeepLinkTarget: Triple<String, Int, String>? = null
+    private var pendingDeepLinkSlug: String? = null
+    private var pendingDeepLinkHint: String = ""
     private var hasReceivedDatabaseRows = false
 
     private val initialBookmarks: Set<String> = if (preferences != null) {
@@ -320,6 +322,14 @@ class HadithViewModel(
                         selectedCatalog?.sections?.toList()?.sortedBy { it.first } ?: state.sections
                     }
                 )
+            }
+            // Replay any deep link that arrived before the catalog was ready.
+            val queuedSlug = pendingDeepLinkSlug
+            val queuedHint = pendingDeepLinkHint
+            if (queuedSlug != null) {
+                pendingDeepLinkSlug = null
+                pendingDeepLinkHint = ""
+                navigateToDeepLink(queuedSlug, queuedHint)
             }
         }
     }
@@ -535,9 +545,16 @@ class HadithViewModel(
     private fun navigateToDeepLink(hadithIdOrSlug: String, sectionHint: String = "") {
         val cleaned = hadithIdOrSlug.trim().removePrefix("hadith/").removePrefix("hadith-")
         val slashParts = cleaned.replace("-", "/").split("/").filter { it.isNotBlank() }
-        val parsedBook = slashParts.firstOrNull { part -> part.all { it.isLetter() } }?.lowercase()
+        val parsedBook = slashParts.firstOrNull { part -> part.all { it.isLetterOrDigit() || it == '_' } }?.lowercase()
         val parsedNumber = slashParts.lastOrNull { part -> part.all { it.isDigit() } }?.toIntOrNull()
             ?: Regex("#?(\\d+)").findAll(hadithIdOrSlug).lastOrNull()?.groupValues?.getOrNull(1)?.toIntOrNull()
+        // Cold start: the catalog has not finished loading yet, so queue the target
+        // instead of failing with a "could not open link" toast.
+        if (_uiState.value.books.isEmpty()) {
+            pendingDeepLinkSlug = hadithIdOrSlug
+            pendingDeepLinkHint = sectionHint
+            return
+        }
         val knownBook = parsedBook != null && _uiState.value.books.any {
             it.key.equals(parsedBook, ignoreCase = true)
         }

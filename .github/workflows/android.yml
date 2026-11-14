@@ -48,6 +48,12 @@ jobs:
       - name: Run unit tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace --no-daemon
 
+      - name: Run lint
+        run: ./gradlew :app:lintDebug --stacktrace --no-daemon
+
+      - name: Verify release build (R8)
+        run: ./gradlew :app:assembleRelease --stacktrace --no-daemon
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:

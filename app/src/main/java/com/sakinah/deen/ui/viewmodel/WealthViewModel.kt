@@ -22,12 +22,12 @@ data class WealthUiState(
     val goldPricePerGram: Float = 88.40f,
     val silverPricePerGram: Float = 1.15f,
     val nisabLastUpdatedEpochMillis: Long = 0L,
-    val cashInBank: Float = 14200f,
-    val goldHeld: Float = 4500f,
+    val cashInBank: Float = 0f,
+    val goldHeld: Float = 0f,
     val silverHeld: Float = 0f,
     val tradeInventory: Float = 0f,
-    val stocksValue: Float = 6800f,
-    val shortTermDebts: Float = 1800f,
+    val stocksValue: Float = 0f,
+    val shortTermDebts: Float = 0f,
     val sadaqahJarCollected: Float = 0f,
     val sadaqahGoal: Float = 100f,
     val nisabThreshold: Float = 85f * 88.40f, // 7514.0f
@@ -71,6 +71,7 @@ class WealthViewModel(
                     cashInBank = prefs.zakatCashInBank,
                     goldHeld = prefs.zakatGoldHeld,
                     silverHeld = prefs.zakatSilverHeld,
+                    tradeInventory = prefs.zakatTradeInventory,
                     stocksValue = prefs.zakatStocksValue,
                     shortTermDebts = prefs.zakatShortTermDebts
                 )
@@ -88,6 +89,7 @@ class WealthViewModel(
         prefs.zakatCashInBank = s.cashInBank
         prefs.zakatGoldHeld = s.goldHeld
         prefs.zakatSilverHeld = s.silverHeld
+        prefs.zakatTradeInventory = s.tradeInventory
         prefs.zakatStocksValue = s.stocksValue
         prefs.zakatShortTermDebts = s.shortTermDebts
     }
@@ -115,8 +117,17 @@ class WealthViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshingRates = true) }
             try {
-                target.refresh()
-                _uiState.update { it.copy(errorMessage = null) }
+                val result = target.refresh()
+                if (result.isSuccess) {
+                    _uiState.update { it.copy(errorMessage = null) }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            errorMessage = "Could not refresh nisab rates: " +
+                                (result.exceptionOrNull()?.message ?: "network error")
+                        )
+                    }
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {

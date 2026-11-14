@@ -217,6 +217,17 @@ class TafseerDownloadRepository(
         }
     }
 
+    /** Removes a single downloaded tafseer pack and its Room commentary rows. */
+    suspend fun removeTafseerPackage(packageId: String) = withContext(Dispatchers.IO) {
+        val pkg = _packages.value.find { it.id == packageId } ?: return@withContext
+        databaseFile(pkg).delete()
+        File(databaseFile(pkg).absolutePath + ".download").delete()
+        tafsirDao?.deleteBySource("tafsir_${pkg.tafsirId}")
+        _packages.value = _packages.value.map {
+            if (it.id == packageId) it.copy(isDownloaded = false) else it
+        }
+    }
+
     /** Removes both Room commentary and downloaded pack files used as an offline cache. */
     suspend fun clearCachedTafsir() = withContext(Dispatchers.IO) {
         tafsirDao?.deleteAll()

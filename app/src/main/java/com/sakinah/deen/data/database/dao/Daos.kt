@@ -323,4 +323,7 @@ interface TafsirDao {
 
     @Query("DELETE FROM tafsir_entries")
     suspend fun deleteAll()
+
+    @Query("DELETE FROM tafsir_entries WHERE sourceKey = :sourceKey")
+    suspend fun deleteBySource(sourceKey: String)
 }

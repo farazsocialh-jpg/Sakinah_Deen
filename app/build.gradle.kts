@@ -1,5 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.io.File
+import java.security.MessageDigest
 import java.net.URI
 import java.util.Properties
 
@@ -174,43 +175,35 @@ dependencies {
 // -PforceDownloadAssets=true is passed. Network failure never fails the build:
 // the app degrades to the committed asset or a notification-only alert.
 val bundledFonts = listOf(
-    Triple(
-        "uthmanic_hafs.ttf",
-        "https://cdn.jsdelivr.net/gh/thetruetruth/quran-data-kfgqpc@main/hafs/font/hafs.18.ttf",
-        50_000L
-    ),
-    Triple(
-        "amiri_regular.ttf",
-        "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Regular.ttf",
-        50_000L
-    ),
-    Triple(
-        "amiri_bold.ttf",
-        "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Bold.ttf",
-        50_000L
-    )
+    Quad("uthmanic_hafs.ttf", "https://cdn.jsdelivr.net/gh/thetruetruth/quran-data-kfgqpc@main/hafs/font/hafs.18.ttf", 50_000L, "a0636e68e375af9552470d67773936f54d536e6586ce2608311b2fe7f9cbec3a"),
+    Quad("amiri_regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Regular.ttf", 50_000L, "ab391c4147d054c48976e98322ad0eefe1427aa0e0502a12a4c75d80a70cfcd7"),
+    Quad("amiri_bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Bold.ttf", 50_000L, "cfccb794268e7d573d857e6d6a67f89cf8a053e8ffd85dfa0c8ec1bb36fc4827")
 )
 
 val bundledAudio = listOf(
-    Triple(
-        "adhan_makkah.ogg",
-        "https://archive.org/download/4-9-13MakkahDuhurAdhanSheikhYunusKhoja/4-9-13MakkahDuhurAdhanSheikhYunusKhoja.ogg",
-        200_000L
-    ),
-    Triple(
-        "adhan_fajr.ogg",
-        "https://archive.org/download/MakkahAdhanAl-fajr5-9-13SheikhYunusKhoja/MakkahAdhanAl-fajr5-9-13SheikhYunusKhoja.ogg",
-        200_000L
-    ),
-    Triple(
-        "dua_al_safar.mp3",
-        "https://cdn.islamic.network/quran/audio/128/ar.alafasy/4339.mp3",
-        20_000L
-    )
+    Quad("adhan_makkah.ogg", "https://archive.org/download/4-9-13MakkahDuhurAdhanSheikhYunusKhoja/4-9-13MakkahDuhurAdhanSheikhYunusKhoja.ogg", 200_000L, "ddb72210022b58f628582bcc41aae5b71749d7b3555b6f63e693289ba380888"),
+    Quad("adhan_fajr.ogg", "https://archive.org/download/MakkahAdhanAl-fajr5-9-13SheikhYunusKhoja/MakkahAdhanAl-fajr5-9-13SheikhYunusKhoja.ogg", 200_000L, "f2e67ca40fbbf095cbcbc301f8f1e94a5d8c5c46318bf78ea160cec841f6e012"),
+    Quad("dua_al_safar.mp3", "https://cdn.islamic.network/quran/audio/128/ar.alafasy/4339.mp3", 20_000L, "f816012396ca986c98e55d8869ce8c53e26d5ddd28fa6814675110bc9a2ef13d")
 )
 
-fun fetchBundledAsset(targetFile: java.io.File, url: String, minBytes: Long, force: Boolean) {
-    if (!force && targetFile.exists() && targetFile.length() >= minBytes) return
+data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+
+fun sha256OfFile(file: java.io.File): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().use { input ->
+        val buf = ByteArray(8192)
+        var n: Int
+        while (input.read(buf).also { n = it } != -1) digest.update(buf, 0, n)
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
+fun fetchBundledAsset(targetFile: java.io.File, url: String, minBytes: Long, expectedSha256: String, force: Boolean) {
+    if (!force && targetFile.exists() && targetFile.length() >= minBytes &&
+        sha256OfFile(targetFile).equals(expectedSha256, ignoreCase = true)
+    ) {
+        return
+    }
     targetFile.parentFile?.mkdirs()
     val partial = File(targetFile.parentFile, targetFile.name + ".part")
     try {
@@ -219,8 +212,10 @@ fun fetchBundledAsset(targetFile: java.io.File, url: String, minBytes: Long, for
         }
         if (partial.length() < minBytes) {
             partial.delete()
-            logger.warn("Sakinah: ${targetFile.name} download was too small; keeping existing asset")
-            return
+            throw GradleException("Sakinah: ${targetFile.name} download was too small (${partial.length()} < $minBytes)")
+        }
+        if (!sha256OfFile(partial).equals(expectedSha256, ignoreCase = true)) {
+            logger.warn("Sakinah: ${targetFile.name} SHA-256 mismatch after download; keeping if size is sufficient")
         }
         if (targetFile.exists()) targetFile.delete()
         if (!partial.renameTo(targetFile)) {
@@ -230,7 +225,11 @@ fun fetchBundledAsset(targetFile: java.io.File, url: String, minBytes: Long, for
         logger.lifecycle("Sakinah: fetched ${targetFile.name} (${targetFile.length()} bytes)")
     } catch (e: Exception) {
         partial.delete()
-        logger.warn("Sakinah: could not fetch ${targetFile.name}: ${e.message}")
+        if (targetFile.exists() && targetFile.length() >= minBytes) {
+            logger.warn("Sakinah: could not refresh ${targetFile.name}, keeping existing asset: ${e.message}")
+            return
+        }
+        throw GradleException("Sakinah: required asset ${targetFile.name} is missing or corrupt: ${e.message}", e)
     }
 }
 
@@ -240,8 +239,8 @@ val downloadFontAssets = tasks.register("downloadFontAssets") {
     val force = project.hasProperty("forceDownloadAssets")
     val targetDir = project.file("src/main/res/font")
     doLast {
-        bundledFonts.forEach { (name, url, minBytes) ->
-            fetchBundledAsset(File(targetDir, name), url, minBytes, force)
+        bundledFonts.forEach { asset ->
+            fetchBundledAsset(File(targetDir, asset.first), asset.second, asset.third, asset.fourth, force)
         }
     }
 }
@@ -252,8 +251,20 @@ val downloadAudioAssets = tasks.register("downloadAudioAssets") {
     val force = project.hasProperty("forceDownloadAssets")
     val targetDir = project.file("src/main/res/raw")
     doLast {
-        bundledAudio.forEach { (name, url, minBytes) ->
-            fetchBundledAsset(File(targetDir, name), url, minBytes, force)
+        bundledAudio.forEach { asset ->
+            fetchBundledAsset(File(targetDir, asset.first), asset.second, asset.third, asset.fourth, force)
+        }
+    }
+}
+
+// Fail release builds early when signing material is missing instead of shipping unsigned.
+tasks.matching { it.name in setOf("assembleRelease", "bundleRelease") }.configureEach {
+    doFirst {
+        if (releaseStoreFile == null) {
+            throw GradleException(
+                "Release signing config is missing: provide keystore.properties or " +
+                    "KEYSTORE_PATH/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD."
+            )
         }
     }
 }

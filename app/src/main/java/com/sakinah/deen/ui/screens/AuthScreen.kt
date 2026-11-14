@@ -253,14 +253,6 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                 }
             }
 
-            if (authProvidersEnabled) {
-                OutlinedButton(
-                    onClick = {},
-                    enabled = false,
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Continue with Google") }
-            }
-
             TextButton(
                 onClick = {
                     scope.launch {
@@ -284,7 +276,7 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Enter your account email to initiate a password reset.",
+                        text = "Password reset is recorded on this device only; local accounts are not emailed.",
                         style = MaterialTheme.typography.bodySmall
                     )
                     OutlinedTextField(
@@ -302,7 +294,7 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                     scope.launch {
                         val res = repo.sendPasswordReset(target)
                         res.onSuccess {
-                            infoMessage = "Password reset recorded for $target."
+                            infoMessage = "Password reset recorded locally for $target (local account)."
                             errorMessage = null
                         }.onFailure { err ->
                             errorMessage = err.message ?: "Could not process password reset."

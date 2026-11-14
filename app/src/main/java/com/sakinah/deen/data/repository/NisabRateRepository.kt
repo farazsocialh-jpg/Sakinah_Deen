@@ -40,7 +40,7 @@ interface NisabRateRepository {
     val rates: StateFlow<NisabRates>
 
     /** Fetches fresh metal prices. Never throws: on any failure the cached rate is kept. */
-    suspend fun refresh()
+    suspend fun refresh(): Result<Unit>
 }
 
 /** Last successful rate persisted so the nisab threshold survives process death offline. */
@@ -78,11 +78,18 @@ class NisabRateRepositoryImpl(
     private val _rates = MutableStateFlow(cache?.read() ?: initial)
     override val rates: StateFlow<NisabRates> = _rates.asStateFlow()
 
-    override suspend fun refresh() {
-        val fresh = runCatching { fetchRemote() }.getOrNull() ?: return
-        if (fresh.goldPricePerGram <= 0f && fresh.silverPricePerGram <= 0f) return
+    override suspend fun refresh(): Result<Unit> {
+        if (endpointUrl.isBlank() || endpointUrl.startsWith("MY_")) {
+            return Result.failure(IllegalStateException("NISAB_RATE_URL is not configured"))
+        }
+        val fresh = runCatching { fetchRemote() }.getOrNull()
+            ?: return Result.failure(IllegalStateException("Nisab rate endpoint unreachable"))
+        if (fresh.goldPricePerGram <= 0f || fresh.silverPricePerGram <= 0f) {
+            return Result.failure(IllegalStateException("Invalid nisab rates received"))
+        }
         cache?.write(fresh)
         _rates.value = fresh
+        return Result.success(Unit)
     }
 
     private suspend fun fetchRemote(): NisabRates? {

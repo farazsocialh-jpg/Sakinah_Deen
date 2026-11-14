@@ -341,8 +341,8 @@ fun WealthScreen(
                     ) {
                         Button(
                             onClick = {
-                                val result = ZakatPdfExporter.exportAndShare(context, state)
                                 scope.launch {
+                                    val result = ZakatPdfExporter.exportAndShare(context, state)
                                     if (result.isSuccess) {
                                         snackbarHostState.showSnackbar("Zakat summary PDF ready to share.")
                                     } else {

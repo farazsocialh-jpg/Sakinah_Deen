@@ -6,7 +6,9 @@ import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.core.app.NotificationCompat
 
 class BluetoothAclReceiver : BroadcastReceiver() {
@@ -27,7 +29,13 @@ class BluetoothAclReceiver : BroadcastReceiver() {
                 intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
             }
 
-            val deviceName = device?.name ?: "In-Car Audio"
+            val deviceName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                ContextCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+            ) {
+                "In-Car Audio"
+            } else {
+                device?.name ?: "In-Car Audio"
+            }
 
             // Dispatch notification to recite Dua al-Safar
             dispatchDuaAlSafarNotification(context, deviceName)

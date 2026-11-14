@@ -204,4 +204,8 @@ class FakeTafsirDao : TafsirDao {
     override suspend fun deleteAll() {
         entries.clear()
     }
+
+    override suspend fun deleteBySource(sourceKey: String) {
+        entries.removeAll { it.sourceKey == sourceKey }
+    }
 }

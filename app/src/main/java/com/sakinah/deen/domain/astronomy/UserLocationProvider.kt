@@ -97,7 +97,7 @@ class UserLocationProvider(private val context: Context) {
                     cont.resume(null)
                 }
             } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 cont.resume(null)
             }
         }
@@ -143,7 +143,7 @@ class UserLocationProvider(private val context: Context) {
                     countryCode = address?.countryCode.orEmpty().uppercase(Locale.US)
                 )
             } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 AreaNames(city = "Detected Location", countryName = "", countryCode = "")
             }
         }
