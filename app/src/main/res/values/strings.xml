@@ -62,4 +62,12 @@
     <string name="action_download">Download</string>
     <string name="action_play">Play</string>
     <string name="offline_seed_note">Bundled offline content</string>
+
+    <!-- City picker -->
+    <string name="city_picker_title">Choose Home City</string>
+    <string name="city_picker_subtitle">Safar (Qasr) is measured from Home.</string>
+    <string name="city_picker_search">Search city</string>
+    <string name="city_picker_no_match">No matching city.</string>
+    <string name="city_picker_use_gps">Use Device GPS</string>
+    <string name="action_cancel">Cancel</string>
 </resources>

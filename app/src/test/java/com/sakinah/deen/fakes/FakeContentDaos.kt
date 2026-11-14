@@ -62,6 +62,9 @@ class FakeQuranDao : QuranDao {
         )
     }
 
+    override fun searchAyahsEscaped(query: String, limit: Int): Flow<List<QuranAyahEntity>> =
+        searchAyahs(query, limit)
+
     override suspend fun getAyah(surahNumber: Int, ayahNumber: Int): QuranAyahEntity? =
         ayahs[surahNumber to ayahNumber]
 
@@ -118,7 +121,21 @@ class FakeHadithDao : HadithDao {
         )
     }
 
-    override fun searchHadiths(query: String, limit: Int): Flow<List<HadithEntryEntity>> = flow {
+    override fun observeAllHadithsByLanguage(
+        languageCode: String,
+        limit: Int,
+        offset: Int
+    ): Flow<List<HadithEntryEntity>> = flow {
+        emit(
+            entries.values
+                .filter { it.languageCode == languageCode }
+                .sortedWith(compareBy({ it.bookKey }, { it.hadithNumber }))
+                .drop(offset)
+                .take(limit)
+        )
+    }
+
+    override fun searchHadithsEscaped(query: String, limit: Int): Flow<List<HadithEntryEntity>> = flow {
         emit(
             entries.values
                 .filter {
@@ -189,5 +206,9 @@ class FakeTafsirDao : TafsirDao {
 
     override suspend fun deleteAll() {
         entries.clear()
+    }
+
+    override suspend fun deleteBySource(sourceKey: String) {
+        entries.removeAll { it.sourceKey == sourceKey }
     }
 }

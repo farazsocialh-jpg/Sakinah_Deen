@@ -18,6 +18,7 @@ import com.sakinah.deen.data.database.entity.AdhkarEntity
 import com.sakinah.deen.data.database.entity.HadithEntryEntity
 import com.sakinah.deen.data.database.entity.QuranAyahEntity
 import com.sakinah.deen.data.database.entity.SurahMetadataEntity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -93,14 +94,14 @@ object DatabaseSeeder {
         // Resolving the database can fail (encryption factory, corrupt file); never let
         // that escape into the Room open callback or the startup coroutine.
         val target = runCatching { content() }.getOrNull() ?: return@withLock SeedSummary()
-        runCatching {
+        try {
             val needsQuran = target.quranDao.countAyahs(1) <= 0
             val needsSurahMetadata = target.quranDao.countSurahs() < 114
             val needsHadith = target.hadithDao.countForBook(NAWAWI_BOOK_KEY) <= 0
             val needsAdhkar = target.adhkarDao.count() <= 0
 
             if (!needsQuran && !needsSurahMetadata && !needsHadith && !needsAdhkar) {
-                return@runCatching SeedSummary(skipped = true)
+                return SeedSummary(skipped = true)
             }
 
             var surahs = 0
@@ -134,8 +135,10 @@ object DatabaseSeeder {
             }
 
             SeedSummary(surahs = surahs, ayahs = ayahs, hadiths = hadiths, adhkar = adhkar)
-        }.getOrElse { error ->
-            Log.w(TAG, "Offline seed failed: ${error.message}")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Offline seed failed: ${e.message}")
             SeedSummary()
         }
     }

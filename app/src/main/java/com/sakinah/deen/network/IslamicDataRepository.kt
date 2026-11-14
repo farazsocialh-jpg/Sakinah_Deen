@@ -355,16 +355,16 @@ class IslamicDataRepository(
         val primaryBody = fetch("$HADITH_CDN_BASE/editions/$languageCode-$bookKey.min.json")
         onProgress(0.45f)
 
-        val arabicByNumber = if (languageCode == "ara") {
-            emptyMap()
+        val arabicEdition = if (languageCode == "ara") {
+            ArabicEditionIndex()
         } else {
             runCatching {
                 parseArabicTexts(fetch("$HADITH_CDN_BASE/editions/ara-$bookKey.min.json"))
-            }.getOrDefault(emptyMap())
+            }.getOrDefault(ArabicEditionIndex())
         }
         onProgress(0.70f)
 
-        val entries = parseHadithEdition(primaryBody, bookKey, languageCode, arabicByNumber)
+        val entries = parseHadithEdition(primaryBody, bookKey, languageCode, arabicEdition)
         if (entries.isEmpty()) error("No hadith parsed for $bookKey")
 
         hadithDao.replaceBook(bookKey, languageCode, entries)
@@ -392,6 +392,14 @@ class IslamicDataRepository(
     /** Every locally seeded/ downloaded collection, used for the "All Books" filter. */
     fun observeAllHadiths(limit: Int = 100000, offset: Int = 0): Flow<List<HadithEntryEntity>> =
         afterSeeding(hadithDao.observeAllHadiths(limit, offset))
+
+    /** "All Books" restricted to one edition, so the ENG/ARA toggle changes every narration. */
+    fun observeAllHadiths(
+        languageCode: String,
+        limit: Int = 100000,
+        offset: Int = 0
+    ): Flow<List<HadithEntryEntity>> =
+        afterSeeding(hadithDao.observeAllHadithsByLanguage(languageCode, limit, offset))
 
     fun searchHadiths(query: String, limit: Int = 200): Flow<List<HadithEntryEntity>> {
         val trimmed = query.trim()
@@ -542,22 +550,50 @@ class IslamicDataRepository(
         return response.bodyAsText()
     }
 
-    private fun parseArabicTexts(body: String): Map<Int, String> {
-        val root = json.parseToJsonElement(body) as? JsonObject ?: return emptyMap()
-        val hadiths = root["hadiths"] as? JsonArray ?: return emptyMap()
-        return hadiths.mapNotNull { element ->
-            val entry = element as? JsonObject ?: return@mapNotNull null
-            val number = intOf(entry["hadithnumber"]) ?: return@mapNotNull null
+    /**
+     * Arabic text keyed both by hadith number and by `reference.book:reference.hadith`, so an
+     * English narration can never be paired with the Arabic of a different hadith (index-based
+     * merging is what produced Bukhari #2's mismatched "trade" narration).
+     */
+    private data class ArabicEditionIndex(
+        val byNumber: Map<Int, String> = emptyMap(),
+        val byReference: Map<String, String> = emptyMap()
+    ) {
+        fun resolve(number: Int, referenceBook: Int?, referenceHadith: Int?): String? {
+            byNumber[number]?.let { return it }
+            if (referenceBook != null && referenceHadith != null) {
+                byReference["$referenceBook:$referenceHadith"]?.let { return it }
+            }
+            return null
+        }
+    }
+
+    private fun parseArabicTexts(body: String): ArabicEditionIndex {
+        val root = json.parseToJsonElement(body) as? JsonObject ?: return ArabicEditionIndex()
+        val hadiths = root["hadiths"] as? JsonArray ?: return ArabicEditionIndex()
+        val byNumber = mutableMapOf<Int, String>()
+        val byReference = mutableMapOf<String, String>()
+        hadiths.forEach { element ->
+            val entry = element as? JsonObject ?: return@forEach
+            val number = intOf(entry["hadithnumber"])
+            val reference = entry["reference"] as? JsonObject
+            val referenceBook = intOf(reference?.get("book"))
+            val referenceHadith = intOf(reference?.get("hadith"))
             val text = (entry["text"] as? JsonPrimitive)?.contentOrNull?.let(::cleanText)
-            if (text.isNullOrBlank()) null else number to text
-        }.toMap()
+            if (text.isNullOrBlank()) return@forEach
+            if (number != null) byNumber[number] = text
+            if (referenceBook != null && referenceHadith != null) {
+                byReference["$referenceBook:$referenceHadith"] = text
+            }
+        }
+        return ArabicEditionIndex(byNumber = byNumber, byReference = byReference)
     }
 
     private fun parseHadithEdition(
         body: String,
         bookKey: String,
         languageCode: String,
-        arabicByNumber: Map<Int, String>
+        arabicEdition: ArabicEditionIndex
     ): List<HadithEntryEntity> {
         val root = json.parseToJsonElement(body) as? JsonObject ?: return emptyList()
         val metadata = root["metadata"] as? JsonObject
@@ -577,17 +613,23 @@ class IslamicDataRepository(
         return hadiths.mapNotNull { element ->
             val entry = element as? JsonObject ?: return@mapNotNull null
             val reference = entry["reference"] as? JsonObject
+            val referenceBook = intOf(reference?.get("book"))
+            val referenceHadith = intOf(reference?.get("hadith"))
             val number = intOf(entry["hadithnumber"])
-                ?: intOf(reference?.get("hadith"))
+                ?: referenceHadith
                 ?: return@mapNotNull null
-            val sectionNumber = intOf(reference?.get("book")) ?: 0
+            val sectionNumber = referenceBook ?: 0
 
             val grade = (entry["grades"] as? JsonArray)
                 ?.firstOrNull() as? JsonObject
 
             val rawText = cleanText((entry["text"] as? JsonPrimitive)?.contentOrNull.orEmpty())
             val isArabicEdition = languageCode.equals("ara", ignoreCase = true)
-            val resolvedArabic = if (isArabicEdition) rawText else arabicByNumber[number].orEmpty()
+            val resolvedArabic = if (isArabicEdition) {
+                rawText
+            } else {
+                arabicEdition.resolve(number, referenceBook, referenceHadith).orEmpty()
+            }
             val resolvedTranslation = if (isArabicEdition) "" else rawText
 
             HadithEntryEntity(

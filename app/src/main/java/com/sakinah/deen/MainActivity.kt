@@ -45,18 +45,23 @@ class MainActivity : ComponentActivity() {
 
             val firstLaunchPermissionLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestMultiplePermissions()
-            ) {
-                scope.launch {
-                    AzaanScheduling.scheduleWithBestLocation(
-                        context = applicationContext,
-                        locationProvider = locationProvider
-                    )
+            ) { result ->
+                // Mark the prompt as handled only after the user has actually responded.
+                appPrefs.firstLaunchPermissionsRequested = true
+                val locationGranted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                    result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+                if (locationGranted) {
+                    scope.launch {
+                        AzaanScheduling.scheduleWithBestLocation(
+                            context = applicationContext,
+                            locationProvider = locationProvider
+                        )
+                    }
                 }
             }
 
             LaunchedEffect(Unit) {
                 if (!appPrefs.firstLaunchPermissionsRequested) {
-                    appPrefs.firstLaunchPermissionsRequested = true
                     val permissions = buildList {
                         add(Manifest.permission.ACCESS_FINE_LOCATION)
                         add(Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -103,11 +108,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        sendStopAdhanIntent()
+        // Only an explicit stop-Adhan action/extra may interrupt playback.
+        val stopRequested = intent.action == AdhanPlaybackService.ACTION_STOP_ADHAN ||
+            intent.getBooleanExtra("stop_adhan", false)
+        if (stopRequested) sendStopAdhanIntent()
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+        if ((keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) &&
+            AdhanPlaybackService.isAdhanActive
+        ) {
             sendStopAdhanIntent()
         }
         return super.onKeyDown(keyCode, event)

@@ -3,6 +3,7 @@ package com.sakinah.deen.ui.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -48,16 +51,27 @@ fun SakinahCard(
     contentPadding: Dp = 16.dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val clickModifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
-    Surface(
-        modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).then(clickModifier),
-        shape = RoundedCornerShape(16.dp),
-        color = containerColor,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.65f))
-    ) {
-        Column(
-            modifier = Modifier.padding(contentPadding),
-            content = content
+    val shape = RoundedCornerShape(16.dp)
+    val border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.65f))
+    val body: @Composable () -> Unit = {
+        Column(modifier = Modifier.padding(contentPadding), content = content)
+    }
+    if (onClick != null) {
+        Surface(
+            onClick = onClick,
+            modifier = modifier.fillMaxWidth(),
+            shape = shape,
+            color = containerColor,
+            border = border,
+            content = body
+        )
+    } else {
+        Surface(
+            modifier = modifier.fillMaxWidth(),
+            shape = shape,
+            color = containerColor,
+            border = border,
+            content = body
         )
     }
 }
@@ -145,17 +159,21 @@ fun StatusBadge(
     accentColor: Color,
     modifier: Modifier = Modifier
 ) {
+    // Bright accents such as mint are illegible on a light surface, so darken the text
+    // while keeping the accent-tinted background.
+    val darkTheme = isSystemInDarkTheme()
+    val labelColor = if (darkTheme) accentColor else lerp(accentColor, Color.Black, 0.45f)
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(8.dp),
-        color = accentColor.copy(alpha = 0.14f)
+        color = accentColor.copy(alpha = if (darkTheme) 0.22f else 0.16f)
     ) {
         Text(
             text = text,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
-            color = accentColor,
+            color = labelColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             softWrap = false
@@ -182,7 +200,7 @@ fun ArabicVerseBlock(
             fontSize = fontSizeSp.sp,
             lineHeight = (fontSizeSp * 1.68f).sp,
             color = color,
-            textAlign = TextAlign.Right
+            textAlign = TextAlign.Start
         )
     }
 }
@@ -197,13 +215,14 @@ fun CitationChip(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick),
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 48.dp),
         shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.14f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f))
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(

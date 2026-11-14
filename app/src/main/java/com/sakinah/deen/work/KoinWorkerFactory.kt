@@ -5,8 +5,13 @@ import androidx.work.ListenableWorker
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
 import com.sakinah.deen.data.database.SakinahEncryptedDatabase
+import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.TafseerDownloadRepository
+import com.sakinah.deen.domain.travel.TravelStatusManager
 import com.sakinah.deen.network.ContentDownloadWorker
+import com.sakinah.deen.work.DailyHabitResetWorker
+import com.sakinah.deen.work.PrayerAlarmWorker
+import com.sakinah.deen.work.TravelDistanceWorker
 import org.koin.core.Koin
 
 /**
@@ -33,6 +38,20 @@ class KoinWorkerFactory(private val koin: Koin) : WorkerFactory() {
                 workerParameters,
                 koin.get(TafseerDownloadRepository::class),
                 koin.get(SakinahEncryptedDatabase::class)
+            )
+
+        PrayerAlarmWorker::class.java.name ->
+            PrayerAlarmWorker(
+                appContext,
+                workerParameters
+            )
+
+        TravelDistanceWorker::class.java.name ->
+            TravelDistanceWorker(
+                appContext,
+                workerParameters,
+                koin.get(TravelStatusManager::class),
+                koin.get(SakinahPreferences::class)
             )
 
         else -> null

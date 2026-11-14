@@ -1,17 +1,25 @@
 package com.sakinah.deen.data.scholar
 
 import android.content.Context
+import com.sakinah.deen.data.model.Citation
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+
+typealias Citation = com.sakinah.deen.data.model.Citation
 
 @Serializable
 data class ScholarChatMessage(
     val id: String,
     val role: String,
     val text: String,
-    val timestampMs: Long
+    val timestampMs: Long,
+    val citations: List<Citation> = emptyList(),
+    val hanafiStance: String? = null,
+    val malikiStance: String? = null,
+    val shafiiStance: String? = null,
+    val hanbaliStance: String? = null
 )
 
 @Serializable
@@ -47,7 +55,10 @@ class ScholarHistoryStore(context: Context) {
     fun save(sessions: List<ScholarChatSession>) {
         runCatching {
             file.parentFile?.mkdirs()
-            file.writeText(json.encodeToString(sessions))
+            val tmp = File(file.absolutePath + ".tmp")
+            tmp.writeText(json.encodeToString(sessions))
+            if (file.exists()) file.delete()
+            tmp.renameTo(file)
         }
     }
 

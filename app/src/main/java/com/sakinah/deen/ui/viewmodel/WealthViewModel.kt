@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sakinah.deen.data.database.dao.SadaqahDao
 import com.sakinah.deen.data.database.entity.SadaqahLogEntity
+import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.NisabRateRepository
 import com.sakinah.deen.data.repository.NisabRates
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,12 +22,12 @@ data class WealthUiState(
     val goldPricePerGram: Float = 88.40f,
     val silverPricePerGram: Float = 1.15f,
     val nisabLastUpdatedEpochMillis: Long = 0L,
-    val cashInBank: Float = 14200f,
-    val goldHeld: Float = 4500f,
+    val cashInBank: Float = 0f,
+    val goldHeld: Float = 0f,
     val silverHeld: Float = 0f,
     val tradeInventory: Float = 0f,
-    val stocksValue: Float = 6800f,
-    val shortTermDebts: Float = 1800f,
+    val stocksValue: Float = 0f,
+    val shortTermDebts: Float = 0f,
     val sadaqahJarCollected: Float = 0f,
     val sadaqahGoal: Float = 100f,
     val nisabThreshold: Float = 85f * 88.40f, // 7514.0f
@@ -55,16 +56,42 @@ sealed class WealthUiIntent {
 
 class WealthViewModel(
     private val sadaqahDao: SadaqahDao,
-    private val nisabRateRepository: NisabRateRepository? = null
+    private val nisabRateRepository: NisabRateRepository? = null,
+    private val preferences: SakinahPreferences? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WealthUiState())
     val uiState: StateFlow<WealthUiState> = _uiState.asStateFlow()
 
     init {
+        // Restore the saved balance sheet before the first calculation (guest mode included).
+        preferences?.let { prefs ->
+            _uiState.update {
+                it.copy(
+                    cashInBank = prefs.zakatCashInBank,
+                    goldHeld = prefs.zakatGoldHeld,
+                    silverHeld = prefs.zakatSilverHeld,
+                    tradeInventory = prefs.zakatTradeInventory,
+                    stocksValue = prefs.zakatStocksValue,
+                    shortTermDebts = prefs.zakatShortTermDebts
+                )
+            }
+        }
         recalculateZakat()
         observeSadaqah()
         observeNisabRates()
+    }
+
+    /** Writes cash, gold, silver, stocks and debts to disk after every edit. */
+    private fun persistBalances() {
+        val prefs = preferences ?: return
+        val s = _uiState.value
+        prefs.zakatCashInBank = s.cashInBank
+        prefs.zakatGoldHeld = s.goldHeld
+        prefs.zakatSilverHeld = s.silverHeld
+        prefs.zakatTradeInventory = s.tradeInventory
+        prefs.zakatStocksValue = s.stocksValue
+        prefs.zakatShortTermDebts = s.shortTermDebts
     }
 
     private fun observeNisabRates() {
@@ -79,6 +106,7 @@ class WealthViewModel(
                     )
                 }
                 recalculateZakat()
+                persistBalances()
             }
         }
         refreshNisabRates(repo)
@@ -89,8 +117,17 @@ class WealthViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshingRates = true) }
             try {
-                target.refresh()
-                _uiState.update { it.copy(errorMessage = null) }
+                val result = target.refresh()
+                if (result.isSuccess) {
+                    _uiState.update { it.copy(errorMessage = null) }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            errorMessage = "Could not refresh nisab rates: " +
+                                (result.exceptionOrNull()?.message ?: "network error")
+                        )
+                    }
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -108,30 +145,37 @@ class WealthViewModel(
             is WealthUiIntent.SetGoldStandard -> {
                 _uiState.update { it.copy(isGoldStandard = intent.isGold) }
                 recalculateZakat()
+                persistBalances()
             }
             is WealthUiIntent.UpdateCash -> {
                 _uiState.update { it.copy(cashInBank = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
+                persistBalances()
             }
             is WealthUiIntent.UpdateGoldHeld -> {
                 _uiState.update { it.copy(goldHeld = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
+                persistBalances()
             }
             is WealthUiIntent.UpdateSilverHeld -> {
                 _uiState.update { it.copy(silverHeld = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
+                persistBalances()
             }
             is WealthUiIntent.UpdateTradeInventory -> {
                 _uiState.update { it.copy(tradeInventory = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
+                persistBalances()
             }
             is WealthUiIntent.UpdateStocksValue -> {
                 _uiState.update { it.copy(stocksValue = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
+                persistBalances()
             }
             is WealthUiIntent.UpdateDebts -> {
                 _uiState.update { it.copy(shortTermDebts = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
+                persistBalances()
             }
             is WealthUiIntent.AddMicroSadaqah -> {
                 addMicroSadaqah(intent.amount, intent.note)
@@ -149,6 +193,7 @@ class WealthViewModel(
                     )
                 }
                 recalculateZakat()
+                persistBalances()
             }
         }
     }

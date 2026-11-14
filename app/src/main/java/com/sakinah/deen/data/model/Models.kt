@@ -107,6 +107,13 @@ data class WealthZakatModel(
     val sadaqahMonthlyGoal: Float = 100f
 )
 
+@kotlinx.serialization.Serializable
+data class Citation(
+    val title: String,
+    val deepLink: String? = null,
+    val referenceType: String = ""
+)
+
 data class ChatMessageModel(
     val id: String,
     val role: String,
@@ -117,5 +124,6 @@ data class ChatMessageModel(
     val malikiStance: String? = null,
     val shafiiStance: String? = null,
     val hanbaliStance: String? = null,
-    val sourceDeepLink: String? = null
+    val sourceDeepLink: String? = null,
+    val citations: List<Citation> = emptyList()
 )

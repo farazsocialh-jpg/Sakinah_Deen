@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -56,6 +57,10 @@ class AdhanPlaybackService : Service() {
         const val EXTRA_MUEZZIN_ID = "extra_muezzin_id"
         const val NOTIFICATION_ID = 4001
 
+        /** Observable flag so the Activity can gate volume-key handling on real playback. */
+        @Volatile
+        var isAdhanActive: Boolean = false
+
         private const val FADE_STEPS = 20
         private const val FADE_STEP_MS = 250L
         private const val SNOOZE_MINUTES = 10
@@ -69,6 +74,7 @@ class AdhanPlaybackService : Service() {
 
     @Volatile private var isPlayingAdhan: Boolean = false
     private var volumeReceiver: BroadcastReceiver? = null
+    private val foregroundGate by lazy { AdhanForegroundGate(this) }
 
     private var currentPrayerName: String = "Salah"
     private var currentPrayerType: PrayerType = PrayerType.DHUHR
@@ -85,7 +91,13 @@ class AdhanPlaybackService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action ?: return START_NOT_STICKY
+        val action = intent?.action
+        if (action == null) {
+            // Started as a foreground service without an action: promote immediately
+            // so Android does not throw ForegroundServiceDidNotStartInTimeException, then stop.
+            promoteToForegroundAndStop()
+            return START_NOT_STICKY
+        }
 
         when (action) {
             ACTION_PLAY_ADHAN -> {
@@ -100,11 +112,14 @@ class AdhanPlaybackService : Service() {
                 isDuaSafar = false
 
                 if (currentMode == PrayerAlertMode.OFF) {
-                    stopSelf()
+                    // OFF must still satisfy the foreground-service contract before stopping.
+                    promoteToForegroundAndStop()
                     return START_NOT_STICKY
                 }
 
-                startPlaybackForeground(buildAdhanNotification(currentPrayerName))
+                if (!startPlaybackForeground(buildAdhanNotification(currentPrayerName))) {
+                    return START_NOT_STICKY
+                }
                 when (currentMode) {
                     PrayerAlertMode.FULL_AZAAN -> playCue(
                         uri = selectedAdhanUri(),
@@ -124,7 +139,9 @@ class AdhanPlaybackService : Service() {
             ACTION_PLAY_DUA_SAFAR -> {
                 isDuaSafar = true
                 currentMode = PrayerAlertMode.FULL_AZAAN
-                startPlaybackForeground(buildDuaSafarNotification())
+                if (!startPlaybackForeground(buildDuaSafarNotification())) {
+                    return START_NOT_STICKY
+                }
                 playCue(
                     uri = resolveDuaSafarUri(),
                     stopWhenPlaybackEnds = true
@@ -132,15 +149,17 @@ class AdhanPlaybackService : Service() {
             }
 
             ACTION_SNOOZE -> {
-                PrayerAlarmScheduler(
-                    this,
-                    com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl(),
-                    preferences
-                ).scheduleSnooze(
-                    prayerType = currentPrayerType,
-                    prayerName = currentPrayerName,
-                    minutes = SNOOZE_MINUTES
-                )
+                runCatching {
+                    PrayerAlarmScheduler(
+                        this,
+                        com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl(),
+                        preferences
+                    ).scheduleSnooze(
+                        prayerType = currentPrayerType,
+                        prayerName = currentPrayerName,
+                        minutes = SNOOZE_MINUTES
+                    )
+                }
                 finishPlayback()
             }
 
@@ -168,22 +187,36 @@ class AdhanPlaybackService : Service() {
         preferences.duaSafarSoundUri?.takeIf { it.isNotBlank() }?.let(Uri::parse)
             ?: Uri.parse("android.resource://$packageName/${R.raw.dua_al_safar}")
 
-    private fun startPlaybackForeground(notification: Notification) {
-        ServiceCompat.startForeground(
-            this,
-            NOTIFICATION_ID,
-            notification,
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-        )
+    /**
+     * Entering the foreground can be refused (Android 14+ background-start rules, revoked
+     * FGS/media permission). In that case post the reminder as a normal notification and
+     * stop instead of letting the exception crash the process.
+     */
+    private fun startPlaybackForeground(notification: Notification): Boolean {
+        val promoted = foregroundGate.enter(notification) {
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            )
+        }
+        if (!promoted) stopSelf()
+        return promoted
     }
 
     private fun playCue(uri: Uri, stopWhenPlaybackEnds: Boolean) {
-        val exo = ensurePlayer(stopWhenPlaybackEnds)
+        val exo = ensurePlayer(stopWhenPlaybackEnds) ?: run {
+            // Audio focus/codec initialisation failed: keep the reminder visible, no audio.
+            finishTonePlayback()
+            return
+        }
         exo.setMediaItem(MediaItem.fromUri(uri))
         exo.volume = 0f
         exo.prepare()
         exo.play()
         isPlayingAdhan = true
+        isAdhanActive = true
         registerVolumeReceiver()
 
         fadeJob?.cancel()
@@ -196,7 +229,7 @@ class AdhanPlaybackService : Service() {
         }
     }
 
-    private fun ensurePlayer(stopWhenPlaybackEnds: Boolean): ExoPlayer {
+    private fun ensurePlayer(stopWhenPlaybackEnds: Boolean): ExoPlayer? {
         player?.let { existing ->
             // Media3 listeners are immutable, so recreate only when the stop policy changes.
             if (playerPolicyStopsOnEnd != stopWhenPlaybackEnds) {
@@ -207,9 +240,14 @@ class AdhanPlaybackService : Service() {
             }
         }
 
-        val exoPlayer = ExoPlayer.Builder(this)
-            .build()
-            .apply {
+        val exoPlayer = try {
+            ExoPlayer.Builder(this).build()
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            return null
+        }
+        try {
+            exoPlayer.apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
@@ -230,11 +268,22 @@ class AdhanPlaybackService : Service() {
                     }
                 })
             }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            runCatching { exoPlayer.release() }
+            return null
+        }
 
         mediaSession?.release()
-        mediaSession = MediaSession.Builder(this, exoPlayer)
-            .setSessionActivity(contentPendingIntent())
-            .build()
+        mediaSession = try {
+            MediaSession.Builder(this, exoPlayer)
+                .setSessionActivity(contentPendingIntent())
+                .build()
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            runCatching { exoPlayer.release() }
+            return null
+        }
 
         player = exoPlayer
         playerPolicyStopsOnEnd = stopWhenPlaybackEnds
@@ -243,6 +292,7 @@ class AdhanPlaybackService : Service() {
 
     private fun finishPlayback() {
         isPlayingAdhan = false
+        isAdhanActive = false
         unregisterVolumeReceiver()
         fadeJob?.cancel()
         fadeJob = null
@@ -259,6 +309,7 @@ class AdhanPlaybackService : Service() {
     /** Short tone/silent leave the prayer notification visible after foreground stops. */
     private fun finishTonePlayback() {
         isPlayingAdhan = false
+        isAdhanActive = false
         unregisterVolumeReceiver()
         fadeJob?.cancel()
         fadeJob = null
@@ -274,6 +325,28 @@ class AdhanPlaybackService : Service() {
     private fun finishFallbackNotification() {
         // A missing/corrupt recording must not crash or leave a silent foreground service.
         finishTonePlayback()
+    }
+
+    /**
+     * Satisfies Android's foreground-service start contract on early-exit paths (no action,
+     * OFF mode) without leaving a stale notification behind.
+     */
+    private fun promoteToForegroundAndStop() {
+        val notification = NotificationCompat.Builder(this, NotificationChannels.CHANNEL_SALAH_ADHAN)
+            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setContentTitle(getString(R.string.adhan_body))
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+        runCatching {
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            )
+        }
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private fun contentPendingIntent(): PendingIntent = PendingIntent.getActivity(
@@ -352,7 +425,12 @@ class AdhanPlaybackService : Service() {
         }
         volumeReceiver = receiver
         try {
-            registerReceiver(receiver, IntentFilter("android.media.VOLUME_CHANGED_ACTION"))
+            ContextCompat.registerReceiver(
+                this,
+                receiver,
+                IntentFilter("android.media.VOLUME_CHANGED_ACTION"),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             // Ignore registration races.
@@ -370,6 +448,7 @@ class AdhanPlaybackService : Service() {
 
     override fun onDestroy() {
         isPlayingAdhan = false
+        isAdhanActive = false
         unregisterVolumeReceiver()
         fadeJob?.cancel()
         mediaSession?.release()

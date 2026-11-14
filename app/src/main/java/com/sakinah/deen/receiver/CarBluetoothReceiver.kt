@@ -33,6 +33,10 @@ class CarBluetoothReceiver : BroadcastReceiver() {
         const val VEHICLE_NOTIFICATION_ID = 5001
         private const val ACTION_OPEN_TRAVEL = "travel"
 
+        /** Address of the Bluetooth device that most recently activated travel mode. */
+        @Volatile
+        var activeCarDeviceAddress: String? = null
+
         private val CAR_DEVICE_CLASSES = setOf(
             BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO,
             BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE
@@ -42,7 +46,7 @@ class CarBluetoothReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             BluetoothDevice.ACTION_ACL_CONNECTED -> handleConnected(context, intent)
-            BluetoothDevice.ACTION_ACL_DISCONNECTED -> handleDisconnected(context)
+            BluetoothDevice.ACTION_ACL_DISCONNECTED -> handleDisconnected(context, intent)
         }
     }
 
@@ -53,6 +57,7 @@ class CarBluetoothReceiver : BroadcastReceiver() {
         if (!isRecognisedCar(context, device, preferences)) return
 
         val carName = safeDeviceName(context, device) ?: "Vehicle Audio System"
+        activeCarDeviceAddress = runCatching { device.address }.getOrNull()
         preferences.travelModeActive = true
 
         val travelState = updateTravelState(context, preferences)
@@ -93,7 +98,20 @@ class CarBluetoothReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun handleDisconnected(context: Context) {
+    private fun handleDisconnected(context: Context, intent: Intent) {
+        val device = extractDevice(intent)
+        val disconnectedAddress = runCatching { device?.address }.getOrNull()
+
+        // Only react to the device that actually activated travel mode; earbuds,
+        // smartwatches or other head units disconnecting must not cancel the trip.
+        val active = activeCarDeviceAddress
+        if (active != null && disconnectedAddress != null &&
+            !disconnectedAddress.equals(active, ignoreCase = true)
+        ) {
+            return
+        }
+
+        activeCarDeviceAddress = null
         SakinahPreferences(context).travelModeActive = false
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager

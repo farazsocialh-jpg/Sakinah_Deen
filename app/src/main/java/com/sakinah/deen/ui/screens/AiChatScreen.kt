@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -59,6 +61,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -127,14 +131,21 @@ fun AiChatScreen(
         }
     }
 
+    // Only follow the stream when a new turn is added or the user is already parked at the
+    // bottom; never animate on every streamed character (that thrashes the list).
     LaunchedEffect(
         state.messages.size,
         state.messages.lastOrNull()?.content?.length,
         imeVisible,
         activeSessionId
     ) {
-        if (state.messages.isNotEmpty()) {
-            listState.animateScrollToItem(state.messages.lastIndex)
+        if (state.messages.isEmpty()) return@LaunchedEffect
+        val nearBottom = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ==
+            state.messages.lastIndex || !listState.canScrollForward
+        val isNewMessage = state.messages.size > (listState.firstVisibleItemIndex +
+            listState.layoutInfo.visibleItemsInfo.size)
+        if (nearBottom || isNewMessage) {
+            listState.scrollToItem(state.messages.lastIndex)
         }
     }
 
@@ -416,7 +427,19 @@ fun AiChatScreen(
                 placeholder = { Text("Ask any Islamic question...", fontSize = 12.sp) },
                 shape = RoundedCornerShape(18.dp),
                 modifier = Modifier.weight(1f),
-                singleLine = true
+                singleLine = false,
+                maxLines = 4,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Sentences,
+                    imeAction = ImeAction.Send
+                ),
+                keyboardActions = KeyboardActions(
+                    onSend = {
+                        if (state.inputText.isNotBlank() && !state.isStreaming) {
+                            vm.onIntent(AiScholarUiIntent.SendQuery(state.inputText))
+                        }
+                    }
+                )
             )
             Spacer(modifier = Modifier.width(8.dp))
             Button(

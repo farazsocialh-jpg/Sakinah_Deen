@@ -41,7 +41,8 @@ class OfflineContentSeeder(
     private val _status = MutableStateFlow<SeedStatus>(SeedStatus.Idle)
     val status: StateFlow<SeedStatus> = _status.asStateFlow()
 
-    private val settled = CompletableDeferred<SeedStatus>()
+    @Volatile
+    private var settled = CompletableDeferred<SeedStatus>()
     private val startLock = Any()
     private var started = false
 
@@ -50,18 +51,26 @@ class OfflineContentSeeder(
         synchronized(startLock) {
             if (started) return
             started = true
+            _status.value = SeedStatus.Seeding
+            if (settled.isCompleted) settled = CompletableDeferred()
         }
-        _status.value = SeedStatus.Seeding
         scope.launch {
-            val result = try {
+            var cancellation: CancellationException? = null
+            val result: SeedStatus = try {
                 SeedStatus.Ready(DatabaseSeeder.seedOnce(readAsset, content))
             } catch (e: CancellationException) {
-                throw e
+                cancellation = e
+                SeedStatus.Failed(e.message ?: "cancelled")
             } catch (e: Throwable) {
                 SeedStatus.Failed(e.message ?: e::class.java.simpleName)
             }
+            // Always settle so awaitReady never hangs; allow a later retry after failure.
             _status.value = result
             settled.complete(result)
+            if (result is SeedStatus.Failed) {
+                synchronized(startLock) { started = false }
+            }
+            cancellation?.let { throw it }
         }
     }
 

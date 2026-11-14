@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -91,6 +92,7 @@ import java.util.Locale
 fun SettingsScreen(
     onBack: () -> Unit,
     onRerunOnboarding: () -> Unit = {},
+    onOpenNotificationSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val repo = rememberInject<SettingsRepository>()
@@ -296,11 +298,41 @@ fun SettingsScreen(
                     )
                 }
 
-                Text(
-                    text = "High latitude: ${settings.prayer.highLatitudeRule.name.replace('_', ' ')}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "High latitude rule",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    var expanded by remember { mutableStateOf(false) }
+                    Box {
+                        TextButton(onClick = { expanded = true }) {
+                            Text(
+                                settings.prayer.highLatitudeRule.name.replace('_', ' '),
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            com.sakinah.deen.settings.HighLatitudeRule.entries.forEach { rule ->
+                                DropdownMenuItem(
+                                    text = { Text(rule.name.replace('_', ' ')) },
+                                    onClick = {
+                                        expanded = false
+                                        scope.launch {
+                                            repo.updatePrayer(settings.prayer.copy(highLatitudeRule = rule))
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Hijri offset: ${settings.prayer.hijriOffset}")
                     Slider(
@@ -316,6 +348,12 @@ fun SettingsScreen(
 
                 // Azaan & Notifications
                 Text("Azaan & Notifications", style = MaterialTheme.typography.titleMedium)
+                OutlinedButton(
+                    onClick = onOpenNotificationSettings,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Manage Azaan & Notifications →", fontSize = 13.sp)
+                }
                 SakinahCard(contentPadding = 14.dp) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
@@ -672,7 +710,20 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        if (!pack.isDownloaded) {
+                        if (pack.isDownloaded) {
+                            TextButton(
+                                enabled = downloadingPackId == null,
+                                onClick = {
+                                    scope.launch {
+                                        tafseerRepository.removeTafseerPackage(pack.id)
+                                        tafseerRepository.refreshDownloadStatus()
+                                        snackbarHostState.showSnackbar("${pack.author} removed.")
+                                    }
+                                }
+                            ) {
+                                Text("Remove", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+                            }
+                        } else {
                             TextButton(
                                 enabled = downloadingPackId == null,
                                 onClick = {

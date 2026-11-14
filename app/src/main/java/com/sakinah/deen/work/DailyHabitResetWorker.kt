@@ -22,32 +22,34 @@ class DailyHabitResetWorker(
 
     override suspend fun doWork(): Result {
         return try {
-            val yesterdayEpochDay = LocalDate.now().minusDays(1).toEpochDay()
-            val todayEpochDay = LocalDate.now().toEpochDay()
+            // Compute today once to avoid midnight races between Worker runs.
+            val today = LocalDate.now()
+            val yesterday = today.minusDays(1)
 
             val salahDao = database.salahDao()
             val qadhaDao = database.qadhaDao()
 
-            // Check yesterday's records; any uncompleted fard prayers become Qadha
-            val requiredPrayers = listOf(
-                PrayerType.FAJR.name,
-                PrayerType.DHUHR.name,
-                PrayerType.ASR.name,
-                PrayerType.MAGHRIB.name,
-                PrayerType.ISHA.name
-            )
+            // Qadha rollover: every uncompleted fard prayer from yesterday is added to
+            // the ledger for its own prayer type.
+            salahDao.getUncompletedFard(yesterday.toEpochDay()).forEach { record ->
+                qadhaDao.incrementMissed(record.prayerType, 1)
+            }
 
-            // Seed today's fresh uncompleted prayer slots
-            val todaySlots = listOf(
-                SalahRecordEntity(todayEpochDay, PrayerType.FAJR.name, isCompleted = false, isJamaah = false, isQadha = false),
-                SalahRecordEntity(todayEpochDay, PrayerType.SUNRISE.name, isCompleted = false, isJamaah = false, isQadha = false),
-                SalahRecordEntity(todayEpochDay, PrayerType.DHUHR.name, isCompleted = false, isJamaah = false, isQadha = false),
-                SalahRecordEntity(todayEpochDay, PrayerType.ASR.name, isCompleted = false, isJamaah = false, isQadha = false),
-                SalahRecordEntity(todayEpochDay, PrayerType.MAGHRIB.name, isCompleted = false, isJamaah = false, isQadha = false),
-                SalahRecordEntity(todayEpochDay, PrayerType.ISHA.name, isCompleted = false, isJamaah = false, isQadha = false)
-            )
-
-            salahDao.insertAll(todaySlots)
+            // Check whether today's SalahRecordEntity slots already exist before inserting
+            // so existing progress isn't overwritten on re-runs.
+            val todayExists = salahDao.slotCountForDay(today.toEpochDay()) > 0
+            if (!todayExists) {
+                // Seed today's fresh uncompleted prayer slots
+                val todaySlots = listOf(
+                    SalahRecordEntity(today.toEpochDay(), PrayerType.FAJR.name, isCompleted = false, isJamaah = false, isQadha = false),
+                    SalahRecordEntity(today.toEpochDay(), PrayerType.SUNRISE.name, isCompleted = false, isJamaah = false, isQadha = false),
+                    SalahRecordEntity(today.toEpochDay(), PrayerType.DHUHR.name, isCompleted = false, isJamaah = false, isQadha = false),
+                    SalahRecordEntity(today.toEpochDay(), PrayerType.ASR.name, isCompleted = false, isJamaah = false, isQadha = false),
+                    SalahRecordEntity(today.toEpochDay(), PrayerType.MAGHRIB.name, isCompleted = false, isJamaah = false, isQadha = false),
+                    SalahRecordEntity(today.toEpochDay(), PrayerType.ISHA.name, isCompleted = false, isJamaah = false, isQadha = false)
+                )
+                salahDao.insertAll(todaySlots)
+            }
 
             Result.success()
         } catch (e: kotlinx.coroutines.CancellationException) {

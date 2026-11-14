@@ -48,6 +48,26 @@ jobs:
       - name: Run unit tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace --no-daemon
 
+      - name: Run lint
+        run: ./gradlew :app:lintDebug --stacktrace --no-daemon
+
+      - name: Generate ephemeral release keystore for R8 verification
+        run: |
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/ci-release.jks" \
+            -storepass android -keypass android \
+            -alias ci -keyalg RSA -keysize 2048 -validity 365 \
+            -dname "CN=Sakinah CI" >/dev/null 2>&1
+          test -s "$RUNNER_TEMP/ci-release.jks"
+
+      - name: Verify release build (R8)
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/ci-release.jks
+          KEYSTORE_PASSWORD: android
+          KEY_ALIAS: ci
+          KEY_PASSWORD: android
+        run: ./gradlew :app:assembleRelease --stacktrace --no-daemon
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:

@@ -1,5 +1,6 @@
 package com.sakinah.deen.data.prayer
 
+import android.util.Log
 import com.sakinah.deen.data.model.PrayerType
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -14,6 +15,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.coroutines.CancellationException
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -65,16 +67,12 @@ class AlAdhanApiClient(
         private val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy")
         private val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
         private val TIME_PATTERN = Regex("""\d{2}:\d{2}""")
+        private const val TAG = "AlAdhanApiClient"
 
-        // Sunrise is mandatory too: the Salah screen and the cache rows both carry it.
-        private val REQUIRED_PRAYERS = listOf(
-            PrayerType.FAJR,
-            PrayerType.SUNRISE,
-            PrayerType.DHUHR,
-            PrayerType.ASR,
-            PrayerType.MAGHRIB,
-            PrayerType.ISHA
-        )
+        /** Logcat is unavailable in JVM unit tests, so logging must never throw. */
+        private fun logWarning(message: String) {
+            runCatching { Log.w(TAG, message) }
+        }
 
         private fun keyOf(type: PrayerType): String = when (type) {
             PrayerType.FAJR -> "Fajr"
@@ -94,7 +92,7 @@ class AlAdhanApiClient(
         methodId: Int,
         schoolId: Int
     ): AlAdhanMonthlyTimetable? {
-        val response = runCatching {
+        val response = try {
             client.get("$baseUrl/v1/calendar/$year/$month") {
                 parameter("latitude", latitude)
                 parameter("longitude", longitude)
@@ -103,12 +101,34 @@ class AlAdhanApiClient(
                 header(HttpHeaders.Accept, "application/json")
                 header(HttpHeaders.UserAgent, USER_AGENT)
             }
-        }.getOrNull() ?: return null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logWarning("AlAdhan request failed: ${e.message}")
+            return null
+        }
 
-        if (!response.status.isSuccess()) return null
+        if (!response.status.isSuccess()) {
+            logWarning("AlAdhan returned HTTP ${response.status.value}")
+            return null
+        }
 
-        val body = runCatching { response.bodyAsText() }.getOrNull() ?: return null
-        return runCatching { parse(body) }.getOrNull()
+        val body = try {
+            response.bodyAsText()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logWarning("AlAdhan body read failed: ${e.message}")
+            return null
+        }
+        return try {
+            parse(body)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logWarning("AlAdhan response parse failed: ${e.message}")
+            null
+        }
     }
 
     internal fun parse(body: String): AlAdhanMonthlyTimetable? {
@@ -147,7 +167,9 @@ class AlAdhanApiClient(
                 parseTime(raw)?.let { put(type, it) }
             }
         }
-        if (REQUIRED_PRAYERS.any { it !in times }) return null
+        // High-latitude/partial responses can omit a prayer ("-----"). Keep the day
+        // with whatever timings are valid instead of discarding the whole day.
+        if (times.isEmpty()) return null
 
         return AlAdhanDay(date = date, times = times)
     }

@@ -12,9 +12,14 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import android.view.Surface
 import java.util.Calendar
 import java.util.TimeZone
 import kotlin.math.PI
@@ -44,9 +49,11 @@ object QiblaMath {
     fun distanceToKaabaKm(lat: Double, lon: Double): Int {
         val dLat = Math.toRadians(KAABA_LAT - lat)
         val dLon = Math.toRadians(KAABA_LON - lon)
-        val a = sin(dLat / 2) * sin(dLat / 2) +
-            cos(Math.toRadians(lat)) * cos(Math.toRadians(KAABA_LAT)) *
-            sin(dLon / 2) * sin(dLon / 2)
+        val a = (
+            sin(dLat / 2) * sin(dLat / 2) +
+                cos(Math.toRadians(lat)) * cos(Math.toRadians(KAABA_LAT)) *
+                sin(dLon / 2) * sin(dLon / 2)
+            ).coerceIn(0.0, 1.0)
         val c = 2 * atan2(sqrt(a), sqrt(1 - a))
         return (EARTH_RADIUS_KM * c).roundToInt()
     }
@@ -56,7 +63,8 @@ object QiblaMath {
             "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
             "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"
         )
-        val idx = (((deg + 11.25f) % 360f) / 22.5f).toInt()
+        val normalized = ((deg % 360f) + 360f) % 360f
+        val idx = (((normalized + 11.25f) % 360f) / 22.5f).toInt()
         return dirs[idx.coerceIn(0, dirs.lastIndex)]
     }
 
@@ -119,7 +127,8 @@ object QiblaMath {
 @Immutable
 data class CompassSensorState(
     val trueNorthAzimuth: Float,
-    val needsCalibration: Boolean
+    val needsCalibration: Boolean,
+    val hasSensor: Boolean = true
 )
 
 @Composable
@@ -129,8 +138,10 @@ fun rememberTrueNorthCompassState(
     enabled: Boolean = true
 ): CompassSensorState {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var smoothedAzimuth by remember { mutableFloatStateOf(0f) }
     var accuracy by remember { mutableIntStateOf(SensorManager.SENSOR_STATUS_ACCURACY_HIGH) }
+    var hasSensor by remember { mutableStateOf(false) }
 
     val declination = remember(latitude, longitude) {
         GeomagneticField(
@@ -141,22 +152,58 @@ fun rememberTrueNorthCompassState(
         ).declination
     }
 
-    DisposableEffect(context, enabled, declination) {
-        if (!enabled) return@DisposableEffect onDispose { }
-
+    DisposableEffect(context, enabled, declination, lifecycleOwner) {
         val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
         val rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+        val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+        hasSensor = rotationSensor != null || (accelerometer != null && magnetometer != null)
 
         val listener = object : SensorEventListener {
             private val rotationMatrix = FloatArray(9)
+            private val remapped = FloatArray(9)
             private val orientation = FloatArray(3)
+            private val accelReading = FloatArray(3)
+            private val magReading = FloatArray(3)
+            private var hasAccel = false
+            private var hasMag = false
             private var hasInitial = false
 
             override fun onSensorChanged(event: SensorEvent) {
-                if (event.sensor.type != Sensor.TYPE_ROTATION_VECTOR) return
-                SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
-                SensorManager.getOrientation(rotationMatrix, orientation)
+                when (event.sensor.type) {
+                    Sensor.TYPE_ROTATION_VECTOR -> {
+                        SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
+                        publish(rotationMatrix)
+                    }
 
+                    Sensor.TYPE_ACCELEROMETER -> {
+                        System.arraycopy(event.values, 0, accelReading, 0, 3)
+                        hasAccel = true
+                        if (rotationSensor == null) publishFallback()
+                    }
+
+                    Sensor.TYPE_MAGNETIC_FIELD -> {
+                        System.arraycopy(event.values, 0, magReading, 0, 3)
+                        hasMag = true
+                        if (rotationSensor == null) publishFallback()
+                    }
+                }
+            }
+
+            private fun publish(rotation: FloatArray) {
+                remapForDisplay(context, rotation, remapped)
+                SensorManager.getOrientation(remapped, orientation)
+                publishAzimuth()
+            }
+
+            private fun publishFallback() {
+                if (!hasAccel || !hasMag) return
+                if (SensorManager.getRotationMatrix(rotationMatrix, null, accelReading, magReading)) {
+                    publish(rotationMatrix)
+                }
+            }
+
+            private fun publishAzimuth() {
                 val magneticAzimuth = ((Math.toDegrees(orientation[0].toDouble()).toFloat() + 360f) % 360f)
                 val trueAzimuth = (magneticAzimuth + declination + 360f) % 360f
 
@@ -176,18 +223,68 @@ fun rememberTrueNorthCompassState(
             }
         }
 
-        if (rotationSensor != null) {
-            sensorManager.registerListener(listener, rotationSensor, SensorManager.SENSOR_DELAY_UI)
+        fun register() {
+            if (!enabled) return
+            if (rotationSensor != null) {
+                sensorManager.registerListener(listener, rotationSensor, SensorManager.SENSOR_DELAY_UI)
+                magnetometer?.let {
+                    sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_UI)
+                }
+            } else {
+                accelerometer?.let {
+                    sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_UI)
+                }
+                magnetometer?.let {
+                    sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_UI)
+                }
+            }
         }
 
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> register()
+                Lifecycle.Event.ON_PAUSE -> sensorManager.unregisterListener(listener)
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        register()
+
         onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
             sensorManager.unregisterListener(listener)
         }
     }
 
     return CompassSensorState(
         trueNorthAzimuth = smoothedAzimuth,
-        needsCalibration = accuracy == SensorManager.SENSOR_STATUS_ACCURACY_LOW ||
-            accuracy == SensorManager.SENSOR_STATUS_UNRELIABLE
+        needsCalibration = !hasSensor ||
+            accuracy == SensorManager.SENSOR_STATUS_ACCURACY_LOW ||
+            accuracy == SensorManager.SENSOR_STATUS_UNRELIABLE,
+        hasSensor = hasSensor
     )
+}
+
+/** Rotates the sensor frame into the current display orientation. */
+private fun remapForDisplay(context: Context, source: FloatArray, destination: FloatArray) {
+    val rotation = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+        context.display?.rotation ?: Surface.ROTATION_0
+    } else {
+        @Suppress("DEPRECATION")
+        val wm = context.getSystemService(Context.WINDOW_SERVICE) as? android.view.WindowManager
+        @Suppress("DEPRECATION")
+        wm?.defaultDisplay?.rotation ?: Surface.ROTATION_0
+    }
+    when (rotation) {
+        Surface.ROTATION_90 -> SensorManager.remapCoordinateSystem(
+            source, SensorManager.AXIS_Y, SensorManager.AXIS_MINUS_X, destination
+        )
+        Surface.ROTATION_180 -> SensorManager.remapCoordinateSystem(
+            source, SensorManager.AXIS_MINUS_X, SensorManager.AXIS_MINUS_Y, destination
+        )
+        Surface.ROTATION_270 -> SensorManager.remapCoordinateSystem(
+            source, SensorManager.AXIS_MINUS_Y, SensorManager.AXIS_X, destination
+        )
+        else -> System.arraycopy(source, 0, destination, 0, 9)
+    }
 }

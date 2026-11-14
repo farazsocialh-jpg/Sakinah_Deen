@@ -11,6 +11,7 @@ import com.sakinah.deen.ui.theme.UserObjective
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * Persists personalized onboarding choices, theme/palette/font presets,
@@ -47,18 +48,31 @@ class AppearancePreferences internal constructor(
     private val _effectiveConfig = MutableStateFlow(_config.value)
     val effectiveConfig: StateFlow<UserAppearanceConfig> = _effectiveConfig.asStateFlow()
 
+    private var previewActive = false
+
+    @Synchronized
     fun setPreview(preview: UserAppearanceConfig?) {
+        previewActive = preview != null
         _effectiveConfig.value = preview ?: _config.value
     }
 
+    @Synchronized
     fun saveConfig(newConfig: UserAppearanceConfig) {
         persist(newConfig)
         _config.value = newConfig
-        _effectiveConfig.value = newConfig
+        // A live onboarding preview keeps control of the effective theme until it ends.
+        if (!previewActive) {
+            _effectiveConfig.value = newConfig
+        }
     }
 
+    @Synchronized
     fun update(transform: (UserAppearanceConfig) -> UserAppearanceConfig) {
-        saveConfig(transform(_config.value))
+        _config.update(transform)
+        persist(_config.value)
+        if (!previewActive) {
+            _effectiveConfig.value = _config.value
+        }
     }
 
     fun resetOnboarding() {

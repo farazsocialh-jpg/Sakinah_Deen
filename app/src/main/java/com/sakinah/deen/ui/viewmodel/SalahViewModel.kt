@@ -449,7 +449,11 @@ class SalahViewModel(
                 if (times.isNotEmpty()) {
                     val zone = locationKTimeZone(state.timeZoneId)
                     val now = Clock.System.now().toLocalDateTime(zone)
-                    val countdown = astronomyEngine.calculateCountdown(times, now.time)
+                    val countdown = withoutSunriseAsNext(
+                        astronomyEngine.calculateCountdown(times, now.time),
+                        times,
+                        now.time
+                    )
                     _uiState.update {
                         it.copy(
                             currentPrayer = countdown.currentPrayer,
@@ -530,9 +534,11 @@ class SalahViewModel(
         val userZone = locationKTimeZone(state.timeZoneId)
         val coords = state.userCoordinates
 
-        val countdown: PrayerCountdownInfo = astronomyEngine.calculateCountdown(
+        val nowTime = Clock.System.now().toLocalDateTime(userZone).time
+        val countdown: PrayerCountdownInfo = withoutSunriseAsNext(
+            astronomyEngine.calculateCountdown(times, nowTime),
             times,
-            Clock.System.now().toLocalDateTime(userZone).time
+            nowTime
         )
         val travel = travelManager.evaluateTravelState(coords)
 
@@ -561,6 +567,38 @@ class SalahViewModel(
                 timeZoneAbbr = TimeZoneResolver.shortAbbreviation(it.timeZoneId)
             )
         }
+    }
+
+    /**
+     * Sunrise is not a prayer, so it can never be the hero banner's "next prayer" target (or
+     * the Visual Guide shortcut). Between Fajr and Dhuhr the countdown runs to Dhuhr instead.
+     */
+    private fun withoutSunriseAsNext(
+        countdown: PrayerCountdownInfo,
+        times: Map<PrayerType, KLocalTime>,
+        now: KLocalTime
+    ): PrayerCountdownInfo {
+        if (countdown.nextPrayer != PrayerType.SUNRISE && countdown.currentPrayer != PrayerType.SUNRISE) {
+            return countdown
+        }
+        val fajr = times[PrayerType.FAJR] ?: return countdown
+        val dhuhr = times[PrayerType.DHUHR] ?: return countdown
+
+        val startSec = fajr.toSecondOfDay().toLong()
+        val endSec = dhuhr.toSecondOfDay().toLong()
+        val nowSec = now.toSecondOfDay().toLong()
+        var window = endSec - startSec
+        if (window <= 0L) window += SECONDS_PER_DAY
+        var remaining = endSec - nowSec
+        if (remaining < 0L) remaining += SECONDS_PER_DAY
+        val elapsed = (window - remaining).coerceIn(0L, window)
+        return PrayerCountdownInfo(
+            currentPrayer = PrayerType.FAJR,
+            nextPrayer = PrayerType.DHUHR,
+            remainingMinutes = remaining / 60L,
+            remainingSeconds = remaining % 60L,
+            elapsedRatio = (elapsed.toFloat() / window.toFloat()).coerceIn(0f, 1f)
+        )
     }
 
     private fun buildPrayerModels(
@@ -742,6 +780,7 @@ class SalahViewModel(
         if (madhhab == Madhhab.HANAFI) AsrMethod.HANAFI else AsrMethod.SHAFI
 
     companion object {
+        private const val SECONDS_PER_DAY = 86_400L
         private val HIJRI_MONTHS = listOf(
             "Muharram", "Safar", "Rabi' al-Awwal", "Rabi' al-Thani",
             "Jumada al-Ula", "Jumada al-Akhirah", "Rajab", "Sha'ban",

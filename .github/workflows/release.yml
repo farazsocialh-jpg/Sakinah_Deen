@@ -83,6 +83,9 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
+      - name: Run tests and lint before release
+        run: ./gradlew :shared:allTests :app:testDebugUnitTest :app:lintDebug --stacktrace --no-daemon
+
       - name: Build signed AAB and APK
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/sakinah_release.jks

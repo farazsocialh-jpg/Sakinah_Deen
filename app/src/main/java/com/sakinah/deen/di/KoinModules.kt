@@ -33,12 +33,16 @@ import com.sakinah.deen.ui.viewmodel.TravelViewModel
 import com.sakinah.deen.ui.viewmodel.WealthViewModel
 import com.sakinah.deen.work.KoinWorkerFactory
 import io.ktor.client.HttpClient
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import org.koin.android.ext.koin.androidContext
+import org.koin.androidx.viewmodel.dsl.viewModel
+import org.koin.core.context.GlobalContext
 import org.koin.dsl.module
 
 val preferencesModule = module {
@@ -81,7 +85,9 @@ val travelModule = module {
     single {
         // No saved Home means no Qasr. Never fall back to a placeholder city, or a
         // user far from that city would see 2-rakat Safar without ever setting Home.
-        TravelStatusManager(get<SakinahPreferences>().homeCoordinates)
+        // Read homeCoordinates dynamically so it always reflects the current pref value
+        // instead of capturing a snapshot at singleton creation.
+        TravelStatusManager(homeAnchorProvider = { get<SakinahPreferences>().homeCoordinates })
     }
     single { QiblaSensorManager(androidContext()) }
 }
@@ -169,7 +175,7 @@ val repositoryModule = module {
 }
 
 val workerModule = module {
-    single { KoinWorkerFactory(get()) }
+    single { KoinWorkerFactory(GlobalContext.get()) }
 }
 
 val accountModule = module {
@@ -197,8 +203,10 @@ val accountModule = module {
                 }.getOrDefault(0L)
             },
             onClearCache = {
-                runCatching {
-                    androidContext().cacheDir.listFiles()?.forEach { it.deleteRecursively() }
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        androidContext().cacheDir.listFiles()?.forEach { it.deleteRecursively() }
+                    }
                 }
             }
         )
@@ -206,12 +214,12 @@ val accountModule = module {
 }
 
 val viewModelModule = module {
-    factory { SalahViewModel(get(), get(), get(), get(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull()) }
-    factory { QuranViewModel(getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull()) }
-    factory { HadithViewModel(getOrNull(), getOrNull(), getOrNull()) }
-    factory { TravelViewModel(get(), get(), getOrNull()) }
-    factory { WealthViewModel(get(), getOrNull()) }
-    factory { AiScholarViewModel(get(), androidContext()) }
+    viewModel { SalahViewModel(get(), get(), get(), get(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull()) }
+    viewModel { QuranViewModel(getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull()) }
+    viewModel { HadithViewModel(getOrNull(), getOrNull(), getOrNull()) }
+    viewModel { TravelViewModel(get(), get(), getOrNull()) }
+    viewModel { WealthViewModel(get(), getOrNull(), getOrNull()) }
+    viewModel { AiScholarViewModel(get(), androidContext(), get()) }
 }
 
 val appModules = listOf(

@@ -1,7 +1,9 @@
 package com.sakinah.deen.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -38,7 +40,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -49,11 +50,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -65,35 +67,41 @@ import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.theme.FontScalePreset
 import com.sakinah.deen.ui.theme.PrayerGuideGender
 import com.sakinah.deen.ui.theme.SakinahPalette
+import com.sakinah.deen.ui.theme.SakinahTheme
 import com.sakinah.deen.ui.theme.ThemeMode
 import com.sakinah.deen.ui.theme.UserAppearanceConfig
 import com.sakinah.deen.ui.theme.UserObjective
 import com.sakinah.deen.ui.theme.UthmanicFontFamily
 
-private val SageBackground = Color(0xFFEEF2EE)
-private val SageCard = Color(0xFFF7F9F7)
-private val SageSelected = Color(0xFFE0EBE4)
-private val SageInk = Color(0xFF1E2622)
-private val SageMuted = Color(0xFF5A6860)
-private val SageAccent = Color(0xFF2F6B55)
-private val SageBorder = Color(0xFFD3DDD6)
-
-private val OnboardingSageScheme = lightColorScheme(
-    primary = SageAccent,
-    onPrimary = Color.White,
-    primaryContainer = SageSelected,
-    onPrimaryContainer = SageInk,
-    secondary = SageAccent,
-    onSecondary = Color.White,
-    secondaryContainer = SageSelected,
-    onSecondaryContainer = SageInk,
-    background = SageBackground,
-    onBackground = SageInk,
-    surface = SageCard,
-    onSurface = SageInk,
-    surfaceVariant = SageSelected,
-    onSurfaceVariant = SageMuted,
-    outline = SageBorder
+private val UserAppearanceConfigSaver = listSaver<UserAppearanceConfig, String>(
+    save = { config ->
+        listOf(
+            config.userName,
+            config.experienceLevel,
+            config.objective.name,
+            config.themeMode.name,
+            config.palette.name,
+            config.fontScale.name,
+            config.focusModeHideDistractions.toString(),
+            config.autoHideBarsOnScroll.toString(),
+            config.prayerGuideGender.name,
+            config.onboardingCompleted.toString()
+        )
+    },
+    restore = { values ->
+        UserAppearanceConfig(
+            userName = values[0],
+            experienceLevel = values[1],
+            objective = UserObjective.valueOf(values[2]),
+            themeMode = ThemeMode.valueOf(values[3]),
+            palette = SakinahPalette.valueOf(values[4]),
+            fontScale = FontScalePreset.valueOf(values[5]),
+            focusModeHideDistractions = values[6].toBoolean(),
+            autoHideBarsOnScroll = values[7].toBoolean(),
+            prayerGuideGender = PrayerGuideGender.valueOf(values[8]),
+            onboardingCompleted = values[9].toBoolean()
+        )
+    }
 )
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -105,8 +113,12 @@ fun PersonalizedOnboardingScreen(
     onDismiss: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    var step by remember { mutableIntStateOf(0) }
-    var config by remember(initialConfig) { mutableStateOf(initialConfig) }
+    var step by rememberSaveable { mutableIntStateOf(0) }
+    var config by rememberSaveable(initialConfig, stateSaver = UserAppearanceConfigSaver) {
+        mutableStateOf(initialConfig)
+    }
+
+    BackHandler(enabled = step > 0) { step-- }
 
     fun updateConfig(updated: UserAppearanceConfig) {
         config = updated
@@ -118,11 +130,22 @@ fun PersonalizedOnboardingScreen(
         listOf("New to Islam", "Practicing Muslim", "Student of Knowledge")
     }
 
-    MaterialTheme(colorScheme = OnboardingSageScheme) {
+    val darkTheme = when (config.themeMode) {
+        ThemeMode.DARK -> true
+        ThemeMode.LIGHT -> false
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    }
+
+    // The live draft drives the theme so Dark mode and palette changes render immediately.
+    SakinahTheme(
+        darkTheme = darkTheme,
+        palette = config.palette,
+        fontScaleMultiplier = config.fontScale.multiplier
+    ) {
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(SageBackground)
+            .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
             .navigationBarsPadding()
             .imePadding(),
@@ -148,12 +171,12 @@ fun PersonalizedOnboardingScreen(
                             fontFamily = FontFamily.Serif,
                             fontSize = 28.sp,
                             fontWeight = FontWeight.Bold,
-                            color = SageAccent
+                            color = MaterialTheme.colorScheme.primary
                         )
                         Text(
                             text = "Step ${step + 1} of $totalSteps · Personalize Your Companion",
                             style = MaterialTheme.typography.bodySmall,
-                            color = SageMuted
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     if (onDismiss != null) {
@@ -161,7 +184,7 @@ fun PersonalizedOnboardingScreen(
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = "Cancel",
-                                tint = SageMuted
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -172,8 +195,8 @@ fun PersonalizedOnboardingScreen(
                         .fillMaxWidth()
                         .height(6.dp)
                         .clip(RoundedCornerShape(3.dp)),
-                    color = SageAccent,
-                    trackColor = SageSelected
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.primaryContainer
                 )
             }
 
@@ -197,12 +220,12 @@ fun PersonalizedOnboardingScreen(
                                 text = "Assalamu Alaikum",
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = SageInk
+                                color = MaterialTheme.colorScheme.onBackground
                             )
                             Text(
                                 text = "Tell us a little about your journey so Sakinah can tailor your daily experience.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = SageMuted
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
                             OutlinedTextField(
@@ -219,7 +242,7 @@ fun PersonalizedOnboardingScreen(
                                 text = "Where are you in your journey?",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
-                                color = SageAccent
+                                color = MaterialTheme.colorScheme.primary
                             )
 
                             FlowRow(
@@ -250,7 +273,7 @@ fun PersonalizedOnboardingScreen(
                                 text = "Visual Guide & Prayer Style",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
-                                color = SageAccent
+                                color = MaterialTheme.colorScheme.primary
                             )
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -298,19 +321,19 @@ fun PersonalizedOnboardingScreen(
                             }
 
                             SakinahCard(
-                                containerColor = SageSelected
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
                             ) {
                                 Text(
                                     text = "Offline-First & Private",
                                     fontWeight = FontWeight.SemiBold,
-                                    color = SageAccent,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                                     fontSize = 14.sp
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
                                     text = "Your preferences, prayer logs, and reading bookmarks remain stored locally on your device.",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = SageMuted
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -322,12 +345,12 @@ fun PersonalizedOnboardingScreen(
                                 text = greeting,
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = SageInk
+                                color = MaterialTheme.colorScheme.onBackground
                             )
                             Text(
                                 text = "We will open Sakinah directly to the space that serves you most.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = SageMuted
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
                             UserObjective.entries.forEach { objective ->
@@ -335,25 +358,29 @@ fun PersonalizedOnboardingScreen(
                                 val icon = objectiveIcon(objective)
                                 SakinahCard(
                                     onClick = {
-                                        val recommendedPalette = when (objective) {
-                                            UserObjective.PRAYER_COMPASS -> SakinahPalette.EMERALD_SANCTUARY
-                                            UserObjective.QURAN_STUDY -> SakinahPalette.ANDALUSIAN_SAPPHIRE
-                                            UserObjective.HADITH_SCHOLAR -> SakinahPalette.MADINAH_SAND
-                                            UserObjective.ALL_IN_ONE -> SakinahPalette.EMERALD_SANCTUARY
-                                        }
-                                        updateConfig(
-                                            config.copy(
-                                                objective = objective,
-                                                palette = recommendedPalette,
-                                                focusModeHideDistractions =
-                                                    objective == UserObjective.QURAN_STUDY
+                                        // Re-tapping the active objective must not wipe a
+                                        // palette/focus choice the user already customised.
+                                        if (config.objective != objective) {
+                                            val recommendedPalette = when (objective) {
+                                                UserObjective.PRAYER_COMPASS -> SakinahPalette.EMERALD_SANCTUARY
+                                                UserObjective.QURAN_STUDY -> SakinahPalette.ANDALUSIAN_SAPPHIRE
+                                                UserObjective.HADITH_SCHOLAR -> SakinahPalette.MADINAH_SAND
+                                                UserObjective.ALL_IN_ONE -> SakinahPalette.EMERALD_SANCTUARY
+                                            }
+                                            updateConfig(
+                                                config.copy(
+                                                    objective = objective,
+                                                    palette = recommendedPalette,
+                                                    focusModeHideDistractions =
+                                                        objective == UserObjective.QURAN_STUDY
+                                                )
                                             )
-                                        )
+                                        }
                                     },
                                     containerColor = if (selected) {
-                                        SageSelected
+                                        MaterialTheme.colorScheme.primaryContainer
                                     } else {
-                                        SageCard
+                                        MaterialTheme.colorScheme.surface
                                     }
                                 ) {
                                     Row(
@@ -364,9 +391,9 @@ fun PersonalizedOnboardingScreen(
                                         Surface(
                                             shape = CircleShape,
                                             color = if (selected) {
-                                                SageAccent
+                                                MaterialTheme.colorScheme.primary
                                             } else {
-                                                SageSelected
+                                                MaterialTheme.colorScheme.primaryContainer
                                             },
                                             modifier = Modifier.size(40.dp)
                                         ) {
@@ -375,9 +402,9 @@ fun PersonalizedOnboardingScreen(
                                                     imageVector = icon,
                                                     contentDescription = null,
                                                     tint = if (selected) {
-                                                        Color.White
+                                                        MaterialTheme.colorScheme.onPrimary
                                                     } else {
-                                                        SageAccent
+                                                        MaterialTheme.colorScheme.primary
                                                     },
                                                     modifier = Modifier.size(20.dp)
                                                 )
@@ -388,20 +415,20 @@ fun PersonalizedOnboardingScreen(
                                                 text = objective.title,
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 15.sp,
-                                                color = SageInk
+                                                color = MaterialTheme.colorScheme.onBackground
                                             )
                                             Spacer(Modifier.height(4.dp))
                                             Text(
                                                 text = objective.subtitle,
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = SageMuted
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                         if (selected) {
                                             Icon(
                                                 imageVector = Icons.Default.Check,
                                                 contentDescription = "Selected",
-                                                tint = SageAccent
+                                                tint = MaterialTheme.colorScheme.primary
                                             )
                                         }
                                     }
@@ -414,31 +441,31 @@ fun PersonalizedOnboardingScreen(
                                 text = "Appearance & Focus",
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = SageInk
+                                color = MaterialTheme.colorScheme.onBackground
                             )
                             Text(
                                 text = "Adjust colors, typography scale, and distraction-free reading in real time.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = SageMuted
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
                             // Live Preview Card
                             SakinahCard(
-                                containerColor = SageCard
+                                containerColor = MaterialTheme.colorScheme.surface
                             ) {
                                 Text(
                                     text = "LIVE PREVIEW",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     letterSpacing = 0.8.sp,
-                                    color = SageAccent
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                                 Spacer(Modifier.height(6.dp))
                                 Text(
                                     text = "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
                                     fontFamily = UthmanicFontFamily,
                                     fontSize = 24.sp,
-                                    color = SageInk,
+                                    color = MaterialTheme.colorScheme.onBackground,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -446,7 +473,7 @@ fun PersonalizedOnboardingScreen(
                                 Text(
                                     text = "In the name of Allah, the Entirely Merciful, the Especially Merciful.",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = SageMuted,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -456,7 +483,7 @@ fun PersonalizedOnboardingScreen(
                                 text = "Theme Mode",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
-                                color = SageAccent
+                                color = MaterialTheme.colorScheme.primary
                             )
                             SegmentedPillBar(
                                 options = ThemeMode.entries,
@@ -469,7 +496,7 @@ fun PersonalizedOnboardingScreen(
                                 text = "Color Palette",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
-                                color = SageAccent
+                                color = MaterialTheme.colorScheme.primary
                             )
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 SakinahPalette.entries.forEach { palette ->
@@ -481,16 +508,16 @@ fun PersonalizedOnboardingScreen(
                                             .clickable { updateConfig(config.copy(palette = palette)) },
                                         shape = RoundedCornerShape(14.dp),
                                         color = if (selected) {
-                                            SageSelected
+                                            MaterialTheme.colorScheme.primaryContainer
                                         } else {
-                                            SageCard
+                                            MaterialTheme.colorScheme.surface
                                         },
                                         border = BorderStroke(
                                             width = if (selected) 1.5.dp else 1.dp,
                                             color = if (selected) {
-                                                SageAccent
+                                                MaterialTheme.colorScheme.primary
                                             } else {
-                                                SageBorder
+                                                MaterialTheme.colorScheme.outline
                                             }
                                         )
                                     ) {
@@ -520,19 +547,19 @@ fun PersonalizedOnboardingScreen(
                                                     text = palette.label,
                                                     fontWeight = FontWeight.SemiBold,
                                                     fontSize = 14.sp,
-                                                    color = SageInk
+                                                    color = MaterialTheme.colorScheme.onBackground
                                                 )
                                                 Text(
                                                     text = palette.subtitle,
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    color = SageMuted
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
                                             if (selected) {
                                                 Icon(
                                                     imageVector = Icons.Default.Check,
                                                     contentDescription = "Selected",
-                                                    tint = SageAccent
+                                                    tint = MaterialTheme.colorScheme.primary
                                                 )
                                             }
                                         }
@@ -544,7 +571,7 @@ fun PersonalizedOnboardingScreen(
                                 text = "Text & Arabic Font Size",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
-                                color = SageAccent
+                                color = MaterialTheme.colorScheme.primary
                             )
                             SegmentedPillBar(
                                 options = FontScalePreset.entries,
@@ -563,12 +590,12 @@ fun PersonalizedOnboardingScreen(
                                             Text(
                                                 text = "Focus Mode",
                                                 fontWeight = FontWeight.SemiBold,
-                                                color = SageInk
+                                                color = MaterialTheme.colorScheme.onBackground
                                             )
                                             Text(
                                                 text = "Default Quran to distraction-free Mus-haf and keep Salah clean.",
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = SageMuted
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                         Spacer(Modifier.width(8.dp))
@@ -588,12 +615,12 @@ fun PersonalizedOnboardingScreen(
                                             Text(
                                                 text = "Auto-Hide Bars on Scroll",
                                                 fontWeight = FontWeight.SemiBold,
-                                                color = SageInk
+                                                color = MaterialTheme.colorScheme.onBackground
                                             )
                                             Text(
                                                 text = "Hide top & bottom navigation bars while scrolling down.",
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = SageMuted
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                         Spacer(Modifier.width(8.dp))

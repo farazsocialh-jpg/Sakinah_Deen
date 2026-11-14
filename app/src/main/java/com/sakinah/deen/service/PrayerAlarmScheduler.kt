@@ -45,6 +45,7 @@ class PrayerAlarmScheduler(
 
         private const val BASE_REQUEST_CODE = 1000
         private const val SNOOZE_REQUEST_CODE = 9500
+        private const val TEST_REQUEST_CODE = 9600
         private const val ALARM_CLOCK_SHOW_REQUEST_CODE = 9700
         private const val SNOOZE_MINUTES = 10
 
@@ -206,6 +207,8 @@ class PrayerAlarmScheduler(
         muezzin: Muezzin = preferences.azaanSettings.muezzin
     ) {
         if (alarmManager == null) return
+        // Never arm an alarm for a time that has already passed.
+        if (triggerEpochMillis <= System.currentTimeMillis()) return
 
         val pendingIntent = buildPrayerPendingIntent(
             requestCode = BASE_REQUEST_CODE + prayerType.ordinal,
@@ -242,6 +245,29 @@ class PrayerAlarmScheduler(
         setExactCompat(triggerAt, pendingIntent)
     }
 
+    /**
+     * Fires one real prayer alarm a few seconds from now so the user can verify the
+     * notification, sound and alert mode without waiting for the next prayer.
+     */
+    fun scheduleTestAlarmInSeconds(
+        seconds: Long = 5,
+        prayerType: PrayerType = PrayerType.DHUHR
+    ) {
+        if (alarmManager == null) return
+        val triggerAt = System.currentTimeMillis() + seconds * 1_000L
+        val pendingIntent = buildPrayerPendingIntent(
+            requestCode = TEST_REQUEST_CODE,
+            prayerName = "Test ${prayerType.name.lowercase().replaceFirstChar { it.uppercase() }}",
+            prayerType = prayerType,
+            timeFormatted = "now",
+            triggerEpochMillis = triggerAt,
+            isSnooze = false,
+            alertMode = preferences.azaanSettings.modeFor(prayerType),
+            muezzin = preferences.azaanSettings.muezzin
+        )
+        setExactCompat(triggerAt, pendingIntent)
+    }
+
     fun cancelAllAlarms() {
         val am = alarmManager ?: return
         for (prayer in PrayerType.entries) {
@@ -251,6 +277,22 @@ class PrayerAlarmScheduler(
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
                 BASE_REQUEST_CODE + prayer.ordinal,
+                intent,
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+            )
+            if (pendingIntent != null) {
+                am.cancel(pendingIntent)
+                pendingIntent.cancel()
+            }
+        }
+        // Snooze and test alarms also need to be cleared.
+        listOf(SNOOZE_REQUEST_CODE, TEST_REQUEST_CODE).forEach { requestCode ->
+            val intent = Intent(context, PrayerAlarmReceiver::class.java).apply {
+                action = ACTION_PRAYER_ALARM
+            }
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                requestCode,
                 intent,
                 PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
             )
