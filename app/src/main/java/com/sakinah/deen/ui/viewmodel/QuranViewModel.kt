@@ -19,6 +19,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
@@ -56,6 +57,7 @@ data class QuranUiState(
     val selectedTranslationId: Int = IslamicDataRepository.DEFAULT_TRANSLATION_ID,
     val selectedTranslationLanguage: String = "English",
     val selectedTranslationIsoCode: String = "en",
+    val arabicFontSize: Int = 24,
     val availableTranslations: List<QuranTranslationResource> = emptyList(),
     val isLoadingTranslation: Boolean = false
 )
@@ -138,9 +140,11 @@ class QuranViewModel(
                 selectedTranslationLanguage = sakinahPreferences?.quranTranslationLanguage
                     ?: settingsRepository?.settings?.value?.appearance?.translationName
                     ?: "English",
-                selectedTranslationIsoCode = settingsRepository?.settings?.value?.appearance?.translationLanguage ?: "en"
+                selectedTranslationIsoCode = settingsRepository?.settings?.value?.appearance?.translationLanguage ?: "en",
+                arabicFontSize = (settingsRepository?.settings?.value?.appearance?.arabicFontSize ?: 24).coerceIn(16, 39)
             )
         }
+        observeSharedSettings()
         observeTafseerPackages()
         observeRoomSurahs()
         observeSelectedSurahAyahs()
@@ -174,6 +178,40 @@ class QuranViewModel(
                 intent.isoCode
             )
             is QuranUiIntent.LoadTranslations -> viewModelScope.launch { loadTranslationCatalog() }
+        }
+    }
+
+    private fun observeSharedSettings() {
+        val repo = settingsRepository ?: return
+        viewModelScope.launch {
+            repo.settings.drop(1).collect { settings ->
+                val fontSize = settings.appearance.arabicFontSize.coerceIn(16, 39)
+                if (fontSize != _uiState.value.arabicFontSize) {
+                    _uiState.update { it.copy(arabicFontSize = fontSize) }
+                }
+
+                val translationId = settings.appearance.translationId
+                if (translationId > 0 && translationId != selectedTranslationIdFlow.value) {
+                    selectedTranslationIdFlow.value = translationId
+                    val language = settings.appearance.translationName.ifBlank {
+                        _uiState.value.selectedTranslationLanguage
+                    }
+                    val iso = settings.appearance.translationLanguage.ifBlank {
+                        _uiState.value.selectedTranslationIsoCode
+                    }
+                    sakinahPreferences?.quranTranslationId = translationId
+                    sakinahPreferences?.quranTranslationLanguage = language
+                    _uiState.update {
+                        it.copy(
+                            selectedTranslationId = translationId,
+                            selectedTranslationLanguage = language,
+                            selectedTranslationIsoCode = iso,
+                            isLoadingTranslation = true
+                        )
+                    }
+                    syncSurah(_uiState.value.currentSurah.number, translationId)
+                }
+            }
         }
     }
 

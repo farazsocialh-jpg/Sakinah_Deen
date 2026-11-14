@@ -39,6 +39,8 @@ data class HadithUiState(
     val targetDeepLinkId: String? = null,
     /** True once the encrypted database has supplied at least one hadith. */
     val isFromDatabase: Boolean = false,
+    /** Brief notice when a collection does not publish the selected language. */
+    val languageFallbackNotice: String? = null,
     /** Surfaced failure for a collection sync, retried through [HadithUiIntent.RetrySync]. */
     val errorMessage: String? = null
 )
@@ -229,18 +231,37 @@ class HadithViewModel(
             _uiState.update { it.copy(isLoading = false) }
             return
         }
+        val catalogBook = hadithCatalog.firstOrNull { it.bookKey == bookKey }
+        val supported = catalogBook?.editions?.map { it.languageCode.lowercase() }?.distinct().orEmpty()
+        val effectiveLanguage = when {
+            supported.isEmpty() || languageCode.lowercase() in supported -> languageCode
+            "eng" in supported -> "eng"
+            "ara" in supported -> "ara"
+            else -> supported.first()
+        }
+        if (effectiveLanguage != languageCode) {
+            _uiState.update {
+                it.copy(
+                    selectedLanguageCode = effectiveLanguage,
+                    languageFallbackNotice = "$bookKey does not offer ${languageCode.uppercase()}; showing ${effectiveLanguage.uppercase()} instead."
+                )
+            }
+            observeDatabaseHadiths()
+        } else {
+            _uiState.update { it.copy(languageFallbackNotice = null) }
+        }
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null, downloadProgress = 0f) }
             try {
-                val available = repo.isBookAvailable(bookKey, languageCode)
+                val available = repo.isBookAvailable(bookKey, effectiveLanguage)
                 if (!available) {
-                    val result = repo.syncHadithBook(bookKey, languageCode) { progress ->
+                    val result = repo.syncHadithBook(bookKey, effectiveLanguage) { progress ->
                         _uiState.update { it.copy(downloadProgress = progress) }
                     }
                     result.exceptionOrNull()?.let { error ->
                         if (error is kotlinx.coroutines.CancellationException) throw error
                         _uiState.update {
-                            it.copy(errorMessage = "Could not load $bookKey ($languageCode): ${error.message ?: "network error"}")
+                            it.copy(errorMessage = "Could not load $bookKey ($effectiveLanguage): ${error.message ?: "network error"}")
                         }
                     }
                 }
@@ -248,7 +269,7 @@ class HadithViewModel(
                 throw e
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(errorMessage = "Could not load $bookKey ($languageCode): ${e.message ?: "network error"}")
+                    it.copy(errorMessage = "Could not load $bookKey ($effectiveLanguage): ${e.message ?: "network error"}")
                 }
             } finally {
                 _uiState.update { it.copy(isLoading = false, downloadProgress = null) }

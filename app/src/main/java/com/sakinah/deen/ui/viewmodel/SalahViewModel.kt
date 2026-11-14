@@ -21,6 +21,7 @@ import com.sakinah.deen.domain.travel.HomeAnchorStore
 import com.sakinah.deen.domain.travel.SafarPolicy
 import com.sakinah.deen.domain.travel.TravelStatusManager
 import com.sakinah.deen.settings.AsrMethod
+import com.sakinah.deen.settings.CalculationMethod as SharedCalculationMethod
 import com.sakinah.deen.settings.SettingsRepository
 import com.sakinah.deen.util.TimeZoneResolver
 import kotlinx.coroutines.Job
@@ -181,16 +182,48 @@ class SalahViewModel(
         val repo = settingsRepository ?: return
         viewModelScope.launch {
             repo.settings.drop(1).collect { settings ->
+                var needsReload = false
                 val targetMadhhab = fromSettingsAsr(settings.prayer.asrMethod)
                 if (_uiState.value.madhhab != targetMadhhab) {
                     preferences?.madhhab = targetMadhhab
                     _uiState.update { it.copy(madhhab = targetMadhhab) }
-                    loadDailySchedule()
-                } else {
-                    updateDateLabels(_uiState.value.timeZoneId)
+                    needsReload = true
                 }
+
+                val manualOverride = preferences?.calculationMethodOverride
+                if (manualOverride == null) {
+                    if (!_uiState.value.isAutomaticMethod) {
+                        _uiState.update { it.copy(isAutomaticMethod = true) }
+                        needsReload = true
+                    }
+                } else {
+                    val targetMethod = fromSharedCalculation(settings.prayer.calculationMethod)
+                    if (_uiState.value.calculationMethod != targetMethod || _uiState.value.isAutomaticMethod) {
+                        prayerTimes?.updateOverride(targetMethod)
+                        _uiState.update {
+                            it.copy(
+                                calculationMethod = targetMethod,
+                                authorityName = SunniMethodMapper.fromOverride(targetMethod).displayName,
+                                isAutomaticMethod = false
+                            )
+                        }
+                        needsReload = true
+                    }
+                }
+
+                if (needsReload) loadDailySchedule() else updateDateLabels(_uiState.value.timeZoneId)
             }
         }
+    }
+
+    private fun fromSharedCalculation(method: SharedCalculationMethod): CalculationMethod = when (method) {
+        SharedCalculationMethod.MWL -> CalculationMethod.MUSLIM_WORLD_LEAGUE
+        SharedCalculationMethod.ISNA -> CalculationMethod.NORTH_AMERICA
+        SharedCalculationMethod.UMM_AL_QURA -> CalculationMethod.UMM_AL_QURA
+        SharedCalculationMethod.EGYPTIAN -> CalculationMethod.EGYPTIAN
+        SharedCalculationMethod.KARACHI -> CalculationMethod.KARACHI
+        SharedCalculationMethod.TEHRAN -> CalculationMethod.KARACHI
+        SharedCalculationMethod.MAKKAH -> CalculationMethod.UMM_AL_QURA
     }
 
     private fun observeHomeAnchorChanges() {

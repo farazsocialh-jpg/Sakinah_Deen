@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -262,6 +264,47 @@ fun SalahScreen(
                                 ) {
                                     Text("Qadha Ledger", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                                 }
+                            }
+                        }
+                    }
+
+                    // 2a. Always-available compact location controls (even after a city preset).
+                    if (!focusMode) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = state.locationName.ifBlank { "Location not set" },
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedButton(
+                                onClick = { showManualCityDialog = true },
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                modifier = Modifier.height(30.dp)
+                            ) {
+                                Text("City", fontSize = 10.sp)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    locationPermissionLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.ACCESS_FINE_LOCATION,
+                                            Manifest.permission.ACCESS_COARSE_LOCATION
+                                        )
+                                    )
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                modifier = Modifier.height(30.dp)
+                            ) {
+                                Text("Enable GPS", fontSize = 10.sp)
                             }
                         }
                     }
@@ -665,11 +708,13 @@ fun SalahScreen(
                     color = MaterialTheme.colorScheme.surface,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(max = 620.dp)
                         .padding(12.dp)
                 ) {
                     Column(
                         modifier = Modifier
                             .verticalScroll(rememberScrollState())
+                            .imePadding()
                             .padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -831,10 +876,14 @@ fun SalahScreen(
                     color = MaterialTheme.colorScheme.surface,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(max = 620.dp)
                         .padding(16.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(20.dp),
+                        modifier = Modifier
+                            .verticalScroll(rememberScrollState())
+                            .imePadding()
+                            .padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(

@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -165,15 +166,23 @@ fun WealthScreen(
                             modifier = Modifier.weight(1f)
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "Refresh rates",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.clickable {
-                                viewModel.onIntent(WealthUiIntent.RefreshNisabRates)
+                        if (state.isRefreshingRates) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(4.dp))
+                                Text("Refreshing…", fontSize = 11.sp)
                             }
-                        )
+                        } else {
+                            Text(
+                                text = "Refresh rates",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clickable {
+                                    viewModel.onIntent(WealthUiIntent.RefreshNisabRates)
+                                }
+                            )
+                        }
                     }
 
                     state.errorMessage?.let { err ->
@@ -239,7 +248,7 @@ fun WealthScreen(
                         label = "Cash in Hand & Bank Accounts ($)",
                         onValueChange = { raw ->
                             cashText = raw
-                            viewModel.onIntent(WealthUiIntent.UpdateCash(raw.toFloatOrNull() ?: 0f))
+                            amountFromInput(raw)?.let { viewModel.onIntent(WealthUiIntent.UpdateCash(it)) }
                         }
                     )
                     ZakatNumberField(
@@ -247,7 +256,7 @@ fun WealthScreen(
                         label = "Gold Value Held ($)",
                         onValueChange = { raw ->
                             goldText = raw
-                            viewModel.onIntent(WealthUiIntent.UpdateGoldHeld(raw.toFloatOrNull() ?: 0f))
+                            amountFromInput(raw)?.let { viewModel.onIntent(WealthUiIntent.UpdateGoldHeld(it)) }
                         }
                     )
                     ZakatNumberField(
@@ -255,7 +264,7 @@ fun WealthScreen(
                         label = "Silver Value Held ($)",
                         onValueChange = { raw ->
                             silverText = raw
-                            viewModel.onIntent(WealthUiIntent.UpdateSilverHeld(raw.toFloatOrNull() ?: 0f))
+                            amountFromInput(raw)?.let { viewModel.onIntent(WealthUiIntent.UpdateSilverHeld(it)) }
                         }
                     )
                     ZakatNumberField(
@@ -263,7 +272,7 @@ fun WealthScreen(
                         label = "Trade & Business Inventory ($)",
                         onValueChange = { raw ->
                             inventoryText = raw
-                            viewModel.onIntent(WealthUiIntent.UpdateTradeInventory(raw.toFloatOrNull() ?: 0f))
+                            amountFromInput(raw)?.let { viewModel.onIntent(WealthUiIntent.UpdateTradeInventory(it)) }
                         }
                     )
                     ZakatNumberField(
@@ -271,7 +280,7 @@ fun WealthScreen(
                         label = "Stocks / Liquid Portfolios ($)",
                         onValueChange = { raw ->
                             stocksText = raw
-                            viewModel.onIntent(WealthUiIntent.UpdateStocksValue(raw.toFloatOrNull() ?: 0f))
+                            amountFromInput(raw)?.let { viewModel.onIntent(WealthUiIntent.UpdateStocksValue(it)) }
                         }
                     )
                     ZakatNumberField(
@@ -279,7 +288,7 @@ fun WealthScreen(
                         label = "Deductible Immediate Debts ($)",
                         onValueChange = { raw ->
                             debtsText = raw
-                            viewModel.onIntent(WealthUiIntent.UpdateDebts(raw.toFloatOrNull() ?: 0f))
+                            amountFromInput(raw)?.let { viewModel.onIntent(WealthUiIntent.UpdateDebts(it)) }
                         }
                     )
                 }
@@ -459,7 +468,7 @@ private fun ZakatNumberField(
     OutlinedTextField(
         value = value,
         onValueChange = { input ->
-            val sanitized = input.filter { it.isDigit() || it == '.' }
+            val sanitized = input.filter { it.isDigit() || it == '.' || it == '-' }
             if (sanitized.count { it == '.' } <= 1) {
                 onValueChange(sanitized)
             }
@@ -467,7 +476,27 @@ private fun ZakatNumberField(
         label = { Text(label) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         singleLine = true,
+        isError = validationError(value) != null,
+        supportingText = validationError(value)?.let { error ->
+            { Text(error, fontSize = 11.sp) }
+        },
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp)
     )
+}
+
+private fun validationError(raw: String): String? = when {
+    raw.isBlank() -> null
+    raw.contains('-') -> "Amount cannot be negative"
+    raw.count { it == '.' } > 1 -> "Use at most one decimal point"
+    raw.length > 18 -> "Amount is too large"
+    raw.toDoubleOrNull() == null -> "Enter a valid amount"
+    raw.toDouble() > 1_000_000_000_000.0 -> "Amount must be 1 trillion or less"
+    else -> null
+}
+
+private fun amountFromInput(raw: String): Float? {
+    if (raw.isBlank() || raw == "." || raw == "-") return 0f
+    if (validationError(raw) != null) return null
+    return raw.toDouble().toFloat()
 }

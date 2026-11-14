@@ -23,9 +23,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -337,6 +339,7 @@ fun QuranScreen(
                         isSelected = selectedAyahNumber == ayah.numberInSurah,
                         isTargetHighlighted = highlightedAyahNumber == ayah.numberInSurah,
                         translationIsRtl = isRtlLanguage(state.selectedTranslationIsoCode),
+                        arabicFontSizeSp = state.arabicFontSize,
                         hifzOverlayActive = hifzOverlayActive && !focusMode,
                         hifzTag = hifzTag,
                         showTafseerAction = !focusMode,
@@ -416,8 +419,8 @@ fun QuranScreen(
                                 text = mushafText,
                                 modifier = Modifier.fillMaxWidth(),
                                 fontFamily = UthmanicFontFamily,
-                                fontSize = 25.sp,
-                                lineHeight = 44.sp,
+                                fontSize = state.arabicFontSize.sp,
+                                lineHeight = (state.arabicFontSize * 1.7f).sp,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 textAlign = TextAlign.Justify
                             )
@@ -658,6 +661,36 @@ fun QuranScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
 
+                            if (state.selectedTafseerContent.isBlank()) {
+                                val packId = tafseerPackIdFor(state.selectedScholar)
+                                if (state.isDownloadingTafseer) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                        Text("Downloading tafseer pack…", fontSize = 12.sp)
+                                    }
+                                } else if (packId != null) {
+                                    Button(
+                                        onClick = { vm.onIntent(QuranUiIntent.DownloadTafseerPack(packId)) },
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Download ${state.selectedScholar} Pack", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+
+                            state.errorMessage?.let { error ->
+                                Text(
+                                    text = error,
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+
                             ayah?.hadithProofQuote?.let { quote ->
                                 SakinahCard(
                                     containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
@@ -680,6 +713,16 @@ fun QuranScreen(
             }
         }
     }
+}
+
+@Composable
+private fun tafseerPackIdFor(scholar: String): String? = when (scholar) {
+    "Ibn Kathir" -> "ibn_kathir_en"
+    "Al-Tabari" -> "al_tabari_ar"
+    "Al-Qurtubi" -> "al_qurtubi_ar"
+    "Al-Sa'di" -> "al_saadi_ur"
+    "Ma'ariful Quran" -> "maariful_quran_en"
+    else -> null
 }
 
 @Composable
@@ -750,6 +793,7 @@ private fun AyahCard(
     isSelected: Boolean,
     isTargetHighlighted: Boolean = false,
     translationIsRtl: Boolean = false,
+    arabicFontSizeSp: Int = 24,
     hifzOverlayActive: Boolean = false,
     hifzTag: String? = null,
     showTafseerAction: Boolean = true,
@@ -817,7 +861,7 @@ private fun AyahCard(
             val marker = ArabicNormalizer.toArabicIndicNumerals(ayah.numberInSurah)
             ArabicVerseBlock(
                 arabicText = "${ayah.arabicText} ﴿$marker﴾",
-                fontSizeSp = 24,
+                fontSizeSp = arabicFontSizeSp,
                 color = MaterialTheme.colorScheme.onSurface,
                 isQuran = true
             )

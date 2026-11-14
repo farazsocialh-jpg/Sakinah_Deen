@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -55,6 +56,7 @@ import com.sakinah.deen.data.model.CalculationMethod as AppMethod
 import com.sakinah.deen.data.model.Madhhab as AppMadhhab
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.SakinahPreferences
+import com.sakinah.deen.data.repository.TafseerDownloadRepository
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
 import com.sakinah.deen.settings.AdhanChoice
 import com.sakinah.deen.settings.AsrMethod
@@ -89,9 +91,13 @@ fun SettingsScreen(
     }
     val appearanceConfig by appearancePrefs.config.collectAsStateWithLifecycle()
     val locationProvider = rememberInject<UserLocationProvider>()
+    val tafseerRepository = rememberInject<TafseerDownloadRepository>()
+    val tafseerPackages by tafseerRepository.packages.collectAsStateWithLifecycle(initialValue = emptyList())
+    var downloadingPackId by remember { mutableStateOf<String?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     var hasHomeLocation by remember { mutableStateOf(appPrefs.homeCoordinates != null) }
+    var translationExpanded by remember { mutableStateOf(false) }
     var homeCityName by remember { mutableStateOf(appPrefs.homeCityName) }
     var showHomeCityPicker by remember { mutableStateOf(false) }
     var gpsHomeRequested by remember { mutableStateOf(false) }
@@ -164,6 +170,11 @@ fun SettingsScreen(
                         DropdownMenuItem(text = { Text("Automatic (by country)") }, onClick = {
                             appPrefs.calculationMethodOverride = null
                             methodOverride = null
+                            scope.launch {
+                                repo.updatePrayer(
+                                    settings.prayer.copy(calculationMethod = CalculationMethod.MWL)
+                                )
+                            }
                             calcExpanded = false
                         })
                         AppMethod.entries.forEach { m ->
@@ -481,18 +492,50 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                OutlinedTextField(
-                    value = appPrefs.quranTranslationLanguage,
-                    onValueChange = { value ->
-                        appPrefs.quranTranslationLanguage = value
-                        scope.launch {
-                            repo.updateAppearance(settings.appearance.copy(translationLanguage = value, translationName = value))
+                val currentTranslation = quranTranslationOptions.firstOrNull {
+                    it.id == appPrefs.quranTranslationId
+                } ?: quranTranslationOptions.first()
+                ExposedDropdownMenuBox(
+                    expanded = translationExpanded,
+                    onExpandedChange = { translationExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = "${currentTranslation.name} (${currentTranslation.language})",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Quran translation edition") },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = translationExpanded)
+                        },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = translationExpanded,
+                        onDismissRequest = { translationExpanded = false }
+                    ) {
+                        quranTranslationOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text("${option.name} · ${option.language}") },
+                                onClick = {
+                                    appPrefs.quranTranslationId = option.id
+                                    appPrefs.quranTranslationLanguage = option.name
+                                    scope.launch {
+                                        repo.updateAppearance(
+                                            settings.appearance.copy(
+                                                translationId = option.id,
+                                                translationLanguage = option.isoCode,
+                                                translationName = option.name
+                                            )
+                                        )
+                                    }
+                                    translationExpanded = false
+                                }
+                            )
                         }
-                    },
-                    label = { Text("Translation language") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    }
+                }
 
                 // Offline storage
                 Text("Offline Storage", style = MaterialTheme.typography.titleMedium)
@@ -507,6 +550,50 @@ fun SettingsScreen(
                         snackbarHostState.showSnackbar("Offline cache cleared.")
                     }
                 }) { Text("Clear cache") }
+
+                Text("Tafseer Packs", style = MaterialTheme.typography.titleSmall)
+                tafseerPackages.forEach { pack ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(pack.author, fontSize = 12.sp)
+                            Text(
+                                text = pack.languageCode.uppercase() +
+                                    " · " + formatBytes(pack.sizeBytes) +
+                                    if (pack.isDownloaded) " · Downloaded" else "",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (!pack.isDownloaded) {
+                            TextButton(
+                                enabled = downloadingPackId == null,
+                                onClick = {
+                                    downloadingPackId = pack.id
+                                    scope.launch {
+                                        val result = tafseerRepository.downloadTafseerPackage(pack.id)
+                                        downloadingPackId = null
+                                        snackbarHostState.showSnackbar(
+                                            if (result.isSuccess) {
+                                                "${pack.author} downloaded for offline use."
+                                            } else {
+                                                "Tafseer download failed: ${result.exceptionOrNull()?.message ?: "network error"}"
+                                            }
+                                        )
+                                    }
+                                }
+                            ) {
+                                if (downloadingPackId == pack.id) {
+                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Text("Download", fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+                }
 
                 TextButton(onClick = onBack) { Text("Back") }
             }
@@ -531,6 +618,23 @@ private fun formatBytes(bytes: Long): String = when {
     bytes >= 1_024L -> String.format(Locale.US, "%.1f KB", bytes / 1_024.0)
     else -> "$bytes bytes"
 }
+
+private data class QuranTranslationOption(
+    val id: Int,
+    val name: String,
+    val language: String,
+    val isoCode: String
+)
+
+/** Quran.com / QuranEnc translation editions that the sync layer can actually fetch. */
+private val quranTranslationOptions = listOf(
+    QuranTranslationOption(20, "Saheeh International", "English", "en"),
+    QuranTranslationOption(234, "Fatah Muhammad Jalandhari", "Urdu", "ur"),
+    QuranTranslationOption(54, "Maulana Muhammad Junagarhi", "Urdu", "ur"),
+    QuranTranslationOption(131, "Dr. Mustafa Khattab (The Clear Quran)", "English", "en"),
+    QuranTranslationOption(85, "Muhammad Hamidullah", "French", "fr"),
+    QuranTranslationOption(27, "Sheikh Muhammad Rida", "Arabic", "ar")
+)
 
 /** Mirrors an Android override into the shared settings store (closest equivalent authority). */
 private fun sharedMethodFor(method: AppMethod): CalculationMethod? = when (method) {

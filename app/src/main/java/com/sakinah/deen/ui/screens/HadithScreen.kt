@@ -274,6 +274,21 @@ fun HadithScreen(
             }
         }
 
+        state.languageFallbackNotice?.let { notice ->
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = notice,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
+        }
+
         state.errorMessage?.let { message ->
             Surface(
                 shape = RoundedCornerShape(14.dp),

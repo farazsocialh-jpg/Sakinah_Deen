@@ -55,6 +55,14 @@ class TafseerDownloadRepository(
                 sizeBytes = 32_100_000L
             ),
             TafseerPackage(
+                id = "al_qurtubi_ar",
+                author = "Al-Jami‘ li Ahkam al-Qur'an (Al-Qurtubi)",
+                languageCode = "ar",
+                filename = "tafsir_qurtubi_ar.db",
+                remoteCdnUrl = "https://cdn.sakinah.deen/tafseer/tafsir_qurtubi_ar.db",
+                sizeBytes = 26_700_000L
+            ),
+            TafseerPackage(
                 id = "al_saadi_ur",
                 author = "Taysir al-Karim al-Rahman (Al-Sa'di)",
                 languageCode = "ur",

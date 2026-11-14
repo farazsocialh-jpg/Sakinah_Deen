@@ -115,6 +115,9 @@ fun TravelScreen(
             appPrefs.saveHomeAnchor(resolved.latitude, resolved.longitude, label)
             homeCoordinates = appPrefs.homeCoordinates
             homeCity = appPrefs.homeCityName
+            // A home set from the current position means zero distance and no active concession.
+            distanceKm = 0f
+            isSafar = false
         }
     }
 
@@ -261,8 +264,13 @@ fun TravelScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    listOf("Fajr: 2" to "2 R", "Dhuhr: 4" to "2 R", "Asr: 4" to "2 R", "Maghrib: 3" to "3 R", "Isha: 4" to "2 R").forEach { (title, count) ->
-                        val activeQasr = isSafar && title != "Fajr: 2" && title != "Maghrib: 3"
+                    val matrix = if (isSafar) {
+                        listOf("Fajr" to "2 R", "Dhuhr" to "2 R", "Asr" to "2 R", "Maghrib" to "3 R", "Isha" to "2 R")
+                    } else {
+                        listOf("Fajr" to "2 R", "Dhuhr" to "4 R", "Asr" to "4 R", "Maghrib" to "3 R", "Isha" to "4 R")
+                    }
+                    matrix.forEach { (title, count) ->
+                        val activeQasr = isSafar && title != "Fajr" && title != "Maghrib"
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = if (activeQasr) MintGreen.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceVariant,
@@ -274,7 +282,7 @@ fun TravelScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text(
-                                    text = title.split(":")[0],
+                                    text = title,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
@@ -458,6 +466,8 @@ fun TravelScreen(
                                 appPrefs.clearHomeAnchor()
                                 homeCoordinates = null
                                 homeCity = null
+                                distanceKm = 0f
+                                isSafar = false
                                 showHomeOptions = false
                             },
                             modifier = Modifier.fillMaxWidth()

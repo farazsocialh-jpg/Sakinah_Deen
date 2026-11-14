@@ -35,6 +35,7 @@ data class WealthUiState(
     val isEligible: Boolean = true,
     val zakatPayable: Float = ((14200f + 4500f + 6800f) - 1800f) * 0.025f,
     val recentSadaqahLogs: List<SadaqahLogEntity> = emptyList(),
+    val isRefreshingRates: Boolean = false,
     /** Surfaced failure for nisab/sadaqah work, retried through [WealthUiIntent.RefreshNisabRates]. */
     val errorMessage: String? = null
 )
@@ -86,6 +87,7 @@ class WealthViewModel(
     private fun refreshNisabRates(repo: NisabRateRepository? = nisabRateRepository) {
         val target = repo ?: return
         viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshingRates = true) }
             try {
                 target.refresh()
                 _uiState.update { it.copy(errorMessage = null) }
@@ -95,6 +97,8 @@ class WealthViewModel(
                 _uiState.update {
                     it.copy(errorMessage = "Could not refresh nisab rates: ${e.message ?: "network error"}")
                 }
+            } finally {
+                _uiState.update { it.copy(isRefreshingRates = false) }
             }
         }
     }
