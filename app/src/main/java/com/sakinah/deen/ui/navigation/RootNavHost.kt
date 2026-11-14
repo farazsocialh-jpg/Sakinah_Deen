@@ -497,7 +497,10 @@ fun RootNavHost() {
                             navigateTo(SakinahScreen.Hadith)
                         },
                         viewModel = aiScholarVm,
-                        contentPadding = innerPadding
+                        contentPadding = PaddingValues(
+                            top = innerPadding.calculateTopPadding(),
+                            bottom = if (imeVisible) 0.dp else innerPadding.calculateBottomPadding()
+                        )
                     )
                 }
                 SakinahScreen.Auth -> {
