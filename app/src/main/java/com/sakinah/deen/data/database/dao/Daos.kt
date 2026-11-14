@@ -217,6 +217,17 @@ interface HadithDao {
     )
     fun observeAllHadiths(limit: Int = 100000, offset: Int = 0): Flow<List<HadithEntryEntity>>
 
+    /** "All Books" view restricted to one language edition, so ENG <-> ARA switches every row. */
+    @Query(
+        "SELECT * FROM hadith_entries WHERE languageCode = :languageCode " +
+            "ORDER BY bookKey ASC, hadithNumber ASC LIMIT :limit OFFSET :offset"
+    )
+    fun observeAllHadithsByLanguage(
+        languageCode: String,
+        limit: Int = 100000,
+        offset: Int = 0
+    ): Flow<List<HadithEntryEntity>>
+
     @Query(
         "SELECT * FROM hadith_entries WHERE englishText LIKE '%' || :query || '%' " +
             "OR arabicText LIKE '%' || :query || '%' OR chapterTitle LIKE '%' || :query || '%' " +

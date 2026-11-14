@@ -1,6 +1,8 @@
 package com.sakinah.deen.ui.components
 
 import android.annotation.SuppressLint
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.animation.core.animateFloatAsState
@@ -16,11 +18,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -38,6 +43,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.sakinah.deen.domain.qibla.QiblaMath
 import com.sakinah.deen.domain.qibla.rememberTrueNorthCompassState
@@ -50,8 +56,8 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 enum class QiblaMode(val label: String) {
-    MAP("Map"),
     COMPASS("Compass"),
+    MAP("Map"),
     SUN("Sun")
 }
 
@@ -62,7 +68,8 @@ fun QiblaModesCard(
     cityName: String,
     modifier: Modifier = Modifier
 ) {
-    var mode by rememberSaveable { mutableStateOf(QiblaMode.MAP) }
+    // Open on the True-North compass: it works offline and needs no tile downloads.
+    var mode by rememberSaveable { mutableStateOf(QiblaMode.COMPASS) }
     val qiblaBearing = remember(latitude, longitude) { QiblaMath.qiblaBearingDegrees(latitude, longitude) }
     val distanceKm = remember(latitude, longitude) { QiblaMath.distanceToKaabaKm(latitude, longitude) }
     val cardinal = remember(qiblaBearing) { QiblaMath.cardinalDirection(qiblaBearing) }
@@ -75,7 +82,7 @@ fun QiblaModesCard(
         ) {
             Column {
                 Text(
-                    text = "Qibla · $cityName",
+                    text = "Qibla Compass · $cityName",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -125,7 +132,11 @@ fun QiblaModesCard(
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 private fun QiblaMapView(latitude: Double, longitude: Double) {
-    val html = remember(latitude, longitude) {
+    var mapFailed by remember(latitude, longitude) { mutableStateOf(false) }
+    var reloadToken by remember(latitude, longitude) { mutableIntStateOf(0) }
+    val webViewRef = remember { mutableStateOf<WebView?>(null) }
+
+    val html = remember(latitude, longitude, reloadToken) {
         """
         <!DOCTYPE html>
         <html>
@@ -133,21 +144,38 @@ private fun QiblaMapView(latitude: Double, longitude: Double) {
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-        <style>html,body,#map{height:100%;margin:0;padding:0;}</style>
+        <style>html,body,#map{height:100%;margin:0;padding:0;background:transparent;}</style>
         </head>
         <body>
         <div id="map"></div>
         <script>
+        window.__sakinahTiles = 0;
         var user = [$latitude, $longitude];
         var kaaba = [${QiblaMath.KAABA_LAT}, ${QiblaMath.KAABA_LON}];
         var map = L.map('map', { zoomControl: true }).setView(user, 18);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20 }).addTo(map);
+        var tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20 }).addTo(map);
+        tiles.on('tileload', function () { window.__sakinahTiles = (window.__sakinahTiles || 0) + 1; });
         L.circleMarker(user, { radius: 7, color: '#0B3B2C', fillColor: '#10B981', fillOpacity: 1 }).addTo(map);
         L.polyline([user, kaaba], { color: '#10B981', weight: 4, dashArray: '8, 6' }).addTo(map);
         </script>
         </body>
         </html>
         """.trimIndent()
+    }
+
+    // Watchdog: Leaflet silently renders an empty (black/white) box when OSM tiles fail.
+    LaunchedEffect(latitude, longitude, reloadToken) {
+        mapFailed = false
+        delay(8_000)
+        val view = webViewRef.value
+        if (view == null) {
+            mapFailed = true
+            return@LaunchedEffect
+        }
+        view.evaluateJavascript("(function(){ return window.__sakinahTiles || 0; })();") { value ->
+            val loaded = value?.trim()?.trim('"')?.toIntOrNull() ?: 0
+            if (loaded <= 0) mapFailed = true
+        }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -157,23 +185,64 @@ private fun QiblaMapView(latitude: Double, longitude: Double) {
                 .height(230.dp)
                 .clip(RoundedCornerShape(12.dp))
         ) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { ctx ->
-                    WebView(ctx).apply {
-                        settings.javaScriptEnabled = true
-                        webViewClient = WebViewClient()
-                        tag = html
-                        loadDataWithBaseURL("https://openstreetmap.org", html, "text/html", "UTF-8", null)
-                    }
-                },
-                update = { webView ->
-                    if (webView.tag != html) {
-                        webView.tag = html
-                        webView.loadDataWithBaseURL("https://openstreetmap.org", html, "text/html", "UTF-8", null)
+            if (mapFailed) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Map tiles unavailable — switch to Compass or Sun, or tap Retry",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Button(onClick = { reloadToken++ }) {
+                            Text("Retry", fontSize = 12.sp)
+                        }
                     }
                 }
-            )
+            } else {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        WebView(ctx).apply {
+                            settings.javaScriptEnabled = true
+                            settings.domStorageEnabled = true
+                            // OpenStreetMap tile servers reject requests without a real UA.
+                            settings.userAgentString = System.getProperty("http.agent")
+                                ?.takeIf { it.isNotBlank() }
+                                ?: "Mozilla/5.0 (Linux; Android ${android.os.Build.VERSION.RELEASE}) SakinahQibla/1.0"
+                            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                            webViewClient = object : WebViewClient() {
+                                override fun onReceivedError(
+                                    view: WebView?,
+                                    request: WebResourceRequest?,
+                                    error: WebResourceError?
+                                ) {
+                                    if (request?.isForMainFrame == true) mapFailed = true
+                                }
+                            }
+                            webViewRef.value = this
+                            tag = html
+                            loadDataWithBaseURL("https://openstreetmap.org", html, "text/html", "UTF-8", null)
+                        }
+                    },
+                    update = { webView ->
+                        if (webView.tag != html) {
+                            webView.tag = html
+                            webView.loadDataWithBaseURL("https://openstreetmap.org", html, "text/html", "UTF-8", null)
+                        }
+                    }
+                )
+            }
         }
         Text(
             text = "Align yourself with the green dashed line relative to your building or street.",

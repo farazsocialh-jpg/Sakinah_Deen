@@ -70,6 +70,7 @@ import com.sakinah.deen.ui.screens.AuthScreen
 import com.sakinah.deen.ui.screens.DataSourcesScreen
 import com.sakinah.deen.ui.screens.HadithScreen
 import com.sakinah.deen.ui.screens.HelpScreen
+import com.sakinah.deen.ui.screens.NotificationSettingsScreen
 import com.sakinah.deen.ui.screens.OnboardingScreen
 import com.sakinah.deen.ui.screens.PersonalizedOnboardingScreen
 import com.sakinah.deen.ui.screens.PrivacyScreen
@@ -107,7 +108,8 @@ enum class SakinahScreen(@StringRes val titleRes: Int) {
     DataSources(R.string.app_name),
     Help(R.string.app_name),
     Privacy(R.string.app_name),
-    About(R.string.app_name)
+    About(R.string.app_name),
+    NotificationSettings(R.string.app_name)
 }
 
 private fun startScreenForObjective(objective: UserObjective): SakinahScreen =
@@ -169,18 +171,18 @@ fun RootNavHost() {
     val aiScholarVm: AiScholarViewModel? = if (koinStarted) koinViewModel() else null
 
     if (showOnboarding) {
-        BackHandler(enabled = rerunOnboarding) {
-            appearancePrefs.setPreview(null)
+        // Cancel/X during a re-run must discard the live preview and restore the last saved
+        // config, then return to Settings instead of trapping the user on Step 1.
+        fun cancelOnboarding() {
+            appearancePrefs.setPreview(appearanceConfig)
             rerunOnboarding = false
         }
+        BackHandler(enabled = rerunOnboarding) { cancelOnboarding() }
         PersonalizedOnboardingScreen(
             initialConfig = appearanceConfig,
             onConfigPreviewChange = { draft -> appearancePrefs.setPreview(draft) },
             onDismiss = if (rerunOnboarding) {
-                {
-                    appearancePrefs.setPreview(null)
-                    rerunOnboarding = false
-                }
+                { cancelOnboarding() }
             } else {
                 null
             },
@@ -310,6 +312,7 @@ fun RootNavHost() {
         SakinahScreen.Help -> "Help & Feedback"
         SakinahScreen.Privacy -> "Privacy & Terms"
         SakinahScreen.About -> "About Sakinah"
+        SakinahScreen.NotificationSettings -> "Azaan & Notifications"
         SakinahScreen.Onboarding -> "Welcome to Sakinah"
     }
 
@@ -426,6 +429,9 @@ fun RootNavHost() {
                             navigateTo(SakinahScreen.VisualGuide)
                         },
                         focusMode = appearanceConfig.focusModeHideDistractions,
+                        onOpenNotificationSettings = {
+                            navigateTo(SakinahScreen.NotificationSettings)
+                        },
                         viewModel = salahVm
                     )
                 }
@@ -509,7 +515,10 @@ fun RootNavHost() {
                 SakinahScreen.Settings -> {
                     SettingsScreen(
                         onBack = { navigateBack() },
-                        onRerunOnboarding = { rerunOnboarding = true }
+                        onRerunOnboarding = { rerunOnboarding = true },
+                        onOpenNotificationSettings = {
+                            navigateTo(SakinahScreen.NotificationSettings)
+                        }
                     )
                 }
                 SakinahScreen.DataSources -> {
@@ -523,6 +532,9 @@ fun RootNavHost() {
                 }
                 SakinahScreen.About -> {
                     AboutScreen(onBack = { navigateBack() })
+                }
+                SakinahScreen.NotificationSettings -> {
+                    NotificationSettingsScreen(onBack = { navigateBack() })
                 }
             }
         }

@@ -146,6 +146,7 @@ class QuranViewModel(
                 arabicFontSize = (settingsRepository?.settings?.value?.appearance?.arabicFontSize ?: 24).coerceIn(16, 39)
             )
         }
+        restoreHifzAnnotations()
         observeSharedSettings()
         observeTafseerPackages()
         viewModelScope.launch { tafseerRepository?.refreshDownloadStatus() }
@@ -568,20 +569,54 @@ class QuranViewModel(
         }
     }
 
+    /**
+     * Mutashabihat / Memory Slip tags are persisted as "surah:ayah" keys so they survive a
+     * restart (and exist in guest mode, where no account sync happens).
+     */
+    private fun restoreHifzAnnotations() {
+        val stored = sakinahPreferences?.hifzAnnotations ?: return
+        if (stored.isEmpty()) return
+        val restored = stored.mapNotNull { (key, tag) ->
+            val parts = key.split(":")
+            if (parts.size != 2) return@mapNotNull null
+            val surah = parts[0].trim().toIntOrNull() ?: return@mapNotNull null
+            val ayah = parts[1].trim().toIntOrNull() ?: return@mapNotNull null
+            if (tag.isBlank()) null else (surah to ayah) to tag
+        }.toMap()
+        if (restored.isEmpty()) return
+        _uiState.update { it.copy(hifzMistakes = it.hifzMistakes + restored) }
+    }
+
+    private fun persistHifzAnnotations(updated: Map<Pair<Int, Int>, String>) {
+        val prefs = sakinahPreferences ?: return
+        prefs.hifzAnnotations = updated
+            .filterValues { it.isNotBlank() }
+            .mapKeys { (key, _) -> "${key.first}:${key.second}" }
+    }
+
     private fun setHifzMistakeTag(surah: Int, ayah: Int, wordPos: Int, tag: String) {
         viewModelScope.launch {
-            hifzDao?.upsertMistake(
-                HifzMistakeEntity(
-                    surahNumber = surah,
-                    ayahNumber = ayah,
-                    wordPosition = wordPos,
-                    mistakeType = tag,
-                    lastReviewedTimestamp = System.currentTimeMillis()
+            if (tag.isBlank()) {
+                hifzDao?.deleteMistakesForAyah(surah, ayah)
+            } else {
+                hifzDao?.upsertMistake(
+                    HifzMistakeEntity(
+                        surahNumber = surah,
+                        ayahNumber = ayah,
+                        wordPosition = wordPos,
+                        mistakeType = tag,
+                        lastReviewedTimestamp = System.currentTimeMillis()
+                    )
                 )
-            )
+            }
             val updated = _uiState.value.hifzMistakes.toMutableMap()
-            updated[Pair(surah, ayah)] = tag
+            if (tag.isBlank()) {
+                updated.remove(Pair(surah, ayah))
+            } else {
+                updated[Pair(surah, ayah)] = tag
+            }
             _uiState.update { it.copy(hifzMistakes = updated) }
+            persistHifzAnnotations(updated)
         }
     }
 

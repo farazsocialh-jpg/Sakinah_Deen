@@ -9,12 +9,16 @@ import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.network.IslamicDataRepository
 import com.sakinah.deen.settings.SettingsRepository
 import com.sakinah.deen.util.ArabicNormalizer
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class HadithBookInfo(
     val key: String,
@@ -66,7 +70,9 @@ sealed class HadithUiIntent {
 class HadithViewModel(
     private val islamicRepository: IslamicDataRepository? = null,
     private val preferences: SakinahPreferences? = null,
-    private val settingsRepository: SettingsRepository? = null
+    private val settingsRepository: SettingsRepository? = null,
+    /** Background dispatcher for the large "All Books" filter; injectable for tests. */
+    private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) : ViewModel() {
 
     private val canonicalBooks = listOf(
@@ -127,6 +133,7 @@ class HadithViewModel(
 
     private var hadithCatalog: List<HadithBookCatalog> = emptyList()
     private var databaseJob: Job? = null
+    private var filterJob: Job? = null
     private var pendingDeepLinkTarget: Triple<String, Int, String>? = null
     private var hasReceivedDatabaseRows = false
 
@@ -211,7 +218,8 @@ class HadithViewModel(
             }
             is HadithUiIntent.SearchQueryChanged -> {
                 _uiState.update { it.copy(searchQuery = intent.query) }
-                applyFilterAndSearch()
+                // 30,000+ rows: debounce keystrokes and filter off the main thread.
+                applyFilterAndSearch(debounceMillis = 250)
             }
             is HadithUiIntent.FilterGradeChanged -> {
                 _uiState.update { it.copy(filterGrade = intent.grade) }
@@ -343,7 +351,7 @@ class HadithViewModel(
         val sectionNumber = _uiState.value.selectedSectionNumber
         databaseJob = viewModelScope.launch {
             val flow = when {
-                bookKey == "all" -> repo.observeAllHadiths()
+                bookKey == "all" -> repo.observeAllHadiths(languageCode)
                 sectionNumber > 0 -> repo.observeHadithsBySection(bookKey, languageCode, sectionNumber)
                 else -> repo.observeHadiths(bookKey, languageCode)
             }
@@ -353,12 +361,9 @@ class HadithViewModel(
                         return@collect
                     }
                     hasReceivedDatabaseRows = true
-                    val entries = if (bookKey == "all") {
-                        val langFiltered = rawEntries.filter { it.languageCode.equals(languageCode, ignoreCase = true) }
-                        if (langFiltered.isNotEmpty() || rawEntries.isEmpty()) langFiltered else rawEntries
-                    } else {
-                        rawEntries
-                    }
+                    // The repository already scopes "All Books" to the selected edition, so
+                    // switching ENG <-> ARA always swaps every displayed narration.
+                    val entries = rawEntries
 
                     val bookmarked = _uiState.value.bookmarkedIds
                     val mapped = entries.map { entry ->
@@ -446,14 +451,34 @@ class HadithViewModel(
         sectionNumber = sectionNumber
     )
 
-    private fun applyFilterAndSearch() {
-        val current = _uiState.value
+    private fun applyFilterAndSearch(debounceMillis: Long = 0) {
+        if (debounceMillis <= 0) {
+            // Immediate paths (book/section/grade changes) stay synchronous so state is
+            // already current when the intent returns.
+            filterJob?.cancel()
+            _uiState.update { it.copy(filteredHadiths = filterHadiths(it)) }
+            return
+        }
+
+        filterJob?.cancel()
+        filterJob = viewModelScope.launch {
+            delay(debounceMillis)
+            val snapshot = _uiState.value
+            val results = withContext(computeDispatcher) { filterHadiths(snapshot) }
+            // Drop a stale result if another keystroke or filter landed meanwhile.
+            if (_uiState.value.searchQuery == snapshot.searchQuery) {
+                _uiState.update { it.copy(filteredHadiths = results) }
+            }
+        }
+    }
+
+    private fun filterHadiths(current: HadithUiState): List<HadithModel> {
         val query = current.searchQuery.trim()
         val bookKey = current.selectedBookKey
         val sectionNumber = current.selectedSectionNumber
         val gradeFilter = current.filterGrade.uppercase()
 
-        val results = current.hadiths.filter { hadith ->
+        return current.hadiths.filter { hadith ->
             val matchesBook = (bookKey == "all" || hadith.bookKey.equals(bookKey, ignoreCase = true))
             val matchesSection = (sectionNumber == 0 || hadith.sectionNumber == 0 || hadith.sectionNumber == sectionNumber)
             val matchesGrade = (gradeFilter == "ALL" || hadith.grade.uppercase().contains(gradeFilter))
@@ -467,8 +492,6 @@ class HadithViewModel(
 
             matchesBook && matchesSection && matchesGrade && matchesQuery
         }
-
-        _uiState.update { it.copy(filteredHadiths = results) }
     }
 
     private fun toggleBookmark(hadithId: String) {

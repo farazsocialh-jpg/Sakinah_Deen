@@ -45,6 +45,7 @@ class PrayerAlarmScheduler(
 
         private const val BASE_REQUEST_CODE = 1000
         private const val SNOOZE_REQUEST_CODE = 9500
+        private const val TEST_REQUEST_CODE = 9600
         private const val ALARM_CLOCK_SHOW_REQUEST_CODE = 9700
         private const val SNOOZE_MINUTES = 10
 
@@ -236,6 +237,29 @@ class PrayerAlarmScheduler(
             timeFormatted = timeFormatted,
             triggerEpochMillis = triggerAt,
             isSnooze = true,
+            alertMode = preferences.azaanSettings.modeFor(prayerType),
+            muezzin = preferences.azaanSettings.muezzin
+        )
+        setExactCompat(triggerAt, pendingIntent)
+    }
+
+    /**
+     * Fires one real prayer alarm a few seconds from now so the user can verify the
+     * notification, sound and alert mode without waiting for the next prayer.
+     */
+    fun scheduleTestAlarmInSeconds(
+        seconds: Long = 5,
+        prayerType: PrayerType = PrayerType.DHUHR
+    ) {
+        if (alarmManager == null) return
+        val triggerAt = System.currentTimeMillis() + seconds * 1_000L
+        val pendingIntent = buildPrayerPendingIntent(
+            requestCode = TEST_REQUEST_CODE,
+            prayerName = "Test ${prayerType.name.lowercase().replaceFirstChar { it.uppercase() }}",
+            prayerType = prayerType,
+            timeFormatted = "now",
+            triggerEpochMillis = triggerAt,
+            isSnooze = false,
             alertMode = preferences.azaanSettings.modeFor(prayerType),
             muezzin = preferences.azaanSettings.muezzin
         )

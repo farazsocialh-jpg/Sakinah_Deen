@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.MonetizationOn
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.HorizontalDivider
@@ -163,6 +164,13 @@ fun ToolsHubScreen(
                     title = "App Settings",
                     subtitle = "Prayer authority, Asr juristic school, theme & cache",
                     onClick = { onNavigate(SakinahScreen.Settings) }
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                HubRow(
+                    icon = Icons.Outlined.Notifications,
+                    title = "Azaan & Notifications",
+                    subtitle = "Per-prayer alert mode, muezzin voice & test alert",
+                    onClick = { onNavigate(SakinahScreen.NotificationSettings) }
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
                 HubRow(

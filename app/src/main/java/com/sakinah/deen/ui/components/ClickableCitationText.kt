@@ -7,14 +7,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
+import androidx.compose.ui.unit.sp
 
 private val INLINE_QURAN_REGEX = Regex("""\b(\d{1,3})\s*:\s*(\d{1,3})\b""")
 private val INLINE_HADITH_REGEX = Regex(
@@ -37,6 +40,105 @@ internal fun extractSectionHint(text: String, matchRange: IntRange? = null): Str
         ?.trim()
         ?.trimEnd('.', ',', ';', ':', ')')
         ?.takeIf { it.isNotBlank() }
+}
+
+private data class MarkdownSpan(val range: IntRange, val style: SpanStyle)
+
+private data class ParsedMarkdown(
+    val text: String,
+    val spans: List<MarkdownSpan>
+)
+
+private val HEADING_PREFIX_REGEX = Regex("^\\s{0,3}#{1,6}\\s+")
+
+/**
+ * Turns the AI reply's Markdown into plain text plus styled spans: **bold**, *italic*,
+ * ### headings and > blockquotes stop appearing as raw symbols in the chat bubble.
+ */
+private fun parseMarkdown(raw: String, blockquoteColor: Color): ParsedMarkdown {
+    val out = StringBuilder()
+    val spans = mutableListOf<MarkdownSpan>()
+    val lines = raw.replace("\r\n", "\n").split('\n')
+
+    fun appendInline(line: String) {
+        var i = 0
+        while (i < line.length) {
+            when {
+                line.startsWith("***", i) || line.startsWith("___", i) -> {
+                    val marker = line.substring(i, i + 3)
+                    val close = line.indexOf(marker, i + 3)
+                    if (close > i + 3) {
+                        val start = out.length
+                        out.append(line.substring(i + 3, close))
+                        spans += MarkdownSpan(start until out.length, SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic))
+                        i = close + 3
+                    } else {
+                        out.append(line[i]); i++
+                    }
+                }
+                line.startsWith("**", i) || line.startsWith("__", i) -> {
+                    val marker = line.substring(i, i + 2)
+                    val close = line.indexOf(marker, i + 2)
+                    if (close > i + 2) {
+                        val start = out.length
+                        out.append(line.substring(i + 2, close))
+                        spans += MarkdownSpan(start until out.length, SpanStyle(fontWeight = FontWeight.Bold))
+                        i = close + 2
+                    } else {
+                        out.append(line[i]); i++
+                    }
+                }
+                line[i] == '*' || line[i] == '_' -> {
+                    val close = line.indexOf(line[i], i + 1)
+                    if (close > i + 1) {
+                        val start = out.length
+                        out.append(line.substring(i + 1, close))
+                        spans += MarkdownSpan(start until out.length, SpanStyle(fontStyle = FontStyle.Italic))
+                        i = close + 1
+                    } else {
+                        out.append(line[i]); i++
+                    }
+                }
+                else -> {
+                    out.append(line[i]); i++
+                }
+            }
+        }
+    }
+
+    lines.forEachIndexed { index, original ->
+        var line = original
+        val isBlockquote = line.trimStart().startsWith(">")
+        if (isBlockquote) {
+            line = line.trimStart().trimStart('>').trimStart()
+        }
+        val heading = HEADING_PREFIX_REGEX.find(line)
+        if (heading != null) {
+            line = line.substring(heading.range.last + 1)
+        }
+        val trimmed = line.trimStart()
+        if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+            line = "• " + trimmed.substring(2)
+        }
+        if (isBlockquote) {
+            line = "▍ $line"
+        }
+
+        val lineStart = out.length
+        appendInline(line)
+        val lineEnd = out.length
+        if (lineEnd > lineStart) {
+            if (heading != null) {
+                spans += MarkdownSpan(lineStart until lineEnd, SpanStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp))
+            }
+            if (isBlockquote) {
+                spans += MarkdownSpan(lineStart until lineEnd, SpanStyle(color = blockquoteColor, fontStyle = FontStyle.Italic))
+            }
+        }
+        if (index != lines.lastIndex) out.append('\n')
+    }
+
+    return ParsedMarkdown(text = out.toString(), spans = spans)
 }
 
 private data class CitationHit(
@@ -66,9 +168,12 @@ fun ClickableCitationText(
         )
     }
 
-    val annotated = remember(text, linkStyle) {
+    val blockquoteColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val annotated = remember(text, linkStyle, blockquoteColor) {
+        val parsed = parseMarkdown(text, blockquoteColor)
+        val plain = parsed.text
         val matches = buildList {
-            INLINE_HADITH_REGEX.findAll(text).forEach { match ->
+            INLINE_HADITH_REGEX.findAll(plain).forEach { match ->
                 val number = match.groupValues[2].toIntOrNull() ?: return@forEach
                 val rawBook = match.groupValues[1].lowercase()
                 val bookKey = when {
@@ -81,10 +186,10 @@ fun ClickableCitationText(
                     rawBook.contains("nawawi") -> "nawawi"
                     else -> "malik"
                 }
-                val sectionHint = extractSectionHint(text, match.range)
+                val sectionHint = extractSectionHint(plain, match.range)
                 add(CitationHit(range = match.range, hadith = Triple(bookKey, number, sectionHint)))
             }
-            INLINE_QURAN_REGEX.findAll(text).forEach { match ->
+            INLINE_QURAN_REGEX.findAll(plain).forEach { match ->
                 val surah = match.groupValues[1].toIntOrNull() ?: return@forEach
                 val ayah = match.groupValues[2].toIntOrNull() ?: return@forEach
                 if (surah in 1..114 && ayah >= 1) {
@@ -97,8 +202,8 @@ fun ClickableCitationText(
             var cursor = 0
             for (hit in matches) {
                 if (hit.range.first < cursor) continue
-                append(text.substring(cursor, hit.range.first))
-                val label = text.substring(hit.range.first, hit.range.last + 1)
+                append(plain.substring(cursor, hit.range.first))
+                val label = plain.substring(hit.range.first, hit.range.last + 1)
                 val quran = hit.quran
                 val hadith = hit.hadith
                 val link = when {
@@ -123,7 +228,14 @@ fun ClickableCitationText(
                 }
                 cursor = hit.range.last + 1
             }
-            if (cursor < text.length) append(text.substring(cursor))
+            if (cursor < plain.length) append(plain.substring(cursor))
+
+            // Markdown styling is applied last so it can overlay the citation links.
+            parsed.spans.forEach { span ->
+                if (span.range.first >= 0 && span.range.last + 1 <= length) {
+                    addStyle(span.style, span.range.first, span.range.last + 1)
+                }
+            }
         }
     }
 

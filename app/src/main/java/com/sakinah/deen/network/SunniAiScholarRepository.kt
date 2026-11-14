@@ -165,11 +165,11 @@ class SunniAiScholarRepositoryImpl(
         return when {
             qLower.contains("sahw") -> listOf(
                 ProofSourceDto(
-                    title = "Sahih Muslim #571",
+                    title = "Sahih Muslim #1272 · Book of Mosques and Places of Prayer",
                     referenceType = "HADITH",
                     primaryTextArabic = "فَلْيَطْرَحِ الشَّكَّ وَلْيَبْنِ عَلَى مَا اسْتَيْقَنَ",
                     translation = "Discard doubt and build upon certainty.",
-                    navigationDeepLink = "hadith/muslim/571"
+                    navigationDeepLink = "hadith/muslim/1272"
                 ),
                 ProofSourceDto(
                     title = "Sahih al-Bukhari #1226",

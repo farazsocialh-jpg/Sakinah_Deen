@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Button
@@ -88,9 +89,6 @@ import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.components.StatusBadge
 import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.AmiriFontFamily
-import com.sakinah.deen.ui.theme.EmeraldDeep
-import com.sakinah.deen.ui.theme.EmeraldSurface
-import com.sakinah.deen.ui.theme.MintGreen
 import com.sakinah.deen.ui.viewmodel.SalahUiIntent
 import com.sakinah.deen.ui.viewmodel.SalahUiState
 import com.sakinah.deen.ui.viewmodel.SalahViewModel
@@ -102,6 +100,7 @@ fun SalahScreen(
     onOpenGuide: () -> Unit,
     onOpenPrayerGuide: ((String, Int) -> Unit)? = null,
     focusMode: Boolean = false,
+    onOpenNotificationSettings: (() -> Unit)? = null,
     viewModel: SalahViewModel? = null,
     modifier: Modifier = Modifier
 ) {
@@ -238,6 +237,23 @@ fun SalahScreen(
                             }
                         }
 
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (onOpenNotificationSettings != null) {
+                                IconButton(
+                                    onClick = onOpenNotificationSettings,
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Notifications,
+                                        contentDescription = "Azaan & Notifications",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
                         if (!focusMode) {
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -265,6 +281,7 @@ fun SalahScreen(
                                     Text("Qadha Ledger", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                                 }
                             }
+                        }
                         }
                     }
 
@@ -351,7 +368,7 @@ fun SalahScreen(
                                             )
                                         },
                                         shape = RoundedCornerShape(12.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldDeep),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                         modifier = Modifier.height(32.dp),
                                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                                     ) {
@@ -363,21 +380,25 @@ fun SalahScreen(
                                         modifier = Modifier.height(32.dp),
                                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                                     ) {
-                                        Text("City", fontSize = 10.sp, color = EmeraldDeep)
+                                        Text("City", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
                                     }
                                 }
                             }
                         }
                     }
 
-                    // 3. Hero Active Prayer Card (Explicit Deep Emerald Surface)
+                    // 3. Hero Active Prayer Card (palette-aware, so Black & White is monochrome)
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(24.dp)
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     ) {
                         Box(
                             modifier = Modifier
-                                .background(Brush.verticalGradient(listOf(EmeraldDeep, EmeraldSurface)))
+                                .background(MaterialTheme.colorScheme.primaryContainer)
                                 .padding(20.dp)
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -388,7 +409,7 @@ fun SalahScreen(
                                 ) {
                                     Text(
                                         text = "CURRENT: ${state.currentPrayer.name} · NEXT: ${state.nextPrayer.name}",
-                                        color = MintGreen,
+                                        color = MaterialTheme.colorScheme.primary,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         letterSpacing = 0.8.sp,
@@ -399,7 +420,7 @@ fun SalahScreen(
                                     Spacer(Modifier.width(8.dp))
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
-                                        color = Color.Black.copy(alpha = 0.3f)
+                                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)
                                     ) {
                                         Row(
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -408,13 +429,13 @@ fun SalahScreen(
                                             Icon(
                                                 imageVector = Icons.Outlined.Timer,
                                                 contentDescription = null,
-                                                tint = MintGreen,
+                                                tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(14.dp)
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text(
                                                 text = state.countdownText,
-                                                color = Color.White,
+                                                color = MaterialTheme.colorScheme.onSurface,
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Medium
                                             )
@@ -431,7 +452,7 @@ fun SalahScreen(
                                         text = "${state.nextPrayer.name} · الصلاة القادمة",
                                         fontSize = 22.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color.White,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier.weight(1f)
                                     )
                                     if (!focusMode) {
@@ -443,8 +464,8 @@ fun SalahScreen(
                                             onClick = { launchPrayerGuide(state.nextPrayer.name, nextRakats) },
                                             shape = RoundedCornerShape(16.dp),
                                             colors = ButtonDefaults.buttonColors(
-                                                containerColor = Color.White.copy(alpha = 0.16f),
-                                                contentColor = Color.White
+                                                containerColor = MaterialTheme.colorScheme.primary,
+                                                contentColor = MaterialTheme.colorScheme.onPrimary
                                             )
                                         ) {
                                             Text("Visual Guide", fontSize = 11.sp)
@@ -457,22 +478,22 @@ fun SalahScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(6.dp),
-                                    color = MintGreen,
-                                    trackColor = Color.White.copy(alpha = 0.2f)
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f)
                                 )
 
                                 if (state.isTraveler) {
                                     Surface(
                                         shape = RoundedCornerShape(10.dp),
-                                        color = MintGreen.copy(alpha = 0.25f),
-                                        border = BorderStroke(1.dp, MintGreen)
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
                                     ) {
                                         Text(
                                             text = "Safar (Qasr) • ${state.distanceFromHomeKm.toInt()} km from Home",
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color(0xFFD1FAE5)
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
                                         )
                                     }
                                 }
@@ -480,14 +501,13 @@ fun SalahScreen(
                         }
                     }
 
-                    // 4. Unified Sub-Mode Switcher (Times | Qibla | Guide)
-                    if (!focusMode) {
-                        SegmentedPillBar(
-                            options = listOf("Times", "Qibla", "Guide"),
-                            selectedIndex = selectedSegment,
-                            onSelect = { selectedSegment = it }
-                        )
-                    }
+                    // 4. Unified Sub-Mode Switcher (Times | Qibla | Guide) — always visible so
+                    // the Qibla tab is never hidden, including in Focus Mode.
+                    SegmentedPillBar(
+                        options = listOf("Times", "Qibla", "Guide"),
+                        selectedIndex = selectedSegment,
+                        onSelect = { selectedSegment = it }
+                    )
                 }
             }
 
@@ -543,7 +563,7 @@ fun SalahScreen(
                                     if (!isSunrise) {
                                         Surface(
                                             shape = RoundedCornerShape(10.dp),
-                                            color = if (prayer.isFardCompleted) MintGreen else MaterialTheme.colorScheme.surfaceVariant,
+                                            color = if (prayer.isFardCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                                             modifier = Modifier
                                                 .size(32.dp)
                                                 .clickable {
@@ -558,7 +578,7 @@ fun SalahScreen(
                                                     Icon(
                                                         imageVector = Icons.Default.Check,
                                                         contentDescription = "Completed",
-                                                        tint = EmeraldDeep,
+                                                        tint = MaterialTheme.colorScheme.onPrimary,
                                                         modifier = Modifier.size(18.dp)
                                                     )
                                                 }
@@ -745,8 +765,8 @@ fun SalahScreen(
 
                         Surface(
                             shape = RoundedCornerShape(10.dp),
-                            color = if (draftIsAutomatic) MintGreen.copy(alpha = 0.2f) else Color.Transparent,
-                            border = if (draftIsAutomatic) BorderStroke(1.dp, MintGreen) else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+                            color = if (draftIsAutomatic) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent,
+                            border = if (draftIsAutomatic) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { draftIsAutomatic = true }
@@ -775,8 +795,8 @@ fun SalahScreen(
                                 val isSelected = !draftIsAutomatic && draftMethod == m
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
-                                    color = if (isSelected) MintGreen.copy(alpha = 0.2f) else Color.Transparent,
-                                    border = if (isSelected) BorderStroke(1.dp, MintGreen) else null,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent,
+                                    border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
@@ -937,8 +957,8 @@ fun SalahScreen(
                                     onClick = { viewModel?.onIntent(SalahUiIntent.DecrementQadha(p)) },
                                     shape = RoundedCornerShape(12.dp),
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = MintGreen,
-                                        contentColor = EmeraldDeep
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
                                     ),
                                     enabled = count > 0
                                 ) {

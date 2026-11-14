@@ -210,7 +210,7 @@ val viewModelModule = module {
     factory { QuranViewModel(getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull()) }
     factory { HadithViewModel(getOrNull(), getOrNull(), getOrNull()) }
     factory { TravelViewModel(get(), get(), getOrNull()) }
-    factory { WealthViewModel(get(), getOrNull()) }
+    factory { WealthViewModel(get(), getOrNull(), getOrNull()) }
     factory { AiScholarViewModel(get(), androidContext()) }
 }
 

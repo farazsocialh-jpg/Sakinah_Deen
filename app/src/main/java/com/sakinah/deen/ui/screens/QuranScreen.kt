@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -134,13 +135,19 @@ fun QuranScreen(
         }
     }
 
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    val landscape = maxWidth > maxHeight
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .imePadding()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // In landscape the controls scroll with the verses (as a list header) so the
+        // reading area is never squeezed to zero height.
+        val header: @Composable () -> Unit = {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // 1. Top Navigation & Layout Toggle
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -205,20 +212,6 @@ fun QuranScreen(
             shape = RoundedCornerShape(16.dp),
             singleLine = true
         )
-
-        if (state.searchQuery.isNotBlank()) {
-            SearchResults(
-                isSearching = state.isSearching,
-                results = state.searchResults,
-                onResultClick = { result ->
-                    vm.onIntent(QuranUiIntent.ClearSearch)
-                    vm.onIntent(QuranUiIntent.SelectSurahAtAyah(result.surahNumber, result.ayahNumber))
-                    selectedAyahNumber = result.ayahNumber
-                    vm.onIntent(QuranUiIntent.SelectAyahForTafseer(result.ayahNumber))
-                }
-            )
-            return@Column
-        }
 
         // 3. Controls Row: Translation Chip + Hifz Mode + Studio Shortcut (hidden in Focus Mode)
         if (!focusMode) {
@@ -322,6 +315,25 @@ fun QuranScreen(
                 }
             }
         }
+        }
+        }
+
+        if (!landscape) header()
+
+        if (state.searchQuery.isNotBlank()) {
+            if (landscape) header()
+            SearchResults(
+                isSearching = state.isSearching,
+                results = state.searchResults,
+                onResultClick = { result ->
+                    vm.onIntent(QuranUiIntent.ClearSearch)
+                    vm.onIntent(QuranUiIntent.SelectSurahAtAyah(result.surahNumber, result.ayahNumber))
+                    selectedAyahNumber = result.ayahNumber
+                    vm.onIntent(QuranUiIntent.SelectAyahForTafseer(result.ayahNumber))
+                }
+            )
+            return@Column
+        }
 
         // 4. Reading Canvas: Study (verse-by-verse) vs Continuous RTL Mus-haf
         if (state.isStudyMode) {
@@ -332,6 +344,9 @@ fun QuranScreen(
                     .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                if (landscape) {
+                    item(key = "reader-header") { header() }
+                }
                 items(surah.ayahs, key = { "${surah.number}:${it.numberInSurah}" }) { ayah ->
                     val hifzTag = state.hifzMistakes[surah.number to ayah.numberInSurah]
                     AyahCard(
@@ -371,6 +386,7 @@ fun QuranScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                if (landscape) header()
                 SakinahCard(contentPadding = 18.dp) {
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Text(
@@ -460,6 +476,7 @@ fun QuranScreen(
                 }
             }
         }
+    }
     }
 
     // 5. Consolidated Tabbed Reader Studio Sheet (Surah | Translation | Tafsir)

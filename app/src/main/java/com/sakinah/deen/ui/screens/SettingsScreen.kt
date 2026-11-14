@@ -91,6 +91,7 @@ import java.util.Locale
 fun SettingsScreen(
     onBack: () -> Unit,
     onRerunOnboarding: () -> Unit = {},
+    onOpenNotificationSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val repo = rememberInject<SettingsRepository>()
@@ -316,6 +317,12 @@ fun SettingsScreen(
 
                 // Azaan & Notifications
                 Text("Azaan & Notifications", style = MaterialTheme.typography.titleMedium)
+                OutlinedButton(
+                    onClick = onOpenNotificationSettings,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Manage Azaan & Notifications →", fontSize = 13.sp)
+                }
                 SakinahCard(contentPadding = 14.dp) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {

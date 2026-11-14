@@ -559,20 +559,19 @@ private fun buildSalahSteps(rakat: Int, totalRakats: Int): List<GuideStep> {
     val hasTashahhud = isFinalRakah || hasMiddleSitting
     val steps = mutableListOf<GuideStep>()
 
-    steps += GuideStep(
-        title = if (rakat == 1) "1. Takbirat al-Ihram" else "1. Begin Rakat $rakat",
-        arabicTitle = "تكبيرة الإحرام",
-        arabicText = "اللَّهُ أَكْبَرُ",
-        transliteration = "Allahu Akbar",
-        translation = "Allah is the Greatest.",
-        source = "Sahih al-Bukhari 735; Sahih Muslim 498",
-        notes = if (rakat == 1) {
-            "Stand facing the Qiblah, make the Niyyah silently, raise the open palms beside the ears (brothers) or shoulders (sisters), and say Allahu Akbar."
-        } else {
-            "You are already standing for Rakat $rakat. Begin with Al-Fatihah; the opening Takbir was said only once."
-        },
-        posture = GuidePosture.TAKBIR
-    )
+    // Takbirat al-Ihram opens the prayer once. Rak'ah 2+ starts already standing in Qiyam.
+    if (rakat == 1) {
+        steps += GuideStep(
+            title = "1. Takbirat al-Ihram",
+            arabicTitle = "تكبيرة الإحرام",
+            arabicText = "اللَّهُ أَكْبَرُ",
+            transliteration = "Allahu Akbar",
+            translation = "Allah is the Greatest.",
+            source = "Sahih al-Bukhari 735; Sahih Muslim 498",
+            notes = "Stand facing the Qiblah, make the Niyyah silently, raise the open palms beside the ears (brothers) or shoulders (sisters), and say Allahu Akbar.",
+            posture = GuidePosture.TAKBIR
+        )
+    }
 
     val recitation = if (rakat == 1) {
         "سُبْحَانَكَ اللَّهُمَّ وَبِحَمْدِكَ، وَتَبَارَكَ اسْمُكَ، وَتَعَالَى جَدُّكَ، وَلَا إِلَهَ غَيْرُكَ. " +
@@ -582,8 +581,12 @@ private fun buildSalahSteps(rakat: Int, totalRakats: Int): List<GuideStep> {
     }
 
     steps += GuideStep(
-        title = "2. Al-Qiyam — Standing & Recitation",
-        arabicTitle = "القيام والقراءة",
+        title = if (rakat == 1) {
+            "2. Al-Qiyam — Standing & Recitation"
+        } else {
+            "2. Al-Qiyam — Standing & Al-Fatihah"
+        },
+        arabicTitle = if (rakat == 1) "القيام والقراءة" else "الْقِيَام",
         arabicText = recitation,
         transliteration = "Subhanaka Allahumma wa bihamdika... Alhamdu lillahi Rabbil-'alamin...",
         translation = "Glory be to You, O Allah, and praise... All praise is for Allah, Lord of all worlds. Guide us to the straight path.",

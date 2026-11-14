@@ -470,7 +470,7 @@ class AiScholarViewModel(
             ScholarChatMessage(
                 id = "sample-2",
                 role = "assistant",
-                text = "Sujud as-Sahw (سجود السهو) consists of two prostrations performed to rectify unintentional omissions or additions in prayer, followed by Salam.\n\nGrounding Proof: In Sahih Muslim #571 (Kitab al-Masajid), the Prophet (ﷺ) instructed to build upon certainty and make two prostrations before concluding the prayer.",
+                text = "Sujud as-Sahw (سجود السهو) consists of two prostrations performed to rectify unintentional omissions or additions in prayer, followed by Salam.\n\nGrounding Proof: In Sahih Muslim #1272 (Kitab al-Masajid — Book of Mosques and Places of Prayer), Abu Sa‘id al-Khudri reported that the Prophet (ﷺ) instructed to discard doubt, build upon certainty, and make two prostrations before concluding the prayer.",
                 timestampMs = System.currentTimeMillis()
             )
         )

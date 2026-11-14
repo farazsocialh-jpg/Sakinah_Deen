@@ -63,6 +63,12 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         private const val KEY_HADITH_BOOKMARKS_INITIALIZED = "hadith_bookmarks_initialized"
         private const val KEY_ALARMS_ENABLED = "alarms_enabled"
         private const val KEY_FIRST_LAUNCH_PERMISSIONS_REQUESTED = "first_launch_permissions_requested"
+        private const val KEY_ZAKAT_CASH = "zakat_cash_in_bank"
+        private const val KEY_ZAKAT_GOLD = "zakat_gold_held"
+        private const val KEY_ZAKAT_SILVER = "zakat_silver_held"
+        private const val KEY_ZAKAT_STOCKS = "zakat_stocks_value"
+        private const val KEY_ZAKAT_DEBTS = "zakat_short_term_debts"
+        private const val KEY_HIFZ_ANNOTATIONS = "hifz_verse_annotations"
         private const val KEY_MUEZZIN = "azaan_muezzin"
         private const val KEY_FAJR_SPECIAL_ADHAN = "azaan_fajr_special"
         private const val KEY_ALERT_MODE_PREFIX = "azaan_mode_"
@@ -286,6 +292,59 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         }
         set(value) {
             prefs.edit().putString(KEY_BOOKMARKED_HADITH_IDS, value.joinToString("|")).apply()
+        }
+
+    /**
+     * Zakat balance-sheet values, persisted on every edit (guest mode included) so
+     * closing the app never loses an entered amount.
+     */
+    var zakatCashInBank: Float
+        get() = prefs.getFloat(KEY_ZAKAT_CASH, 14200f)
+        set(value) = prefs.edit().putFloat(KEY_ZAKAT_CASH, value).apply()
+
+    var zakatGoldHeld: Float
+        get() = prefs.getFloat(KEY_ZAKAT_GOLD, 4500f)
+        set(value) = prefs.edit().putFloat(KEY_ZAKAT_GOLD, value).apply()
+
+    var zakatSilverHeld: Float
+        get() = prefs.getFloat(KEY_ZAKAT_SILVER, 0f)
+        set(value) = prefs.edit().putFloat(KEY_ZAKAT_SILVER, value).apply()
+
+    var zakatStocksValue: Float
+        get() = prefs.getFloat(KEY_ZAKAT_STOCKS, 6800f)
+        set(value) = prefs.edit().putFloat(KEY_ZAKAT_STOCKS, value).apply()
+
+    var zakatShortTermDebts: Float
+        get() = prefs.getFloat(KEY_ZAKAT_DEBTS, 1800f)
+        set(value) = prefs.edit().putFloat(KEY_ZAKAT_DEBTS, value).apply()
+
+    /**
+     * Hifz verse annotations keyed by "surahNumber:ayahNumber" (e.g. "2:255" to "Mutashabihat").
+     * Stored locally so memorisation tags survive a restart in guest mode too.
+     */
+    var hifzAnnotations: Map<String, String>
+        get() {
+            val raw = prefs.getString(KEY_HIFZ_ANNOTATIONS, null) ?: return emptyMap()
+            if (raw.isBlank()) return emptyMap()
+            return raw.split("|").mapNotNull { entry ->
+                val separator = entry.indexOf('=')
+                if (separator <= 0 || separator == entry.lastIndex) return@mapNotNull null
+                val key = entry.substring(0, separator).trim()
+                val tag = entry.substring(separator + 1).trim()
+                if (key.isBlank() || tag.isBlank()) null else key to tag
+            }.toMap()
+        }
+        set(value) {
+            val encoded = value
+                .filterKeys { it.isNotBlank() }
+                .filterValues { it.isNotBlank() }
+                .entries
+                .joinToString("|") { "${it.key}=${it.value}" }
+            if (encoded.isBlank()) {
+                prefs.edit().remove(KEY_HIFZ_ANNOTATIONS).apply()
+            } else {
+                prefs.edit().putString(KEY_HIFZ_ANNOTATIONS, encoded).apply()
+            }
         }
 
     fun saveLocation(latitude: Double, longitude: Double, label: String) {

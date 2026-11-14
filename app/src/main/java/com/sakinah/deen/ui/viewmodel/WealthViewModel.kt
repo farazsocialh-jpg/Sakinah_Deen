@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sakinah.deen.data.database.dao.SadaqahDao
 import com.sakinah.deen.data.database.entity.SadaqahLogEntity
+import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.NisabRateRepository
 import com.sakinah.deen.data.repository.NisabRates
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,16 +56,40 @@ sealed class WealthUiIntent {
 
 class WealthViewModel(
     private val sadaqahDao: SadaqahDao,
-    private val nisabRateRepository: NisabRateRepository? = null
+    private val nisabRateRepository: NisabRateRepository? = null,
+    private val preferences: SakinahPreferences? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WealthUiState())
     val uiState: StateFlow<WealthUiState> = _uiState.asStateFlow()
 
     init {
+        // Restore the saved balance sheet before the first calculation (guest mode included).
+        preferences?.let { prefs ->
+            _uiState.update {
+                it.copy(
+                    cashInBank = prefs.zakatCashInBank,
+                    goldHeld = prefs.zakatGoldHeld,
+                    silverHeld = prefs.zakatSilverHeld,
+                    stocksValue = prefs.zakatStocksValue,
+                    shortTermDebts = prefs.zakatShortTermDebts
+                )
+            }
+        }
         recalculateZakat()
         observeSadaqah()
         observeNisabRates()
+    }
+
+    /** Writes cash, gold, silver, stocks and debts to disk after every edit. */
+    private fun persistBalances() {
+        val prefs = preferences ?: return
+        val s = _uiState.value
+        prefs.zakatCashInBank = s.cashInBank
+        prefs.zakatGoldHeld = s.goldHeld
+        prefs.zakatSilverHeld = s.silverHeld
+        prefs.zakatStocksValue = s.stocksValue
+        prefs.zakatShortTermDebts = s.shortTermDebts
     }
 
     private fun observeNisabRates() {
@@ -79,6 +104,7 @@ class WealthViewModel(
                     )
                 }
                 recalculateZakat()
+                persistBalances()
             }
         }
         refreshNisabRates(repo)
@@ -108,30 +134,37 @@ class WealthViewModel(
             is WealthUiIntent.SetGoldStandard -> {
                 _uiState.update { it.copy(isGoldStandard = intent.isGold) }
                 recalculateZakat()
+                persistBalances()
             }
             is WealthUiIntent.UpdateCash -> {
                 _uiState.update { it.copy(cashInBank = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
+                persistBalances()
             }
             is WealthUiIntent.UpdateGoldHeld -> {
                 _uiState.update { it.copy(goldHeld = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
+                persistBalances()
             }
             is WealthUiIntent.UpdateSilverHeld -> {
                 _uiState.update { it.copy(silverHeld = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
+                persistBalances()
             }
             is WealthUiIntent.UpdateTradeInventory -> {
                 _uiState.update { it.copy(tradeInventory = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
+                persistBalances()
             }
             is WealthUiIntent.UpdateStocksValue -> {
                 _uiState.update { it.copy(stocksValue = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
+                persistBalances()
             }
             is WealthUiIntent.UpdateDebts -> {
                 _uiState.update { it.copy(shortTermDebts = intent.amount.coerceAtLeast(0f)) }
                 recalculateZakat()
+                persistBalances()
             }
             is WealthUiIntent.AddMicroSadaqah -> {
                 addMicroSadaqah(intent.amount, intent.note)
@@ -149,6 +182,7 @@ class WealthViewModel(
                     )
                 }
                 recalculateZakat()
+                persistBalances()
             }
         }
     }

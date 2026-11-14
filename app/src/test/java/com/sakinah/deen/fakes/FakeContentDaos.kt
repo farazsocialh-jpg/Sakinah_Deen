@@ -118,6 +118,20 @@ class FakeHadithDao : HadithDao {
         )
     }
 
+    override fun observeAllHadithsByLanguage(
+        languageCode: String,
+        limit: Int,
+        offset: Int
+    ): Flow<List<HadithEntryEntity>> = flow {
+        emit(
+            entries.values
+                .filter { it.languageCode == languageCode }
+                .sortedWith(compareBy({ it.bookKey }, { it.hadithNumber }))
+                .drop(offset)
+                .take(limit)
+        )
+    }
+
     override fun searchHadiths(query: String, limit: Int): Flow<List<HadithEntryEntity>> = flow {
         emit(
             entries.values
