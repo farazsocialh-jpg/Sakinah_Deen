@@ -58,8 +58,10 @@ object SafarPolicy {
         val dLat = lat2 - lat1
         val dLon = lon2 - lon1
 
-        val a = sin(dLat / 2) * sin(dLat / 2) +
-            cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2)
+        val a = (
+            sin(dLat / 2) * sin(dLat / 2) +
+                cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2)
+            ).coerceIn(0.0, 1.0)
         val c = 2 * atan2(sqrt(a), sqrt(1 - a))
         return EARTH_RADIUS_KM * c
     }

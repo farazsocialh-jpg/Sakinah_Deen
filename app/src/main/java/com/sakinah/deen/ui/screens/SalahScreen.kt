@@ -61,7 +61,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -76,6 +75,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
@@ -92,7 +93,6 @@ import com.sakinah.deen.ui.theme.AmiriFontFamily
 import com.sakinah.deen.ui.viewmodel.SalahUiIntent
 import com.sakinah.deen.ui.viewmodel.SalahUiState
 import com.sakinah.deen.ui.viewmodel.SalahViewModel
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -137,7 +137,10 @@ fun SalahScreen(
     var showManualCityDialog by remember { mutableStateOf(false) }
     var expandedId by remember { mutableStateOf<String?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
-    val refreshScope = rememberCoroutineScope()
+    // Refresh completes when the view model publishes the refreshed state.
+    LaunchedEffect(state) {
+        if (isRefreshing) isRefreshing = false
+    }
 
     val qiblaManager = rememberInject<QiblaSensorManager>()
     val compassData by qiblaManager.compassFlow.collectAsState()
@@ -151,6 +154,12 @@ fun SalahScreen(
         onDispose {
             qiblaManager.stopListening()
         }
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        if (selectedSegment == 1) qiblaManager.startListening()
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
+        qiblaManager.stopListening()
     }
     LaunchedEffect(selectedSegment, state.userCoordinates) {
         if (selectedSegment == 1) {
@@ -178,10 +187,9 @@ fun SalahScreen(
     PullToRefreshBox(
         isRefreshing = isRefreshing,
         onRefresh = {
-            isRefreshing = true
-            refreshScope.launch {
+            if (!isRefreshing) {
+                isRefreshing = true
                 viewModel?.onIntent(SalahUiIntent.RefreshLocation)
-                isRefreshing = false
             }
         },
         modifier = modifier.fillMaxSize()

@@ -33,19 +33,29 @@ interface SalahDao {
     @Query("SELECT * FROM salah_records WHERE isQadha = 1 ORDER BY dateEpochDay DESC")
     fun observePendingQadhaRecords(): Flow<List<SalahRecordEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    // Use targeted column-preserving upsert instead of REPLACE to avoid overwriting
+    // user state (isBookmarked, lastReadAt, isCompleted, isJamaah, isQadha, completedAt, notes).
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun upsertSalahRecord(record: SalahRecordEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(records: List<SalahRecordEntity>)
 
     @Query("DELETE FROM salah_records WHERE dateEpochDay = :epochDay")
     suspend fun deleteForDay(epochDay: Long)
 
-    /** Rebuilds one day atomically (used when re-seeding or correcting a day). */
+    @Query(
+        "SELECT * FROM salah_records WHERE dateEpochDay = :epochDay AND isCompleted = 0 " +
+            "AND prayerType IN ('FAJR','DHUHR','ASR','MAGHRIB','ISHA')"
+    )
+    suspend fun getUncompletedFard(epochDay: Long): List<SalahRecordEntity>
+
+    @Query("SELECT COUNT(*) FROM salah_records WHERE dateEpochDay = :epochDay")
+    suspend fun slotCountForDay(epochDay: Long): Int
+
+    /** Fills in missing slots for one day without touching existing user progress. */
     @Transaction
     suspend fun replaceDay(epochDay: Long, records: List<SalahRecordEntity>) {
-        deleteForDay(epochDay)
         insertAll(records)
     }
 }
@@ -88,10 +98,11 @@ interface QadhaDao {
 
     @Transaction
     suspend fun decrementMissed(prayerType: String, delta: Int = 1) {
+        if (delta <= 0) return
         val existing = getQadhaForPrayer(prayerType)
         if (existing != null) {
             val newMissed = (existing.totalMissed - delta).coerceAtLeast(0)
-            val newMadeUp = existing.totalMadeUp + delta
+            val newMadeUp = minOf(delta, existing.totalMissed) + existing.totalMadeUp
             upsertQadha(
                 existing.copy(
                     totalMissed = newMissed,
@@ -147,6 +158,13 @@ interface QuranDao {
             "ORDER BY surahNumber ASC, ayahNumber ASC LIMIT :limit"
     )
     fun searchAyahs(query: String, limit: Int = 100): Flow<List<QuranAyahEntity>>
+
+    @Query(
+        "SELECT * FROM quran_ayahs WHERE textUthmani LIKE '%' || :query ESCAPE '\\' " +
+            "OR translation LIKE '%' || :query ESCAPE '\\' " +
+            "ORDER BY surahNumber ASC, ayahNumber ASC LIMIT :limit"
+    )
+    fun searchAyahsEscaped(query: String, limit: Int = 100): Flow<List<QuranAyahEntity>>
 
     @Query("SELECT * FROM quran_ayahs WHERE surahNumber = :surahNumber AND ayahNumber = :ayahNumber LIMIT 1")
     suspend fun getAyah(surahNumber: Int, ayahNumber: Int): QuranAyahEntity?
@@ -229,11 +247,12 @@ interface HadithDao {
     ): Flow<List<HadithEntryEntity>>
 
     @Query(
-        "SELECT * FROM hadith_entries WHERE englishText LIKE '%' || :query || '%' " +
-            "OR arabicText LIKE '%' || :query || '%' OR chapterTitle LIKE '%' || :query || '%' " +
+        "SELECT * FROM hadith_entries WHERE englishText LIKE '%' || :query ESCAPE '\\' " +
+            "OR arabicText LIKE '%' || :query ESCAPE '\\' " +
+            "OR chapterTitle LIKE '%' || :query ESCAPE '\\' " +
             "ORDER BY bookKey ASC, languageCode ASC, hadithNumber ASC LIMIT :limit"
     )
-    fun searchHadiths(query: String, limit: Int = 200): Flow<List<HadithEntryEntity>>
+    fun searchHadithsEscaped(query: String, limit: Int = 200): Flow<List<HadithEntryEntity>>
 
     @Query("SELECT * FROM hadith_entries WHERE bookKey = :bookKey AND languageCode = :languageCode AND hadithNumber = :hadithNumber LIMIT 1")
     suspend fun getHadith(bookKey: String, languageCode: String = "eng", hadithNumber: Int): HadithEntryEntity?
@@ -299,7 +318,8 @@ interface PrayerTimetableDao {
 
     @Transaction
     suspend fun replaceMonth(cacheKey: String, rows: List<PrayerTimetableEntity>) {
-        deleteForKey(cacheKey)
+        // When single-cache-key retention is intended, delete all older entries first.
+        deleteAllExcept(cacheKey)
         upsertAll(rows)
     }
 }

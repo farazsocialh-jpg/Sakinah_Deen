@@ -19,13 +19,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.sakinah.deen.R
 
 /** A Home or manual city choice with coordinates, ISO country code, and IANA timezone. */
 data class HomeCity(
@@ -68,13 +71,15 @@ val homeCityPresets: List<HomeCity> = listOf(
  */
 @Composable
 fun HomeLocationCityPickerDialog(
-    title: String = "Choose Home City",
-    subtitle: String = "Safar (Qasr) is measured from Home.",
+    title: String? = null,
+    subtitle: String? = null,
     onUseDeviceGps: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onCitySelected: (HomeCity) -> Unit
 ) {
-    var query by remember { mutableStateOf("") }
+    val resolvedTitle = title ?: stringResource(R.string.city_picker_title)
+    val resolvedSubtitle = subtitle ?: stringResource(R.string.city_picker_subtitle)
+    var query by rememberSaveable { mutableStateOf("") }
     val results = remember(query) {
         val term = query.trim()
         if (term.isEmpty()) homeCityPresets
@@ -94,26 +99,26 @@ fun HomeLocationCityPickerDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = title,
+                    text = resolvedTitle,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = subtitle,
+                    text = resolvedSubtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
-                    label = { Text("Search city") },
+                    label = { Text(stringResource(R.string.city_picker_search)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (results.isEmpty()) {
                     Text(
-                        text = "No matching city.",
+                        text = stringResource(R.string.city_picker_no_match),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -122,7 +127,7 @@ fun HomeLocationCityPickerDialog(
                         modifier = Modifier.heightIn(max = 300.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        items(results) { city ->
+                        items(results, key = { it.name }) { city ->
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = MaterialTheme.colorScheme.surfaceVariant,
@@ -159,11 +164,11 @@ fun HomeLocationCityPickerDialog(
                 ) {
                     if (onUseDeviceGps != null) {
                         TextButton(onClick = onUseDeviceGps) {
-                            Text("Use Device GPS")
+                            Text(stringResource(R.string.city_picker_use_gps))
                         }
                     }
                     TextButton(onClick = onDismiss) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.action_cancel))
                     }
                 }
             }

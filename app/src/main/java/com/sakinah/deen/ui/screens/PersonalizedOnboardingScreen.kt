@@ -1,5 +1,6 @@
 package com.sakinah.deen.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -49,11 +50,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -71,6 +73,37 @@ import com.sakinah.deen.ui.theme.UserAppearanceConfig
 import com.sakinah.deen.ui.theme.UserObjective
 import com.sakinah.deen.ui.theme.UthmanicFontFamily
 
+private val UserAppearanceConfigSaver = listSaver<UserAppearanceConfig, String>(
+    save = { config ->
+        listOf(
+            config.userName,
+            config.experienceLevel,
+            config.objective.name,
+            config.themeMode.name,
+            config.palette.name,
+            config.fontScale.name,
+            config.focusModeHideDistractions.toString(),
+            config.autoHideBarsOnScroll.toString(),
+            config.prayerGuideGender.name,
+            config.onboardingCompleted.toString()
+        )
+    },
+    restore = { values ->
+        UserAppearanceConfig(
+            userName = values[0],
+            experienceLevel = values[1],
+            objective = UserObjective.valueOf(values[2]),
+            themeMode = ThemeMode.valueOf(values[3]),
+            palette = SakinahPalette.valueOf(values[4]),
+            fontScale = FontScalePreset.valueOf(values[5]),
+            focusModeHideDistractions = values[6].toBoolean(),
+            autoHideBarsOnScroll = values[7].toBoolean(),
+            prayerGuideGender = PrayerGuideGender.valueOf(values[8]),
+            onboardingCompleted = values[9].toBoolean()
+        )
+    }
+)
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PersonalizedOnboardingScreen(
@@ -80,8 +113,12 @@ fun PersonalizedOnboardingScreen(
     onDismiss: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    var step by remember { mutableIntStateOf(0) }
-    var config by remember(initialConfig) { mutableStateOf(initialConfig) }
+    var step by rememberSaveable { mutableIntStateOf(0) }
+    var config by rememberSaveable(initialConfig, stateSaver = UserAppearanceConfigSaver) {
+        mutableStateOf(initialConfig)
+    }
+
+    BackHandler(enabled = step > 0) { step-- }
 
     fun updateConfig(updated: UserAppearanceConfig) {
         config = updated
@@ -289,7 +326,7 @@ fun PersonalizedOnboardingScreen(
                                 Text(
                                     text = "Offline-First & Private",
                                     fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                                     fontSize = 14.sp
                                 )
                                 Spacer(Modifier.height(4.dp))
@@ -321,20 +358,24 @@ fun PersonalizedOnboardingScreen(
                                 val icon = objectiveIcon(objective)
                                 SakinahCard(
                                     onClick = {
-                                        val recommendedPalette = when (objective) {
-                                            UserObjective.PRAYER_COMPASS -> SakinahPalette.EMERALD_SANCTUARY
-                                            UserObjective.QURAN_STUDY -> SakinahPalette.ANDALUSIAN_SAPPHIRE
-                                            UserObjective.HADITH_SCHOLAR -> SakinahPalette.MADINAH_SAND
-                                            UserObjective.ALL_IN_ONE -> SakinahPalette.EMERALD_SANCTUARY
-                                        }
-                                        updateConfig(
-                                            config.copy(
-                                                objective = objective,
-                                                palette = recommendedPalette,
-                                                focusModeHideDistractions =
-                                                    objective == UserObjective.QURAN_STUDY
+                                        // Re-tapping the active objective must not wipe a
+                                        // palette/focus choice the user already customised.
+                                        if (config.objective != objective) {
+                                            val recommendedPalette = when (objective) {
+                                                UserObjective.PRAYER_COMPASS -> SakinahPalette.EMERALD_SANCTUARY
+                                                UserObjective.QURAN_STUDY -> SakinahPalette.ANDALUSIAN_SAPPHIRE
+                                                UserObjective.HADITH_SCHOLAR -> SakinahPalette.MADINAH_SAND
+                                                UserObjective.ALL_IN_ONE -> SakinahPalette.EMERALD_SANCTUARY
+                                            }
+                                            updateConfig(
+                                                config.copy(
+                                                    objective = objective,
+                                                    palette = recommendedPalette,
+                                                    focusModeHideDistractions =
+                                                        objective == UserObjective.QURAN_STUDY
+                                                )
                                             )
-                                        )
+                                        }
                                     },
                                     containerColor = if (selected) {
                                         MaterialTheme.colorScheme.primaryContainer
@@ -361,7 +402,7 @@ fun PersonalizedOnboardingScreen(
                                                     imageVector = icon,
                                                     contentDescription = null,
                                                     tint = if (selected) {
-                                                        Color.White
+                                                        MaterialTheme.colorScheme.onPrimary
                                                     } else {
                                                         MaterialTheme.colorScheme.primary
                                                     },

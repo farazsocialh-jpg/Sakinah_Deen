@@ -86,19 +86,27 @@ fun NotificationSettingsScreen(
 
     val previewPlayer = remember(context, previewPlayerFactory) { previewPlayerFactory(context) }
     var previewingMuezzin by remember { mutableStateOf<Muezzin?>(null) }
-    previewPlayer.onFinished = { previewingMuezzin = null }
 
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(previewPlayer, lifecycleOwner) {
+    DisposableEffect(previewPlayer, lifecycleOwner, context) {
+        previewPlayer.onFinished = { previewingMuezzin = null }
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
-                previewPlayer.stop()
-                previewingMuezzin = null
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    notificationsGranted = notificationsPermissionGranted(context)
+                    exactAlarmsAllowed = canScheduleExactAlarms(context)
+                }
+                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
+                    previewPlayer.stop()
+                    previewingMuezzin = null
+                }
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            previewPlayer.onFinished = null
             previewPlayer.release()
             previewingMuezzin = null
         }

@@ -55,4 +55,10 @@
     <string name="action_download">ڈاؤن لوڈ</string>
     <string name="action_play">چلائیں</string>
     <string name="offline_seed_note">آف لائن شامل مواد</string>
+    <string name="city_picker_title">گھر کا شہر منتخب کریں</string>
+    <string name="city_picker_subtitle">سفر (قصر) کا حساب گھر سے لیا جاتا ہے۔</string>
+    <string name="city_picker_search">شہر تلاش کریں</string>
+    <string name="city_picker_no_match">کوئی مماثل شہر نہیں ملا۔</string>
+    <string name="city_picker_use_gps">ڈیوائس GPS استعمال کریں</string>
+    <string name="action_cancel">منسوخ کریں</string>
 </resources>

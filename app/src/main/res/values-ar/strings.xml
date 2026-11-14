@@ -55,4 +55,10 @@
     <string name="action_download">تنزيل</string>
     <string name="action_play">تشغيل</string>
     <string name="offline_seed_note">محتوى مضمّن دون اتصال</string>
+    <string name="city_picker_title">اختيار مدينة المنزل</string>
+    <string name="city_picker_subtitle">تُقاس مسافة السفر (القصر) من المنزل.</string>
+    <string name="city_picker_search">ابحث عن مدينة</string>
+    <string name="city_picker_no_match">لا توجد مدينة مطابقة.</string>
+    <string name="city_picker_use_gps">استخدام GPS الجهاز</string>
+    <string name="action_cancel">إلغاء</string>
 </resources>

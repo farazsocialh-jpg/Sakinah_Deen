@@ -44,7 +44,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         AdhkarEntity::class,
         PrayerTimetableEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 @TypeConverters(SakinahTypeConverters::class)
@@ -63,9 +63,8 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
         private const val DB_NAME = "sakinah_encrypted.db"
 
         /**
-         * v5 adds lookup indices for the hot queries (pending qadha, spaced-repetition
-         * review, monthly sadaqah totals, adhkar categories). Index names follow Room's
-         * `<prefix>_<table>_<column>` convention so the generated schema matches.
+         * v6 -> v7 language-aware hadith editions. Duplicate legacy rows are collapsed
+         * by (bookKey, hadithNumber) before the new composite key is applied.
          */
         internal val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -73,10 +72,28 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
                     "CREATE TABLE IF NOT EXISTS `hadith_entries_new` (`bookKey` TEXT NOT NULL, `languageCode` TEXT NOT NULL, `hadithNumber` INTEGER NOT NULL, `bookTitle` TEXT NOT NULL, `sectionNumber` INTEGER NOT NULL, `chapterTitle` TEXT NOT NULL, `arabicText` TEXT NOT NULL, `englishText` TEXT NOT NULL, `grade` TEXT NOT NULL, `gradingScholar` TEXT NOT NULL, `downloadedAt` INTEGER NOT NULL, PRIMARY KEY(`bookKey`, `languageCode`, `hadithNumber`))"
                 )
                 db.execSQL(
-                    "INSERT INTO `hadith_entries_new` (`bookKey`,`languageCode`,`hadithNumber`,`bookTitle`,`sectionNumber`,`chapterTitle`,`arabicText`,`englishText`,`grade`,`gradingScholar`,`downloadedAt`) SELECT `bookKey`,'eng',`hadithNumber`,`bookTitle`,`sectionNumber`,`chapterTitle`,`arabicText`,`englishText`,`grade`,`gradingScholar`,`downloadedAt` FROM `hadith_entries`"
+                    "INSERT OR REPLACE INTO `hadith_entries_new` (`bookKey`,`languageCode`,`hadithNumber`,`bookTitle`,`sectionNumber`,`chapterTitle`,`arabicText`,`englishText`,`grade`,`gradingScholar`,`downloadedAt`) SELECT `bookKey`,'eng',`hadithNumber`,`bookTitle`,`sectionNumber`,`chapterTitle`,`arabicText`,`englishText`,`grade`,`gradingScholar`,`downloadedAt` FROM `hadith_entries` GROUP BY `bookKey`,`hadithNumber`"
                 )
                 db.execSQL("DROP TABLE `hadith_entries`")
                 db.execSQL("ALTER TABLE `hadith_entries_new` RENAME TO `hadith_entries`")
+            }
+        }
+
+        /**
+         * v7 -> v8 adds Quran reader state (bookmark/last-read/juz) and sadaqah categories,
+         * plus lookup indices for hadith sections.
+         */
+        internal val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `quran_ayahs` ADD COLUMN `juzNumber` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `quran_ayahs` ADD COLUMN `isBookmarked` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `quran_ayahs` ADD COLUMN `lastReadAt` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `sadaqah_logs` ADD COLUMN `category` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_quran_ayahs_juzNumber` ON `quran_ayahs` (`juzNumber`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_quran_ayahs_isBookmarked` ON `quran_ayahs` (`isBookmarked`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_quran_ayahs_lastReadAt` ON `quran_ayahs` (`lastReadAt`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_sadaqah_logs_category` ON `sadaqah_logs` (`category`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_hadith_entries_sectionNumber` ON `hadith_entries` (`sectionNumber`)")
             }
         }
 
@@ -101,20 +118,27 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
         private var INSTANCE: SakinahEncryptedDatabase? = null
 
         fun getInstance(context: Context, passphraseBytes: ByteArray): SakinahEncryptedDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val factory = SupportOpenHelperFactory(passphraseBytes)
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    SakinahEncryptedDatabase::class.java,
-                    DB_NAME
-                )
-                    .openHelperFactory(factory)
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
-                    .addCallback(DatabaseSeeder.createCallback(context.applicationContext) { INSTANCE })
-                    .build()
-                INSTANCE = instance
-                instance
+            INSTANCE?.let { return it }
+            return synchronized(this) {
+                // Re-check inside the lock; two threads can race past the first read.
+                INSTANCE ?: build(context.applicationContext, passphraseBytes).also { INSTANCE = it }
             }
+        }
+
+        private fun build(context: Context, passphraseBytes: ByteArray): SakinahEncryptedDatabase {
+            val factory = SupportOpenHelperFactory(passphraseBytes)
+            return Room.databaseBuilder(
+                context,
+                SakinahEncryptedDatabase::class.java,
+                DB_NAME
+            )
+                .openHelperFactory(factory)
+                .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                // Pre-production builds 1..3 predate the migration chain; their schema
+                // cannot be upgraded safely, so recreate only those legacy versions.
+                .fallbackToDestructiveMigrationFrom(1, 2, 3)
+                .addCallback(DatabaseSeeder.createCallback(context) { INSTANCE })
+                .build()
         }
     }
 }

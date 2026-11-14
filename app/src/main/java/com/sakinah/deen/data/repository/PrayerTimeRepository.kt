@@ -155,20 +155,21 @@ class PrayerTimeRepositoryImpl(
 
         // 1. Cache: fresh authoritative rows work instantly and offline.
         if (cached != null && cached.isFreshOnline(clock())) {
-            return@withContext publish(cached, PrayerTimeSource.CACHE, authority)
+            return@withContext publish(cached, PrayerTimeSource.CACHE, authority, adjustments)
         }
 
         // 2. Network: month missing, context changed, or rows older than the fresh window.
+        // A timezone mismatch in the cache must not suppress a network refresh.
         if (refreshMonth(date, coordinates, authority, schoolId, cacheKey)) {
             val fetched = dao?.getForDay(cacheKey, epochDay)?.takeIf { it.matchesZone(deviceZone) }
             if (fetched != null && fetched.isFreshOnline(clock())) {
-                return@withContext publish(fetched, PrayerTimeSource.ONLINE, authority)
+                return@withContext publish(fetched, PrayerTimeSource.ONLINE, authority, adjustments)
             }
         }
 
         // 3. Offline: keep whatever authoritative row survived, else calculate locally.
         if (cached != null) {
-            return@withContext publish(cached, PrayerTimeSource.CACHE, authority)
+            return@withContext publish(cached, PrayerTimeSource.CACHE, authority, adjustments)
         }
 
         val local = localCalculation(date, coordinates, authority, madhhab, zoneId, adjustments)
@@ -183,15 +184,19 @@ class PrayerTimeRepositoryImpl(
         authority: SunniAuthority,
         schoolId: Int,
         cacheKey: String
-    ): Boolean = mutex.withLock {
+    ): Boolean {
         val now = clock()
-        val existing = dao?.getForKey(cacheKey).orEmpty()
-        if (existing.any { it.isFreshOnline(now) }) return@withLock false
-        if (now - (lastAttemptAt[cacheKey] ?: 0L) < RETRY_THROTTLE_MS) return@withLock false
+        // Only guard the throttle/cache state under the mutex; network I/O stays outside.
+        val shouldFetch = mutex.withLock {
+            val existing = dao?.getForKey(cacheKey).orEmpty()
+            if (existing.any { it.isFreshOnline(now) }) return false
+            if (now - (lastAttemptAt[cacheKey] ?: 0L) < RETRY_THROTTLE_MS) return false
+            lastAttemptAt[cacheKey] = now
+            true
+        }
+        if (!shouldFetch) return false
 
-        val client = apiClient ?: return@withLock false
-        lastAttemptAt[cacheKey] = now
-
+        val client = apiClient ?: return false
         val timetable = client.fetchMonth(
             year = date.year,
             month = date.monthValue,
@@ -199,18 +204,23 @@ class PrayerTimeRepositoryImpl(
             longitude = coordinates.second,
             methodId = authority.methodId,
             schoolId = schoolId
-        ) ?: return@withLock false
+        ) ?: return false
 
-        val rows = timetable.days.map { day ->
+        val rows = timetable.days.mapNotNull { day ->
+            val required = listOf(
+                PrayerType.FAJR, PrayerType.SUNRISE, PrayerType.DHUHR,
+                PrayerType.ASR, PrayerType.MAGHRIB, PrayerType.ISHA
+            )
+            if (required.any { it !in day.times }) return@mapNotNull null
             PrayerTimetableEntity(
                 cacheKey = cacheKey,
                 dateEpochDay = day.date.toEpochDay(),
-                fajr = formatTime(day.times[PrayerType.FAJR]!!),
-                sunrise = formatTime(day.times[PrayerType.SUNRISE]!!),
-                dhuhr = formatTime(day.times[PrayerType.DHUHR]!!),
-                asr = formatTime(day.times[PrayerType.ASR]!!),
-                maghrib = formatTime(day.times[PrayerType.MAGHRIB]!!),
-                isha = formatTime(day.times[PrayerType.ISHA]!!),
+                fajr = formatTime(day.times.getValue(PrayerType.FAJR)),
+                sunrise = formatTime(day.times.getValue(PrayerType.SUNRISE)),
+                dhuhr = formatTime(day.times.getValue(PrayerType.DHUHR)),
+                asr = formatTime(day.times.getValue(PrayerType.ASR)),
+                maghrib = formatTime(day.times.getValue(PrayerType.MAGHRIB)),
+                isha = formatTime(day.times.getValue(PrayerType.ISHA)),
                 methodName = timetable.methodName.ifBlank { authority.displayName },
                 methodId = authority.methodId,
                 schoolId = schoolId,
@@ -219,12 +229,13 @@ class PrayerTimeRepositoryImpl(
                 fetchedAt = now
             )
         }
-        if (rows.isEmpty()) return@withLock false
+        if (rows.isEmpty()) return false
 
-        dao?.replaceMonth(cacheKey, rows)
-        dao?.deleteAllExcept(cacheKey)
-        lastAttemptAt.keys.retainAll(setOf(cacheKey))
-        true
+        mutex.withLock {
+            dao?.replaceMonth(cacheKey, rows)
+            lastAttemptAt.keys.retainAll(setOf(cacheKey))
+        }
+        return true
     }
 
     /**
@@ -267,9 +278,10 @@ class PrayerTimeRepositoryImpl(
     private fun publish(
         row: PrayerTimetableEntity,
         source: PrayerTimeSource,
-        authority: SunniAuthority
+        authority: SunniAuthority,
+        adjustments: PrayerAdjustments = PrayerAdjustments()
     ): ResolvedPrayerTimes {
-        val times = row.toTimesOrNull()
+        val times = row.toTimesOrNull()?.let { applyAdjustments(it, adjustments) }
             ?: return publishEmptyFallback(authority)
         remember(row.cacheKey, row.dateEpochDay, times)
         return ResolvedPrayerTimes(
@@ -295,6 +307,22 @@ class PrayerTimeRepositoryImpl(
         authority = authority,
         fetchedAtEpochMillis = fetchedAt
     )
+
+    /** Applies the user's per-prayer offsets consistently to cached and fetched rows. */
+    private fun applyAdjustments(
+        times: Map<PrayerType, LocalTime>,
+        adjustments: PrayerAdjustments
+    ): Map<PrayerType, LocalTime> = times.mapValues { (type, time) ->
+        val minutes = when (type) {
+            PrayerType.FAJR -> adjustments.fajrMinutes
+            PrayerType.SUNRISE -> adjustments.sunriseMinutes
+            PrayerType.DHUHR -> adjustments.dhuhrMinutes
+            PrayerType.ASR -> adjustments.asrMinutes
+            PrayerType.MAGHRIB -> adjustments.maghribMinutes
+            PrayerType.ISHA -> adjustments.ishaMinutes
+        }
+        if (minutes == 0) time else time.plusMinutes(minutes.toLong())
+    }
 
     private fun publishEmptyFallback(authority: SunniAuthority) = ResolvedPrayerTimes(
         times = emptyMap(),

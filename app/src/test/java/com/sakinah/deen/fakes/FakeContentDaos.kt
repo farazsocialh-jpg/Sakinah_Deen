@@ -62,6 +62,9 @@ class FakeQuranDao : QuranDao {
         )
     }
 
+    override fun searchAyahsEscaped(query: String, limit: Int): Flow<List<QuranAyahEntity>> =
+        searchAyahs(query, limit)
+
     override suspend fun getAyah(surahNumber: Int, ayahNumber: Int): QuranAyahEntity? =
         ayahs[surahNumber to ayahNumber]
 
@@ -132,7 +135,7 @@ class FakeHadithDao : HadithDao {
         )
     }
 
-    override fun searchHadiths(query: String, limit: Int): Flow<List<HadithEntryEntity>> = flow {
+    override fun searchHadithsEscaped(query: String, limit: Int): Flow<List<HadithEntryEntity>> = flow {
         emit(
             entries.values
                 .filter {

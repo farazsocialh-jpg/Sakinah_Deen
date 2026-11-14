@@ -1,5 +1,6 @@
 package com.sakinah.deen.data.database.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -31,7 +32,7 @@ data class QadhaLedgerEntity(
 @Entity(
     tableName = "hifz_mistakes",
     primaryKeys = ["surahNumber", "ayahNumber", "wordPosition"],
-    indices = [Index("lastReviewedTimestamp")]
+    indices = [Index("lastReviewedTimestamp"), Index("surahNumber")]
 )
 data class HifzMistakeEntity(
     val surahNumber: Int,
@@ -43,7 +44,7 @@ data class HifzMistakeEntity(
 
 @Entity(
     tableName = "sadaqah_logs",
-    indices = [Index("timestamp")]
+    indices = [Index("timestamp"), Index("category")]
 )
 data class SadaqahLogEntity(
     @PrimaryKey
@@ -51,7 +52,9 @@ data class SadaqahLogEntity(
     val amount: Double,
     val currency: String = "USD",
     val note: String? = null,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    @ColumnInfo(defaultValue = "")
+    val category: String = ""
 )
 
 /**
@@ -60,7 +63,8 @@ data class SadaqahLogEntity(
  */
 @Entity(
     tableName = "quran_ayahs",
-    primaryKeys = ["surahNumber", "ayahNumber"]
+    primaryKeys = ["surahNumber", "ayahNumber"],
+    indices = [Index("juzNumber"), Index("isBookmarked"), Index("lastReadAt")]
 )
 data class QuranAyahEntity(
     val surahNumber: Int,
@@ -73,6 +77,12 @@ data class QuranAyahEntity(
     val surahNameEnglish: String? = null,
     val surahNameArabic: String? = null,
     val revelationPlace: String? = null,
+    @ColumnInfo(defaultValue = "0")
+    val juzNumber: Int = 0,
+    @ColumnInfo(defaultValue = "0")
+    val isBookmarked: Boolean = false,
+    @ColumnInfo(defaultValue = "0")
+    val lastReadAt: Long = 0,
     val downloadedAt: Long = System.currentTimeMillis()
 )
 
@@ -109,7 +119,8 @@ data class SurahMetadataEntity(
  */
 @Entity(
     tableName = "hadith_entries",
-    primaryKeys = ["bookKey", "languageCode", "hadithNumber"]
+    primaryKeys = ["bookKey", "languageCode", "hadithNumber"],
+    indices = [Index("sectionNumber")]
 )
 data class HadithEntryEntity(
     val bookKey: String,

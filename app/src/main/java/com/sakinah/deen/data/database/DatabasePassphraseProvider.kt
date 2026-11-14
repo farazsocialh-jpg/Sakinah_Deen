@@ -94,5 +94,8 @@ object DatabasePassphraseProvider {
             val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
             if (keyStore.containsAlias(KEYSTORE_ALIAS)) keyStore.deleteEntry(KEYSTORE_ALIAS)
         }
+        // The old database was encrypted with the key we just discarded, so it can never
+        // be opened again. Remove it before the new passphrase creates a fresh database.
+        runCatching { appContext.deleteDatabase("sakinah_encrypted.db") }
     }
 }

@@ -6,12 +6,19 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.sakinah.deen.data.database.SakinahEncryptedDatabase
 import com.sakinah.deen.data.database.dao.TafsirDao
 import com.sakinah.deen.data.model.TafseerEntry
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -94,7 +101,7 @@ class TafseerDownloadRepository(
             TafseerPackage(
                 id = "al_saadi_ur",
                 author = "Taysir al-Karim al-Rahman (Al-Sa'di)",
-                languageCode = "ar",
+                languageCode = "ur",
                 filename = "tafsir_saadi_ur.db",
                 remoteCdnUrl = "https://cdn.sakinah.deen/tafseer/tafsir_saadi_ur.db",
                 sizeBytes = 14_800_000L,
@@ -114,8 +121,16 @@ class TafseerDownloadRepository(
 
     val packages: Flow<List<TafseerPackage>> = _packages.asStateFlow()
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val packageMutexes = mutableMapOf<String, Mutex>()
+
+    private fun mutexFor(packageId: String): Mutex = synchronized(packageMutexes) {
+        packageMutexes.getOrPut(packageId) { Mutex() }
+    }
+
     init {
-        checkLocalDownloads()
+        // Disk scans must never run on the constructing (main) thread.
+        scope.launch { checkLocalDownloads() }
     }
 
     /**
@@ -124,11 +139,12 @@ class TafseerDownloadRepository(
      */
     private fun checkLocalDownloads() {
         deleteEmptyTafseerDatabases()
-        val updated = _packages.value.map { pkg ->
-            val file = databaseFile(pkg)
-            pkg.copy(isDownloaded = databaseHasEntries(file))
+        _packages.update { packages ->
+            packages.map { pkg ->
+                val file = databaseFile(pkg)
+                pkg.copy(isDownloaded = databaseHasEntries(file))
+            }
         }
-        _packages.value = updated
     }
 
     /**
@@ -137,16 +153,17 @@ class TafseerDownloadRepository(
      */
     suspend fun refreshDownloadStatus() = withContext(Dispatchers.IO) {
         deleteEmptyTafseerDatabases()
-        val updated = _packages.value.map { pkg ->
-            val file = databaseFile(pkg)
-            val fileCount = if (databaseHasEntries(file)) 1 else 0
-            val roomCount = tafsirDao
-                ?.takeIf { pkg.tafsirId > 0 }
-                ?.countForSource("tafsir_${pkg.tafsirId}")
-                ?: 0
-            pkg.copy(isDownloaded = fileCount > 0 || roomCount > 0)
+        _packages.update { packages ->
+            packages.map { pkg ->
+                val file = databaseFile(pkg)
+                val fileCount = if (databaseHasEntries(file)) 1 else 0
+                val roomCount = tafsirDao
+                    ?.takeIf { pkg.tafsirId > 0 }
+                    ?.countForSource("tafsir_${pkg.tafsirId}")
+                    ?: 0
+                pkg.copy(isDownloaded = fileCount > 0 || roomCount > 0)
+            }
         }
-        _packages.value = updated
     }
 
     suspend fun downloadTafseerPackage(
@@ -156,6 +173,7 @@ class TafseerDownloadRepository(
         val pkg = _packages.value.find { it.id == packageId }
             ?: return@withContext Result.failure(IllegalArgumentException("Tafseer package $packageId not found"))
 
+        mutexFor(packageId).withLock {
         val targetFile = databaseFile(pkg)
         val tempFile = File(targetFile.absolutePath + ".download")
         targetFile.parentFile?.mkdirs()
@@ -181,6 +199,7 @@ class TafseerDownloadRepository(
                         var downloaded = 0L
 
                         while (input.read(buffer).also { bytesRead = it } != -1) {
+                            ensureActive()
                             output.write(buffer, 0, bytesRead)
                             downloaded += bytesRead
                             if (totalLength > 0) {
@@ -205,8 +224,8 @@ class TafseerDownloadRepository(
                 tempFile.delete()
             }
 
-            _packages.value = _packages.value.map {
-                if (it.id == packageId) it.copy(isDownloaded = true) else it
+            _packages.update { packages ->
+                packages.map { if (it.id == packageId) it.copy(isDownloaded = true) else it }
             }
 
             Result.success(targetFile)
@@ -214,6 +233,7 @@ class TafseerDownloadRepository(
             tempFile.delete()
             if (e is kotlinx.coroutines.CancellationException) throw e
             Result.failure(e)
+        }
         }
     }
 
@@ -223,8 +243,8 @@ class TafseerDownloadRepository(
         databaseFile(pkg).delete()
         File(databaseFile(pkg).absolutePath + ".download").delete()
         tafsirDao?.deleteBySource("tafsir_${pkg.tafsirId}")
-        _packages.value = _packages.value.map {
-            if (it.id == packageId) it.copy(isDownloaded = false) else it
+        _packages.update { packages ->
+            packages.map { if (it.id == packageId) it.copy(isDownloaded = false) else it }
         }
     }
 
@@ -235,7 +255,7 @@ class TafseerDownloadRepository(
             databaseFile(pkg).delete()
             File(databaseFile(pkg).absolutePath + ".download").delete()
         }
-        _packages.value = _packages.value.map { it.copy(isDownloaded = false) }
+        _packages.update { packages -> packages.map { it.copy(isDownloaded = false) } }
     }
 
     suspend fun attachTafseerDatabase(

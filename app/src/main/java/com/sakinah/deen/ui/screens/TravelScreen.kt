@@ -42,7 +42,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -60,9 +59,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
 import com.sakinah.deen.domain.sensor.QiblaSensorManager
+import com.sakinah.deen.domain.travel.SafarPolicy
 import com.sakinah.deen.domain.travel.TravelStatusManager
 import com.sakinah.deen.ui.components.ArabicVerseBlock
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
@@ -83,7 +86,7 @@ fun TravelScreen(
     val travelManager = rememberInject<TravelStatusManager>()
     val qiblaManager = rememberInject<QiblaSensorManager>()
 
-    val compassData by qiblaManager.compassFlow.collectAsState()
+    val compassData by qiblaManager.compassFlow.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
     LaunchedEffect(compassData.isAligned, compassData.isFlat) {
         if (compassData.isAligned && compassData.isFlat) {
@@ -92,7 +95,7 @@ fun TravelScreen(
     }
 
     var distanceKm by remember { mutableFloatStateOf(0f) }
-    val thresholdKm = 88f
+    val thresholdKm = SafarPolicy.THRESHOLD_KM.toFloat()
     var isSafar by remember { mutableStateOf(false) }
     var homeCoordinates by remember { mutableStateOf(appPrefs.homeCoordinates) }
     var homeCity by remember { mutableStateOf(appPrefs.homeCityName) }
@@ -130,8 +133,14 @@ fun TravelScreen(
         gpsHomeRequested = false
     }
 
-    LaunchedEffect(Unit) {
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         qiblaManager.startListening()
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
+        qiblaManager.stopListening()
+    }
+
+    LaunchedEffect(Unit) {
         val resolved = locationProvider.getFreshOrCachedLocation()
         val loc = Location("").apply {
             latitude = resolved.latitude
@@ -221,7 +230,7 @@ fun TravelScreen(
 
                 Button(
                     onClick = {
-                        distanceKm = if (distanceKm >= 88f) 45f else 95f
+                        distanceKm = if (distanceKm >= thresholdKm) thresholdKm / 2 else thresholdKm + 15f
                         isSafar = distanceKm >= thresholdKm
                     },
                     shape = RoundedCornerShape(12.dp),
@@ -231,7 +240,11 @@ fun TravelScreen(
                     )
                 ) {
                     Text(
-                        text = if (isSafar) "Simulate Local Return (<88km)" else "Simulate Travel Departure (>88km)",
+                        text = if (isSafar) {
+                            "Simulate Local Return (<${thresholdKm.toInt()}km)"
+                        } else {
+                            "Simulate Travel Departure (>${thresholdKm.toInt()}km)"
+                        },
                         fontSize = 11.sp
                     )
                 }

@@ -19,7 +19,19 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.sp
 
-private val INLINE_QURAN_REGEX = Regex("""\b(\d{1,3})\s*:\s*(\d{1,3})\b""")
+private val INLINE_QURAN_REGEX = Regex("""\b(\d{1,3})\s*:\s*(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?\b""")
+
+/** Number of ayat in each surah, indexed from surah 1. */
+private val AYAH_COUNTS = intArrayOf(
+    7, 286, 200, 176, 120, 165, 206, 75, 129, 109, 123, 111, 43, 52, 99, 128, 111,
+    110, 98, 135, 112, 78, 118, 64, 77, 227, 93, 88, 69, 60, 34, 30, 73, 54, 45, 83,
+    182, 88, 75, 85, 54, 53, 89, 59, 37, 35, 38, 29, 18, 45, 60, 49, 62, 55, 78, 96,
+    29, 22, 24, 13, 14, 11, 11, 18, 12, 12, 30, 52, 52, 44, 28, 28, 20, 56, 40, 31,
+    50, 40, 46, 42, 29, 19, 36, 25, 22, 17, 19, 26, 30, 20, 15, 21, 11, 8, 8, 19, 5,
+    8, 8, 11, 11, 8, 3, 9, 5, 4, 7, 3, 6, 3, 5, 4, 5, 6
+)
+
+private fun isIdentifierChar(c: Char): Boolean = c.isLetterOrDigit()
 private val INLINE_HADITH_REGEX = Regex(
     """(?i)\b(Sahih\s+al-?Bukhari|Bukhari|Sahih\s+Muslim|Muslim|Abu\s+Dawud|Tirmidhi|Nasa'?i|Ibn\s+Majah|Muwatta|Malik|Nawawi)\b[^.\n]{0,40}?\b(?:No\.?|Hadith|#|:)?\s*(\d{1,5})\b"""
 )
@@ -88,9 +100,23 @@ private fun parseMarkdown(raw: String, blockquoteColor: Color): ParsedMarkdown {
                         out.append(line[i]); i++
                     }
                 }
-                line[i] == '*' || line[i] == '_' -> {
-                    val close = line.indexOf(line[i], i + 1)
+                line[i] == '*' -> {
+                    val close = line.indexOf('*', i + 1)
                     if (close > i + 1) {
+                        val start = out.length
+                        out.append(line.substring(i + 1, close))
+                        spans += MarkdownSpan(start until out.length, SpanStyle(fontStyle = FontStyle.Italic))
+                        i = close + 1
+                    } else {
+                        out.append(line[i]); i++
+                    }
+                }
+                line[i] == '_' -> {
+                    val boundaryBefore = i == 0 || !isIdentifierChar(line[i - 1])
+                    val close = if (boundaryBefore) line.indexOf('_', i + 1) else -1
+                    val boundaryAfter = close > 0 &&
+                        (close == line.lastIndex || !isIdentifierChar(line[close + 1]))
+                    if (close > i + 1 && boundaryAfter) {
                         val start = out.length
                         out.append(line.substring(i + 1, close))
                         spans += MarkdownSpan(start until out.length, SpanStyle(fontStyle = FontStyle.Italic))
@@ -184,7 +210,8 @@ fun ClickableCitationText(
                     rawBook.contains("nasai") || rawBook.contains("nasa'i") -> "nasai"
                     rawBook.contains("majah") -> "ibnmajah"
                     rawBook.contains("nawawi") -> "nawawi"
-                    else -> "malik"
+                    rawBook.contains("muwatta") || rawBook.contains("malik") -> "malik"
+                    else -> return@forEach
                 }
                 val sectionHint = extractSectionHint(plain, match.range)
                 add(CitationHit(range = match.range, hadith = Triple(bookKey, number, sectionHint)))
@@ -192,7 +219,9 @@ fun ClickableCitationText(
             INLINE_QURAN_REGEX.findAll(plain).forEach { match ->
                 val surah = match.groupValues[1].toIntOrNull() ?: return@forEach
                 val ayah = match.groupValues[2].toIntOrNull() ?: return@forEach
-                if (surah in 1..114 && ayah >= 1) {
+                val endAyah = match.groupValues.getOrNull(3)?.toIntOrNull() ?: ayah
+                val maxAyah = AYAH_COUNTS.getOrNull(surah - 1) ?: return@forEach
+                if (ayah >= 1 && endAyah >= ayah && endAyah <= maxAyah) {
                     add(CitationHit(range = match.range, quran = surah to ayah))
                 }
             }

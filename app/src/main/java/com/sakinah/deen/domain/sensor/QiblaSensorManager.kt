@@ -22,8 +22,8 @@ import kotlin.math.tan
 
 data class QiblaCompassData(
     val azimuthTrueNorthDeg: Float = 0f,
-    val kaabaBearingDeg: Float = 118f,
-    val needleRelativeAngleDeg: Float = 118f,
+    val kaabaBearingDeg: Float = 0f,
+    val needleRelativeAngleDeg: Float = 0f,
     val accuracy: Int = SensorManager.SENSOR_STATUS_ACCURACY_HIGH,
     val isVehicularTrajectoryActive: Boolean = false,
     val magneticDeclinationDeg: Float = 0f,
@@ -93,9 +93,7 @@ class QiblaSensorManager(
                 return 0f
             }
 
-            val a = WGS84_SEMI_MAJOR_AXIS_M
             val f = WGS84_FLATTENING
-            val b = a * (1.0 - f)
 
             val phi1 = Math.toRadians(latitude1)
             val phi2 = Math.toRadians(latitude2)
@@ -194,7 +192,8 @@ class QiblaSensorManager(
     // Location state for GeomagneticField declination and Kaaba bearing
     private var lastKnownLocation: Location? = null
     private var magneticDeclination = 0f
-    private var kaabaBearing = 118f // Default London-to-Mecca bearing
+    private var kaabaBearing = 0f
+    private var isListening = false
 
     val hasCompassSensor: Boolean
         get() = rotationVectorSensor != null ||
@@ -215,11 +214,14 @@ class QiblaSensorManager(
         // Industry-standard ellipsoidal Qibla bearing.
         kaabaBearing = calculateKaabaBearing(location.latitude, location.longitude)
 
-        evaluateHeadingOutput(smoothedAzimuth, tiltDeg, isVehicular = false)
+        val isVehicular = location.hasSpeed() &&
+            (location.speed * 3.6f) > VEHICLE_SPEED_THRESHOLD_KMH
+        evaluateHeadingOutput(smoothedAzimuth, tiltDeg, isVehicular = isVehicular)
     }
 
     fun startListening() {
-        if (sensorManager == null) return
+        if (sensorManager == null || isListening) return
+        isListening = true
 
         if (rotationVectorSensor != null) {
             sensorManager.registerListener(
@@ -244,6 +246,10 @@ class QiblaSensorManager(
 
     fun stopListening() {
         sensorManager?.unregisterListener(this)
+        isListening = false
+        hasAccelerometer = false
+        hasMagnetometer = false
+        hasHeading = false
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -251,14 +257,6 @@ class QiblaSensorManager(
         val isVehicleMovingFast = location != null &&
                 location.hasSpeed() &&
                 (location.speed * 3.6f) > VEHICLE_SPEED_THRESHOLD_KMH
-
-        if (isVehicleMovingFast && location.hasBearing()) {
-            // Over vehicular speed threshold (>15 km/h): prioritize GPS trajectory heading.
-            // GPS bearings are true-north referenced, so no declination is applied.
-            val vehicleHeading = (location.bearing + 360f) % 360f
-            applyHeading(vehicleHeading, isVehicular = true)
-            return
-        }
 
         when (event.sensor.type) {
             Sensor.TYPE_ROTATION_VECTOR -> {
@@ -273,7 +271,14 @@ class QiblaSensorManager(
                 val trueNorthAzimuth = (magneticAzimuthDeg + magneticDeclination + 360f) % 360f
                 tiltDeg = calculateTilt(orientationAngles)
 
-                applyHeading(trueNorthAzimuth, isVehicular = false)
+                val vehicleHeading = location?.takeIf { isVehicleMovingFast && it.hasBearing() }
+                if (vehicleHeading != null) {
+                    // Over the vehicular speed threshold: prioritize the true-north GPS
+                    // trajectory, but keep processing tilt/magnetic sensors below.
+                    applyHeading((vehicleHeading.bearing + 360f) % 360f, isVehicular = true)
+                } else {
+                    applyHeading(trueNorthAzimuth, isVehicular = false)
+                }
             }
 
             Sensor.TYPE_ACCELEROMETER -> {
@@ -369,10 +374,15 @@ class QiblaSensorManager(
         }
     }
 
-    @Suppress("DEPRECATION")
     private fun currentDisplayRotation(): Int {
-        val windowManager = appContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
-        return windowManager?.defaultDisplay?.rotation ?: Surface.ROTATION_0
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            appContext.display?.rotation ?: Surface.ROTATION_0
+        } else {
+            @Suppress("DEPRECATION")
+            val windowManager = appContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+            @Suppress("DEPRECATION")
+            windowManager?.defaultDisplay?.rotation ?: Surface.ROTATION_0
+        }
     }
 
     private fun calculateTilt(orientation: FloatArray): Float {

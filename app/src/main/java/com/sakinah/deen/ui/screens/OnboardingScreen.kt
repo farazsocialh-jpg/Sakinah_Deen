@@ -2,6 +2,7 @@ package com.sakinah.deen.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,17 +34,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.sakinah.deen.ui.theme.EmeraldDeep
-import com.sakinah.deen.ui.theme.MintGreen
 import com.sakinah.deen.ui.theme.PrayerGuideGender
 
 enum class JourneyTrack {
@@ -53,13 +53,13 @@ enum class JourneyTrack {
 
 @Composable
 fun OnboardingScreen(
-    onContinue: (PrayerGuideGender) -> Unit,
+    onContinue: (JourneyTrack, Boolean, PrayerGuideGender) -> Unit,
     initialGender: PrayerGuideGender = PrayerGuideGender.MALE,
     modifier: Modifier = Modifier
 ) {
-    var selectedTrack by remember { mutableStateOf(JourneyTrack.NEW_TO_ISLAM) }
-    var selectedGender by remember(initialGender) { mutableStateOf(initialGender) }
-    var isHanafiAsr by remember { mutableStateOf(false) }
+    var selectedTrack by rememberSaveable { mutableStateOf(JourneyTrack.NEW_TO_ISLAM) }
+    var selectedGender by rememberSaveable { mutableStateOf(initialGender) }
+    var isHanafiAsr by rememberSaveable { mutableStateOf(false) }
 
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
@@ -158,7 +158,7 @@ fun OnboardingScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Asr Juristic Method",
                             style = MaterialTheme.typography.bodyMedium,
@@ -182,16 +182,18 @@ fun OnboardingScreen(
 
         // 5. Bottom Action Button
         Button(
-            onClick = { onContinue(selectedGender) },
+            onClick = { onContinue(selectedTrack, isHanafiAsr, selectedGender) },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
             shape = RoundedCornerShape(28.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MintGreen)
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            )
         ) {
             Text(
                 text = "Continue to Daily Home",
-                color = EmeraldDeep,
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp
             )
@@ -208,7 +210,11 @@ private fun GenderChoiceCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.clickable { onClick() },
+        modifier = modifier.selectable(
+            selected = isSelected,
+            onClick = onClick,
+            role = Role.RadioButton
+        ),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) {
@@ -237,7 +243,7 @@ private fun GenderChoiceCard(
                     MaterialTheme.colorScheme.onSurface
                 }
             )
-            RadioButton(selected = isSelected, onClick = onClick)
+            RadioButton(selected = isSelected, onClick = null)
         }
     }
 }
@@ -256,11 +262,15 @@ private fun TrackCardItem(
             .clickable { onClick() },
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) MintGreen.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface
+            containerColor = if (isSelected) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
         ),
         border = BorderStroke(
             width = if (isSelected) 2.dp else 1.dp,
-            color = if (isSelected) MintGreen else MaterialTheme.colorScheme.outline
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
         )
     ) {
         Row(
