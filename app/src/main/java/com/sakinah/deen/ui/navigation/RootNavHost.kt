@@ -12,6 +12,10 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -51,6 +55,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.R
 import com.sakinah.deen.data.prefs.AppearancePreferences
@@ -109,7 +114,7 @@ private fun startScreenForObjective(objective: UserObjective): SakinahScreen =
         else -> SakinahScreen.DailySalah
     }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun RootNavHost() {
     val koinStarted = remember { GlobalContext.getOrNull() != null }
@@ -223,6 +228,7 @@ fun RootNavHost() {
     }
 
     val autoHideBars = appearanceConfig.autoHideBarsOnScroll
+    val imeVisible = WindowInsets.isImeVisible
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     var bottomBarHidden by rememberSaveable { mutableStateOf(false) }
 
@@ -327,7 +333,7 @@ fun RootNavHost() {
         },
         bottomBar = {
             AnimatedVisibility(
-                visible = currentScreen in topLevelTabs && (!autoHideBars || !bottomBarHidden),
+                visible = currentScreen in topLevelTabs && (!autoHideBars || !bottomBarHidden) && !imeVisible,
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
             ) {
@@ -372,7 +378,9 @@ fun RootNavHost() {
             targetState = currentScreen,
             transitionSpec = { fadeIn() togetherWith fadeOut() },
             label = "SakinahScreenTransition",
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(
+                if (currentScreen == SakinahScreen.AiScholar) PaddingValues(0.dp) else innerPadding
+            )
         ) { screen ->
             when (screen) {
                 SakinahScreen.Onboarding -> {
@@ -463,7 +471,8 @@ fun RootNavHost() {
                             hadithDeepLinkNonce++
                             navigateTo(SakinahScreen.Hadith)
                         },
-                        viewModel = aiScholarVm
+                        viewModel = aiScholarVm,
+                        contentPadding = innerPadding
                     )
                 }
                 SakinahScreen.Auth -> {

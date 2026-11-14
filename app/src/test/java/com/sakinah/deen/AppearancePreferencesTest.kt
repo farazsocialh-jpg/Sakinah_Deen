@@ -40,7 +40,7 @@ class AppearancePreferencesTest {
             experienceLevel = "Student of Knowledge",
             objective = UserObjective.QURAN_STUDY,
             themeMode = ThemeMode.DARK,
-            palette = SakinahPalette.MADINAH_TEAL,
+            palette = SakinahPalette.PURE_MONOCHROME,
             fontScale = FontScalePreset.COMFORTABLE,
             focusModeHideDistractions = true,
             autoHideBarsOnScroll = false,
@@ -81,7 +81,7 @@ class AppearancePreferencesTest {
         store.saveConfig(saved)
 
         val preview = saved.copy(
-            palette = SakinahPalette.MIDNIGHT_TAHAJJUD,
+            palette = SakinahPalette.ANDALUSIAN_SAPPHIRE,
             themeMode = ThemeMode.DARK,
             fontScale = FontScalePreset.LARGE
         )
@@ -102,7 +102,7 @@ class AppearancePreferencesTest {
             UserAppearanceConfig(
                 userName = "Bilal",
                 objective = UserObjective.HADITH_SCHOLAR,
-                palette = SakinahPalette.MECCAN_SAND,
+                palette = SakinahPalette.MADINAH_SAND,
                 onboardingCompleted = true
             )
         )
@@ -112,7 +112,7 @@ class AppearancePreferencesTest {
         assertFalse(current.onboardingCompleted)
         assertEquals("Bilal", current.userName)
         assertEquals(UserObjective.HADITH_SCHOLAR, current.objective)
-        assertEquals(SakinahPalette.MECCAN_SAND, current.palette)
+        assertEquals(SakinahPalette.MADINAH_SAND, current.palette)
     }
 
     @Test

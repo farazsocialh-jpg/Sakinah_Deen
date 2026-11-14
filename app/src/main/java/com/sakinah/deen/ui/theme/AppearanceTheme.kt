@@ -54,29 +54,29 @@ enum class SakinahPalette(
         darkPreviewPrimary = NightMintAccent,
         darkPreviewBg = NightBackground
     ),
-    MECCAN_SAND(
-        label = "Meccan Sand",
-        subtitle = "Limestone parchment & bronze gold",
+    MADINAH_SAND(
+        label = "Madinah Sand",
+        subtitle = "Warm sand & muted gold",
         lightPreviewPrimary = Color(0xFF6B4423),
         lightPreviewAccent = Color(0xFFB4823E),
         darkPreviewPrimary = Color(0xFFE0B36B),
         darkPreviewBg = Color(0xFF14100C)
     ),
-    MADINAH_TEAL(
-        label = "Madinah Teal",
-        subtitle = "Alabaster & serene Nabawi teal",
-        lightPreviewPrimary = Color(0xFF0E4D5C),
-        lightPreviewAccent = Color(0xFF14919B),
-        darkPreviewPrimary = Color(0xFF4FD1C5),
-        darkPreviewBg = Color(0xFF07161A)
-    ),
-    MIDNIGHT_TAHAJJUD(
-        label = "Midnight Crescent",
+    ANDALUSIAN_SAPPHIRE(
+        label = "Andalusian Sapphire",
         subtitle = "Deep sapphire & silver starlight",
         lightPreviewPrimary = Color(0xFF1E3A5F),
         lightPreviewAccent = Color(0xFF3B82F6),
         darkPreviewPrimary = Color(0xFF93C5FD),
         darkPreviewBg = Color(0xFF070B14)
+    ),
+    PURE_MONOCHROME(
+        label = "Black & White",
+        subtitle = "Pure monochrome, with an OLED-friendly dark mode",
+        lightPreviewPrimary = Color(0xFF000000),
+        lightPreviewAccent = Color(0xFF2E2E2E),
+        darkPreviewPrimary = Color(0xFFFFFFFF),
+        darkPreviewBg = Color(0xFF000000)
     )
 }
 
@@ -138,7 +138,7 @@ fun buildSakinahColorScheme(palette: SakinahPalette, isDark: Boolean): ColorSche
         )
     }
 
-    SakinahPalette.MECCAN_SAND -> if (isDark) {
+    SakinahPalette.MADINAH_SAND -> if (isDark) {
         darkColorScheme(
             primary = Color(0xFFE0B36B),
             onPrimary = Color(0xFF21160A),
@@ -176,45 +176,45 @@ fun buildSakinahColorScheme(palette: SakinahPalette, isDark: Boolean): ColorSche
         )
     }
 
-    SakinahPalette.MADINAH_TEAL -> if (isDark) {
+    SakinahPalette.PURE_MONOCHROME -> if (isDark) {
         darkColorScheme(
-            primary = Color(0xFF4FD1C5),
-            onPrimary = Color(0xFF062024),
-            primaryContainer = Color(0xFF12373D),
-            onPrimaryContainer = Color(0xFFB2F5EA),
-            secondary = Color(0xFF2CB1BC),
-            onSecondary = Color(0xFF062024),
-            secondaryContainer = Color(0xFF16323A),
-            onSecondaryContainer = Color(0xFFECF8FA),
-            background = Color(0xFF07161A),
-            onBackground = Color(0xFFECF8FA),
-            surface = Color(0xFF0E2329),
-            onSurface = Color(0xFFECF8FA),
-            surfaceVariant = Color(0xFF16323A),
-            onSurfaceVariant = Color(0xFF93B3BA),
-            outline = Color(0xFF1E444E)
+            primary = Color(0xFFFFFFFF),
+            onPrimary = Color(0xFF000000),
+            primaryContainer = Color(0xFF1A1A1A),
+            onPrimaryContainer = Color(0xFFFFFFFF),
+            secondary = Color(0xFFE0E0E0),
+            onSecondary = Color(0xFF000000),
+            secondaryContainer = Color(0xFF121212),
+            onSecondaryContainer = Color(0xFFFFFFFF),
+            background = Color(0xFF000000),
+            onBackground = Color(0xFFFFFFFF),
+            surface = Color(0xFF121212),
+            onSurface = Color(0xFFFFFFFF),
+            surfaceVariant = Color(0xFF1A1A1A),
+            onSurfaceVariant = Color(0xFFBDBDBD),
+            outline = Color(0xFF2E2E2E)
         )
     } else {
         lightColorScheme(
-            primary = Color(0xFF0E4D5C),
-            onPrimary = Color.White,
-            primaryContainer = Color(0xFFCFF2F6),
-            onPrimaryContainer = Color(0xFF0A3945),
-            secondary = Color(0xFF14919B),
-            onSecondary = Color.White,
-            secondaryContainer = Color(0xFFCFF2F6),
-            onSecondaryContainer = Color(0xFF0A3945),
-            background = Color(0xFFF5FAFA),
-            onBackground = Color(0xFF132428),
-            surface = CardSurface,
-            onSurface = Color(0xFF132428),
-            surfaceVariant = Color(0xFFE9F3F4),
-            onSurfaceVariant = Color(0xFF536A6F),
-            outline = Color(0xFFD5E5E7)
+            primary = Color(0xFF000000),
+            onPrimary = Color(0xFFFFFFFF),
+            primaryContainer = Color(0xFFF0F0F0),
+            onPrimaryContainer = Color(0xFF000000),
+            secondary = Color(0xFF2E2E2E),
+            onSecondary = Color(0xFFFFFFFF),
+            secondaryContainer = Color(0xFFF2F2F2),
+            onSecondaryContainer = Color(0xFF000000),
+            background = Color(0xFFFFFFFF),
+            onBackground = Color(0xFF000000),
+            surface = Color(0xFFFFFFFF),
+            onSurface = Color(0xFF000000),
+            surfaceVariant = Color(0xFFF2F2F2),
+            onSurfaceVariant = Color(0xFF4A4A4A),
+            outline = Color(0xFFD9D9D9)
         )
     }
 
-    SakinahPalette.MIDNIGHT_TAHAJJUD -> if (isDark) {
+    SakinahPalette.ANDALUSIAN_SAPPHIRE -> if (isDark) {
         darkColorScheme(
             primary = Color(0xFF93C5FD),
             onPrimary = Color(0xFF091426),
