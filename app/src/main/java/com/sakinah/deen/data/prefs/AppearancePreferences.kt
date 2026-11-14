@@ -3,6 +3,7 @@ package com.sakinah.deen.data.prefs
 import android.content.Context
 import android.content.SharedPreferences
 import com.sakinah.deen.ui.theme.FontScalePreset
+import com.sakinah.deen.ui.theme.PrayerGuideGender
 import com.sakinah.deen.ui.theme.SakinahPalette
 import com.sakinah.deen.ui.theme.ThemeMode
 import com.sakinah.deen.ui.theme.UserAppearanceConfig
@@ -32,6 +33,7 @@ class AppearancePreferences internal constructor(
         private const val KEY_FONT_SCALE = "font_scale_preset"
         private const val KEY_FOCUS_MODE = "focus_mode_hide_distractions"
         private const val KEY_AUTO_HIDE_BARS = "auto_hide_bars_on_scroll"
+        private const val KEY_PRAYER_GUIDE_GENDER = "prayer_guide_gender"
         private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
     }
 
@@ -75,6 +77,7 @@ class AppearancePreferences internal constructor(
             fontScale = safeEnum(KEY_FONT_SCALE, defaults.fontScale),
             focusModeHideDistractions = prefs.getBoolean(KEY_FOCUS_MODE, defaults.focusModeHideDistractions),
             autoHideBarsOnScroll = prefs.getBoolean(KEY_AUTO_HIDE_BARS, defaults.autoHideBarsOnScroll),
+            prayerGuideGender = safeEnum(KEY_PRAYER_GUIDE_GENDER, defaults.prayerGuideGender),
             onboardingCompleted = prefs.getBoolean(KEY_ONBOARDING_COMPLETED, defaults.onboardingCompleted)
         )
     }
@@ -89,6 +92,7 @@ class AppearancePreferences internal constructor(
             .putString(KEY_FONT_SCALE, value.fontScale.name)
             .putBoolean(KEY_FOCUS_MODE, value.focusModeHideDistractions)
             .putBoolean(KEY_AUTO_HIDE_BARS, value.autoHideBarsOnScroll)
+            .putString(KEY_PRAYER_GUIDE_GENDER, value.prayerGuideGender.name)
             .putBoolean(KEY_ONBOARDING_COMPLETED, value.onboardingCompleted)
             .apply()
     }

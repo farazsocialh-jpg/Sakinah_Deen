@@ -80,6 +80,11 @@ enum class SakinahPalette(
     )
 }
 
+enum class PrayerGuideGender(val label: String) {
+    MALE("Brother (Male)"),
+    FEMALE("Sister (Female)")
+}
+
 enum class FontScalePreset(val label: String, val multiplier: Float) {
     COMPACT("Compact", 0.90f),
     STANDARD("Standard", 1.00f),
@@ -96,6 +101,7 @@ data class UserAppearanceConfig(
     val fontScale: FontScalePreset = FontScalePreset.STANDARD,
     val focusModeHideDistractions: Boolean = false,
     val autoHideBarsOnScroll: Boolean = true,
+    val prayerGuideGender: PrayerGuideGender = PrayerGuideGender.MALE,
     val onboardingCompleted: Boolean = false
 )
 

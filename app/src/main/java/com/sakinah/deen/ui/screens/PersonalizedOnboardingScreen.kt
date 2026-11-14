@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import com.sakinah.deen.ui.components.SakinahCard
 import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.theme.FontScalePreset
+import com.sakinah.deen.ui.theme.PrayerGuideGender
 import com.sakinah.deen.ui.theme.SakinahPalette
 import com.sakinah.deen.ui.theme.ThemeMode
 import com.sakinah.deen.ui.theme.UserAppearanceConfig
@@ -242,6 +243,57 @@ fun PersonalizedOnboardingScreen(
                                             null
                                         }
                                     )
+                                }
+                            }
+
+                            Text(
+                                text = "Visual Guide & Prayer Style",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SageAccent
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                PrayerGuideGender.entries.forEach { gender ->
+                                    val selected = config.prayerGuideGender == gender
+                                    Surface(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable {
+                                                updateConfig(config.copy(prayerGuideGender = gender))
+                                            },
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = if (selected) {
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.surface
+                                        },
+                                        contentColor = if (selected) {
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                        border = BorderStroke(
+                                            width = if (selected) 2.dp else 1.dp,
+                                            color = if (selected) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.outline
+                                            }
+                                        )
+                                    ) {
+                                        Text(
+                                            text = gender.label,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 8.dp, vertical = 14.dp),
+                                            textAlign = TextAlign.Center,
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    }
                                 }
                             }
 

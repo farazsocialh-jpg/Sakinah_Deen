@@ -403,7 +403,11 @@ fun RootNavHost() {
             when (screen) {
                 SakinahScreen.Onboarding -> {
                     OnboardingScreen(
-                        onContinue = {
+                        initialGender = appearanceConfig.prayerGuideGender,
+                        onContinue = { gender ->
+                            if (gender != appearanceConfig.prayerGuideGender) {
+                                appearancePrefs.update { it.copy(prayerGuideGender = gender) }
+                            }
                             backStack.clear()
                             currentScreen = SakinahScreen.DailySalah
                         }

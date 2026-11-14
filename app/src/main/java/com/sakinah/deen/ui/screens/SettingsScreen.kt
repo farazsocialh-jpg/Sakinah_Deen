@@ -79,6 +79,7 @@ import com.sakinah.deen.ui.components.SakinahCard
 import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.FontScalePreset
+import com.sakinah.deen.ui.theme.PrayerGuideGender
 import com.sakinah.deen.ui.theme.SakinahPalette
 import com.sakinah.deen.ui.theme.ThemeMode as UiThemeMode
 import kotlinx.coroutines.launch
@@ -457,6 +458,21 @@ fun SettingsScreen(
                                 scope.launch {
                                     repo.updateAppearance(settings.appearance.copy(theme = sharedMode))
                                 }
+                            }
+                        )
+
+                        Text(
+                            text = "Prayer Guide Style",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        SegmentedPillBar(
+                            options = PrayerGuideGender.entries,
+                            selected = appearanceConfig.prayerGuideGender,
+                            labelProvider = { if (it == PrayerGuideGender.MALE) "Male" else "Female" },
+                            onSelect = { gender ->
+                                appearancePrefs.update { it.copy(prayerGuideGender = gender) }
                             }
                         )
 

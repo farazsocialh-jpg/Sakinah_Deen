@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sakinah.deen.ui.theme.EmeraldDeep
 import com.sakinah.deen.ui.theme.MintGreen
+import com.sakinah.deen.ui.theme.PrayerGuideGender
 
 enum class JourneyTrack {
     NEW_TO_ISLAM,
@@ -52,10 +53,12 @@ enum class JourneyTrack {
 
 @Composable
 fun OnboardingScreen(
-    onContinue: () -> Unit,
+    onContinue: (PrayerGuideGender) -> Unit,
+    initialGender: PrayerGuideGender = PrayerGuideGender.MALE,
     modifier: Modifier = Modifier
 ) {
     var selectedTrack by remember { mutableStateOf(JourneyTrack.NEW_TO_ISLAM) }
+    var selectedGender by remember(initialGender) { mutableStateOf(initialGender) }
     var isHanafiAsr by remember { mutableStateOf(false) }
 
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -100,7 +103,32 @@ fun OnboardingScreen(
             onClick = { selectedTrack = JourneyTrack.ISTIQAMAH }
         )
 
-        // 3. Madhhab & Calculation Settings Card
+        // 3. Visual guide gender preference
+        Text(
+            text = "Visual Guide & Prayer Style",
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = "Choose the illustrations shown in the visual Wudu and Salah guide.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            PrayerGuideGender.entries.forEach { gender ->
+                GenderChoiceCard(
+                    label = gender.label,
+                    isSelected = selectedGender == gender,
+                    onClick = { selectedGender = gender },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        // 4. Madhhab & Calculation Settings Card
         Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -152,9 +180,9 @@ fun OnboardingScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 4. Bottom Action Button
+        // 5. Bottom Action Button
         Button(
-            onClick = onContinue,
+            onClick = { onContinue(selectedGender) },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
@@ -169,6 +197,48 @@ fun OnboardingScreen(
             )
         }
     }
+    }
+}
+
+@Composable
+private fun GenderChoiceCard(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.clickable { onClick() },
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
+        ),
+        border = BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = if (isSelected) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
+            )
+            RadioButton(selected = isSelected, onClick = onClick)
+        }
     }
 }
 
