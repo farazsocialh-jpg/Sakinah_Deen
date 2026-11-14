@@ -37,6 +37,7 @@ data class HadithUiState(
     val downloadProgress: Float? = null,
     val bookmarkedIds: Set<String> = emptySet(),
     val targetDeepLinkId: String? = null,
+    val deepLinkToastMessage: String? = null,
     /** True once the encrypted database has supplied at least one hadith. */
     val isFromDatabase: Boolean = false,
     /** Brief notice when a collection does not publish the selected language. */
@@ -52,8 +53,12 @@ sealed class HadithUiIntent {
     data class SearchQueryChanged(val query: String) : HadithUiIntent()
     data class FilterGradeChanged(val grade: String) : HadithUiIntent()
     data class ToggleBookmark(val hadithId: String) : HadithUiIntent()
-    data class NavigateToDeepLink(val hadithIdOrSlug: String) : HadithUiIntent()
+    data class NavigateToDeepLink(
+        val hadithIdOrSlug: String,
+        val sectionHint: String = ""
+    ) : HadithUiIntent()
     data object ClearDeepLinkTarget : HadithUiIntent()
+    data object ClearDeepLinkToast : HadithUiIntent()
     data object ClearSearch : HadithUiIntent()
     data object RetrySync : HadithUiIntent()
 }
@@ -122,7 +127,7 @@ class HadithViewModel(
 
     private var hadithCatalog: List<HadithBookCatalog> = emptyList()
     private var databaseJob: Job? = null
-    private var pendingDeepLinkTarget: Pair<String, Int>? = null
+    private var pendingDeepLinkTarget: Triple<String, Int, String>? = null
     private var hasReceivedDatabaseRows = false
 
     private val initialBookmarks: Set<String> = if (preferences != null) {
@@ -213,8 +218,9 @@ class HadithViewModel(
                 applyFilterAndSearch()
             }
             is HadithUiIntent.ToggleBookmark -> toggleBookmark(intent.hadithId)
-            is HadithUiIntent.NavigateToDeepLink -> navigateToDeepLink(intent.hadithIdOrSlug)
+            is HadithUiIntent.NavigateToDeepLink -> navigateToDeepLink(intent.hadithIdOrSlug, intent.sectionHint)
             is HadithUiIntent.ClearDeepLinkTarget -> _uiState.update { it.copy(targetDeepLinkId = null) }
+            is HadithUiIntent.ClearDeepLinkToast -> _uiState.update { it.copy(deepLinkToastMessage = null) }
             is HadithUiIntent.ClearSearch -> {
                 _uiState.update { it.copy(searchQuery = "") }
                 applyFilterAndSearch()
@@ -263,6 +269,7 @@ class HadithViewModel(
                         _uiState.update {
                             it.copy(errorMessage = "Could not load $bookKey ($effectiveLanguage): ${error.message ?: "network error"}")
                         }
+                        failPendingDeepLink()
                     }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -271,6 +278,7 @@ class HadithViewModel(
                 _uiState.update {
                     it.copy(errorMessage = "Could not load $bookKey ($effectiveLanguage): ${e.message ?: "network error"}")
                 }
+                failPendingDeepLink()
             } finally {
                 _uiState.update { it.copy(isLoading = false, downloadProgress = null) }
             }
@@ -359,14 +367,33 @@ class HadithViewModel(
                     }
 
                     val pending = pendingDeepLinkTarget
-                    val resolvedDeepLink = if (pending != null) {
-                        mapped.firstOrNull {
-                            it.bookKey.equals(pending.first, ignoreCase = true) && it.hadithNumber == pending.second
-                        }?.id
+                    val resolvedModel = if (pending != null) {
+                        val candidates = mapped.filter {
+                            it.bookKey.equals(pending.first, ignoreCase = true) &&
+                                it.hadithNumber == pending.second
+                        }
+                        val section = resolveSectionNumber(pending.third, _uiState.value.sections)
+                        candidates.firstOrNull { hadith ->
+                            pending.third.isBlank() ||
+                                sectionMatches(hadith.chapterTitle, pending.third) ||
+                                (section > 0 && hadith.sectionNumber == section)
+                        } ?: candidates.firstOrNull()
                     } else {
                         null
                     }
-                    if (resolvedDeepLink != null) pendingDeepLinkTarget = null
+                    val resolvedDeepLink = resolvedModel?.id
+                    if (resolvedDeepLink != null) {
+                        pendingDeepLinkTarget = null
+                    } else if (
+                        pending != null &&
+                        pending.third.isNotBlank() &&
+                        _uiState.value.selectedSectionNumber > 0
+                    ) {
+                        // The hinted section did not contain this number; retry against the whole book.
+                        _uiState.update { it.copy(selectedSectionNumber = 0) }
+                        observeDatabaseHadiths()
+                        return@collect
+                    }
 
                     _uiState.update {
                         it.copy(
@@ -374,10 +401,21 @@ class HadithViewModel(
                             isFromDatabase = mapped.isNotEmpty() || it.isFromDatabase,
                             isLoading = false,
                             errorMessage = null,
+                            selectedSectionNumber = resolvedModel?.sectionNumber
+                                ?.takeIf { number -> number > 0 }
+                                ?: it.selectedSectionNumber,
                             targetDeepLinkId = resolvedDeepLink ?: it.targetDeepLinkId
                         )
                     }
                     applyFilterAndSearch()
+                    if (
+                        pendingDeepLinkTarget != null &&
+                        resolvedDeepLink == null &&
+                        mapped.isNotEmpty() &&
+                        _uiState.value.selectedSectionNumber == 0
+                    ) {
+                        failPendingDeepLink()
+                    }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -471,17 +509,42 @@ class HadithViewModel(
         bookmarks: Set<String>
     ): Boolean = canonicalId in bookmarks || "$bookKey-$hadithNumber" in bookmarks
 
-    private fun navigateToDeepLink(hadithIdOrSlug: String) {
+    private fun navigateToDeepLink(hadithIdOrSlug: String, sectionHint: String = "") {
         val cleaned = hadithIdOrSlug.trim().removePrefix("hadith/").removePrefix("hadith-")
         val slashParts = cleaned.replace("-", "/").split("/").filter { it.isNotBlank() }
         val parsedBook = slashParts.firstOrNull { part -> part.all { it.isLetter() } }?.lowercase()
         val parsedNumber = slashParts.lastOrNull { part -> part.all { it.isDigit() } }?.toIntOrNull()
             ?: Regex("#?(\\d+)").findAll(hadithIdOrSlug).lastOrNull()?.groupValues?.getOrNull(1)?.toIntOrNull()
+        val knownBook = parsedBook != null && _uiState.value.books.any {
+            it.key.equals(parsedBook, ignoreCase = true)
+        }
+        if (parsedBook == null || parsedNumber == null || parsedNumber <= 0 || !knownBook) {
+            pendingDeepLinkTarget = null
+            _uiState.update {
+                it.copy(
+                    deepLinkToastMessage = buildManualSearchHint(
+                        parsedBook ?: "Hadith",
+                        parsedNumber ?: 0,
+                        sectionHint
+                    )
+                )
+            }
+            return
+        }
+        val hint = sectionHint.trim().takeIf { it.isNotBlank() }
+        val matchedSection = resolveSectionNumber(hint, _uiState.value.sections)
 
         val target = _uiState.value.hadiths.firstOrNull { h ->
             h.id.equals(hadithIdOrSlug, ignoreCase = true) ||
-                (parsedBook != null && parsedNumber != null && h.bookKey.equals(parsedBook, true) && h.hadithNumber == parsedNumber) ||
-                (parsedBook == null && parsedNumber != null && h.hadithNumber == parsedNumber)
+                (
+                    h.bookKey.equals(parsedBook, true) &&
+                        h.hadithNumber == parsedNumber &&
+                        (
+                            hint == null ||
+                                h.sectionNumber == matchedSection ||
+                                sectionMatches(h.chapterTitle, hint)
+                            )
+                    )
         }
 
         if (target != null) {
@@ -489,20 +552,22 @@ class HadithViewModel(
             _uiState.update {
                 it.copy(
                     selectedBookKey = target.bookKey,
-                    selectedSectionNumber = 0,
+                    selectedSectionNumber = target.sectionNumber.takeIf { number -> number > 0 }
+                        ?: matchedSection,
                     searchQuery = "",
                     filterGrade = "all",
                     targetDeepLinkId = target.id
                 )
             }
             updateDerivedFromCatalog(target.bookKey)
+            observeDatabaseHadiths()
             applyFilterAndSearch()
-        } else if (parsedBook != null && parsedNumber != null) {
-            pendingDeepLinkTarget = parsedBook to parsedNumber
+        } else {
+            pendingDeepLinkTarget = Triple(parsedBook, parsedNumber, hint.orEmpty())
             _uiState.update {
                 it.copy(
                     selectedBookKey = parsedBook,
-                    selectedSectionNumber = 0,
+                    selectedSectionNumber = matchedSection,
                     searchQuery = "",
                     filterGrade = "all"
                 )
@@ -510,6 +575,51 @@ class HadithViewModel(
             updateDerivedFromCatalog(parsedBook)
             syncBook(parsedBook, _uiState.value.selectedLanguageCode)
             observeDatabaseHadiths()
+            applyFilterAndSearch()
         }
     }
+
+    private fun buildManualSearchHint(bookKey: String, number: Int, sectionHint: String): String {
+        val bookTitle = _uiState.value.books.firstOrNull {
+            it.key.equals(bookKey, ignoreCase = true)
+        }?.title ?: bookKey.replaceFirstChar { it.uppercase() }
+        val locationLabel = if (sectionHint.isNotBlank()) "$bookTitle - $sectionHint" else bookTitle
+        val numPart = if (number > 0) "Hadith #$number" else "this Hadith"
+        return "Could not open link. Please search $numPart in [$locationLabel] in the Hadith menu."
+    }
+
+    private fun failPendingDeepLink() {
+        val pending = pendingDeepLinkTarget ?: return
+        pendingDeepLinkTarget = null
+        _uiState.update {
+            it.copy(
+                deepLinkToastMessage = buildManualSearchHint(
+                    pending.first,
+                    pending.second,
+                    pending.third
+                )
+            )
+        }
+    }
+
+    private fun resolveSectionNumber(hint: String?, sections: List<Pair<Int, String>>): Int {
+        if (hint.isNullOrBlank()) return 0
+        return sections.firstOrNull { sectionMatches(it.second, hint) }?.first ?: 0
+    }
+
+    private fun sectionMatches(sectionName: String, hint: String): Boolean {
+        val normalizedSection = normalizeSectionText(sectionName)
+        val normalizedHint = normalizeSectionText(hint)
+        if (normalizedSection.isBlank() || normalizedHint.isBlank()) return false
+        if (normalizedSection.contains(normalizedHint) || normalizedHint.contains(normalizedSection)) return true
+        val keywords = normalizedHint.split(' ').filter { it.length >= 3 }
+        return keywords.any { keyword -> normalizedSection.contains(keyword) }
+    }
+
+    private fun normalizeSectionText(value: String): String = value
+        .lowercase()
+        .replace(Regex("\\b(book|kitab|the|of|al|and)\\b"), " ")
+        .replace(Regex("[^a-z0-9 ]"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
 }

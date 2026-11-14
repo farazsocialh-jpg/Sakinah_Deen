@@ -18,13 +18,31 @@ import androidx.compose.ui.text.withLink
 
 private val INLINE_QURAN_REGEX = Regex("""\b(\d{1,3})\s*:\s*(\d{1,3})\b""")
 private val INLINE_HADITH_REGEX = Regex(
-    """(?i)\b(Sahih\s+al-?Bukhari|Bukhari|Sahih\s+Muslim|Muslim|Abu\s+Dawud|Tirmidhi|Nasa'?i|Ibn\s+Majah|Muwatta|Malik|Nawawi)\s*(?:No.?|#|:)?\s*(\d{1,5})\b"""
+    """(?i)\b(Sahih\s+al-?Bukhari|Bukhari|Sahih\s+Muslim|Muslim|Abu\s+Dawud|Tirmidhi|Nasa'?i|Ibn\s+Majah|Muwatta|Malik|Nawawi)\b[^.\n]{0,40}?\b(?:No\.?|Hadith|#|:)?\s*(\d{1,5})\b"""
 )
+private val SECTION_HINT_REGEX = Regex(
+    """(?i)\b(?:Book\s+of|Kitab(?:\s+al-)?)\s+[A-Za-z'’ -]{2,60}"""
+)
+
+/** Pulls a Kitab/Book phrase out of the citation context around a matched reference. */
+internal fun extractSectionHint(text: String, matchRange: IntRange? = null): String? {
+    val context = if (matchRange == null) {
+        text
+    } else {
+        val start = (matchRange.first - 80).coerceAtLeast(0)
+        val end = (matchRange.last + 81).coerceAtMost(text.length)
+        text.substring(start, end)
+    }
+    return SECTION_HINT_REGEX.find(context)?.value
+        ?.trim()
+        ?.trimEnd('.', ',', ';', ':', ')')
+        ?.takeIf { it.isNotBlank() }
+}
 
 private data class CitationHit(
     val range: IntRange,
     val quran: Pair<Int, Int>? = null,
-    val hadith: Pair<String, Int>? = null
+    val hadith: Triple<String, Int, String?>? = null
 )
 
 @Composable
@@ -32,7 +50,7 @@ fun ClickableCitationText(
     text: String,
     style: TextStyle = MaterialTheme.typography.bodyMedium,
     onQuranClick: (surah: Int, ayah: Int) -> Unit,
-    onHadithClick: (bookKey: String, number: Int) -> Unit,
+    onHadithClick: (bookKey: String, number: Int, sectionHint: String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val linkColor = MaterialTheme.colorScheme.primary
@@ -63,7 +81,8 @@ fun ClickableCitationText(
                     rawBook.contains("nawawi") -> "nawawi"
                     else -> "malik"
                 }
-                add(CitationHit(range = match.range, hadith = bookKey to number))
+                val sectionHint = extractSectionHint(text, match.range)
+                add(CitationHit(range = match.range, hadith = Triple(bookKey, number, sectionHint)))
             }
             INLINE_QURAN_REGEX.findAll(text).forEach { match ->
                 val surah = match.groupValues[1].toIntOrNull() ?: return@forEach
@@ -91,7 +110,9 @@ fun ClickableCitationText(
                     hadith != null -> LinkAnnotation.Clickable(
                         tag = "hadith:${hadith.first}:${hadith.second}",
                         styles = linkStyle,
-                        linkInteractionListener = { currentOnHadithClick(hadith.first, hadith.second) }
+                        linkInteractionListener = {
+                            currentOnHadithClick(hadith.first, hadith.second, hadith.third)
+                        }
                     )
                     else -> null
                 }

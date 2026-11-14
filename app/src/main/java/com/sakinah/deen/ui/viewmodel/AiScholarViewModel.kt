@@ -7,6 +7,7 @@ import com.sakinah.deen.data.model.ChatMessageModel
 import com.sakinah.deen.data.scholar.ScholarChatMessage
 import com.sakinah.deen.data.scholar.ScholarChatSession
 import com.sakinah.deen.data.scholar.ScholarHistoryStore
+import com.sakinah.deen.ui.components.extractSectionHint
 import com.sakinah.deen.network.SunniAiScholarRepository
 import com.sakinah.deen.network.model.ChatMessageDto
 import com.sakinah.deen.network.model.RagQueryRequest
@@ -51,7 +52,11 @@ sealed class AiScholarUiIntent {
 
 sealed class AiScholarNavigationEvent {
     data class NavigateToQuran(val surah: Int, val ayah: Int) : AiScholarNavigationEvent()
-    data class NavigateToHadith(val bookKey: String, val hadithNumber: Int) : AiScholarNavigationEvent()
+    data class NavigateToHadith(
+        val bookKey: String,
+        val hadithNumber: Int,
+        val sectionHint: String? = null
+    ) : AiScholarNavigationEvent()
 }
 
 class AiScholarViewModel(
@@ -397,7 +402,13 @@ class AiScholarViewModel(
                 val parts = deepLink.removePrefix("hadith/").split("/")
                 val book = parts.getOrNull(0)?.lowercase() ?: "bukhari"
                 val num = parts.getOrNull(1)?.toIntOrNull() ?: 1
-                _navigationEvents.emit(AiScholarNavigationEvent.NavigateToHadith(book, num))
+                _navigationEvents.emit(
+                    AiScholarNavigationEvent.NavigateToHadith(
+                        bookKey = book,
+                        hadithNumber = num,
+                        sectionHint = extractSectionHint(sourceTitle)
+                    )
+                )
                 return@launch
             }
 
@@ -422,7 +433,13 @@ class AiScholarViewModel(
                 else -> "bukhari"
             }
             val num = HADITH_NUMBER_REGEX.findAll(sourceTitle).lastOrNull()?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
-            _navigationEvents.emit(AiScholarNavigationEvent.NavigateToHadith(bookKey, num))
+            _navigationEvents.emit(
+                AiScholarNavigationEvent.NavigateToHadith(
+                    bookKey = bookKey,
+                    hadithNumber = num,
+                    sectionHint = extractSectionHint(sourceTitle)
+                )
+            )
         }
     }
 

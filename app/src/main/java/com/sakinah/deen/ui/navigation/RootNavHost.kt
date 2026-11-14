@@ -155,6 +155,7 @@ fun RootNavHost() {
 
     var targetHadithBookKey by rememberSaveable { mutableStateOf("all") }
     var targetHadithNumber by rememberSaveable { mutableIntStateOf(0) }
+    var targetHadithSectionHint by rememberSaveable { mutableStateOf("") }
     var targetHadithSearchQuery by rememberSaveable { mutableStateOf("") }
     var hadithDeepLinkNonce by rememberSaveable { mutableIntStateOf(0) }
 
@@ -444,6 +445,7 @@ fun RootNavHost() {
                     HadithScreen(
                         initialBookKey = targetHadithBookKey,
                         initialHadithNumber = targetHadithNumber,
+                        initialSectionHint = targetHadithSectionHint,
                         initialSearchQuery = targetHadithSearchQuery,
                         deepLinkNonce = hadithDeepLinkNonce,
                         viewModel = hadithVm
@@ -471,6 +473,7 @@ fun RootNavHost() {
                         onNavigateToHadith = {
                             targetHadithBookKey = "all"
                             targetHadithNumber = 0
+                            targetHadithSectionHint = ""
                             targetHadithSearchQuery = ""
                             hadithDeepLinkNonce++
                             navigateTo(SakinahScreen.Hadith)
@@ -481,9 +484,10 @@ fun RootNavHost() {
                             quranDeepLinkNonce++
                             navigateTo(SakinahScreen.Quran)
                         },
-                        onNavigateToHadithDetail = { bookKey, number ->
+                        onNavigateToHadithDetail = { bookKey, number, sectionHint ->
                             targetHadithBookKey = bookKey
                             targetHadithNumber = number
+                            targetHadithSectionHint = sectionHint.orEmpty()
                             targetHadithSearchQuery = ""
                             hadithDeepLinkNonce++
                             navigateTo(SakinahScreen.Hadith)

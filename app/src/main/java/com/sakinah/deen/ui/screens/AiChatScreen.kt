@@ -86,7 +86,7 @@ fun AiChatScreen(
     onNavigateToQuran: () -> Unit = {},
     onNavigateToHadith: () -> Unit = {},
     onNavigateToQuranDetail: ((surah: Int, ayah: Int) -> Unit)? = null,
-    onNavigateToHadithDetail: ((book: String, number: Int) -> Unit)? = null,
+    onNavigateToHadithDetail: ((book: String, number: Int, sectionHint: String?) -> Unit)? = null,
     viewModel: AiScholarViewModel? = null,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     modifier: Modifier = Modifier
@@ -114,7 +114,11 @@ fun AiChatScreen(
                 }
                 is AiScholarNavigationEvent.NavigateToHadith -> {
                     if (onNavigateToHadithDetail != null) {
-                        onNavigateToHadithDetail(event.bookKey, event.hadithNumber)
+                        onNavigateToHadithDetail(
+                            event.bookKey,
+                            event.hadithNumber,
+                            event.sectionHint
+                        )
                     } else {
                         onNavigateToHadith()
                     }
@@ -291,9 +295,9 @@ fun AiChatScreen(
                                             onNavigateToQuran()
                                         }
                                     },
-                                    onHadithClick = { bookKey, number ->
+                                    onHadithClick = { bookKey, number, sectionHint ->
                                         if (onNavigateToHadithDetail != null) {
-                                            onNavigateToHadithDetail(bookKey, number)
+                                            onNavigateToHadithDetail(bookKey, number, sectionHint)
                                         } else {
                                             onNavigateToHadith()
                                         }
