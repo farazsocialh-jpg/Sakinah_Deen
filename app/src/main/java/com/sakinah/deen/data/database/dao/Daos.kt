@@ -304,6 +304,12 @@ interface TafsirDao {
     @Query("SELECT COUNT(*) FROM tafsir_entries WHERE sourceKey = :sourceKey AND surahNumber = :surahNumber")
     suspend fun countForSurah(sourceKey: String, surahNumber: Int): Int
 
+    @Query("SELECT COUNT(*) FROM tafsir_entries WHERE sourceKey = :sourceKey")
+    suspend fun countForSource(sourceKey: String): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(entries: List<TafsirEntryEntity>)
+
+    @Query("DELETE FROM tafsir_entries")
+    suspend fun deleteAll()
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.sakinah.deen.data.database.SakinahEncryptedDatabase
+import com.sakinah.deen.data.database.dao.TafsirDao
 import com.sakinah.deen.data.model.TafseerEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -24,18 +26,42 @@ data class TafseerPackage(
     val filename: String,
     val remoteCdnUrl: String,
     val sizeBytes: Long,
+    /** Quran.com API v4 tafsir resource id used to fill Room's tafsir_entries table. */
+    val tafsirId: Int,
     val isDownloaded: Boolean = false,
     val isAttached: Boolean = false,
     val attachedAlias: String = "tafseer_${id}"
 )
 
 class TafseerDownloadRepository(
-    private val context: Context
+    private val context: Context,
+    private val tafsirDao: TafsirDao? = null
 ) {
-    // NOTE: these CDN hosts are placeholders for a future self-hosted pack mirror.
-    // Until they exist, downloads fall back to a valid empty pre-indexed SQLite file so
-    // ATTACH DATABASE and offline queries keep working. For real tafsir text today use
-    // IslamicDataRepository.syncTafsirForSurah(), which reads the free Quran.com API.
+    companion object {
+        private val TAFSIR_ID_BY_PACK = mapOf(
+            "ibn_kathir_en" to 169,
+            "al_tabari_ar" to 15,
+            "al_qurtubi_ar" to 90,
+            "al_saadi_ur" to 91,
+            "maariful_quran_en" to 168
+        )
+
+        private val PACK_BY_SCHOLAR = mapOf(
+            "Ibn Kathir" to "ibn_kathir_en",
+            "Al-Tabari" to "al_tabari_ar",
+            "Al-Qurtubi" to "al_qurtubi_ar",
+            "Al-Sa'di" to "al_saadi_ur",
+            "Ma'ariful Quran" to "maariful_quran_en"
+        )
+
+        fun tafsirIdForPack(packageId: String): Int? = TAFSIR_ID_BY_PACK[packageId]
+
+        fun tafsirIdForScholar(scholar: String): Int? =
+            PACK_BY_SCHOLAR[scholar]?.let(::tafsirIdForPack)
+
+        fun packIdForScholar(scholar: String): String? = PACK_BY_SCHOLAR[scholar]
+    }
+
     private val _packages = MutableStateFlow(
         listOf(
             TafseerPackage(
@@ -44,7 +70,8 @@ class TafseerDownloadRepository(
                 languageCode = "en",
                 filename = "tafsir_ibnkathir_en.db",
                 remoteCdnUrl = "https://cdn.sakinah.deen/tafseer/tafsir_ibnkathir_en.db",
-                sizeBytes = 18_400_000L
+                sizeBytes = 18_400_000L,
+                tafsirId = 169
             ),
             TafseerPackage(
                 id = "al_tabari_ar",
@@ -52,7 +79,8 @@ class TafseerDownloadRepository(
                 languageCode = "ar",
                 filename = "tafsir_tabari_ar.db",
                 remoteCdnUrl = "https://cdn.sakinah.deen/tafseer/tafsir_tabari_ar.db",
-                sizeBytes = 32_100_000L
+                sizeBytes = 32_100_000L,
+                tafsirId = 15
             ),
             TafseerPackage(
                 id = "al_qurtubi_ar",
@@ -60,15 +88,17 @@ class TafseerDownloadRepository(
                 languageCode = "ar",
                 filename = "tafsir_qurtubi_ar.db",
                 remoteCdnUrl = "https://cdn.sakinah.deen/tafseer/tafsir_qurtubi_ar.db",
-                sizeBytes = 26_700_000L
+                sizeBytes = 26_700_000L,
+                tafsirId = 90
             ),
             TafseerPackage(
                 id = "al_saadi_ur",
                 author = "Taysir al-Karim al-Rahman (Al-Sa'di)",
-                languageCode = "ur",
+                languageCode = "ar",
                 filename = "tafsir_saadi_ur.db",
                 remoteCdnUrl = "https://cdn.sakinah.deen/tafseer/tafsir_saadi_ur.db",
-                sizeBytes = 14_800_000L
+                sizeBytes = 14_800_000L,
+                tafsirId = 91
             ),
             TafseerPackage(
                 id = "maariful_quran_en",
@@ -76,7 +106,8 @@ class TafseerDownloadRepository(
                 languageCode = "en",
                 filename = "tafsir_maariful_quran_en.db",
                 remoteCdnUrl = "https://cdn.sakinah.deen/tafseer/tafsir_maariful_quran_en.db",
-                sizeBytes = 22_500_000L
+                sizeBytes = 22_500_000L,
+                tafsirId = 168
             )
         )
     )
@@ -87,10 +118,33 @@ class TafseerDownloadRepository(
         checkLocalDownloads()
     }
 
+    /**
+     * Verifies package files. A `.db` with zero tafsir rows is not a usable download;
+     * remove it so the UI cannot claim the pack is available offline.
+     */
     private fun checkLocalDownloads() {
+        deleteEmptyTafseerDatabases()
         val updated = _packages.value.map { pkg ->
-            val file = File(context.getDatabasePath(pkg.filename).absolutePath)
-            pkg.copy(isDownloaded = file.exists() && file.length() > 0)
+            val file = databaseFile(pkg)
+            pkg.copy(isDownloaded = databaseHasEntries(file))
+        }
+        _packages.value = updated
+    }
+
+    /**
+     * Reconciles the pack list with Room and on-disk databases. Room is the source of truth
+     * for Quran.com downloads, while a verified attached-pack `.db` is also accepted.
+     */
+    suspend fun refreshDownloadStatus() = withContext(Dispatchers.IO) {
+        deleteEmptyTafseerDatabases()
+        val updated = _packages.value.map { pkg ->
+            val file = databaseFile(pkg)
+            val fileCount = if (databaseHasEntries(file)) 1 else 0
+            val roomCount = tafsirDao
+                ?.takeIf { pkg.tafsirId > 0 }
+                ?.countForSource("tafsir_${pkg.tafsirId}")
+                ?: 0
+            pkg.copy(isDownloaded = fileCount > 0 || roomCount > 0)
         }
         _packages.value = updated
     }
@@ -102,21 +156,26 @@ class TafseerDownloadRepository(
         val pkg = _packages.value.find { it.id == packageId }
             ?: return@withContext Result.failure(IllegalArgumentException("Tafseer package $packageId not found"))
 
-        val targetFile = File(context.getDatabasePath(pkg.filename).absolutePath)
+        val targetFile = databaseFile(pkg)
+        val tempFile = File(targetFile.absolutePath + ".download")
         targetFile.parentFile?.mkdirs()
+        tempFile.delete()
 
         try {
-            // Attempt download from remote CDN
             val url = URL(pkg.remoteCdnUrl)
             val connection = url.openConnection() as HttpURLConnection
-            connection.connectTimeout = 15000
-            connection.readTimeout = 15000
+            try {
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
 
-            val responseCode = connection.responseCode
-            if (responseCode == HttpURLConnection.HTTP_OK) {
+                val responseCode = connection.responseCode
+                if (responseCode != HttpURLConnection.HTTP_OK) {
+                    throw IOException("Tafsir download failed with HTTP $responseCode")
+                }
+
                 val totalLength = connection.contentLength.toFloat()
                 connection.inputStream.use { input ->
-                    FileOutputStream(targetFile).use { output ->
+                    FileOutputStream(tempFile).use { output ->
                         val buffer = ByteArray(8192)
                         var bytesRead: Int
                         var downloaded = 0L
@@ -130,26 +189,42 @@ class TafseerDownloadRepository(
                         }
                     }
                 }
-            } else {
-                // If offline or simulated sandbox, create clean pre-indexed local SQLite database file
-                createFallbackTafseerDb(targetFile, pkg)
+            } finally {
+                connection.disconnect()
             }
 
-            // Update state
+            if (!databaseHasEntries(tempFile)) {
+                throw IOException("Downloaded tafsir pack contains no tafsir entries")
+            }
+
+            if (targetFile.exists() && !targetFile.delete()) {
+                throw IOException("Could not replace the existing tafsir pack")
+            }
+            if (!tempFile.renameTo(targetFile)) {
+                tempFile.copyTo(targetFile, overwrite = true)
+                tempFile.delete()
+            }
+
             _packages.value = _packages.value.map {
                 if (it.id == packageId) it.copy(isDownloaded = true) else it
             }
 
             Result.success(targetFile)
         } catch (e: Exception) {
+            tempFile.delete()
             if (e is kotlinx.coroutines.CancellationException) throw e
-            // Offline fallback: write local pre-indexed schema
-            createFallbackTafseerDb(targetFile, pkg)
-            _packages.value = _packages.value.map {
-                if (it.id == packageId) it.copy(isDownloaded = true) else it
-            }
-            Result.success(targetFile)
+            Result.failure(e)
         }
+    }
+
+    /** Removes both Room commentary and downloaded pack files used as an offline cache. */
+    suspend fun clearCachedTafsir() = withContext(Dispatchers.IO) {
+        tafsirDao?.deleteAll()
+        _packages.value.forEach { pkg ->
+            databaseFile(pkg).delete()
+            File(databaseFile(pkg).absolutePath + ".download").delete()
+        }
+        _packages.value = _packages.value.map { it.copy(isDownloaded = false) }
     }
 
     suspend fun attachTafseerDatabase(
@@ -159,17 +234,15 @@ class TafseerDownloadRepository(
         val pkg = _packages.value.find { it.id == packageId }
             ?: return@withContext Result.failure(IllegalArgumentException("Package not found"))
 
-        val dbFile = File(context.getDatabasePath(pkg.filename).absolutePath)
-        if (!dbFile.exists()) {
-            return@withContext Result.failure(IllegalStateException("Tafseer DB not downloaded yet"))
+        val dbFile = databaseFile(pkg)
+        if (!databaseHasEntries(dbFile)) {
+            return@withContext Result.failure(IllegalStateException("Tafseer DB has no entries"))
         }
 
         try {
             val db: SupportSQLiteDatabase = roomDb.openHelper.writableDatabase
             val alias = pkg.attachedAlias
-            // Execute ATTACH DATABASE statement
-            val attachSql = "ATTACH DATABASE '${dbFile.absolutePath}' AS $alias"
-            db.execSQL(attachSql)
+            db.execSQL("ATTACH DATABASE '${dbFile.absolutePath}' AS $alias")
 
             _packages.value = _packages.value.map {
                 if (it.id == packageId) it.copy(isAttached = true) else it
@@ -234,34 +307,38 @@ class TafseerDownloadRepository(
         emit(entry)
     }.flowOn(Dispatchers.IO)
 
-    /**
-     * Creates a genuinely attachable SQLite database when the pack CDN is unreachable.
-     * Writing a text placeholder here would make ATTACH DATABASE fail later.
-     */
-    private fun createFallbackTafseerDb(file: File, pkg: TafseerPackage) {
-        file.parentFile?.mkdirs()
-        if (file.exists()) file.delete()
+    private fun databaseFile(pkg: TafseerPackage): File =
+        context.getDatabasePath(pkg.filename)
 
-        val database = SQLiteDatabase.openOrCreateDatabase(file, null)
-        try {
-            database.execSQL(
-                """
-                CREATE TABLE IF NOT EXISTS tafseer_entries (
-                    tafseerId TEXT NOT NULL,
-                    surahNumber INTEGER NOT NULL,
-                    ayahNumber INTEGER NOT NULL,
-                    author TEXT NOT NULL,
-                    languageCode TEXT NOT NULL,
-                    contentMarkdown TEXT NOT NULL,
-                    PRIMARY KEY (surahNumber, ayahNumber)
-                )
-                """.trimIndent()
+    private fun databaseHasEntries(file: File): Boolean {
+        if (!file.isFile || file.length() == 0L) return false
+        return runCatching {
+            val database = SQLiteDatabase.openDatabase(
+                file.absolutePath,
+                null,
+                SQLiteDatabase.OPEN_READONLY
             )
-            database.execSQL(
-                "CREATE INDEX IF NOT EXISTS idx_tafseer_ayah ON tafseer_entries(surahNumber, ayahNumber)"
-            )
-        } finally {
-            database.close()
-        }
+            try {
+                database.rawQuery("SELECT COUNT(*) FROM tafseer_entries", null).use { cursor ->
+                    cursor.moveToFirst() && cursor.getInt(0) > 0
+                }
+            } finally {
+                database.close()
+            }
+        }.getOrDefault(false)
+    }
+
+    private fun deleteEmptyTafseerDatabases() {
+        val databaseDir = context.getDatabasePath("sakinah.db").parentFile ?: return
+        databaseDir.listFiles()
+            ?.filter { file ->
+                file.isFile && file.name.startsWith("tafsir_") &&
+                    (file.name.endsWith(".db") || file.name.endsWith(".db.download"))
+            }
+            ?.forEach { file ->
+                if (file.name.endsWith(".db.download") || !databaseHasEntries(file)) {
+                    file.delete()
+                }
+            }
     }
 }

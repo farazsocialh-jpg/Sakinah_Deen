@@ -179,7 +179,15 @@ class FakeTafsirDao : TafsirDao {
         it.sourceKey == sourceKey && it.surahNumber == surahNumber
     }
 
+    override suspend fun countForSource(sourceKey: String): Int = entries.count {
+        it.sourceKey == sourceKey
+    }
+
     override suspend fun upsertAll(entries: List<TafsirEntryEntity>) {
         this.entries += entries
+    }
+
+    override suspend fun deleteAll() {
+        entries.clear()
     }
 }

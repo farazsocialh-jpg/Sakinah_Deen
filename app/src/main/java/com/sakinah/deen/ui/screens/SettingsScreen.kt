@@ -43,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -104,6 +105,10 @@ fun SettingsScreen(
     val tafseerRepository = rememberInject<TafseerDownloadRepository>()
     val tafseerPackages by tafseerRepository.packages.collectAsStateWithLifecycle(initialValue = emptyList())
     var downloadingPackId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(tafseerRepository) {
+        tafseerRepository.refreshDownloadStatus()
+    }
     val snackbarHostState = remember { SnackbarHostState() }
 
     var hasHomeLocation by remember { mutableStateOf(appPrefs.homeCoordinates != null) }
@@ -629,6 +634,7 @@ fun SettingsScreen(
                 Button(onClick = {
                     scope.launch {
                         repo.clearCache()
+                        tafseerRepository.clearCachedTafsir()
                         cacheBytes = repo.cacheSizeBytes()
                         snackbarHostState.showSnackbar("Offline cache cleared.")
                     }
@@ -657,6 +663,7 @@ fun SettingsScreen(
                                     downloadingPackId = pack.id
                                     scope.launch {
                                         val result = tafseerRepository.downloadTafseerPackage(pack.id)
+                                        tafseerRepository.refreshDownloadStatus()
                                         downloadingPackId = null
                                         snackbarHostState.showSnackbar(
                                             if (result.isSuccess) {

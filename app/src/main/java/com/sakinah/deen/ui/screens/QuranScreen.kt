@@ -632,7 +632,13 @@ fun QuranScreen(
                                     .horizontalScroll(rememberScrollState()),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                listOf("Ibn Kathir", "Al-Tabari", "Al-Qurtubi", "Al-Sa'di", "Ma'ariful Quran").forEach { scholar ->
+                                listOf(
+                                    "Ibn Kathir",
+                                    "Al-Tabari",
+                                    "Al-Qurtubi",
+                                    "Al-Sa'di",
+                                    "Ma'ariful Quran"
+                                ).forEach { scholar ->
                                     val selected = state.selectedScholar == scholar
                                     Surface(
                                         shape = RoundedCornerShape(10.dp),
@@ -683,6 +689,14 @@ fun QuranScreen(
                                 }
                             }
 
+                            state.tafseerErrorMessage?.let { error ->
+                                Text(
+                                    text = error,
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+
                             state.errorMessage?.let { error ->
                                 Text(
                                     text = error,
@@ -716,14 +730,8 @@ fun QuranScreen(
 }
 
 @Composable
-private fun tafseerPackIdFor(scholar: String): String? = when (scholar) {
-    "Ibn Kathir" -> "ibn_kathir_en"
-    "Al-Tabari" -> "al_tabari_ar"
-    "Al-Qurtubi" -> "al_qurtubi_ar"
-    "Al-Sa'di" -> "al_saadi_ur"
-    "Ma'ariful Quran" -> "maariful_quran_en"
-    else -> null
-}
+private fun tafseerPackIdFor(scholar: String): String? =
+    com.sakinah.deen.data.repository.TafseerDownloadRepository.packIdForScholar(scholar)
 
 @Composable
 private fun SearchResults(

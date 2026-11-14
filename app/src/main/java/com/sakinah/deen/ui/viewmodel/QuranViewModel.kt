@@ -44,6 +44,8 @@ data class QuranUiState(
     val downloadedTafseers: List<TafseerPackage> = emptyList(),
     val availableTafseers: List<TafseerPackage> = emptyList(),
     val selectedTafseerContent: String = "",
+    /** Download/lookup failure shown inside the Tafseer sheet. */
+    val tafseerErrorMessage: String? = null,
     val selectedScholar: String = "Ibn Kathir",
     val hifzMistakes: Map<Pair<Int, Int>, String> = emptyMap(),
     val isDownloadingTafseer: Boolean = false,
@@ -146,6 +148,7 @@ class QuranViewModel(
         }
         observeSharedSettings()
         observeTafseerPackages()
+        viewModelScope.launch { tafseerRepository?.refreshDownloadStatus() }
         observeRoomSurahs()
         observeSelectedSurahAyahs()
         if (islamicRepository != null) {
@@ -427,37 +430,85 @@ class QuranViewModel(
     }
 
     private fun selectAyahForTafseer(ayahNumber: Int) {
-        val ayah = _uiState.value.currentSurah.ayahs.find { it.numberInSurah == ayahNumber }
+        val state = _uiState.value
+        val ayah = state.currentSurah.ayahs.find { it.numberInSurah == ayahNumber }
             ?: return
+        val scholar = state.selectedScholar
+        val surahNumber = state.currentSurah.number
 
-        _uiState.update { it.copy(activeHighlightedAyah = ayahNumber) }
+        _uiState.update {
+            it.copy(
+                activeHighlightedAyah = ayahNumber,
+                tafseerErrorMessage = null
+            )
+        }
 
-        val cached = when (_uiState.value.selectedScholar) {
+        val cached = when (scholar) {
             "Ibn Kathir" -> ayah.tafseerIbnKathir
             "Al-Tabari" -> ayah.tafseerTabari
             "Al-Qurtubi" -> ayah.tafseerQurtubi
             "Al-Sa'di" -> ayah.tafseerSadi
             "Ma'ariful Quran" -> ayah.tafseerMaarifulQuran
-            else -> ayah.tafseerIbnKathir
+            else -> ""
         }
 
         if (cached.isNotBlank()) {
-            _uiState.update { it.copy(selectedTafseerContent = cached, contentNotice = null) }
+            _uiState.update {
+                it.copy(
+                    selectedTafseerContent = cached,
+                    contentNotice = null,
+                    tafseerErrorMessage = null
+                )
+            }
             return
         }
 
+        // Clear the previous scholar's text while the correctly mapped tafsir is loaded.
+        _uiState.update {
+            it.copy(
+                selectedTafseerContent = "",
+                contentNotice = "Loading $scholar commentary…"
+            )
+        }
+
         val repo = islamicRepository ?: return
+        val tafsirId = TafseerDownloadRepository.tafsirIdForScholar(scholar)
+            ?: IslamicDataRepository.IBN_KATHIR_TAFSIR_ID
         viewModelScope.launch {
-            val tafsir = runCatching { repo.getTafsir(ayahNumber = ayahNumber, surahNumber = _uiState.value.currentSurah.number) }
-                .getOrNull()
-            _uiState.update { state ->
-                if (tafsir != null) {
-                    state.copy(selectedTafseerContent = tafsir.text, contentNotice = null)
-                } else {
-                    state.copy(
-                        selectedTafseerContent = "",
-                        contentNotice = "No cached tafseer for ${state.currentSurah.nameEnglish} " +
-                            "$ayahNumber. Download the tafseer pack to read ${state.selectedScholar} offline."
+            try {
+                val tafsir = repo.getTafsir(
+                    ayahNumber = ayahNumber,
+                    surahNumber = surahNumber,
+                    tafsirId = tafsirId
+                )
+                _uiState.update { current ->
+                    if (current.selectedScholar != scholar ||
+                        current.currentSurah.number != surahNumber ||
+                        current.activeHighlightedAyah != ayahNumber
+                    ) {
+                        current
+                    } else if (tafsir != null) {
+                        current.copy(
+                            selectedTafseerContent = tafsir.text,
+                            contentNotice = null,
+                            tafseerErrorMessage = null
+                        )
+                    } else {
+                        current.copy(
+                            selectedTafseerContent = "",
+                            contentNotice = "No cached commentary for ${current.currentSurah.nameEnglish} " +
+                                "$ayahNumber in $scholar. Download the tafsir pack to read it offline."
+                        )
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { current ->
+                    if (current.selectedScholar != scholar) current
+                    else current.copy(
+                        contentNotice = null,
+                        tafseerErrorMessage = friendlyTafseerError(scholar, e)
                     )
                 }
             }
@@ -535,26 +586,82 @@ class QuranViewModel(
     }
 
     private fun downloadTafseerPack(packageId: String) {
-        val repo = tafseerRepository ?: return
+        val repo = islamicRepository
+        val tafsirId = TafseerDownloadRepository.tafsirIdForPack(packageId)
+        if (repo == null || tafsirId == null) {
+            _uiState.update {
+                it.copy(tafseerErrorMessage = "Could not identify this tafsir pack. Please choose another scholar.")
+            }
+            return
+        }
+
+        val state = _uiState.value
+        val surahNumber = state.currentSurah.number
+        val ayahNumber = state.activeHighlightedAyah
+        val scholar = state.selectedScholar
+
         viewModelScope.launch {
-            _uiState.update { it.copy(isDownloadingTafseer = true, errorMessage = null) }
+            _uiState.update {
+                it.copy(
+                    isDownloadingTafseer = true,
+                    contentNotice = null,
+                    tafseerErrorMessage = null
+                )
+            }
             try {
-                val result = repo.downloadTafseerPackage(packageId)
-                result.exceptionOrNull()?.let { error ->
-                    if (error is kotlinx.coroutines.CancellationException) throw error
+                val result = repo.syncTafsirForSurah(
+                    surahNumber = surahNumber,
+                    tafsirId = tafsirId
+                )
+                val error = result.exceptionOrNull()
+                val savedRows = result.getOrNull() ?: 0
+
+                if (error != null) {
                     _uiState.update {
-                        it.copy(errorMessage = "Tafseer download failed: ${error.message ?: "network error"}")
+                        it.copy(tafseerErrorMessage = friendlyTafseerError(scholar, error))
                     }
+                } else if (savedRows <= 0) {
+                    _uiState.update {
+                        it.copy(
+                            tafseerErrorMessage = "No $scholar commentary was returned for Surah $surahNumber. " +
+                                "Check your connection and try again."
+                        )
+                    }
+                } else {
+                    tafseerRepository?.refreshDownloadStatus()
+                    _uiState.update {
+                        it.copy(
+                            activeHighlightedAyah = ayahNumber,
+                            selectedTafseerContent = "",
+                            contentNotice = null,
+                            tafseerErrorMessage = null
+                        )
+                    }
+                    selectAyahForTafseer(ayahNumber)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(errorMessage = "Tafseer download failed: ${e.message ?: "network error"}")
+                    it.copy(tafseerErrorMessage = friendlyTafseerError(scholar, e))
                 }
             } finally {
                 _uiState.update { it.copy(isDownloadingTafseer = false) }
             }
+        }
+    }
+
+    private fun friendlyTafseerError(scholar: String, error: Throwable): String {
+        val message = error.message.orEmpty().lowercase()
+        val offline = error is java.io.IOException ||
+            message.contains("connect") ||
+            message.contains("timeout") ||
+            message.contains("network") ||
+            message.contains("unable to resolve")
+        return if (offline) {
+            "Offline: couldn't download $scholar commentary. Check your internet connection and try again."
+        } else {
+            "Couldn't download $scholar commentary: ${error.message ?: "unknown error"}"
         }
     }
 

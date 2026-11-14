@@ -46,6 +46,6 @@ class SakinahContainer(private val context: Context) {
     }
 
     val tafseerRepository: TafseerDownloadRepository by lazy {
-        TafseerDownloadRepository(context)
+        TafseerDownloadRepository(context, database.tafsirDao())
     }
 }

@@ -476,7 +476,8 @@ class IslamicDataRepository(
 
         val sourceKey = "tafsir_$tafsirId"
         val collected = mutableListOf<TafsirEntryEntity>()
-        var resolvedName = "Ibn Kathir (Abridged)"
+        var resolvedName = "Tafsir $tafsirId"
+        var lastError: Throwable? = null
 
         range.forEachIndexed { index, ayahNumber ->
             runCatching {
@@ -497,12 +498,20 @@ class IslamicDataRepository(
                         text = text
                     )
                 }
+            }.onFailure { error ->
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                lastError = error
             }.getOrNull()?.let { collected.add(it) }
 
             onProgress((index + 1).toFloat() / range.count().toFloat())
             delay(120)
         }
 
+        if (collected.isEmpty()) {
+            // Offline/HTTP failures must reach the caller instead of looking like a successful
+            // empty download. Partial success is still useful and is stored below.
+            lastError?.let { throw it }
+        }
         if (collected.isNotEmpty()) {
             tafsirDao.upsertAll(collected)
         }
