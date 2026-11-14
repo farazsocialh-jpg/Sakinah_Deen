@@ -1,6 +1,9 @@
 package com.sakinah.deen.ui.screens
 
 import android.Manifest
+import android.content.Context
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -10,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,6 +42,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -52,13 +57,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sakinah.deen.data.model.AzaanSettings
 import com.sakinah.deen.data.model.CalculationMethod as AppMethod
 import com.sakinah.deen.data.model.Madhhab as AppMadhhab
+import com.sakinah.deen.data.model.Muezzin
+import com.sakinah.deen.data.model.PrayerAlertMode
+import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.TafseerDownloadRepository
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
-import com.sakinah.deen.settings.AdhanChoice
+import com.sakinah.deen.service.AdhanAudio
+import com.sakinah.deen.service.AzaanScheduling
 import com.sakinah.deen.settings.AsrMethod
 import com.sakinah.deen.settings.CalculationMethod
 import com.sakinah.deen.settings.SettingsRepository
@@ -125,7 +135,19 @@ fun SettingsScreen(
         gpsHomeRequested = false
     }
 
-    val adhanChoices = AdhanChoice.entries
+    var azaanSettings by remember { mutableStateOf(appPrefs.azaanSettings) }
+    val previewPlayer = remember(context) { MuezzinPreviewPlayer(context) }
+    var previewingMuezzin by remember { mutableStateOf<Muezzin?>(null) }
+    previewPlayer.onFinished = { previewingMuezzin = null }
+    DisposableEffect(previewPlayer) {
+        onDispose { previewPlayer.release() }
+    }
+
+    fun applyAzaanSettings(updated: AzaanSettings) {
+        azaanSettings = updated
+        appPrefs.azaanSettings = updated
+        AzaanScheduling.scheduleStoredLocation(context)
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -286,58 +308,119 @@ fun SettingsScreen(
                     )
                 }
 
-                // Adhan & Notifications
-                Text("Adhan & Notifications", style = MaterialTheme.typography.titleMedium)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Fajr", modifier = Modifier.weight(1f))
-                    Switch(checked = settings.adhan.fajrEnabled, onCheckedChange = { v ->
-                        scope.launch { repo.updateAdhan(settings.adhan.copy(fajrEnabled = v)) }
-                    })
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Dhuhr", modifier = Modifier.weight(1f))
-                    Switch(checked = settings.adhan.dhuhrEnabled, onCheckedChange = { v ->
-                        scope.launch { repo.updateAdhan(settings.adhan.copy(dhuhrEnabled = v)) }
-                    })
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Asr", modifier = Modifier.weight(1f))
-                    Switch(checked = settings.adhan.asrEnabled, onCheckedChange = { v ->
-                        scope.launch { repo.updateAdhan(settings.adhan.copy(asrEnabled = v)) }
-                    })
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Maghrib", modifier = Modifier.weight(1f))
-                    Switch(checked = settings.adhan.maghribEnabled, onCheckedChange = { v ->
-                        scope.launch { repo.updateAdhan(settings.adhan.copy(maghribEnabled = v)) }
-                    })
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Isha", modifier = Modifier.weight(1f))
-                    Switch(checked = settings.adhan.ishaEnabled, onCheckedChange = { v ->
-                        scope.launch { repo.updateAdhan(settings.adhan.copy(ishaEnabled = v)) }
-                    })
+                // Azaan & Notifications
+                Text("Azaan & Notifications", style = MaterialTheme.typography.titleMedium)
+                SakinahCard(contentPadding = 14.dp) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Enable Azaan Notifications",
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Exact alarm-clock reminders that survive Doze and reboot",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = azaanSettings.enabled,
+                            onCheckedChange = { enabled ->
+                                applyAzaanSettings(azaanSettings.copy(enabled = enabled))
+                            }
+                        )
+                    }
                 }
 
-                var adhanExpanded by remember { mutableStateOf(false) }
-                ExposedDropdownMenuBox(expanded = adhanExpanded, onExpandedChange = { adhanExpanded = it }) {
-                    OutlinedTextField(
-                        value = settings.adhan.adhanChoice.name,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Adhan sound") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = adhanExpanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                AzaanSettings.ALERT_PRAYERS.forEach { prayer ->
+                    PrayerAlertCard(
+                        prayer = prayer,
+                        mode = azaanSettings.modeFor(prayer),
+                        offsetMinutes = azaanSettings.offsetFor(prayer),
+                        enabled = azaanSettings.enabled,
+                        onModeChange = { mode ->
+                            applyAzaanSettings(
+                                azaanSettings.copy(
+                                    modes = azaanSettings.modes + (prayer to mode)
+                                )
+                            )
+                        },
+                        onOffsetChange = { offset ->
+                            applyAzaanSettings(
+                                azaanSettings.copy(
+                                    offsetsMinutes = azaanSettings.offsetsMinutes + (prayer to offset)
+                                )
+                            )
+                        }
                     )
-                    ExposedDropdownMenu(expanded = adhanExpanded, onDismissRequest = { adhanExpanded = false }) {
-                        adhanChoices.forEach { a ->
-                            DropdownMenuItem(text = { Text(a.name) }, onClick = {
-                                scope.launch { repo.updateAdhan(settings.adhan.copy(adhanChoice = a)) }
-                                adhanExpanded = false
-                            })
+                }
+
+                SakinahCard(contentPadding = 14.dp) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Special Fajr Azaan",
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Includes “As-Salatu Khayrun Minan-Nawm”",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = azaanSettings.fajrSpecialAdhan,
+                            onCheckedChange = { enabled ->
+                                applyAzaanSettings(azaanSettings.copy(fajrSpecialAdhan = enabled))
+                            }
+                        )
+                    }
+                }
+
+                Text("Muezzin (Moazan) Voice", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text = "Choose the recitation used for Full Azaan. Preview before selecting.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Muezzin.entries.forEach { muezzin ->
+                    val selected = azaanSettings.muezzin == muezzin
+                    SakinahCard(contentPadding = 12.dp) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = selected,
+                                onClick = {
+                                    applyAzaanSettings(azaanSettings.copy(muezzin = muezzin))
+                                },
+                                label = { Text(muezzin.displayName, fontSize = 12.sp) }
+                            )
+                            Spacer(Modifier.weight(1f))
+                            OutlinedButton(
+                                onClick = {
+                                    if (previewingMuezzin == muezzin) {
+                                        previewPlayer.stop()
+                                        previewingMuezzin = null
+                                    } else {
+                                        previewingMuezzin = if (previewPlayer.play(muezzin)) muezzin else null
+                                    }
+                                },
+                                modifier = Modifier.height(36.dp)
+                            ) {
+                                Text(
+                                    if (previewingMuezzin == muezzin) "Stop Preview" else "Play Preview",
+                                    fontSize = 11.sp
+                                )
+                            }
                         }
                     }
                 }
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Car Bluetooth Dua al-Safar auto-play", modifier = Modifier.weight(1f))
                     Switch(checked = settings.adhan.carBluetoothAutoPlay, onCheckedChange = { v ->
@@ -611,6 +694,127 @@ fun SettingsScreen(
             }
         )
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PrayerAlertCard(
+    prayer: PrayerType,
+    mode: PrayerAlertMode,
+    offsetMinutes: Int,
+    enabled: Boolean,
+    onModeChange: (PrayerAlertMode) -> Unit,
+    onOffsetChange: (Int) -> Unit
+) {
+    val prayerName = prayer.name.lowercase().replaceFirstChar { it.uppercase() }
+    SakinahCard(contentPadding = 12.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = prayerName,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+                if (!enabled) {
+                    Text(
+                        text = "Master switch off",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Text(
+                text = "Alert style",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                PrayerAlertMode.entries.forEach { option ->
+                    FilterChip(
+                        selected = mode == option,
+                        onClick = { onModeChange(option) },
+                        label = { Text(option.label, fontSize = 11.sp) }
+                    )
+                }
+            }
+
+            Text(
+                text = "Pre-Azaan / Timing offset",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                AzaanSettings.OFFSET_OPTIONS.forEach { option ->
+                    FilterChip(
+                        selected = offsetMinutes == option,
+                        onClick = { onOffsetChange(option) },
+                        label = { Text(offsetLabel(option), fontSize = 11.sp) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun offsetLabel(minutes: Int): String = when {
+    minutes == 0 -> "Exact (0 min)"
+    minutes > 0 -> "+$minutes min"
+    else -> "$minutes min"
+}
+
+/** Small local MediaPlayer used only for the Settings Muezzin audition buttons. */
+private class MuezzinPreviewPlayer(private val context: Context) {
+    var onFinished: (() -> Unit)? = null
+    private var player: MediaPlayer? = null
+
+    fun play(muezzin: Muezzin): Boolean {
+        stop()
+        return runCatching {
+            val mediaPlayer = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                setDataSource(context, AdhanAudio.muezzinUri(context, muezzin))
+                setOnCompletionListener {
+                    stop()
+                    onFinished?.invoke()
+                }
+                setOnErrorListener { _, _, _ ->
+                    stop()
+                    onFinished?.invoke()
+                    true
+                }
+                prepare()
+                start()
+            }
+            player = mediaPlayer
+            true
+        }.getOrElse {
+            stop()
+            false
+        }
+    }
+
+    fun stop() {
+        player?.let { mediaPlayer ->
+            runCatching { mediaPlayer.stop() }
+            runCatching { mediaPlayer.release() }
+        }
+        player = null
+    }
+
+    fun release() = stop()
 }
 
 private fun formatBytes(bytes: Long): String = when {

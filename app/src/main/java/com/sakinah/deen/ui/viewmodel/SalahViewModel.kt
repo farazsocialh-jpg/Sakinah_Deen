@@ -20,6 +20,7 @@ import com.sakinah.deen.domain.astronomy.UserLocationProvider
 import com.sakinah.deen.domain.travel.HomeAnchorStore
 import com.sakinah.deen.domain.travel.SafarPolicy
 import com.sakinah.deen.domain.travel.TravelStatusManager
+import com.sakinah.deen.service.PrayerAlarmScheduler
 import com.sakinah.deen.settings.AsrMethod
 import com.sakinah.deen.settings.CalculationMethod as SharedCalculationMethod
 import com.sakinah.deen.settings.SettingsRepository
@@ -116,7 +117,8 @@ class SalahViewModel(
     private val locationProvider: UserLocationProvider? = null,
     private val prayerTimes: PrayerTimeRepository? = null,
     private val preferences: SakinahPreferences? = null,
-    private val settingsRepository: SettingsRepository? = null
+    private val settingsRepository: SettingsRepository? = null,
+    private val alarmScheduler: PrayerAlarmScheduler? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SalahUiState())
@@ -483,6 +485,14 @@ class SalahViewModel(
                 adjustments = state.adjustments
             ),
             sourceLabel = "Offline Calculation"
+        )
+
+        // City, GPS, madhhab, calculation-method or offset changes all pass through here.
+        // Re-arm immediately so background alarms never use stale times.
+        alarmScheduler?.scheduleAllDailyAlarms(
+            coordinates = state.userCoordinates,
+            method = preferences?.calculationMethodOverride,
+            madhhab = state.madhhab
         )
 
         val repository = prayerTimes ?: return

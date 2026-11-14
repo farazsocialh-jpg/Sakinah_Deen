@@ -15,11 +15,14 @@ import androidx.core.app.ServiceCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import com.sakinah.deen.MainActivity
 import com.sakinah.deen.R
+import com.sakinah.deen.data.model.Muezzin
+import com.sakinah.deen.data.model.PrayerAlertMode
 import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import kotlinx.coroutines.CoroutineScope
@@ -33,9 +36,10 @@ import kotlinx.coroutines.launch
 /**
  * Foreground Adhan playback built on Media3/ExoPlayer.
  *
- * Fajr uses the recording that includes "As-salatu khayrun min an-nawm"; the other
- * prayers use the standard Makkah Adhan. Both are bundled, so playback works with
- * no network and even after the app process was killed.
+ * Full Azaan plays the Muezzin chosen in Settings (Fajr can use the recording with
+ * "As-salatu khayrun min an-nawm"). Short Tone plays a brief chime, and Silent posts the
+ * high-priority notification without audio. All recordings are bundled, so playback works
+ * with no network and even after the app process was killed.
  */
 class AdhanPlaybackService : Service() {
 
@@ -48,18 +52,14 @@ class AdhanPlaybackService : Service() {
 
         const val EXTRA_PRAYER_NAME = "extra_prayer_name"
         const val EXTRA_PRAYER_TYPE = "extra_prayer_type"
+        const val EXTRA_ALERT_MODE = "extra_alert_mode"
+        const val EXTRA_MUEZZIN_ID = "extra_muezzin_id"
         const val NOTIFICATION_ID = 4001
 
         private const val FADE_STEPS = 20
         private const val FADE_STEP_MS = 250L
         private const val SNOOZE_MINUTES = 10
         private const val MISSING_AUDIO_STOP_DELAY_MS = 4000L
-    }
-
-    private enum class PlaybackSource(val rawResourceId: Int) {
-        ADHAN_MAKKAH(R.raw.adhan_makkah),
-        ADHAN_FAJR(R.raw.adhan_fajr),
-        DUA_SAFAR(R.raw.dua_al_safar)
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -72,6 +72,9 @@ class AdhanPlaybackService : Service() {
 
     private var currentPrayerName: String = "Salah"
     private var currentPrayerType: PrayerType = PrayerType.DHUHR
+    private var currentMode: PrayerAlertMode = PrayerAlertMode.FULL_AZAAN
+    private var currentMuezzin: Muezzin = Muezzin.MAKKAH
+    private var playerPolicyStopsOnEnd: Boolean = true
     private var isDuaSafar: Boolean = false
     private lateinit var preferences: SakinahPreferences
 
@@ -90,19 +93,42 @@ class AdhanPlaybackService : Service() {
                 currentPrayerType = intent.getStringExtra(EXTRA_PRAYER_TYPE)
                     ?.let { name -> runCatching { PrayerType.valueOf(name) }.getOrNull() }
                     ?: PrayerType.DHUHR
+                currentMode = intent.getStringExtra(EXTRA_ALERT_MODE)
+                    ?.let { name -> runCatching { PrayerAlertMode.valueOf(name) }.getOrNull() }
+                    ?: preferences.alertModeFor(currentPrayerType)
+                currentMuezzin = Muezzin.fromId(intent.getStringExtra(EXTRA_MUEZZIN_ID))
                 isDuaSafar = false
 
+                if (currentMode == PrayerAlertMode.OFF) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+
                 startPlaybackForeground(buildAdhanNotification(currentPrayerName))
-                playCue(
-                    if (currentPrayerType == PrayerType.FAJR) PlaybackSource.ADHAN_FAJR
-                    else PlaybackSource.ADHAN_MAKKAH
-                )
+                when (currentMode) {
+                    PrayerAlertMode.FULL_AZAAN -> playCue(
+                        uri = selectedAdhanUri(),
+                        stopWhenPlaybackEnds = true
+                    )
+
+                    PrayerAlertMode.SHORT_TONE -> playCue(
+                        uri = AdhanAudio.shortToneUri(this),
+                        stopWhenPlaybackEnds = false
+                    )
+
+                    PrayerAlertMode.SILENT -> finishTonePlayback()
+                    PrayerAlertMode.OFF -> stopSelf()
+                }
             }
 
             ACTION_PLAY_DUA_SAFAR -> {
                 isDuaSafar = true
+                currentMode = PrayerAlertMode.FULL_AZAAN
                 startPlaybackForeground(buildDuaSafarNotification())
-                playCue(PlaybackSource.DUA_SAFAR)
+                playCue(
+                    uri = resolveDuaSafarUri(),
+                    stopWhenPlaybackEnds = true
+                )
             }
 
             ACTION_SNOOZE -> {
@@ -128,6 +154,20 @@ class AdhanPlaybackService : Service() {
         return START_NOT_STICKY
     }
 
+    private fun selectedAdhanUri(): Uri {
+        preferences.adhanSoundUri?.takeIf { it.isNotBlank() }?.let { return Uri.parse(it) }
+        return AdhanAudio.muezzinUri(
+            context = this,
+            muezzin = currentMuezzin,
+            fajrSpecialAdhan = preferences.azaanSettings.fajrSpecialAdhan,
+            prayerTypeName = currentPrayerType.name
+        )
+    }
+
+    private fun resolveDuaSafarUri(): Uri =
+        preferences.duaSafarSoundUri?.takeIf { it.isNotBlank() }?.let(Uri::parse)
+            ?: Uri.parse("android.resource://$packageName/${R.raw.dua_al_safar}")
+
     private fun startPlaybackForeground(notification: Notification) {
         ServiceCompat.startForeground(
             this,
@@ -137,17 +177,8 @@ class AdhanPlaybackService : Service() {
         )
     }
 
-    private fun playCue(source: PlaybackSource) {
-        val uri = resolveCueUri(source)
-        if (uri == null) {
-            scope.launch {
-                delay(MISSING_AUDIO_STOP_DELAY_MS)
-                finishPlayback()
-            }
-            return
-        }
-
-        val exo = ensurePlayer()
+    private fun playCue(uri: Uri, stopWhenPlaybackEnds: Boolean) {
+        val exo = ensurePlayer(stopWhenPlaybackEnds)
         exo.setMediaItem(MediaItem.fromUri(uri))
         exo.volume = 0f
         exo.prepare()
@@ -165,8 +196,16 @@ class AdhanPlaybackService : Service() {
         }
     }
 
-    private fun ensurePlayer(): ExoPlayer {
-        player?.let { return it }
+    private fun ensurePlayer(stopWhenPlaybackEnds: Boolean): ExoPlayer {
+        player?.let { existing ->
+            // Media3 listeners are immutable, so recreate only when the stop policy changes.
+            if (playerPolicyStopsOnEnd != stopWhenPlaybackEnds) {
+                existing.release()
+                player = null
+            } else {
+                return existing
+            }
+        }
 
         val exoPlayer = ExoPlayer.Builder(this)
             .build()
@@ -174,7 +213,7 @@ class AdhanPlaybackService : Service() {
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                        .setUsage(C.USAGE_MEDIA)
+                        .setUsage(C.USAGE_ALARM)
                         .build(),
                     /* handleAudioFocus = */ true
                 )
@@ -182,33 +221,24 @@ class AdhanPlaybackService : Service() {
                 addListener(object : Player.Listener {
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         if (playbackState == Player.STATE_ENDED) {
-                            finishPlayback()
+                            if (stopWhenPlaybackEnds) finishPlayback() else finishTonePlayback()
                         }
+                    }
+
+                    override fun onPlayerError(error: PlaybackException) {
+                        if (stopWhenPlaybackEnds) finishFallbackNotification() else finishTonePlayback()
                     }
                 })
             }
 
+        mediaSession?.release()
         mediaSession = MediaSession.Builder(this, exoPlayer)
             .setSessionActivity(contentPendingIntent())
             .build()
 
         player = exoPlayer
+        playerPolicyStopsOnEnd = stopWhenPlaybackEnds
         return exoPlayer
-    }
-
-    /**
-     * A user-supplied recording wins; otherwise the bundled raw resource is used.
-     */
-    private fun resolveCueUri(source: PlaybackSource): Uri? {
-        val override = when (source) {
-            PlaybackSource.DUA_SAFAR -> preferences.duaSafarSoundUri
-            PlaybackSource.ADHAN_MAKKAH -> preferences.adhanSoundUri
-            PlaybackSource.ADHAN_FAJR -> preferences.adhanSoundUri
-        }
-        if (!override.isNullOrBlank()) {
-            return Uri.parse(override)
-        }
-        return Uri.parse("android.resource://$packageName/${source.rawResourceId}")
     }
 
     private fun finishPlayback() {
@@ -226,10 +256,32 @@ class AdhanPlaybackService : Service() {
         stopSelf()
     }
 
+    /** Short tone/silent leave the prayer notification visible after foreground stops. */
+    private fun finishTonePlayback() {
+        isPlayingAdhan = false
+        unregisterVolumeReceiver()
+        fadeJob?.cancel()
+        fadeJob = null
+        try {
+            player?.stop()
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+        }
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
+        stopSelf()
+    }
+
+    private fun finishFallbackNotification() {
+        // A missing/corrupt recording must not crash or leave a silent foreground service.
+        finishTonePlayback()
+    }
+
     private fun contentPendingIntent(): PendingIntent = PendingIntent.getActivity(
         this,
         0,
-        Intent(this, MainActivity::class.java),
+        Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        },
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
@@ -241,17 +293,23 @@ class AdhanPlaybackService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-    private fun buildAdhanNotification(prayerName: String): Notification =
-        NotificationCompat.Builder(this, NotificationChannels.CHANNEL_SALAH_ADHAN)
+    private fun buildAdhanNotification(prayerName: String): Notification {
+        val channel = if (currentMode == PrayerAlertMode.SILENT) {
+            NotificationChannels.CHANNEL_SALAH_SILENT
+        } else {
+            NotificationChannels.CHANNEL_SALAH_ADHAN
+        }
+        return NotificationCompat.Builder(this, channel)
             .setSmallIcon(R.drawable.ic_launcher_monochrome)
-            // Title format requested for the prayer-time notification, e.g. "Maghrib prayer time started".
             .setContentTitle("$prayerName prayer time started")
             .setContentText(getString(R.string.adhan_body))
             .setContentIntent(contentPendingIntent())
-            .setOngoing(true)
+            .setOngoing(currentMode == PrayerAlertMode.FULL_AZAAN)
+            .setAutoCancel(false)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setFullScreenIntent(contentPendingIntent(), true)
             .addAction(
                 android.R.drawable.ic_media_pause,
                 getString(R.string.adhan_action_stop),
@@ -268,6 +326,7 @@ class AdhanPlaybackService : Service() {
                 actionPendingIntent(3, ACTION_SNOOZE)
             )
             .build()
+    }
 
     private fun buildDuaSafarNotification(): Notification =
         NotificationCompat.Builder(this, NotificationChannels.CHANNEL_TRAVEL_SAFAR)

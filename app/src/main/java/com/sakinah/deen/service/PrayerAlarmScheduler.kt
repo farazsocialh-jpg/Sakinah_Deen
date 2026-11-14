@@ -5,8 +5,12 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import com.sakinah.deen.MainActivity
+import com.sakinah.deen.data.model.AzaanSettings
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
+import com.sakinah.deen.data.model.Muezzin
+import com.sakinah.deen.data.model.PrayerAlertMode
 import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.data.prayer.PrayerTimeSnapshot
 import com.sakinah.deen.data.prayer.SunniMethodMapper
@@ -36,18 +40,15 @@ class PrayerAlarmScheduler(
         const val EXTRA_PRAYER_TIME_FORMATTED = "extra_prayer_time_formatted"
         const val EXTRA_TRIGGER_MILLIS = "extra_trigger_millis"
         const val EXTRA_IS_SNOOZE = "extra_is_snooze"
+        const val EXTRA_ALERT_MODE = "extra_alert_mode"
+        const val EXTRA_MUEZZIN_ID = "extra_muezzin_id"
 
         private const val BASE_REQUEST_CODE = 1000
         private const val SNOOZE_REQUEST_CODE = 9500
+        private const val ALARM_CLOCK_SHOW_REQUEST_CODE = 9700
         private const val SNOOZE_MINUTES = 10
 
-        private val PRAYERS_TO_SCHEDULE = listOf(
-            PrayerType.FAJR,
-            PrayerType.DHUHR,
-            PrayerType.ASR,
-            PrayerType.MAGHRIB,
-            PrayerType.ISHA
-        )
+        private val PRAYERS_TO_SCHEDULE = AzaanSettings.ALERT_PRAYERS
     }
 
     private val alarmManager: AlarmManager? =
@@ -67,6 +68,11 @@ class PrayerAlarmScheduler(
         madhhab: Madhhab? = null
     ) {
         if (alarmManager == null) return
+        val settings = preferences.azaanSettings
+        if (!settings.enabled) {
+            cancelAllAlarms()
+            return
+        }
         val coords = coordinates ?: preferences.locationCoordinates ?: return
         val school = madhhab ?: preferences.madhhab
         val authority = authorityFor(method)
@@ -86,6 +92,10 @@ class PrayerAlarmScheduler(
      */
     suspend fun scheduleAllDailyAlarmsRefreshed(coordinates: Pair<Double, Double>? = null) {
         if (alarmManager == null) return
+        if (!preferences.azaanSettings.enabled) {
+            cancelAllAlarms()
+            return
+        }
         val repository = prayerTimes ?: return scheduleAllDailyAlarms(coordinates)
         val coords = coordinates ?: preferences.locationCoordinates ?: return
         val school = preferences.madhhab
@@ -110,17 +120,29 @@ class PrayerAlarmScheduler(
         todayTimes: Map<PrayerType, JLocalTime>,
         tomorrowTimes: Map<PrayerType, JLocalTime>
     ) {
+        // Re-register the complete table so turning a prayer off removes its old alarm.
+        cancelAllAlarms()
+
+        val settings = preferences.azaanSettings
+        if (!settings.enabled) return
+
         val nowJ = JLocalTime.now()
         val todayJ = JLocalDate.now()
         val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a")
 
         for (prayer in PRAYERS_TO_SCHEDULE) {
-            val todayTime = todayTimes[prayer] ?: continue
-            val isFutureToday = todayTime.isAfter(nowJ)
-            val triggerDate = if (isFutureToday) todayJ else todayJ.plusDays(1)
-            val effectiveTime = if (isFutureToday) todayTime else (tomorrowTimes[prayer] ?: todayTime)
+            val mode = settings.modeFor(prayer)
+            if (mode == PrayerAlertMode.OFF) continue
 
-            val triggerMillis = LocalDateTime.of(triggerDate, effectiveTime)
+            val todayTime = todayTimes[prayer] ?: continue
+            val offset = settings.offsetFor(prayer).toLong()
+            val todayAlertTime = todayTime.plusMinutes(offset)
+            val isFutureToday = todayAlertTime.isAfter(nowJ)
+            val triggerDate = if (isFutureToday) todayJ else todayJ.plusDays(1)
+            val baseTime = if (isFutureToday) todayTime else (tomorrowTimes[prayer] ?: todayTime)
+            val alertTime = baseTime.plusMinutes(offset)
+
+            val triggerMillis = LocalDateTime.of(triggerDate, alertTime)
                 .atZone(ZoneId.systemDefault())
                 .toInstant()
                 .toEpochMilli()
@@ -128,8 +150,10 @@ class PrayerAlarmScheduler(
             scheduleSingleAlarm(
                 prayerType = prayer,
                 prayerName = prayer.name.lowercase().replaceFirstChar { it.uppercase() },
-                timeFormatted = effectiveTime.format(timeFormatter),
-                triggerEpochMillis = triggerMillis
+                timeFormatted = alertTime.format(timeFormatter),
+                triggerEpochMillis = triggerMillis,
+                alertMode = mode,
+                muezzin = settings.muezzin
             )
         }
     }
@@ -177,7 +201,9 @@ class PrayerAlarmScheduler(
         prayerType: PrayerType,
         prayerName: String,
         timeFormatted: String,
-        triggerEpochMillis: Long
+        triggerEpochMillis: Long,
+        alertMode: PrayerAlertMode = preferences.azaanSettings.modeFor(prayerType),
+        muezzin: Muezzin = preferences.azaanSettings.muezzin
     ) {
         if (alarmManager == null) return
 
@@ -187,7 +213,9 @@ class PrayerAlarmScheduler(
             prayerType = prayerType,
             timeFormatted = timeFormatted,
             triggerEpochMillis = triggerEpochMillis,
-            isSnooze = false
+            isSnooze = false,
+            alertMode = alertMode,
+            muezzin = muezzin
         )
         setExactCompat(triggerEpochMillis, pendingIntent)
     }
@@ -207,7 +235,9 @@ class PrayerAlarmScheduler(
             prayerType = prayerType,
             timeFormatted = timeFormatted,
             triggerEpochMillis = triggerAt,
-            isSnooze = true
+            isSnooze = true,
+            alertMode = preferences.azaanSettings.modeFor(prayerType),
+            muezzin = preferences.azaanSettings.muezzin
         )
         setExactCompat(triggerAt, pendingIntent)
     }
@@ -237,7 +267,9 @@ class PrayerAlarmScheduler(
         prayerType: PrayerType,
         timeFormatted: String,
         triggerEpochMillis: Long,
-        isSnooze: Boolean
+        isSnooze: Boolean,
+        alertMode: PrayerAlertMode,
+        muezzin: Muezzin
     ): PendingIntent {
         val intent = Intent(context, PrayerAlarmReceiver::class.java).apply {
             action = ACTION_PRAYER_ALARM
@@ -246,6 +278,8 @@ class PrayerAlarmScheduler(
             putExtra(EXTRA_PRAYER_TIME_FORMATTED, timeFormatted)
             putExtra(EXTRA_TRIGGER_MILLIS, triggerEpochMillis)
             putExtra(EXTRA_IS_SNOOZE, isSnooze)
+            putExtra(EXTRA_ALERT_MODE, alertMode.name)
+            putExtra(EXTRA_MUEZZIN_ID, muezzin.id)
         }
         return PendingIntent.getBroadcast(
             context,
@@ -256,16 +290,25 @@ class PrayerAlarmScheduler(
     }
 
     /**
-     * Exact alarms are a runtime grant on Android 12+. When the user revokes it,
-     * fall back to an inexact idle-safe alarm instead of losing the reminder.
+     * An alarm clock is the strongest user-visible alarm: it wakes the device out of Doze,
+     * shows the time, and lets the alarm receiver start its media-playback foreground service.
+     * If exact alarms were disabled, keep the reminder with an idle-safe fallback.
      */
     private fun setExactCompat(triggerAtMillis: Long, pendingIntent: PendingIntent) {
         val am = alarmManager ?: return
         val canScheduleExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()
+        val showIntent = PendingIntent.getActivity(
+            context,
+            ALARM_CLOCK_SHOW_REQUEST_CODE,
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         if (canScheduleExact) {
             try {
-                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                am.setAlarmClock(AlarmManager.AlarmClockInfo(triggerAtMillis, showIntent), pendingIntent)
                 return
             } catch (e: SecurityException) {
                 // Permission revoked between the check and the call.

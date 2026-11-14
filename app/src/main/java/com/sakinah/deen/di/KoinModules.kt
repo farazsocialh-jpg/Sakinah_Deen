@@ -20,6 +20,7 @@ import com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
 import com.sakinah.deen.domain.sensor.QiblaSensorManager
 import com.sakinah.deen.domain.travel.TravelStatusManager
+import com.sakinah.deen.service.PrayerAlarmScheduler
 import com.sakinah.deen.network.IslamicDataRepository
 import com.sakinah.deen.network.SunniAiClient
 import com.sakinah.deen.network.SunniAiScholarRepository
@@ -145,6 +146,14 @@ val prayerTimeModule = module {
             settings = get()
         )
     }
+    single {
+        PrayerAlarmScheduler(
+            context = androidContext(),
+            astronomyEngine = get(),
+            preferences = get(),
+            prayerTimes = getOrNull()
+        )
+    }
 }
 
 val repositoryModule = module {
@@ -197,7 +206,7 @@ val accountModule = module {
 }
 
 val viewModelModule = module {
-    factory { SalahViewModel(get(), get(), get(), get(), getOrNull(), getOrNull(), getOrNull(), getOrNull()) }
+    factory { SalahViewModel(get(), get(), get(), get(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull()) }
     factory { QuranViewModel(getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull()) }
     factory { HadithViewModel(getOrNull(), getOrNull(), getOrNull()) }
     factory { TravelViewModel(get(), get(), getOrNull()) }

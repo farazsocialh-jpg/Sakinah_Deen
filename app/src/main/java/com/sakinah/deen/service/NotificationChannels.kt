@@ -4,7 +4,6 @@ import android.app.NotificationChannel
 import android.app.NotificationChannelGroup
 import android.app.NotificationManager
 import android.content.Context
-import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
 import com.sakinah.deen.R
@@ -53,13 +52,9 @@ object NotificationChannels {
             description = context.getString(R.string.channel_adhan_desc)
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 500, 250, 500, 250, 500)
-            setSound(
-                adhanSoundUri(context),
-                AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .build()
-            )
+            // Playback is owned by AdhanPlaybackService so the selected Muezzin is heard.
+            // A channel sound here would overlap that recording with the bundled Makkah Adhan.
+            setSound(null, null)
             lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             setShowBadge(true)
         }

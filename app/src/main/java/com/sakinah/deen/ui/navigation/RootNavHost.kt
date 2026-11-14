@@ -59,6 +59,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.R
 import com.sakinah.deen.data.prefs.AppearancePreferences
+import com.sakinah.deen.data.prefs.SakinahPreferences
+import com.sakinah.deen.domain.astronomy.UserLocationProvider
+import com.sakinah.deen.service.AzaanScheduling
 import com.sakinah.deen.settings.SettingsRepository
 import com.sakinah.deen.settings.ThemeMode as SharedThemeMode
 import com.sakinah.deen.ui.screens.AboutScreen
@@ -130,6 +133,12 @@ fun RootNavHost() {
     val settingsRepo: SettingsRepository? = remember(koinStarted) {
         if (koinStarted) GlobalContext.get().getOrNull<SettingsRepository>() else null
     }
+    val appPrefs: SakinahPreferences? = remember(koinStarted, context) {
+        if (koinStarted) GlobalContext.get().getOrNull<SakinahPreferences>() else null
+    }
+    val locationProvider: UserLocationProvider? = remember(koinStarted) {
+        if (koinStarted) GlobalContext.get().getOrNull<UserLocationProvider>() else null
+    }
     val scope = rememberCoroutineScope()
 
     var rerunOnboarding by rememberSaveable { mutableStateOf(false) }
@@ -190,6 +199,14 @@ fun RootNavHost() {
                 rerunOnboarding = false
                 backStack.clear()
                 currentScreen = startScreenForObjective(savedConfig.objective)
+
+                appPrefs?.alarmsEnabled = true
+                scope.launch {
+                    AzaanScheduling.scheduleWithBestLocation(
+                        context = context,
+                        locationProvider = locationProvider
+                    )
+                }
             }
         )
         return

@@ -2,9 +2,13 @@ package com.sakinah.deen.data.prefs
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.sakinah.deen.data.model.AzaanSettings
 import com.sakinah.deen.data.model.CalculationMethod
-import com.sakinah.deen.network.IslamicDataRepository
 import com.sakinah.deen.data.model.Madhhab
+import com.sakinah.deen.data.model.Muezzin
+import com.sakinah.deen.data.model.PrayerAlertMode
+import com.sakinah.deen.data.model.PrayerType
+import com.sakinah.deen.network.IslamicDataRepository
 import com.sakinah.deen.domain.travel.HomeAnchorStore
 import com.sakinah.deen.domain.travel.SafarPolicy
 
@@ -57,6 +61,12 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         private const val KEY_HADITH_LANGUAGE = "hadith_language_code"
         private const val KEY_BOOKMARKED_HADITH_IDS = "bookmarked_hadith_ids"
         private const val KEY_HADITH_BOOKMARKS_INITIALIZED = "hadith_bookmarks_initialized"
+        private const val KEY_ALARMS_ENABLED = "alarms_enabled"
+        private const val KEY_FIRST_LAUNCH_PERMISSIONS_REQUESTED = "first_launch_permissions_requested"
+        private const val KEY_MUEZZIN = "azaan_muezzin"
+        private const val KEY_FAJR_SPECIAL_ADHAN = "azaan_fajr_special"
+        private const val KEY_ALERT_MODE_PREFIX = "azaan_mode_"
+        private const val KEY_ALERT_OFFSET_PREFIX = "azaan_offset_"
     }
 
     /** Double is stored as raw bits so stored coordinates do not lose precision. */
@@ -205,6 +215,60 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
     var quranTranslationLanguage: String
         get() = prefs.getString(KEY_QURAN_TRANSLATION_LANGUAGE, "English") ?: "English"
         set(value) = prefs.edit().putString(KEY_QURAN_TRANSLATION_LANGUAGE, value).apply()
+
+    /**
+     * Background Azaan scheduling is on after onboarding (or whenever a location has already
+     * been saved by an older install). The settings screen can turn it off explicitly.
+     */
+    var alarmsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_ALARMS_ENABLED, locationCoordinates != null)
+        set(value) = prefs.edit().putBoolean(KEY_ALARMS_ENABLED, value).apply()
+
+    /** True once the first-launch permission request has been shown, so it is not repeated. */
+    var firstLaunchPermissionsRequested: Boolean
+        get() = prefs.getBoolean(KEY_FIRST_LAUNCH_PERMISSIONS_REQUESTED, false)
+        set(value) = prefs.edit().putBoolean(KEY_FIRST_LAUNCH_PERMISSIONS_REQUESTED, value).apply()
+
+    var azaanSettings: AzaanSettings
+        get() {
+            val modes = AzaanSettings.ALERT_PRAYERS.associateWith { prayer ->
+                prefs.getString(KEY_ALERT_MODE_PREFIX + prayer.name.lowercase(), null)
+                    ?.let { name -> runCatching { PrayerAlertMode.valueOf(name) }.getOrNull() }
+                    ?: PrayerAlertMode.FULL_AZAAN
+            }
+            val offsets = AzaanSettings.ALERT_PRAYERS.associateWith { prayer ->
+                prefs.getInt(KEY_ALERT_OFFSET_PREFIX + prayer.name.lowercase(), 0)
+            }
+            return AzaanSettings(
+                enabled = alarmsEnabled,
+                muezzin = Muezzin.fromId(prefs.getString(KEY_MUEZZIN, null)),
+                fajrSpecialAdhan = prefs.getBoolean(KEY_FAJR_SPECIAL_ADHAN, true),
+                modes = modes,
+                offsetsMinutes = offsets
+            )
+        }
+        set(value) {
+            prefs.edit().apply {
+                putBoolean(KEY_ALARMS_ENABLED, value.enabled)
+                putString(KEY_MUEZZIN, value.muezzin.id)
+                putBoolean(KEY_FAJR_SPECIAL_ADHAN, value.fajrSpecialAdhan)
+                AzaanSettings.ALERT_PRAYERS.forEach { prayer ->
+                    val suffix = prayer.name.lowercase()
+                    putString(
+                        KEY_ALERT_MODE_PREFIX + suffix,
+                        (value.modes[prayer] ?: PrayerAlertMode.FULL_AZAAN).name
+                    )
+                    putInt(
+                        KEY_ALERT_OFFSET_PREFIX + suffix,
+                        value.offsetsMinutes[prayer] ?: 0
+                    )
+                }
+            }.apply()
+        }
+
+    fun alertModeFor(prayer: PrayerType): PrayerAlertMode = azaanSettings.modeFor(prayer)
+
+    fun alertOffsetMinutesFor(prayer: PrayerType): Int = azaanSettings.offsetFor(prayer)
 
     var hadithLanguageCode: String
         get() = prefs.getString(KEY_HADITH_LANGUAGE, "eng") ?: "eng"

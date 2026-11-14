@@ -1,26 +1,35 @@
 package com.sakinah.deen
 
+import android.Manifest
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.data.prefs.AppearancePreferences
+import com.sakinah.deen.data.prefs.SakinahPreferences
+import com.sakinah.deen.domain.astronomy.UserLocationProvider
 import com.sakinah.deen.service.AdhanPlaybackService
+import com.sakinah.deen.service.AzaanScheduling
 import com.sakinah.deen.ui.navigation.RootNavHost
 import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.SakinahTheme
 import com.sakinah.deen.ui.theme.ThemeMode
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,6 +39,34 @@ class MainActivity : ComponentActivity() {
         setContent {
             val appearancePrefs = rememberInject<AppearancePreferences>()
             val appearanceConfig by appearancePrefs.effectiveConfig.collectAsStateWithLifecycle()
+            val appPrefs = rememberInject<SakinahPreferences>()
+            val locationProvider = rememberInject<UserLocationProvider>()
+            val scope = rememberCoroutineScope()
+
+            val firstLaunchPermissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestMultiplePermissions()
+            ) {
+                scope.launch {
+                    AzaanScheduling.scheduleWithBestLocation(
+                        context = applicationContext,
+                        locationProvider = locationProvider
+                    )
+                }
+            }
+
+            LaunchedEffect(Unit) {
+                if (!appPrefs.firstLaunchPermissionsRequested) {
+                    appPrefs.firstLaunchPermissionsRequested = true
+                    val permissions = buildList {
+                        add(Manifest.permission.ACCESS_FINE_LOCATION)
+                        add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            add(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    }
+                    firstLaunchPermissionLauncher.launch(permissions.toTypedArray())
+                }
+            }
             val darkTheme = when (appearanceConfig.themeMode) {
                 ThemeMode.DARK -> true
                 ThemeMode.LIGHT -> false
@@ -62,11 +99,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        sendStopAdhanIntent()
     }
 
     override fun onNewIntent(intent: Intent) {

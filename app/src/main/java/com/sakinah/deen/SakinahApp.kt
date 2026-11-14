@@ -69,19 +69,22 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
 
         NotificationChannels.createChannels(this)
 
-        // Restore exact alarms on cold start. Coordinates come from the persisted
-        // location selection; the documented default city is only a bootstrap value
-        // until onboarding stores a real fix.
+        // Restore exact alarms on cold start only for a location the user actually saved.
+        // Never arm reminders for a bootstrap/default city before onboarding.
         val coordinates = preferences.locationCoordinates
-            ?: Pair(SakinahPreferences.DEFAULT_LATITUDE, SakinahPreferences.DEFAULT_LONGITUDE)
+        if (coordinates != null && preferences.alarmsEnabled) {
+            val scheduler = PrayerAlarmScheduler(this, astronomyEngine, preferences, prayerTimeRepository)
 
-        val scheduler = PrayerAlarmScheduler(this, astronomyEngine, preferences, prayerTimeRepository)
-
-        // Register alarms immediately from the local astronomical table so reminders exist
-        // even in airplane mode, then upgrade to the cached/online authority timetable.
-        scheduler.scheduleAllDailyAlarms(coordinates = coordinates)
-        applicationScope.launch {
-            runCatching { scheduler.scheduleAllDailyAlarmsRefreshed(coordinates = coordinates) }
+            // Register alarms immediately from the local astronomical table so reminders exist
+            // even in airplane mode, then upgrade to the cached/online authority timetable.
+            scheduler.scheduleAllDailyAlarms(
+                coordinates = coordinates,
+                method = preferences.calculationMethodOverride,
+                madhhab = preferences.madhhab
+            )
+            applicationScope.launch {
+                runCatching { scheduler.scheduleAllDailyAlarmsRefreshed(coordinates = coordinates) }
+            }
         }
     }
 }

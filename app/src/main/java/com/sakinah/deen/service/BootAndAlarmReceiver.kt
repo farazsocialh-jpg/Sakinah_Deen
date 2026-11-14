@@ -20,6 +20,8 @@ class BootAndAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action
         if (action != Intent.ACTION_BOOT_COMPLETED &&
+            action != "android.intent.action.QUICKBOOT_POWERON" &&
+            action != "com.htc.intent.action.QUICKBOOT_POWERON" &&
             action != Intent.ACTION_TIME_CHANGED &&
             action != Intent.ACTION_TIMEZONE_CHANGED &&
             action != Intent.ACTION_MY_PACKAGE_REPLACED
@@ -42,9 +44,6 @@ class BootAndAlarmReceiver : BroadcastReceiver() {
 
     private fun restoreAlarms(context: Context) {
         val preferences = SakinahPreferences(context)
-        val coordinates = preferences.locationCoordinates
-            ?: Pair(SakinahPreferences.DEFAULT_LATITUDE, SakinahPreferences.DEFAULT_LONGITUDE)
-
         NotificationChannels.createChannels(context)
 
         val scheduler = PrayerAlarmScheduler(
@@ -52,7 +51,20 @@ class BootAndAlarmReceiver : BroadcastReceiver() {
             astronomyEngine = PrayerCalculationEngineImpl(),
             preferences = preferences
         )
-        scheduler.cancelAllAlarms()
-        scheduler.scheduleAllDailyAlarms(coordinates = coordinates)
+
+        if (!preferences.alarmsEnabled) {
+            scheduler.cancelAllAlarms()
+            return
+        }
+
+        // Never silently substitute Makkah (or another city) after a reboot: use the
+        // location the user selected. If none is saved yet, the app will schedule after
+        // onboarding/location resolution instead of firing alarms for the wrong place.
+        val coordinates = preferences.locationCoordinates ?: return
+        scheduler.scheduleAllDailyAlarms(
+            coordinates = coordinates,
+            method = preferences.calculationMethodOverride,
+            madhhab = preferences.madhhab
+        )
     }
 }
