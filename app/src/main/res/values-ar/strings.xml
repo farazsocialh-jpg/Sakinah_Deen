@@ -67,4 +67,37 @@
     <string name="quran_reading_layout_caption">اختر طريقة عرض آيات القرآن في القارئ.</string>
     <string name="hadith_reading_layout_title">تخطيط قراءة الحديث</string>
     <string name="hadith_reading_layout_caption">اختر طريقة عرض نص الحديث في القارئ.</string>
+
+    <!-- Visual Salah Guide -->
+    <string name="guide_title">دليل الصلاة المصوّر</string>
+    <string name="guide_back_cd">رجوع</string>
+    <string name="guide_tab_wudu">الوضوء</string>
+    <string name="guide_tab_salah">الصلاة</string>
+    <string name="guide_tab_after_salah">بعد الصلاة</string>
+    <string name="guide_subtitle_salah">%1$s · الركعة %2$d من %3$d · الخطوة %4$d من %5$d</string>
+    <string name="guide_subtitle_other">%1$s · الخطوة %2$d من %3$d</string>
+    <string name="guide_section_physical">الهيئة الجسدية</string>
+    <string name="guide_section_recite">ما يُقال في هذا الركن</string>
+    <string name="guide_pronunciation_prefix">النطق: %1$s</string>
+    <string name="guide_meaning_prefix">المعنى: %1$s</string>
+    <string name="guide_quran_ref">القرآن: %1$s</string>
+    <string name="guide_hadith_ref">الحديث: %1$s</string>
+    <string name="guide_speak_arabic">نطق العربية</string>
+    <string name="guide_stop_speaking">إيقاف النطق</string>
+    <string name="guide_tts_unavailable">الصوت العربي غير متاح على الجهاز</string>
+    <string name="guide_previous">السابق</string>
+    <string name="guide_next_step">الخطوة التالية</string>
+    <string name="guide_go_to_salah">الانتقال إلى الصلاة</string>
+    <string name="guide_go_to_after_salah">أذكار بعد الصلاة</string>
+    <string name="guide_complete">إتمام</string>
+    <string name="guide_wudu_next_hint">انتقل إلى تبويب الصلاة عندما تكون مستعداً للصلاة.</string>
+    <string name="guide_tasbih_title">عدّاد التسبيح · %1$d / 100</string>
+    <string name="guide_tasbih_now">الذكر الحالي: %1$s</string>
+    <string name="guide_tasbih_done_hint">اكتملت 100 — سبحان الله (33×)، الحمد لله (33×)، الله أكبر (34×)</string>
+    <string name="guide_tasbih_tap">اضغط للعد +1</string>
+    <string name="guide_tasbih_complete">اكتملت 100</string>
+    <string name="guide_tasbih_reset_cd">إعادة ضبط العداد</string>
+    <string name="guide_tasbih_subhanallah">سبحان الله (33×)</string>
+    <string name="guide_tasbih_alhamdulillah">الحمد لله (33×)</string>
+    <string name="guide_tasbih_allahuakbar">الله أكبر (34×)</string>
 </resources>
