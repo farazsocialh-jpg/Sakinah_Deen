@@ -8,6 +8,7 @@ import com.sakinah.deen.data.model.Madhhab
 import com.sakinah.deen.data.model.Muezzin
 import com.sakinah.deen.data.model.PrayerAlertMode
 import com.sakinah.deen.data.model.PrayerType
+import com.sakinah.deen.data.model.QuranTranslationResource
 import com.sakinah.deen.network.IslamicDataRepository
 import com.sakinah.deen.domain.travel.HomeAnchorStore
 import com.sakinah.deen.domain.travel.SafarPolicy
@@ -58,6 +59,8 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         private const val KEY_DUA_SAFAR_SOUND_URI = "dua_safar_sound_uri"
         private const val KEY_QURAN_TRANSLATION_ID = "quran_translation_id"
         private const val KEY_QURAN_TRANSLATION_LANGUAGE = "quran_translation_language"
+        private const val KEY_QURAN_TRANSLATION_EDITION_KEY = "quran_translation_edition_key"
+        private const val KEY_QURAN_TRANSLATION_SOURCE = "quran_translation_source"
         private const val KEY_HADITH_LANGUAGE = "hadith_language_code"
         private const val KEY_BOOKMARKED_HADITH_IDS = "bookmarked_hadith_ids"
         private const val KEY_HADITH_BOOKMARKS_INITIALIZED = "hadith_bookmarks_initialized"
@@ -222,6 +225,17 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
     var quranTranslationLanguage: String
         get() = prefs.getString(KEY_QURAN_TRANSLATION_LANGUAGE, "English") ?: "English"
         set(value) = prefs.edit().putString(KEY_QURAN_TRANSLATION_LANGUAGE, value).apply()
+
+    var quranTranslationEditionKey: String
+        get() = prefs.getString(KEY_QURAN_TRANSLATION_EDITION_KEY, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_QURAN_TRANSLATION_EDITION_KEY, value).apply()
+
+    var quranTranslationSource: String
+        get() = prefs.getString(
+            KEY_QURAN_TRANSLATION_SOURCE,
+            QuranTranslationResource.SOURCE_QURAN_COM
+        ) ?: QuranTranslationResource.SOURCE_QURAN_COM
+        set(value) = prefs.edit().putString(KEY_QURAN_TRANSLATION_SOURCE, value).apply()
 
     /**
      * Background Azaan scheduling is on after onboarding (or whenever a location has already

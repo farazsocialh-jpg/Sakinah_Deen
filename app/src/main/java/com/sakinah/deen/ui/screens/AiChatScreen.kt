@@ -2,6 +2,8 @@ package com.sakinah.deen.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -512,7 +514,10 @@ fun AiChatScreen(
             },
             title = { Text("Before You Begin") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     Text(
                         text = "Islamic AI Scholar is an educational research companion grounded in the Quran, Kutub al-Tis'ah, and the four classical legal schools.",
                         fontSize = 13.sp,

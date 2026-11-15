@@ -241,15 +241,18 @@ fun VisualSalahGuideScreen(
             ) {
                 if (tab == GuideTab.SALAH && step.posture != null) {
                     SakinahCard(contentPadding = 12.dp) {
-                        Image(
-                            painter = painterResource(postureDrawable(step.posture, gender)),
-                            contentDescription = "${step.title} posture for ${gender.label}",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(if (landscape) 150.dp else 210.dp),
-                            contentScale = ContentScale.Fit,
-                            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface)
-                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Image(
+                                painter = painterResource(postureDrawable(step.posture, gender)),
+                                contentDescription = "${step.title} posture for ${gender.label}",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(if (landscape) 150.dp else 210.dp),
+                                contentScale = ContentScale.Fit,
+                                colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface)
+                            )
+                            PostureCueBadge(step)
+                        }
                     }
                 }
 
@@ -344,6 +347,47 @@ fun VisualSalahGuideScreen(
                 )
             }
         }
+    }
+}
+
+/** Concise physical cue that changes with the active posture/step. */
+private fun postureCueFor(step: GuideStep): String {
+    val title = step.title.lowercase()
+    val notes = step.notes.lowercase()
+    return when {
+        title.contains("takbir") || title.contains("qiyam") ->
+            "Stand facing the Qiblah with hands folded; eyes on the prostration point."
+        title.contains("ruku") ->
+            "Flat back near 90°, hands gripping the knees, fingers spread."
+        title.contains("qawmah") ->
+            "Rise fully upright and pause before going down."
+        title.contains("sujud") ->
+            "Seven bones on the ground; forearms lifted, fingers together."
+        title.contains("tashahhud") ->
+            "Sit on the left foot with the right foot upright; raise the right index finger at the testimony."
+        title.contains("salam") ->
+            "Turn the head fully right, then left, saying the Salam each time."
+        notes.contains("right foot") || notes.contains("left foot") ->
+            "Keep the right foot upright and the left foot spread beneath you."
+        else -> step.notes.take(110)
+    }
+}
+
+@Composable
+private fun PostureCueBadge(step: GuideStep) {
+    Surface(
+        shape = RoundedCornerShape(9.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = "Position cue · ${postureCueFor(step)}",
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onPrimaryContainer
+        )
     }
 }
 

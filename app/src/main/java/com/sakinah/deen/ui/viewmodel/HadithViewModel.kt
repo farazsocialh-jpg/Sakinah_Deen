@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sakinah.deen.data.database.entity.HadithEntryEntity
 import com.sakinah.deen.data.model.HadithBookCatalog
+import com.sakinah.deen.data.model.HadithEditionResource
 import com.sakinah.deen.data.model.HadithModel
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.network.IslamicDataRepository
@@ -30,7 +31,11 @@ data class HadithUiState(
     val books: List<HadithBookInfo> = emptyList(),
     val selectedBookKey: String = "all",
     val selectedLanguageCode: String = "eng",
-    val availableLanguages: List<String> = listOf("eng", "ara"),
+    /** Language actually read for a single book when the requested one is unavailable. */
+    val resolvedLanguageCode: String? = null,
+    val availableLanguages: List<String> = emptyList(),
+    /** All catalog languages as (ISO code, human-readable name), ordered for the picker. */
+    val availableLanguageOptions: List<Pair<String, String>> = emptyList(),
     val sections: List<Pair<Int, String>> = emptyList(),
     val selectedSectionNumber: Int = 0,
     val searchQuery: String = "",
@@ -65,6 +70,7 @@ sealed class HadithUiIntent {
     data object ClearDeepLinkToast : HadithUiIntent()
     data object ClearSearch : HadithUiIntent()
     data object RetrySync : HadithUiIntent()
+    data object ReloadCatalog : HadithUiIntent()
 }
 
 class HadithViewModel(
@@ -133,6 +139,7 @@ class HadithViewModel(
 
     private var hadithCatalog: List<HadithBookCatalog> = emptyList()
     private var databaseJob: Job? = null
+    private var allBooksSyncJob: Job? = null
     private var filterJob: Job? = null
     private var pendingDeepLinkTarget: Triple<String, Int, String>? = null
     private var pendingDeepLinkSlug: String? = null
@@ -176,6 +183,7 @@ class HadithViewModel(
                 _uiState.update {
                     it.copy(
                         selectedBookKey = intent.bookKey,
+                        resolvedLanguageCode = null,
                         selectedSectionNumber = 0,
                         isLoading = intent.bookKey != "all",
                         errorMessage = null,
@@ -186,6 +194,8 @@ class HadithViewModel(
                 applyFilterAndSearch()
                 if (intent.bookKey != "all") {
                     syncBook(intent.bookKey, _uiState.value.selectedLanguageCode)
+                } else {
+                    syncAllBooks(_uiState.value.selectedLanguageCode)
                 }
                 observeDatabaseHadiths()
             }
@@ -201,6 +211,7 @@ class HadithViewModel(
                 _uiState.update {
                     it.copy(
                         selectedLanguageCode = intent.languageCode,
+                        resolvedLanguageCode = null,
                         selectedSectionNumber = 0,
                         isLoading = _uiState.value.selectedBookKey != "all",
                         errorMessage = null,
@@ -211,6 +222,8 @@ class HadithViewModel(
                 applyFilterAndSearch()
                 if (_uiState.value.selectedBookKey != "all") {
                     syncBook(_uiState.value.selectedBookKey, intent.languageCode)
+                } else {
+                    syncAllBooks(intent.languageCode)
                 }
                 observeDatabaseHadiths()
             }
@@ -237,8 +250,13 @@ class HadithViewModel(
             }
             is HadithUiIntent.RetrySync -> {
                 val bookKey = _uiState.value.selectedBookKey
-                if (bookKey != "all") syncBook(bookKey, _uiState.value.selectedLanguageCode)
+                if (bookKey != "all") {
+                    syncBook(bookKey, _uiState.value.selectedLanguageCode)
+                } else {
+                    syncAllBooks(_uiState.value.selectedLanguageCode)
+                }
             }
+            is HadithUiIntent.ReloadCatalog -> loadCatalog()
         }
     }
 
@@ -255,16 +273,16 @@ class HadithViewModel(
             "ara" in supported -> "ara"
             else -> supported.first()
         }
-        if (effectiveLanguage != languageCode) {
+        if (!effectiveLanguage.equals(languageCode, ignoreCase = true)) {
             _uiState.update {
                 it.copy(
-                    selectedLanguageCode = effectiveLanguage,
+                    resolvedLanguageCode = effectiveLanguage,
                     languageFallbackNotice = "$bookKey does not offer ${languageCode.uppercase()}; showing ${effectiveLanguage.uppercase()} instead."
                 )
             }
             observeDatabaseHadiths()
         } else {
-            _uiState.update { it.copy(languageFallbackNotice = null) }
+            _uiState.update { it.copy(resolvedLanguageCode = null, languageFallbackNotice = null) }
         }
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null, downloadProgress = 0f) }
@@ -302,6 +320,12 @@ class HadithViewModel(
             hadithCatalog = catalog
             _uiState.update { state ->
                 val selectedCatalog = catalog.firstOrNull { it.bookKey == state.selectedBookKey }
+                val editions = if (state.selectedBookKey == "all") {
+                    catalog.flatMap { it.editions }
+                } else {
+                    selectedCatalog?.editions.orEmpty()
+                }
+                val languageOptions = languageOptionsFor(editions)
                 state.copy(
                     books = if (catalog.isNotEmpty()) {
                         catalog.map { info ->
@@ -314,14 +338,19 @@ class HadithViewModel(
                     } else {
                         state.books
                     },
-                    availableLanguages = selectedCatalog?.editions?.map { it.languageCode }?.distinct()?.ifEmpty { state.availableLanguages }
-                        ?: state.availableLanguages,
+                    availableLanguages = languageOptions.map { it.first }
+                        .ifEmpty { state.availableLanguages },
+                    availableLanguageOptions = languageOptions
+                        .ifEmpty { state.availableLanguageOptions },
                     sections = if (state.selectedBookKey == "all") {
                         emptyList()
                     } else {
                         selectedCatalog?.sections?.toList()?.sortedBy { it.first } ?: state.sections
                     }
                 )
+            }
+            if (_uiState.value.selectedBookKey == "all") {
+                syncAllBooks(_uiState.value.selectedLanguageCode)
             }
             // Replay any deep link that arrived before the catalog was ready.
             val queuedSlug = pendingDeepLinkSlug
@@ -335,21 +364,125 @@ class HadithViewModel(
     }
 
     private fun updateDerivedFromCatalog(bookKey: String) {
-        if (bookKey == "all") {
-            _uiState.update { state ->
-                state.copy(
-                    sections = emptyList(),
-                    availableLanguages = listOf("eng", "ara")
-                )
-            }
-            return
+        val editions = if (bookKey == "all") {
+            hadithCatalog.flatMap { it.editions }
+        } else {
+            hadithCatalog.firstOrNull { it.bookKey == bookKey }?.editions.orEmpty()
         }
-        val selectedCatalog = hadithCatalog.firstOrNull { it.bookKey == bookKey } ?: return
+        val options = languageOptionsFor(editions)
+        val selectedCatalog = hadithCatalog.firstOrNull { it.bookKey == bookKey }
         _uiState.update { state ->
             state.copy(
-                availableLanguages = selectedCatalog.editions.map { it.languageCode }.distinct().ifEmpty { state.availableLanguages },
-                sections = selectedCatalog.sections.toList().sortedBy { it.first }
+                availableLanguages = options.map { it.first }.ifEmpty { state.availableLanguages },
+                availableLanguageOptions = options.ifEmpty { state.availableLanguageOptions },
+                sections = if (bookKey == "all") {
+                    emptyList()
+                } else {
+                    selectedCatalog?.sections?.toList()?.sortedBy { it.first } ?: state.sections
+                }
             )
+        }
+    }
+
+    private fun languageOptionsFor(
+        editions: List<HadithEditionResource>
+    ): List<Pair<String, String>> {
+        val priority = listOf("eng", "ara", "urd", "ind", "tur", "fra", "ben")
+        val byCode = linkedMapOf<String, String>()
+        editions.forEach { edition ->
+            val code = edition.languageCode.trim().lowercase()
+            if (code.isBlank()) return@forEach
+            val displayName = edition.languageName.trim().ifBlank {
+                IslamicDataRepository.languageDisplayName(code)
+            }
+            byCode.putIfAbsent(code, displayName)
+        }
+        return byCode.entries.sortedWith(
+            compareBy(
+                { entry -> priority.indexOf(entry.key).takeIf { it >= 0 } ?: priority.size },
+                { entry -> entry.value.lowercase() }
+            )
+        ).map { it.key to it.value }
+    }
+
+    private fun syncAllBooks(languageCode: String) {
+        val repo = islamicRepository ?: return
+        val catalog = hadithCatalog
+        if (catalog.isEmpty()) return
+        allBooksSyncJob?.cancel()
+        allBooksSyncJob = viewModelScope.launch {
+            _uiState.update {
+                it.copy(isLoading = true, errorMessage = null, downloadProgress = 0f)
+            }
+            val fallbackBooks = mutableListOf<String>()
+            val failures = mutableListOf<String>()
+            catalog.forEachIndexed { index, book ->
+                val supported = book.editions.map { it.languageCode.lowercase() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                val effectiveLanguage = when {
+                    supported.isEmpty() || languageCode.lowercase() in supported -> languageCode
+                    "eng" in supported -> "eng"
+                    "ara" in supported -> "ara"
+                    else -> supported.first()
+                }
+                if (!effectiveLanguage.equals(languageCode, ignoreCase = true)) {
+                    fallbackBooks += book.bookTitle.ifBlank { book.bookKey }
+                }
+                val available = runCatching {
+                    repo.isBookAvailable(book.bookKey, effectiveLanguage)
+                }.getOrDefault(false)
+                if (!available) {
+                    val result = repo.syncHadithBook(book.bookKey, effectiveLanguage) { progress ->
+                        _uiState.update {
+                            it.copy(
+                                downloadProgress = (index + progress) / catalog.size.toFloat()
+                            )
+                        }
+                    }
+                    val failure = result.exceptionOrNull()
+                    if (failure is kotlinx.coroutines.CancellationException) throw failure
+                    if (failure != null) {
+                        failures += "${book.bookTitle.ifBlank { book.bookKey }}: ${failure.message ?: "download failed"}"
+                    }
+                }
+                _uiState.update {
+                    it.copy(downloadProgress = (index + 1f) / catalog.size.toFloat())
+                }
+            }
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    downloadProgress = null,
+                    languageFallbackNotice = if (fallbackBooks.isNotEmpty()) {
+                        "${languageCode.uppercase()} is unavailable in ${fallbackBooks.take(3).joinToString(", ")}" +
+                            (if (fallbackBooks.size > 3) " and ${fallbackBooks.size - 3} more" else "") +
+                            "; showing the closest available edition on those cards."
+                    } else {
+                        null
+                    },
+                    errorMessage = if (failures.isNotEmpty()) {
+                        "Some collections could not be downloaded: ${failures.take(2).joinToString("; ")}"
+                    } else {
+                        it.errorMessage
+                    }
+                )
+            }
+        }
+    }
+
+    private fun preferredAllBookEntries(
+        entries: List<HadithEntryEntity>,
+        selectedLanguageCode: String
+    ): List<HadithEntryEntity> {
+        return entries.groupBy { it.bookKey }.values.flatMap { rows ->
+            rows.filter { it.languageCode.equals(selectedLanguageCode, ignoreCase = true) }
+                .ifEmpty { rows.filter { it.languageCode.equals("eng", ignoreCase = true) } }
+                .ifEmpty { rows.filter { it.languageCode.equals("ara", ignoreCase = true) } }
+                .ifEmpty {
+                    val closest = rows.firstOrNull()?.languageCode
+                    rows.filter { it.languageCode == closest }
+                }
         }
     }
 
@@ -358,12 +491,13 @@ class HadithViewModel(
         val repo = islamicRepository ?: return
         val bookKey = _uiState.value.selectedBookKey
         val languageCode = _uiState.value.selectedLanguageCode
+        val queryLanguageCode = _uiState.value.resolvedLanguageCode ?: languageCode
         val sectionNumber = _uiState.value.selectedSectionNumber
         databaseJob = viewModelScope.launch {
             val flow = when {
-                bookKey == "all" -> repo.observeAllHadiths(languageCode)
-                sectionNumber > 0 -> repo.observeHadithsBySection(bookKey, languageCode, sectionNumber)
-                else -> repo.observeHadiths(bookKey, languageCode)
+                bookKey == "all" -> repo.observeAllHadiths()
+                sectionNumber > 0 -> repo.observeHadithsBySection(bookKey, queryLanguageCode, sectionNumber)
+                else -> repo.observeHadiths(bookKey, queryLanguageCode)
             }
             try {
                 flow.collect { rawEntries ->
@@ -371,14 +505,25 @@ class HadithViewModel(
                         return@collect
                     }
                     hasReceivedDatabaseRows = true
-                    // The repository already scopes "All Books" to the selected edition, so
-                    // switching ENG <-> ARA always swaps every displayed narration.
-                    val entries = rawEntries
+                    // "All Books" chooses the selected edition per collection, with an
+                    // English/Arabic fallback for books that do not publish that language.
+                    val entries = if (bookKey == "all") {
+                        preferredAllBookEntries(rawEntries, languageCode)
+                    } else {
+                        rawEntries
+                    }
 
                     val bookmarked = _uiState.value.bookmarkedIds
                     val mapped = entries.map { entry ->
                         val canonicalId = "${entry.bookKey}-${entry.languageCode}-${entry.hadithNumber}"
-                        entry.toModel(isBookmarkMatch(canonicalId, entry.bookKey, entry.hadithNumber, bookmarked))
+                        entry.toModel(
+                            bookmarked = isBookmarkMatch(
+                                canonicalId, entry.bookKey, entry.hadithNumber, bookmarked
+                            ),
+                            selectedLanguageCode = languageCode,
+                            detectFallback = bookKey == "all" ||
+                                !queryLanguageCode.equals(languageCode, ignoreCase = true)
+                        )
                     }
 
                     val pending = pendingDeepLinkTarget
@@ -445,7 +590,11 @@ class HadithViewModel(
         }
     }
 
-    private fun HadithEntryEntity.toModel(bookmarked: Boolean): HadithModel = HadithModel(
+    private fun HadithEntryEntity.toModel(
+        bookmarked: Boolean,
+        selectedLanguageCode: String,
+        detectFallback: Boolean
+    ): HadithModel = HadithModel(
         id = "$bookKey-$languageCode-$hadithNumber",
         bookKey = bookKey,
         bookTitle = bookTitle,
@@ -458,7 +607,11 @@ class HadithViewModel(
         sanad = "",
         matnTranslation = englishText,
         bookmarked = bookmarked,
-        sectionNumber = sectionNumber
+        sectionNumber = sectionNumber,
+        languageCode = languageCode,
+        languageName = IslamicDataRepository.languageDisplayName(languageCode, languageCode),
+        isLanguageFallback = detectFallback &&
+            !languageCode.equals(selectedLanguageCode, ignoreCase = true)
     )
 
     private fun applyFilterAndSearch(debounceMillis: Long = 0) {

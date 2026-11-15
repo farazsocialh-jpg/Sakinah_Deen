@@ -41,6 +41,48 @@ class HadithCatalogAndLanguageTest {
     }
 
     @Test
+    fun fetchHadithCatalog_fallsBackToRawMirror() = runBlocking {
+        val editions = """
+            {"bukhari":{"name":"Sahih al-Bukhari","collection":[
+              {"name":"urd-bukhari","book":"bukhari","language":"Urdu","has_sections":true,"direction":"ltr","linkmin":"x"}
+            ]}}
+        """.trimIndent()
+        val client = HttpClient(MockEngine { request ->
+            val url = request.url.toString()
+            when {
+                url.contains("cdn.jsdelivr.net") -> respond(
+                    "unavailable",
+                    HttpStatusCode.ServiceUnavailable,
+                    headersOf(HttpHeaders.ContentType, ContentType.Text.Plain.toString())
+                )
+                url.endsWith("/editions.min.json") -> respond(
+                    editions,
+                    HttpStatusCode.OK,
+                    headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                )
+                else -> respond(
+                    "{}",
+                    HttpStatusCode.OK,
+                    headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                )
+            }
+        })
+        val repo = IslamicDataRepository(
+            quranDao = com.sakinah.deen.fakes.FakeQuranDao(),
+            hadithDao = FakeHadithDao(),
+            tafsirDao = com.sakinah.deen.fakes.FakeTafsirDao(),
+            client = client,
+            json = Json { ignoreUnknownKeys = true; isLenient = true }
+        )
+
+        val parsed = repo.fetchHadithCatalog()
+
+        assertEquals(1, parsed.size)
+        assertEquals("urd", parsed[0].editions.single().languageCode)
+        assertEquals("Urdu", parsed[0].editions.single().languageName)
+    }
+
+    @Test
     fun syncHadithBook_usesRequestedLanguageAndJoinsArabic() = runBlocking {
         val hadithDao = FakeHadithDao()
         val client = HttpClient(MockEngine { request ->

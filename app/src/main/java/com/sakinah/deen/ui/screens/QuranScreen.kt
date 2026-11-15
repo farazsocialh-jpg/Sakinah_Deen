@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -590,43 +591,76 @@ fun QuranScreen(
                                 CircularProgressIndicator()
                             }
                         }
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 360.dp)
-                        ) {
-                            items(filteredTranslations, key = { it.id }) { item ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            vm.onIntent(
-                                                QuranUiIntent.SelectTranslation(
-                                                    translationId = item.id,
-                                                    languageName = item.languageName.ifBlank { item.name },
-                                                    isoCode = item.isoCode
-                                                )
-                                            )
-                                            studioSheetTab = -1
-                                        }
-                                        .padding(vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                        if (!state.isLoadingTranslation && filteredTranslations.isEmpty()) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 22.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = if (state.availableTranslations.isEmpty()) {
+                                        "Translation catalog could not be loaded. Check your connection and retry."
+                                    } else {
+                                        "No translations match “$translationQuery”."
+                                    },
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                                OutlinedButton(
+                                    onClick = { vm.onIntent(QuranUiIntent.LoadTranslations) }
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = item.name,
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 14.sp,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            text = "${item.languageName.ifBlank { item.isoCode }} · ${item.authorName}",
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                    Text("Retry", fontSize = 11.sp)
+                                }
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 360.dp)
+                            ) {
+                                items(
+                                    filteredTranslations,
+                                    key = {
+                                        "${it.id}_${it.isoCode}_${it.name}_${it.authorName}_${it.editionKey}"
                                     }
-                                    if (state.selectedTranslationId == item.id) {
-                                        Icon(Icons.Default.Translate, contentDescription = null, tint = MintGreen)
+                                ) { item ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                vm.onIntent(
+                                                    QuranUiIntent.SelectTranslation(
+                                                        translationId = item.id,
+                                                        languageName = item.languageName.ifBlank { item.name },
+                                                        isoCode = item.isoCode,
+                                                        editionKey = item.editionKey,
+                                                        source = item.source
+                                                    )
+                                                )
+                                                studioSheetTab = -1
+                                            }
+                                            .padding(vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = item.name,
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 14.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = "${item.languageName.ifBlank { item.isoCode }} · ${item.authorName.ifBlank { item.editionKey }}",
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        if (state.selectedTranslationId == item.id) {
+                                            Icon(Icons.Default.Translate, contentDescription = null, tint = MintGreen)
+                                        }
                                     }
                                 }
                             }
@@ -854,17 +888,22 @@ private fun QuranLanguageBadge(
     onClick: () -> Unit
 ) {
     Surface(
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier
+            .defaultMinSize(minWidth = 48.dp, minHeight = 40.dp)
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(50),
         color = MaterialTheme.colorScheme.secondaryContainer
     ) {
-        Text(
-            text = isoCode.uppercase().take(2).ifBlank { "EN" },
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp),
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSecondaryContainer
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = isoCode.uppercase().take(3).ifBlank { "ENG" },
+                modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                maxLines = 1
+            )
+        }
     }
 }
 

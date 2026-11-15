@@ -59,6 +59,8 @@ data class QuranUiState(
     val selectedTranslationId: Int = IslamicDataRepository.DEFAULT_TRANSLATION_ID,
     val selectedTranslationLanguage: String = "English",
     val selectedTranslationIsoCode: String = "en",
+    val selectedTranslationEditionKey: String = "",
+    val selectedTranslationSource: String = QuranTranslationResource.SOURCE_QURAN_COM,
     val arabicFontSize: Int = 24,
     val availableTranslations: List<QuranTranslationResource> = emptyList(),
     val isLoadingTranslation: Boolean = false
@@ -79,7 +81,9 @@ sealed class QuranUiIntent {
     data class SelectTranslation(
         val translationId: Int,
         val languageName: String = "",
-        val isoCode: String = ""
+        val isoCode: String = "",
+        val editionKey: String = "",
+        val source: String = QuranTranslationResource.SOURCE_QURAN_COM
     ) : QuranUiIntent()
     data object LoadTranslations : QuranUiIntent()
 }
@@ -143,6 +147,9 @@ class QuranViewModel(
                     ?: settingsRepository?.settings?.value?.appearance?.translationName
                     ?: "English",
                 selectedTranslationIsoCode = settingsRepository?.settings?.value?.appearance?.translationLanguage ?: "en",
+                selectedTranslationEditionKey = sakinahPreferences?.quranTranslationEditionKey.orEmpty(),
+                selectedTranslationSource = sakinahPreferences?.quranTranslationSource
+                    ?: QuranTranslationResource.SOURCE_QURAN_COM,
                 arabicFontSize = (settingsRepository?.settings?.value?.appearance?.arabicFontSize ?: 24).coerceIn(16, 39)
             )
         }
@@ -179,7 +186,9 @@ class QuranViewModel(
             is QuranUiIntent.SelectTranslation -> selectTranslation(
                 intent.translationId,
                 intent.languageName,
-                intent.isoCode
+                intent.isoCode,
+                intent.editionKey,
+                intent.source
             )
             is QuranUiIntent.LoadTranslations -> viewModelScope.launch { loadTranslationCatalog() }
         }
@@ -205,15 +214,25 @@ class QuranViewModel(
                     }
                     sakinahPreferences?.quranTranslationId = translationId
                     sakinahPreferences?.quranTranslationLanguage = language
+                    sakinahPreferences?.quranTranslationEditionKey = ""
+                    sakinahPreferences?.quranTranslationSource =
+                        QuranTranslationResource.SOURCE_QURAN_COM
                     _uiState.update {
                         it.copy(
                             selectedTranslationId = translationId,
                             selectedTranslationLanguage = language,
                             selectedTranslationIsoCode = iso,
+                            selectedTranslationEditionKey = "",
+                            selectedTranslationSource = QuranTranslationResource.SOURCE_QURAN_COM,
                             isLoadingTranslation = true
                         )
                     }
-                    syncSurah(_uiState.value.currentSurah.number, translationId)
+                    syncSurah(
+                        _uiState.value.currentSurah.number,
+                        translationId,
+                        "",
+                        QuranTranslationResource.SOURCE_QURAN_COM
+                    )
                 }
             }
         }
@@ -346,21 +365,43 @@ class QuranViewModel(
             )
         }
 
-        if (islamicRepository != null) syncSurah(surahNumber, selectedTranslationIdFlow.value)
+        if (islamicRepository != null) {
+            syncSurah(
+                surahNumber,
+                selectedTranslationIdFlow.value,
+                _uiState.value.selectedTranslationEditionKey,
+                _uiState.value.selectedTranslationSource
+            )
+        }
     }
 
     private fun retrySync() {
         val surahNumber = _uiState.value.currentSurah.number
         _uiState.update { it.copy(errorMessage = null) }
-        syncSurah(surahNumber, selectedTranslationIdFlow.value)
+        syncSurah(
+            surahNumber,
+            selectedTranslationIdFlow.value,
+            _uiState.value.selectedTranslationEditionKey,
+            _uiState.value.selectedTranslationSource
+        )
     }
 
-    private fun syncSurah(surahNumber: Int, translationId: Int = selectedTranslationIdFlow.value) {
+    private fun syncSurah(
+        surahNumber: Int,
+        translationId: Int = selectedTranslationIdFlow.value,
+        editionKey: String = _uiState.value.selectedTranslationEditionKey,
+        source: String = _uiState.value.selectedTranslationSource
+    ) {
         val repo = islamicRepository ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingTranslation = true, errorMessage = null) }
             try {
-                val result = repo.syncSurah(surahNumber, translationId)
+                val result = repo.syncSurah(
+                    surahNumber = surahNumber,
+                    translationId = translationId,
+                    translationEditionKey = editionKey,
+                    translationSource = source
+                )
                 result.exceptionOrNull()?.let { error ->
                     if (error is kotlinx.coroutines.CancellationException) throw error
                     _uiState.update {
@@ -394,7 +435,18 @@ class QuranViewModel(
         }
     }
 
-    private fun selectTranslation(translationId: Int, languageName: String, isoCode: String) {
+    private fun selectTranslation(
+        translationId: Int,
+        languageName: String,
+        isoCode: String,
+        editionKey: String,
+        source: String
+    ) {
+        val catalogEntry = _uiState.value.availableTranslations.firstOrNull { it.id == translationId }
+        val resolvedEditionKey = editionKey.ifBlank { catalogEntry?.editionKey.orEmpty() }
+        val resolvedSource = source.ifBlank {
+            catalogEntry?.source ?: QuranTranslationResource.SOURCE_QURAN_COM
+        }
         selectedTranslationIdFlow.value = translationId
         val language = languageName.ifBlank { _uiState.value.selectedTranslationLanguage }
         val iso = isoCode.ifBlank { _uiState.value.selectedTranslationIsoCode }
@@ -403,11 +455,15 @@ class QuranViewModel(
                 selectedTranslationId = translationId,
                 selectedTranslationLanguage = language,
                 selectedTranslationIsoCode = iso,
+                selectedTranslationEditionKey = resolvedEditionKey,
+                selectedTranslationSource = resolvedSource,
                 isLoadingTranslation = true
             )
         }
         sakinahPreferences?.quranTranslationId = translationId
         sakinahPreferences?.quranTranslationLanguage = language
+        sakinahPreferences?.quranTranslationEditionKey = resolvedEditionKey
+        sakinahPreferences?.quranTranslationSource = resolvedSource
         settingsRepository?.let { repo ->
             viewModelScope.launch {
                 repo.updateAppearance(
@@ -419,14 +475,28 @@ class QuranViewModel(
                 )
             }
         }
-        syncSurah(_uiState.value.currentSurah.number, translationId)
+        syncSurah(
+            _uiState.value.currentSurah.number,
+            translationId,
+            resolvedEditionKey,
+            resolvedSource
+        )
     }
 
     private fun loadTranslationCatalog() {
         val repo = islamicRepository ?: return
         viewModelScope.launch {
             val catalog = repo.fetchTranslationCatalog()
-            _uiState.update { it.copy(availableTranslations = catalog) }
+            _uiState.update { state ->
+                val selected = catalog.firstOrNull { it.id == state.selectedTranslationId }
+                state.copy(
+                    availableTranslations = catalog,
+                    selectedTranslationEditionKey = selected?.editionKey
+                        ?: state.selectedTranslationEditionKey,
+                    selectedTranslationSource = selected?.source
+                        ?: state.selectedTranslationSource
+                )
+            }
         }
     }
 

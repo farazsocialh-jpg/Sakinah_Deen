@@ -102,6 +102,21 @@ private fun HadithBookBadge(hadith: HadithModel, modifier: Modifier = Modifier) 
             modifier = Modifier.weight(1f, fill = false)
         )
         GradePill(hadith)
+        if (hadith.isLanguageFallback) {
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.secondaryContainer
+            ) {
+                Text(
+                    text = "${hadith.languageCode.uppercase()} fallback",
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    maxLines = 1
+                )
+            }
+        }
     }
 }
 

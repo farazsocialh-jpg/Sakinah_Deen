@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
@@ -85,6 +86,8 @@ fun HadithScreen(
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var savedOnly by rememberSaveable { mutableStateOf(false) }
     var showBookPicker by remember { mutableStateOf(false) }
+    var showLanguagePicker by remember { mutableStateOf(false) }
+    var languageQuery by remember { mutableStateOf("") }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val appearancePrefs = rememberInject<AppearancePreferences>()
@@ -184,10 +187,7 @@ fun HadithScreen(
                         state = state,
                         savedOnly = savedOnly,
                         onBookClick = { showBookPicker = true },
-                        onLanguageClick = {
-                            val next = if (state.selectedLanguageCode.equals("eng", true)) "ara" else "eng"
-                            vm.onIntent(HadithUiIntent.SelectLanguage(next))
-                        },
+                        onLanguageClick = { showLanguagePicker = true },
                         onGradeSelected = { vm.onIntent(HadithUiIntent.FilterGradeChanged(it)) },
                         onSearchClick = { searchExpanded = !searchExpanded },
                         onSavedClick = { savedOnly = !savedOnly }
@@ -201,10 +201,7 @@ fun HadithScreen(
                     savedOnly = savedOnly,
                     onBookClick = { showBookPicker = true },
                     onAllBooks = { vm.onIntent(HadithUiIntent.SelectBook("all")) },
-                    onLanguageClick = {
-                        val next = if (state.selectedLanguageCode.equals("eng", true)) "ara" else "eng"
-                        vm.onIntent(HadithUiIntent.SelectLanguage(next))
-                    },
+                    onLanguageClick = { showLanguagePicker = true },
                     onGradeSelected = { vm.onIntent(HadithUiIntent.FilterGradeChanged(it)) },
                     onSearchClick = { searchExpanded = !searchExpanded },
                     onSavedClick = { savedOnly = !savedOnly }
@@ -356,10 +353,7 @@ fun HadithScreen(
                         savedOnly = savedOnly,
                         onBookClick = { showBookPicker = true },
                         onAllBooks = { vm.onIntent(HadithUiIntent.SelectBook("all")) },
-                        onLanguageClick = {
-                            val next = if (state.selectedLanguageCode.equals("eng", true)) "ara" else "eng"
-                            vm.onIntent(HadithUiIntent.SelectLanguage(next))
-                        },
+                        onLanguageClick = { showLanguagePicker = true },
                         onGradeSelected = { vm.onIntent(HadithUiIntent.FilterGradeChanged(it)) },
                         onSearchClick = { searchExpanded = !searchExpanded },
                         onSavedClick = { savedOnly = !savedOnly }
@@ -450,6 +444,128 @@ fun HadithScreen(
             }
         }
     }
+
+    if (showLanguagePicker) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                showLanguagePicker = false
+                languageQuery = ""
+            },
+            sheetState = sheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Choose a language",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                OutlinedTextField(
+                    value = languageQuery,
+                    onValueChange = { languageQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Search language or code") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp)
+                )
+
+                val languageOptions = state.availableLanguageOptions
+                val filteredLanguages = remember(languageOptions, languageQuery) {
+                    val query = languageQuery.trim()
+                    if (query.isBlank()) {
+                        languageOptions
+                    } else {
+                        languageOptions.filter { (code, name) ->
+                            name.contains(query, ignoreCase = true) ||
+                                code.contains(query, ignoreCase = true)
+                        }
+                    }
+                }
+
+                when {
+                    languageOptions.isEmpty() -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Language editions are still loading or unavailable.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                            OutlinedButton(onClick = { vm.onIntent(HadithUiIntent.ReloadCatalog) }) {
+                                Text("Retry", fontSize = 11.sp)
+                            }
+                        }
+                    }
+                    filteredLanguages.isEmpty() -> {
+                        Text(
+                            text = "No languages match “$languageQuery”.",
+                            modifier = Modifier.padding(vertical = 18.dp),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    else -> LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 400.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        items(filteredLanguages, key = { it.first }) { (code, name) ->
+                            val selected = code.equals(state.selectedLanguageCode, ignoreCase = true)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        vm.onIntent(HadithUiIntent.SelectLanguage(code))
+                                        showLanguagePicker = false
+                                        languageQuery = ""
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = name,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (selected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = code.uppercase(),
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (selected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected language",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -501,7 +617,7 @@ private fun HadithFilterBar(
             modifier = Modifier.clickable(onClick = onLanguageClick)
         ) {
             Text(
-                text = if (state.selectedLanguageCode.equals("ara", true)) "AR" else "EN",
+                text = state.selectedLanguageCode.uppercase().take(3),
                 modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
@@ -587,7 +703,7 @@ private fun HadithZenPill(
         state.filterGrade.equals("hasan", true) -> "Hasan"
         else -> "All Grades"
     }
-    val language = if (state.selectedLanguageCode.equals("ara", true)) "AR" else "EN"
+    val language = state.selectedLanguageCode.uppercase().take(3)
     Surface(
         modifier = Modifier.fillMaxWidth(0.95f),
         shape = RoundedCornerShape(50),

@@ -78,7 +78,11 @@ data class HadithModel(
     val sanad: String,
     val matnTranslation: String,
     val bookmarked: Boolean = false,
-    val sectionNumber: Int = 0
+    val sectionNumber: Int = 0,
+    val languageCode: String = "",
+    val languageName: String = "",
+    /** True when an All Books result uses a different edition than the selected language. */
+    val isLanguageFallback: Boolean = false
 )
 
 data class TravelConcessionModel(

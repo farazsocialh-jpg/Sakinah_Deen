@@ -19,12 +19,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -63,6 +65,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -536,7 +539,15 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val salahLayoutState = rememberLazyListState()
+                        LaunchedEffect(Unit) {
+                            val index = SalahHomeLayout.entries.indexOf(appearanceConfig.salahHomeLayout)
+                            if (index >= 0) salahLayoutState.animateScrollToItem(index)
+                        }
+                        LazyRow(
+                            state = salahLayoutState,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             items(SalahHomeLayout.entries) { layout ->
                                 val selected = appearanceConfig.salahHomeLayout == layout
                                 Surface(
@@ -558,6 +569,7 @@ fun SettingsScreen(
                                     },
                                     modifier = Modifier
                                         .width(190.dp)
+                                        .heightIn(min = 88.dp)
                                         .clickable { appearancePrefs.updateSalahHomeLayout(layout) }
                                 ) {
                                     Column(
@@ -567,13 +579,17 @@ fun SettingsScreen(
                                         Text(
                                             text = layout.displayName,
                                             fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
                                             text = layout.subtitle,
                                             style = MaterialTheme.typography.bodySmall,
                                             fontSize = 10.sp,
-                                            lineHeight = 13.sp
+                                            lineHeight = 13.sp,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 }
@@ -591,7 +607,15 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val quranLayoutState = rememberLazyListState()
+                        LaunchedEffect(Unit) {
+                            val index = QuranReadingLayout.entries.indexOf(appearanceConfig.quranReadingLayout)
+                            if (index >= 0) quranLayoutState.animateScrollToItem(index)
+                        }
+                        LazyRow(
+                            state = quranLayoutState,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             items(QuranReadingLayout.entries) { layout ->
                                 val selected = appearanceConfig.quranReadingLayout == layout
                                 Surface(
@@ -613,6 +637,7 @@ fun SettingsScreen(
                                     },
                                     modifier = Modifier
                                         .width(190.dp)
+                                        .heightIn(min = 88.dp)
                                         .clickable { appearancePrefs.updateQuranReadingLayout(layout) }
                                 ) {
                                     Column(
@@ -622,13 +647,17 @@ fun SettingsScreen(
                                         Text(
                                             text = layout.displayName,
                                             fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
                                             text = layout.subtitle,
                                             style = MaterialTheme.typography.bodySmall,
                                             fontSize = 10.sp,
-                                            lineHeight = 13.sp
+                                            lineHeight = 13.sp,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 }
@@ -646,7 +675,15 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val hadithLayoutState = rememberLazyListState()
+                        LaunchedEffect(Unit) {
+                            val index = HadithReadingLayout.entries.indexOf(appearanceConfig.hadithReadingLayout)
+                            if (index >= 0) hadithLayoutState.animateScrollToItem(index)
+                        }
+                        LazyRow(
+                            state = hadithLayoutState,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             items(HadithReadingLayout.entries) { layout ->
                                 val selected = appearanceConfig.hadithReadingLayout == layout
                                 Surface(
@@ -668,6 +705,7 @@ fun SettingsScreen(
                                     },
                                     modifier = Modifier
                                         .width(190.dp)
+                                        .heightIn(min = 88.dp)
                                         .clickable { appearancePrefs.updateHadithReadingLayout(layout) }
                                 ) {
                                     Column(
@@ -677,13 +715,17 @@ fun SettingsScreen(
                                         Text(
                                             text = layout.displayName,
                                             fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
                                             text = layout.subtitle,
                                             style = MaterialTheme.typography.bodySmall,
                                             fontSize = 10.sp,
-                                            lineHeight = 13.sp
+                                            lineHeight = 13.sp,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 }
