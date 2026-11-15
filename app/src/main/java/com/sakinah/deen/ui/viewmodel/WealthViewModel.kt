@@ -123,8 +123,7 @@ class WealthViewModel(
                 } else {
                     _uiState.update {
                         it.copy(
-                            errorMessage = "Could not refresh nisab rates: " +
-                                (result.exceptionOrNull()?.message ?: "network error")
+                            errorMessage = "Using the built-in Nisab benchmark; live market sync is unavailable."
                         )
                     }
                 }
@@ -132,7 +131,9 @@ class WealthViewModel(
                 throw e
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(errorMessage = "Could not refresh nisab rates: ${e.message ?: "network error"}")
+                    it.copy(
+                        errorMessage = "Using the built-in Nisab benchmark; live market sync is unavailable."
+                    )
                 }
             } finally {
                 _uiState.update { it.copy(isRefreshingRates = false) }

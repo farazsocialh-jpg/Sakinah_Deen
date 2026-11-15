@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.sp
+import com.sakinah.deen.util.stripHtmlForDisplay
 
 private val INLINE_QURAN_REGEX = Regex("""\b(\d{1,3})\s*:\s*(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?\b""")
 
@@ -196,7 +197,8 @@ fun ClickableCitationText(
 
     val blockquoteColor = MaterialTheme.colorScheme.onSurfaceVariant
     val annotated = remember(text, linkStyle, blockquoteColor) {
-        val parsed = parseMarkdown(text, blockquoteColor)
+        // Model output occasionally contains raw HTML wrappers around Arabic quotes.
+        val parsed = parseMarkdown(stripHtmlForDisplay(text), blockquoteColor)
         val plain = parsed.text
         val matches = buildList {
             INLINE_HADITH_REGEX.findAll(plain).forEach { match ->

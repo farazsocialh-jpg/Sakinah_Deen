@@ -19,11 +19,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
@@ -182,9 +181,11 @@ private fun DividerHairlineLayout(
     state: QuranAyahUiState,
     onAyahClick: (AyahModel) -> Unit,
     onTafseer: (AyahModel) -> Unit,
-    onTagMistake: (AyahModel, String) -> Unit
+    onTagMistake: (AyahModel, String) -> Unit,
+    listState: LazyListState
 ) {
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
     ) {
@@ -239,57 +240,55 @@ private fun ContinuousMushafLayout(
     onAyahClick: (AyahModel) -> Unit,
     onTafseer: (AyahModel) -> Unit,
     onTagMistake: (AyahModel, String) -> Unit,
-    onToggleStudyMode: () -> Unit
+    onToggleStudyMode: () -> Unit,
+    listState: LazyListState
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 18.dp, vertical = 10.dp),
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                color = MaterialTheme.colorScheme.surface
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(9.dp)
+            item(key = "mushaf-header") {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.surface
                 ) {
                     Text(
                         text = "سورة ${surah.nameArabic} · ${surah.nameEnglish}",
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
                         textAlign = TextAlign.Center,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    surah.ayahs.forEach { ayah ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onAyahClick(ayah) },
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            AyahArabic(ayah, (state.arabicFontSizeSp + 4).coerceAtMost(36))
-                            if (ayah.translation.isNotBlank()) {
-                                Text(
-                                    text = ayah.translation,
-                                    fontFamily = FontFamily.Serif,
-                                    fontSize = 12.sp,
-                                    lineHeight = 16.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            TafseerLink(onClick = { onTafseer(ayah) })
-                            HifzTagRow(surah, ayah, state, onTagMistake)
-                        }
-                    }
                 }
             }
-            Spacer(Modifier.height(54.dp))
+            itemsIndexed(surah.ayahs, key = { _, ayah -> ayah.numberInSurah }) { _, ayah ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onAyahClick(ayah) }
+                        .padding(vertical = 2.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    AyahArabic(ayah, (state.arabicFontSizeSp + 4).coerceAtMost(36))
+                    if (ayah.translation.isNotBlank()) {
+                        Text(
+                            text = ayah.translation,
+                            fontFamily = FontFamily.Serif,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    TafseerLink(onClick = { onTafseer(ayah) })
+                    HifzTagRow(surah, ayah, state, onTagMistake)
+                }
+            }
+            item(key = "mushaf-footer") { Spacer(Modifier.height(54.dp)) }
         }
 
         Surface(
@@ -303,7 +302,7 @@ private fun ContinuousMushafLayout(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
         ) {
             Text(
-                text = "Study | Mus-haf",
+                text = "Switch to Study",
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold
@@ -318,9 +317,10 @@ private fun AlternatingRowsLayout(
     state: QuranAyahUiState,
     onAyahClick: (AyahModel) -> Unit,
     onTafseer: (AyahModel) -> Unit,
-    onTagMistake: (AyahModel, String) -> Unit
+    onTagMistake: (AyahModel, String) -> Unit,
+    listState: LazyListState
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
         itemsIndexed(surah.ayahs, key = { _, ayah -> ayah.numberInSurah }) { index, ayah ->
             Row(
                 modifier = Modifier
@@ -376,9 +376,11 @@ private fun CompactCardsLayout(
     state: QuranAyahUiState,
     onAyahClick: (AyahModel) -> Unit,
     onTafseer: (AyahModel) -> Unit,
-    onTagMistake: (AyahModel, String) -> Unit
+    onTagMistake: (AyahModel, String) -> Unit,
+    listState: LazyListState
 ) {
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -439,9 +441,10 @@ private fun SplitColumnLayout(
     state: QuranAyahUiState,
     onAyahClick: (AyahModel) -> Unit,
     onTafseer: (AyahModel) -> Unit,
-    onTagMistake: (AyahModel, String) -> Unit
+    onTagMistake: (AyahModel, String) -> Unit,
+    listState: LazyListState
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
         itemsIndexed(surah.ayahs, key = { _, ayah -> ayah.numberInSurah }) { index, ayah ->
             Row(
                 modifier = Modifier
@@ -491,9 +494,11 @@ private fun ImmersiveZenLayout(
     surah: SurahModel,
     onAyahClick: (AyahModel) -> Unit,
     onTafseer: (AyahModel) -> Unit,
-    onTagMistake: (AyahModel, String) -> Unit
+    onTagMistake: (AyahModel, String) -> Unit,
+    listState: LazyListState
 ) {
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 54.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -535,7 +540,8 @@ private fun FocusSpotlightLayout(
     state: QuranAyahUiState,
     onAyahClick: (AyahModel) -> Unit,
     onTafseer: (AyahModel) -> Unit,
-    onTagMistake: (AyahModel, String) -> Unit
+    onTagMistake: (AyahModel, String) -> Unit,
+    listState: LazyListState
 ) {
     var activeAyahNumber by rememberSaveable {
         mutableIntStateOf(state.selectedAyahNumber.coerceAtLeast(1))
@@ -555,6 +561,7 @@ private fun FocusSpotlightLayout(
             trackColor = MaterialTheme.colorScheme.surfaceVariant
         )
         LazyColumn(
+            state = listState,
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -633,9 +640,11 @@ private fun ThumbBottomDockLayout(
     state: QuranAyahUiState,
     onAyahClick: (AyahModel) -> Unit,
     onTafseer: (AyahModel) -> Unit,
-    onTagMistake: (AyahModel, String) -> Unit
+    onTagMistake: (AyahModel, String) -> Unit,
+    listState: LazyListState
 ) {
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -669,11 +678,13 @@ private fun ArabicTapExpandLayout(
     surah: SurahModel,
     state: QuranAyahUiState,
     onTafseer: (AyahModel) -> Unit,
-    onTagMistake: (AyahModel, String) -> Unit
+    onTagMistake: (AyahModel, String) -> Unit,
+    listState: LazyListState
 ) {
     var expandedAyahNumber by rememberSaveable { mutableIntStateOf(0) }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -740,7 +751,8 @@ private fun LeftAccentRibbonLayout(
     state: QuranAyahUiState,
     onAyahClick: (AyahModel) -> Unit,
     onTafseer: (AyahModel) -> Unit,
-    onTagMistake: (AyahModel, String) -> Unit
+    onTagMistake: (AyahModel, String) -> Unit,
+    listState: LazyListState
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Surface(
@@ -759,6 +771,7 @@ private fun LeftAccentRibbonLayout(
             )
         }
         LazyColumn(
+            state = listState,
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(9.dp)
@@ -808,38 +821,39 @@ internal fun QuranReadingLayoutContent(
     onAyahClick: (AyahModel) -> Unit,
     onTafseer: (AyahModel) -> Unit,
     onTagMistake: (AyahModel, String) -> Unit,
-    onToggleStudyMode: () -> Unit
+    onToggleStudyMode: () -> Unit,
+    listState: LazyListState
 ) {
     when (layout) {
         QuranReadingLayout.DIVIDER_HAIRLINE -> DividerHairlineLayout(
-            surah, state, onAyahClick, onTafseer, onTagMistake
+            surah, state, onAyahClick, onTafseer, onTagMistake, listState
         )
         QuranReadingLayout.CONTINUOUS_MUSHAF -> ContinuousMushafLayout(
-            surah, state, onAyahClick, onTafseer, onTagMistake, onToggleStudyMode
+            surah, state, onAyahClick, onTafseer, onTagMistake, onToggleStudyMode, listState
         )
         QuranReadingLayout.ALTERNATING_ROWS -> AlternatingRowsLayout(
-            surah, state, onAyahClick, onTafseer, onTagMistake
+            surah, state, onAyahClick, onTafseer, onTagMistake, listState
         )
         QuranReadingLayout.COMPACT_CARDS -> CompactCardsLayout(
-            surah, state, onAyahClick, onTafseer, onTagMistake
+            surah, state, onAyahClick, onTafseer, onTagMistake, listState
         )
         QuranReadingLayout.SPLIT_COLUMN -> SplitColumnLayout(
-            surah, state, onAyahClick, onTafseer, onTagMistake
+            surah, state, onAyahClick, onTafseer, onTagMistake, listState
         )
         QuranReadingLayout.IMMERSIVE_ZEN -> ImmersiveZenLayout(
-            state, surah, onAyahClick, onTafseer, onTagMistake
+            state, surah, onAyahClick, onTafseer, onTagMistake, listState
         )
         QuranReadingLayout.FOCUS_SPOTLIGHT -> FocusSpotlightLayout(
-            surah, state, onAyahClick, onTafseer, onTagMistake
+            surah, state, onAyahClick, onTafseer, onTagMistake, listState
         )
         QuranReadingLayout.THUMB_BOTTOM_DOCK -> ThumbBottomDockLayout(
-            surah, state, onAyahClick, onTafseer, onTagMistake
+            surah, state, onAyahClick, onTafseer, onTagMistake, listState
         )
         QuranReadingLayout.ARABIC_TAP_EXPAND -> ArabicTapExpandLayout(
-            surah, state, onTafseer, onTagMistake
+            surah, state, onTafseer, onTagMistake, listState
         )
         QuranReadingLayout.LEFT_ACCENT_RIBBON -> LeftAccentRibbonLayout(
-            surah, state, onAyahClick, onTafseer, onTagMistake
+            surah, state, onAyahClick, onTafseer, onTagMistake, listState
         )
     }
 }

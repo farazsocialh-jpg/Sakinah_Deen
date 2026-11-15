@@ -71,6 +71,8 @@ data class HadithModel(
     val bookTitle: String,
     val bookTotalCount: Int,
     val hadithNumber: Int,
+    /** Alternate Arabic/Dar-us-Salam reference used by scholars (e.g. "657.01"). */
+    val arabicNumber: String = "",
     val chapterTitle: String,
     val grade: String,
     val gradingScholar: String,

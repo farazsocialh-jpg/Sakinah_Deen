@@ -317,7 +317,7 @@ fun VisualSalahGuideScreen(
                         }
                     ),
                     modifier = Modifier
-                        .size(width = 60.dp, height = 60.dp)
+                        .size(width = 68.dp, height = 72.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .clickable {
                             tts.stop()
@@ -337,7 +337,7 @@ fun VisualSalahGuideScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(4.dp),
+                                    .padding(start = 4.dp, end = 4.dp, top = 20.dp, bottom = 4.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(

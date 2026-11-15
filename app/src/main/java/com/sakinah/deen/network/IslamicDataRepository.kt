@@ -25,12 +25,14 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.isSuccess
 import com.sakinah.deen.util.ArabicNormalizer
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -542,22 +544,31 @@ class IslamicDataRepository(
     ): Result<Int> = runCatching {
         onProgress(0.05f)
 
-        val primaryBody = fetchHadithEdition(languageCode, bookKey)
+        val primaryBody = withContext(Dispatchers.IO) {
+            fetchHadithEdition(languageCode, bookKey)
+        }
         onProgress(0.45f)
 
         val arabicEdition = if (languageCode == "ara") {
             ArabicEditionIndex()
         } else {
             runCatching {
-                parseArabicTexts(fetchHadithEdition("ara", bookKey))
+                withContext(Dispatchers.IO) {
+                    parseArabicTexts(fetchHadithEdition("ara", bookKey))
+                }
             }.getOrDefault(ArabicEditionIndex())
         }
         onProgress(0.70f)
 
-        val entries = parseHadithEdition(primaryBody, bookKey, languageCode, arabicEdition)
+        // Parsing multi-megabyte Urdu/Bengali editions must never run on the main thread.
+        val entries = withContext(Dispatchers.Default) {
+            parseHadithEdition(primaryBody, bookKey, languageCode, arabicEdition)
+        }
         if (entries.isEmpty()) error("No hadith parsed for $bookKey")
 
-        hadithDao.replaceBook(bookKey, languageCode, entries)
+        withContext(Dispatchers.IO) {
+            hadithDao.replaceBook(bookKey, languageCode, entries)
+        }
         onProgress(1f)
         entries.size
     }
@@ -837,6 +848,7 @@ class IslamicDataRepository(
                 bookKey = bookKey,
                 languageCode = languageCode,
                 hadithNumber = number,
+                arabicNumber = (entry["arabicnumber"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
                 bookTitle = cleanText(bookTitle),
                 sectionNumber = sectionNumber,
                 chapterTitle = sections[sectionNumber.toString()].orEmpty(),

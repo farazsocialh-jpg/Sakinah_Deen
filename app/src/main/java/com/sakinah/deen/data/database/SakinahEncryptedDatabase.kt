@@ -44,7 +44,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         AdhkarEntity::class,
         PrayerTimetableEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 @TypeConverters(SakinahTypeConverters::class)
@@ -83,6 +83,14 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
          * v7 -> v8 adds Quran reader state (bookmark/last-read/juz) and sadaqah categories,
          * plus lookup indices for hadith sections.
          */
+        internal val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `hadith_entries` ADD COLUMN `arabicNumber` TEXT NOT NULL DEFAULT ''"
+                )
+            }
+        }
+
         internal val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `quran_ayahs` ADD COLUMN `juzNumber` INTEGER NOT NULL DEFAULT 0")
@@ -133,7 +141,7 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
                 DB_NAME
             )
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 // Pre-production builds 1..3 predate the migration chain; their schema
                 // cannot be upgraded safely, so recreate only those legacy versions.
                 .fallbackToDestructiveMigrationFrom(1, 2, 3)

@@ -17,8 +17,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -34,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -80,7 +83,7 @@ fun QiblaModesCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Qibla Compass · $cityName",
                     style = MaterialTheme.typography.titleMedium,
@@ -92,6 +95,7 @@ fun QiblaModesCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            Spacer(Modifier.width(8.dp))
             StatusBadge(
                 text = when (mode) {
                     QiblaMode.MAP -> "Magnet-Free"
@@ -133,6 +137,7 @@ fun QiblaModesCard(
 @Composable
 private fun QiblaMapView(latitude: Double, longitude: Double) {
     var mapFailed by remember(latitude, longitude) { mutableStateOf(false) }
+    var mapLoading by remember(latitude, longitude) { mutableStateOf(true) }
     var reloadToken by remember(latitude, longitude) { mutableIntStateOf(0) }
     val webViewRef = remember { mutableStateOf<WebView?>(null) }
 
@@ -166,6 +171,7 @@ private fun QiblaMapView(latitude: Double, longitude: Double) {
     // Watchdog: Leaflet silently renders an empty (black/white) box when OSM tiles fail.
     LaunchedEffect(latitude, longitude, reloadToken) {
         mapFailed = false
+        mapLoading = true
         delay(8_000)
         val view = webViewRef.value
         if (view == null) {
@@ -174,6 +180,7 @@ private fun QiblaMapView(latitude: Double, longitude: Double) {
         }
         view.evaluateJavascript("(function(){ return window.__sakinahTiles || 0; })();") { value ->
             val loaded = value?.trim()?.trim('"')?.toIntOrNull() ?: 0
+            mapLoading = false
             if (loaded <= 0) mapFailed = true
         }
     }
@@ -185,6 +192,26 @@ private fun QiblaMapView(latitude: Double, longitude: Double) {
                 .height(230.dp)
                 .clip(RoundedCornerShape(12.dp))
         ) {
+            if (mapLoading && !mapFailed) {
+                Surface(
+                    modifier = Modifier.fillMaxSize().zIndex(1f),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Loading Qibla map…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
             if (mapFailed) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -227,7 +254,10 @@ private fun QiblaMapView(latitude: Double, longitude: Double) {
                                     request: WebResourceRequest?,
                                     error: WebResourceError?
                                 ) {
-                                    if (request?.isForMainFrame == true) mapFailed = true
+                                    if (request?.isForMainFrame == true) {
+                                        mapFailed = true
+                                        mapLoading = false
+                                    }
                                 }
                             }
                             webViewRef.value = this

@@ -38,6 +38,12 @@ interface SalahDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun upsertSalahRecord(record: SalahRecordEntity)
 
+    @Query("SELECT * FROM salah_records WHERE dateEpochDay = :epochDay AND prayerType = :prayerType LIMIT 1")
+    suspend fun getSalahRecord(epochDay: Long, prayerType: String): SalahRecordEntity?
+
+    @Update
+    suspend fun updateSalahRecord(record: SalahRecordEntity)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(records: List<SalahRecordEntity>)
 
@@ -270,7 +276,9 @@ interface HadithDao {
     @Transaction
     suspend fun replaceBook(bookKey: String, languageCode: String = "eng", entries: List<HadithEntryEntity>) {
         clearBook(bookKey, languageCode)
-        upsertAll(entries)
+        // Large Urdu/Bengali editions can exceed a single bind batch. Chunking keeps the
+        // transaction bounded while retaining the atomic clear-and-replace behaviour.
+        entries.chunked(500).forEach { upsertAll(it) }
     }
 }
 

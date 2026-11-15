@@ -730,12 +730,16 @@ class SalahViewModel(
             val newJamaah = if (newCompleted) isJamaah else false
 
             val epochDay = currentLocationLocalDate(_uiState.value.timeZoneId).toEpochDay()
-            val entity = SalahRecordEntity(
+            val existing = salahDao.getSalahRecord(epochDay, prayerType.name)
+            val entity = (existing ?: SalahRecordEntity(
                 dateEpochDay = epochDay,
                 prayerType = prayerType.name,
+                isCompleted = false,
+                isJamaah = false,
+                isQadha = false
+            )).copy(
                 isCompleted = newCompleted,
                 isJamaah = newJamaah,
-                isQadha = false,
                 completedTimestamp = if (newCompleted) System.currentTimeMillis() else null
             )
             completedRecordsByPrayer = completedRecordsByPrayer.toMutableMap().apply {
@@ -755,7 +759,13 @@ class SalahViewModel(
                 )
             }
 
-            salahDao.upsertSalahRecord(entity)
+            // The table is keyed by (dateEpochDay, prayerType). A plain INSERT IGNORE
+            // silently dropped the unchecked state when a row already existed.
+            if (existing != null) {
+                salahDao.updateSalahRecord(entity)
+            } else {
+                salahDao.upsertSalahRecord(entity)
+            }
         }
     }
 

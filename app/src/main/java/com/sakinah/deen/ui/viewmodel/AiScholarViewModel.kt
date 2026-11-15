@@ -9,6 +9,7 @@ import com.sakinah.deen.data.scholar.ScholarChatSession
 import com.sakinah.deen.data.scholar.ScholarHistoryStore
 import com.sakinah.deen.ui.components.extractSectionHint
 import com.sakinah.deen.network.SunniAiScholarRepository
+import com.sakinah.deen.util.stripHtmlForDisplay
 import com.sakinah.deen.network.model.ChatMessageDto
 import com.sakinah.deen.network.model.RagQueryRequest
 import com.sakinah.deen.network.model.RagStreamChunk
@@ -340,7 +341,12 @@ class AiScholarViewModel(
                                 _uiState.update { it.copy(guardrailNotice = chunk.notice) }
                             }
                             is RagStreamChunk.Complete -> {
-                                val messages = _uiState.value.messages
+                                val messages = _uiState.value.messages.map { msg ->
+                                    if (msg.role == "assistant") {
+                                        msg.copy(content = stripHtmlForDisplay(msg.content))
+                                    } else msg
+                                }
+                                _uiState.update { it.copy(messages = messages) }
                                 val unanswered = messages.lastOrNull()
                                     ?.let { it.role == "assistant" && it.content.isBlank() } == true
                                 _uiState.update {

@@ -143,7 +143,9 @@ fun QuranScreen(
         val idx = surah.ayahs.indexOfFirst { it.numberInSurah == target }
         if (idx >= 0) {
             selectedAyahNumber = target
-            listState.animateScrollToItem(idx)
+            // Continuous Mushaf has a header item before the first ayah.
+            val itemIndex = if (readingLayout == QuranReadingLayout.CONTINUOUS_MUSHAF) idx + 1 else idx
+            listState.animateScrollToItem(itemIndex)
             highlightedAyahNumber = target
             vm.onIntent(QuranUiIntent.ClearScrollTarget)
             delay(2000)
@@ -307,7 +309,6 @@ fun QuranScreen(
                                     )
                                 )
                                 selectedAyahNumber = result.ayahNumber
-                                vm.onIntent(QuranUiIntent.SelectAyahForTafseer(result.ayahNumber))
                                 searchExpanded = false
                             }
                         )
@@ -325,7 +326,8 @@ fun QuranScreen(
                             onAyahClick = onAyahClick,
                             onTafseer = onTafseerClick,
                             onTagMistake = onTagMistakeClick,
-                            onToggleStudyMode = toggleStudyMode
+                            onToggleStudyMode = toggleStudyMode,
+                            listState = listState
                         )
                     }
                 } else {
@@ -865,20 +867,25 @@ private fun QuranStudyPill(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier
+            .defaultMinSize(minWidth = 48.dp, minHeight = 40.dp)
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(50),
         color = if (isStudyMode) MaterialTheme.colorScheme.primaryContainer
-        else MaterialTheme.colorScheme.surfaceVariant
+        else MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
     ) {
-        Text(
-            text = if (isStudyMode) "Study" else "Mus-haf",
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (isStudyMode) MaterialTheme.colorScheme.onPrimaryContainer
-            else MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = if (isStudyMode) "To Mus-haf" else "To Study",
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isStudyMode) MaterialTheme.colorScheme.onPrimaryContainer
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
     }
 }
 

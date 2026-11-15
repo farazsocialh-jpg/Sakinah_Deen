@@ -9,9 +9,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -50,8 +47,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -278,35 +273,23 @@ fun RootNavHost() {
 
     val bottomBarScrollConnection = remember(autoHideBars) {
         object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+            // React only to distance the child list actually consumed. Using onPreScroll
+            // hid the bar even when a gesture could not move the list, and the old
+            // Initial-pass tap detector intercepted scroll gestures on every screen.
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
                 if (!autoHideBars) return Offset.Zero
-                if (available.y < -10f) {
+                if (consumed.y < -2f) {
                     bottomBarHidden = true
-                } else if (available.y > 10f) {
+                } else if (consumed.y > 2f) {
                     bottomBarHidden = false
                 }
                 return Offset.Zero
             }
         }
-    }
-
-    val revealOnTapModifier = if (autoHideBars && bottomBarHidden) {
-        Modifier.pointerInput(Unit) {
-            awaitEachGesture {
-                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                val up = waitForUpOrCancellation(pass = PointerEventPass.Initial)
-                if (up != null) {
-                    val dx = up.position.x - down.position.x
-                    val dy = up.position.y - down.position.y
-                    if (dx * dx + dy * dy < 400f) {
-                        bottomBarHidden = false
-                        scrollBehavior.state.heightOffset = 0f
-                    }
-                }
-            }
-        }
-    } else {
-        Modifier
     }
 
     val salahLabel = stringResource(R.string.nav_salah)
@@ -339,7 +322,6 @@ fun RootNavHost() {
         Modifier
             .nestedScroll(scrollBehavior.nestedScrollConnection)
             .nestedScroll(bottomBarScrollConnection)
-            .then(revealOnTapModifier)
     } else {
         Modifier
     }
@@ -352,7 +334,11 @@ fun RootNavHost() {
                 currentScreen != SakinahScreen.Quran &&
                 currentScreen != SakinahScreen.Hadith &&
                 currentScreen != SakinahScreen.AiScholar &&
-                currentScreen != SakinahScreen.VisualGuide
+                currentScreen != SakinahScreen.VisualGuide &&
+                currentScreen != SakinahScreen.DataSources &&
+                currentScreen != SakinahScreen.Help &&
+                currentScreen != SakinahScreen.Privacy &&
+                currentScreen != SakinahScreen.About
             ) {
                 TopAppBar(
                     title = {

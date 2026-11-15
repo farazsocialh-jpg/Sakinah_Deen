@@ -1,7 +1,16 @@
 package com.sakinah.deen.ui.screens
 
 import android.Manifest
+import android.app.Activity
+import android.content.Intent
 import android.location.Location
+import android.net.Uri
+import android.provider.Settings
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -142,7 +151,12 @@ fun SalahScreen(
         val isGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         viewModel?.onIntent(SalahUiIntent.LocationPermissionResult(isGranted))
+        // A permission grant alone does not switch a manual city back to GPS.
+        if (isGranted) viewModel?.onIntent(SalahUiIntent.UseGpsLocation)
     }
+    val context = LocalContext.current
+    var gpsPermissionRequested by rememberSaveable { mutableStateOf(false) }
+    var showGpsSettingsDialog by rememberSaveable { mutableStateOf(false) }
 
     var selectedSegment by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(focusMode) {
@@ -674,8 +688,40 @@ fun SalahScreen(
                 title = "Select Prayer Location",
                 subtitle = "Choose a city or switch back to device GPS.",
                 onUseDeviceGps = {
-                    viewModel?.onIntent(SalahUiIntent.UseGpsLocation)
                     showManualCityDialog = false
+                    val granted = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (granted) {
+                        viewModel?.onIntent(SalahUiIntent.UseGpsLocation)
+                    } else {
+                        val activity = context as? Activity
+                        val rationale = activity != null && (
+                            ActivityCompat.shouldShowRequestPermissionRationale(
+                                activity,
+                                Manifest.permission.ACCESS_FINE_LOCATION
+                            ) || ActivityCompat.shouldShowRequestPermissionRationale(
+                                activity,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
+                            )
+                        )
+                        if (!gpsPermissionRequested || rationale) {
+                            gpsPermissionRequested = true
+                            locationPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
+                        } else {
+                            showGpsSettingsDialog = true
+                        }
+                    }
                 },
                 onDismiss = { showManualCityDialog = false },
                 onCitySelected = { city ->
@@ -689,6 +735,34 @@ fun SalahScreen(
                         )
                     )
                     showManualCityDialog = false
+                }
+            )
+        }
+
+        if (showGpsSettingsDialog) {
+            AlertDialog(
+                onDismissRequest = { showGpsSettingsDialog = false },
+                title = { Text("Location permission needed") },
+                text = {
+                    Text(
+                        "Device GPS is blocked. Enable Location for Sakinah Deen in Android Settings, " +
+                            "then tap Use Device GPS again."
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showGpsSettingsDialog = false
+                            val intent = Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.fromParts("package", context.packageName, null)
+                            )
+                            runCatching { context.startActivity(intent) }
+                        }
+                    ) { Text("Open Settings") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showGpsSettingsDialog = false }) { Text("Cancel") }
                 }
             )
         }

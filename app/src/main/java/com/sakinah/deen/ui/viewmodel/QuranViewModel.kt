@@ -317,7 +317,8 @@ class QuranViewModel(
                     scrollTargetAyah = targetAyah
                 )
             }
-            selectAyahForTafseer(targetAyah)
+            // Navigation/scroll must never open Tafsir. Only an explicit Tafseer tap may
+            // show the missing-commentary state.
             return
         }
 

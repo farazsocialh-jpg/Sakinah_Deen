@@ -126,6 +126,8 @@ data class HadithEntryEntity(
     val bookKey: String,
     val languageCode: String = "eng",
     val hadithNumber: Int,
+    /** Dar-us-Salam/Arabic numbering (e.g. "657.01"), which can differ from [hadithNumber]. */
+    val arabicNumber: String = "",
     val bookTitle: String,
     val sectionNumber: Int = 0,
     val chapterTitle: String = "",

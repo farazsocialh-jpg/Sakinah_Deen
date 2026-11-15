@@ -530,10 +530,12 @@ class HadithViewModel(
                     val resolvedModel = if (pending != null) {
                         val candidates = mapped.filter {
                             it.bookKey.equals(pending.first, ignoreCase = true) &&
-                                it.hadithNumber == pending.second
+                                it.matchesCitationNumber(pending.second)
                         }
+                        val arabicMatches = candidates.filter { it.arabicNumberMatches(pending.second) }
+                        val preferred = arabicMatches.ifEmpty { candidates }
                         val section = resolveSectionNumber(pending.third, _uiState.value.sections)
-                        candidates.firstOrNull { hadith ->
+                        preferred.firstOrNull { hadith ->
                             pending.third.isBlank() ||
                                 sectionMatches(hadith.chapterTitle, pending.third) ||
                                 (section > 0 && hadith.sectionNumber == section)
@@ -590,6 +592,19 @@ class HadithViewModel(
         }
     }
 
+    /**
+     * Citations from the Scholar use the Dar-us-Salam/Arabic reference. In editions where
+     * that differs from the sequential hadith number (e.g. Sahih Muslim 657.01), match both.
+     */
+    private fun HadithModel.matchesCitationNumber(number: Int): Boolean =
+        hadithNumber == number || arabicNumberMatches(number)
+
+    private fun HadithModel.arabicNumberMatches(number: Int): Boolean {
+        val arabic = arabicNumber.trim()
+        if (arabic.isEmpty()) return false
+        return arabic == number.toString() || arabic.startsWith("$number.")
+    }
+
     private fun HadithEntryEntity.toModel(
         bookmarked: Boolean,
         selectedLanguageCode: String,
@@ -600,6 +615,7 @@ class HadithViewModel(
         bookTitle = bookTitle,
         bookTotalCount = 0,
         hadithNumber = hadithNumber,
+        arabicNumber = arabicNumber,
         chapterTitle = chapterTitle,
         grade = grade.ifBlank { "UNGRADED" },
         gradingScholar = gradingScholar,
@@ -727,11 +743,11 @@ class HadithViewModel(
         val hint = sectionHint.trim().takeIf { it.isNotBlank() }
         val matchedSection = resolveSectionNumber(hint, _uiState.value.sections)
 
-        val target = _uiState.value.hadiths.firstOrNull { h ->
+        val candidates = _uiState.value.hadiths.filter { h ->
             h.id.equals(hadithIdOrSlug, ignoreCase = true) ||
                 (
                     h.bookKey.equals(parsedBook, true) &&
-                        h.hadithNumber == parsedNumber &&
+                        h.matchesCitationNumber(parsedNumber) &&
                         (
                             hint == null ||
                                 h.sectionNumber == matchedSection ||
@@ -739,6 +755,8 @@ class HadithViewModel(
                             )
                     )
         }
+        val target = candidates.firstOrNull { it.arabicNumberMatches(parsedNumber) }
+            ?: candidates.firstOrNull()
 
         if (target != null) {
             pendingDeepLinkTarget = null

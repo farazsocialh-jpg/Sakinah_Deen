@@ -79,7 +79,11 @@ fun NotificationSettingsScreen(
     val appPrefs = remember(context) { SakinahPreferences(context) }
     val scope = rememberCoroutineScope()
 
-    var azaanSettings by remember { mutableStateOf(appPrefs.azaanSettings) }
+    // Corrupt/legacy preference types must not take the whole screen (and the app) down
+    // when the prayer bell is opened.
+    var azaanSettings by remember {
+        mutableStateOf(runCatching { appPrefs.azaanSettings }.getOrDefault(AzaanSettings()))
+    }
     var notificationsGranted by remember { mutableStateOf(notificationsPermissionGranted(context)) }
     var exactAlarmsAllowed by remember { mutableStateOf(canScheduleExactAlarms(context)) }
     var testScheduled by remember { mutableStateOf(false) }
@@ -123,7 +127,7 @@ fun NotificationSettingsScreen(
 
     fun applySettings(updated: AzaanSettings) {
         azaanSettings = updated
-        appPrefs.azaanSettings = updated
+        runCatching { appPrefs.azaanSettings = updated }
         runCatching { AzaanScheduling.scheduleStoredLocation(context) }
     }
 
