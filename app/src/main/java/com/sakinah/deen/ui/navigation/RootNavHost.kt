@@ -351,7 +351,8 @@ fun RootNavHost() {
                 currentScreen != SakinahScreen.DailySalah &&
                 currentScreen != SakinahScreen.Quran &&
                 currentScreen != SakinahScreen.Hadith &&
-                currentScreen != SakinahScreen.AiScholar
+                currentScreen != SakinahScreen.AiScholar &&
+                currentScreen != SakinahScreen.VisualGuide
             ) {
                 TopAppBar(
                     title = {

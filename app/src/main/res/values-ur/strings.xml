@@ -67,4 +67,37 @@
     <string name="quran_reading_layout_caption">منتخب کریں کہ قرآن کی آیات ریڈر میں کیسے دکھائی جائیں۔</string>
     <string name="hadith_reading_layout_title">حدیث ریڈنگ لے آؤٹ</string>
     <string name="hadith_reading_layout_caption">منتخب کریں کہ حدیث کا متن ریڈر میں کیسے دکھایا جائے۔</string>
+
+    <!-- Visual Salah Guide -->
+    <string name="guide_title">بصری رہنمائے نماز</string>
+    <string name="guide_back_cd">واپس</string>
+    <string name="guide_tab_wudu">وضو</string>
+    <string name="guide_tab_salah">نماز</string>
+    <string name="guide_tab_after_salah">بعد از نماز</string>
+    <string name="guide_subtitle_salah">%1$s · رکعت %2$d از %3$d · مرحلہ %4$d از %5$d</string>
+    <string name="guide_subtitle_other">%1$s · مرحلہ %2$d از %3$d</string>
+    <string name="guide_section_physical">جسمانی کیفیت</string>
+    <string name="guide_section_recite">پڑھنے کی دعائیں و اذکار</string>
+    <string name="guide_pronunciation_prefix">تلفظ: %1$s</string>
+    <string name="guide_meaning_prefix">مفہوم: %1$s</string>
+    <string name="guide_quran_ref">قرآن: %1$s</string>
+    <string name="guide_hadith_ref">حدیث: %1$s</string>
+    <string name="guide_speak_arabic">عربی تلفظ سنیں</string>
+    <string name="guide_stop_speaking">تلفظ روکیں</string>
+    <string name="guide_tts_unavailable">اس ڈیوائس پر عربی آواز دستیاب نہیں</string>
+    <string name="guide_previous">پچھلا</string>
+    <string name="guide_next_step">اگلا مرحلہ</string>
+    <string name="guide_go_to_salah">نماز کی طرف جائیں</string>
+    <string name="guide_go_to_after_salah">بعد از نماز اذکار</string>
+    <string name="guide_complete">مکمل</string>
+    <string name="guide_wudu_next_hint">جب نماز کے لیے تیار ہوں تو نماز ٹیب پر جائیں۔</string>
+    <string name="guide_tasbih_title">تسبیح کاؤنٹر · %1$d / 100</string>
+    <string name="guide_tasbih_now">موجودہ ذکر: %1$s</string>
+    <string name="guide_tasbih_done_hint">100 مکمل — سبحان اللہ (33×)، الحمد للہ (33×)، اللہ اکبر (34×)</string>
+    <string name="guide_tasbih_tap">گنتی کے لیے دبائیں +1</string>
+    <string name="guide_tasbih_complete">100 مکمل</string>
+    <string name="guide_tasbih_reset_cd">کاؤنٹر ری سیٹ کریں</string>
+    <string name="guide_tasbih_subhanallah">سبحان اللہ (33×)</string>
+    <string name="guide_tasbih_alhamdulillah">الحمد للہ (33×)</string>
+    <string name="guide_tasbih_allahuakbar">اللہ اکبر (34×)</string>
 </resources>

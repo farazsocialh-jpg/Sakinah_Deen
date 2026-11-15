@@ -78,4 +78,38 @@
     <string name="city_picker_no_match">No matching city.</string>
     <string name="city_picker_use_gps">Use Device GPS</string>
     <string name="action_cancel">Cancel</string>
+
+    <!-- Visual Salah Guide -->
+    <string name="guide_title">Visual Salah Guide</string>
+    <string name="guide_back_cd">Back</string>
+    <string name="guide_tab_wudu">Wudu</string>
+    <string name="guide_tab_salah">Salah</string>
+    <string name="guide_tab_after_salah">After Salah</string>
+    <string name="guide_subtitle_salah">%1$s · Rak\'ah %2$d of %3$d · Step %4$d of %5$d</string>
+    <string name="guide_subtitle_other">%1$s · Step %2$d of %3$d</string>
+    <string name="guide_step_badge" translatable="false">%1$d</string>
+    <string name="guide_section_physical">Physical Posture</string>
+    <string name="guide_section_recite">What to Recite</string>
+    <string name="guide_pronunciation_prefix">Pronunciation: %1$s</string>
+    <string name="guide_meaning_prefix">Meaning: %1$s</string>
+    <string name="guide_quran_ref">Quran: %1$s</string>
+    <string name="guide_hadith_ref">Hadith: %1$s</string>
+    <string name="guide_speak_arabic">Pronounce Arabic</string>
+    <string name="guide_stop_speaking">Stop Pronunciation</string>
+    <string name="guide_tts_unavailable">Arabic voice unavailable on device</string>
+    <string name="guide_previous">Previous</string>
+    <string name="guide_next_step">Next Step</string>
+    <string name="guide_go_to_salah">Go to Salah</string>
+    <string name="guide_go_to_after_salah">After Salah Adhkar</string>
+    <string name="guide_complete">Complete</string>
+    <string name="guide_wudu_next_hint">Proceed to the Salah tab when ready to pray.</string>
+    <string name="guide_tasbih_title">Tasbih Counter · %1$d / 100</string>
+    <string name="guide_tasbih_now">Current phrase: %1$s</string>
+    <string name="guide_tasbih_done_hint">100 complete — SubhanAllah (33×), Alhamdulillah (33×), Allahu Akbar (34×)</string>
+    <string name="guide_tasbih_tap">Tap to Count +1</string>
+    <string name="guide_tasbih_complete">100 Complete</string>
+    <string name="guide_tasbih_reset_cd">Reset counter</string>
+    <string name="guide_tasbih_subhanallah">SubhanAllah (33×)</string>
+    <string name="guide_tasbih_alhamdulillah">Alhamdulillah (33×)</string>
+    <string name="guide_tasbih_allahuakbar">Allahu Akbar (34×)</string>
 </resources>
