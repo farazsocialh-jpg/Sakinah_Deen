@@ -6,6 +6,8 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.hardware.display.DisplayManager
+import android.view.Display
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
@@ -267,14 +269,9 @@ fun rememberTrueNorthCompassState(
 
 /** Rotates the sensor frame into the current display orientation. */
 private fun remapForDisplay(context: Context, source: FloatArray, destination: FloatArray) {
-    val rotation = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-        context.display?.rotation ?: Surface.ROTATION_0
-    } else {
-        @Suppress("DEPRECATION")
-        val wm = context.getSystemService(Context.WINDOW_SERVICE) as? android.view.WindowManager
-        @Suppress("DEPRECATION")
-        wm?.defaultDisplay?.rotation ?: Surface.ROTATION_0
-    }
+    val displayManager = context.getSystemService(DisplayManager::class.java)
+    val rotation = displayManager?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation
+        ?: Surface.ROTATION_0
     when (rotation) {
         Surface.ROTATION_90 -> SensorManager.remapCoordinateSystem(
             source, SensorManager.AXIS_Y, SensorManager.AXIS_MINUS_X, destination

@@ -63,6 +63,10 @@
     <string name="action_play">Play</string>
     <string name="offline_seed_note">Bundled offline content</string>
 
+    <!-- Appearance -->
+    <string name="salah_home_layout_title">Salah Home Layout</string>
+    <string name="salah_home_layout_caption">Choose how the Salah home screen presents the current prayer and timetable.</string>
+
     <!-- City picker -->
     <string name="city_picker_title">Choose Home City</string>
     <string name="city_picker_subtitle">Safar (Qasr) is measured from Home.</string>

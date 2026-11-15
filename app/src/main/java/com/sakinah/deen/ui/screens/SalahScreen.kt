@@ -94,6 +94,8 @@ import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
 import com.sakinah.deen.data.model.PrayerModel
 import com.sakinah.deen.data.model.PrayerType
+import com.sakinah.deen.data.prefs.AppearancePreferences
+import com.sakinah.deen.data.prefs.SalahHomeLayout
 import com.sakinah.deen.domain.sensor.QiblaSensorManager
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
 import com.sakinah.deen.ui.components.QiblaModesCard
@@ -129,6 +131,10 @@ fun SalahScreen(
             )
         )
     }
+
+    val appearancePrefs = rememberInject<AppearancePreferences>()
+    val appearanceConfig by appearancePrefs.effectiveConfig.collectAsStateWithLifecycle()
+    val salahHomeLayout = appearanceConfig.salahHomeLayout
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -211,416 +217,106 @@ fun SalahScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 1. Top Date & Location Header + Hero Card + Mode Segment
+            // 1. Deduplicated Salah header + layout-specific hero
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = state.hijriDate,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            if (state.gregorianDate.isNotBlank()) {
-                                Text(
-                                    text = state.gregorianDate,
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .padding(top = 2.dp)
-                                    .clickable { showManualCityDialog = true }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.LocationOn,
-                                    contentDescription = "Change Location",
-                                    tint = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text(
-                                    text = "${state.locationName} (${state.timeZoneAbbr}) · ${state.sourceLabel}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 11.sp,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (onOpenNotificationSettings != null) {
-                                IconButton(
-                                    onClick = onOpenNotificationSettings,
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Notifications,
-                                        contentDescription = "Azaan & Notifications",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                        if (!focusMode) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(
-                                    onClick = { showSettingsDialog = true },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Tune,
-                                        contentDescription = "Prayer Settings",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                                Button(
-                                    onClick = { showQadhaDialog = true },
-                                    shape = RoundedCornerShape(20.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                ) {
-                                    Text("Qadha Ledger", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                                }
-                            }
-                        }
-                        }
-                    }
-
-                    // 2a. Always-available compact location controls (even after a city preset).
-                    if (!focusMode) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = state.locationName.ifBlank { "Location not set" },
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            OutlinedButton(
-                                onClick = { showManualCityDialog = true },
-                                shape = RoundedCornerShape(12.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                                modifier = Modifier.height(30.dp)
-                            ) {
-                                Text("City", fontSize = 10.sp)
-                            }
-                            OutlinedButton(
-                                onClick = {
-                                    locationPermissionLauncher.launch(
-                                        arrayOf(
-                                            Manifest.permission.ACCESS_FINE_LOCATION,
-                                            Manifest.permission.ACCESS_COARSE_LOCATION
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(
+                        modifier = if (salahHomeLayout == SalahHomeLayout.SEAMLESS_EDITORIAL) {
+                            Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            MaterialTheme.colorScheme.surfaceVariant,
+                                            MaterialTheme.colorScheme.background
                                         )
                                     )
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                                modifier = Modifier.height(30.dp)
-                            ) {
-                                Text("Enable GPS", fontSize = 10.sp)
-                            }
-                        }
-                    }
+                                )
+                        } else {
+                            Modifier
+                        },
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SalahTopHeader(
+                            state = state,
+                            focusMode = focusMode,
+                            onPickLocation = { showManualCityDialog = true },
+                            onOpenNotifications = onOpenNotificationSettings,
+                            onOpenSettings = { showSettingsDialog = true },
+                            onOpenQadha = { showQadhaDialog = true }
+                        )
 
-                    // 2. Location Permission Warning Banner
-                    if (!focusMode && state.showLocationWarningBanner) {
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = Color(0xFFFEF3C7),
-                            border = BorderStroke(1.dp, Color(0xFFFDE68A)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                        if (!focusMode && state.showLocationWarningBanner) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = SalahAmber.copy(alpha = 0.14f),
+                                border = BorderStroke(1.dp, SalahAmber.copy(alpha = 0.55f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showManualCityDialog = true }
                             ) {
                                 Row(
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Warning,
-                                        contentDescription = "Location Warning",
-                                        tint = Color(0xFFB45309),
-                                        modifier = Modifier.size(18.dp)
+                                        contentDescription = null,
+                                        tint = SalahAmber,
+                                        modifier = Modifier.size(16.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Spacer(Modifier.width(6.dp))
                                     Text(
-                                        text = "Enable location for exact local prayer times.",
+                                        text = "Enable location for exact local prayer times. Tap to choose a city.",
                                         fontSize = 11.sp,
-                                        color = Color(0xFF78350F),
-                                        lineHeight = 15.sp
-                                    )
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Button(
-                                        onClick = {
-                                            locationPermissionLauncher.launch(
-                                                arrayOf(
-                                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                                    Manifest.permission.ACCESS_COARSE_LOCATION
-                                                )
-                                            )
-                                        },
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                        modifier = Modifier.height(32.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
-                                    ) {
-                                        Text("Enable GPS", fontSize = 10.sp, color = Color.White)
-                                    }
-                                    OutlinedButton(
-                                        onClick = { showManualCityDialog = true },
-                                        shape = RoundedCornerShape(12.dp),
-                                        modifier = Modifier.height(32.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
-                                    ) {
-                                        Text("City", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // 3. Redesigned Current-Prayer Hero Card
-                    val remainingFraction = (state.remainingMillis.toFloat() / state.totalWindowMillis.coerceAtLeast(1L)).coerceIn(0f, 1f)
-                    val remainingPercent = (remainingFraction * 100f).roundToInt().coerceIn(0, 100)
-                    val bucketIndex = ((100 - remainingPercent).coerceIn(0, 99)) / 10
-                    val animatedProgress by animateFloatAsState(targetValue = remainingFraction, label = "currentPrayerProgress")
-                    val isCompleted = state.isCurrentPrayerCompleted
-                    val uncheckedBorder = if (remainingPercent <= 20) Color(0xFFEF4444) else Color(0xFF223452)
-                    val barBrush = if (isCompleted) {
-                        Brush.horizontalGradient(listOf(Color(0xFF22C55E), Color(0xFF4ADE80)))
-                    } else if (remainingPercent <= 20) {
-                        Brush.horizontalGradient(listOf(Color(0xFFF59E0B), Color(0xFFEF4444)))
-                    } else {
-                        Brush.horizontalGradient(listOf(Color(0xFF8EC5FC), Color(0xFF5BA4F8)))
-                    }
-                    val accentColor = if (isCompleted) Color(0xFF22C55E) else if (remainingPercent <= 20) Color(0xFFF59E0B) else Color(0xFF8EC5FC)
-                    val nextColor = if (isCompleted) Color(0xFF4ADE80) else Color(0xFF8EC5FC)
-                    val progressPercentColor = if (isCompleted) Color(0xFF4ADE80) else Color(0xFF8EC5FC)
-
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
-                        color = Color(0xFF111C2D),
-                        border = BorderStroke(1.dp, if (isCompleted) Color(0xFF1E3A2F) else uncheckedBorder)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "NEXT: ${state.nextPrayerName.uppercase()}",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    letterSpacing = 0.6.sp,
-                                    color = nextColor
-                                )
-                                Surface(
-                                    shape = RoundedCornerShape(50),
-                                    color = Color(0xFF1B2A42)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Schedule,
-                                            contentDescription = null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = state.nextPrayerStartTimeFormatted,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = Color.White
-                                        )
-                                    }
-                                }
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "${state.currentPrayerName.uppercase()} · ${state.currentPrayerArabic}",
-                                    fontSize = 28.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Surface(
-                                    shape = CircleShape,
-                                    color = if (isCompleted) Color(0xFF22C55E) else Color(0xFF162338),
-                                    border = if (isCompleted) null else BorderStroke(1.5.dp, Color(0xFF5B7699)),
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clickable {
-                                            viewModel?.onIntent(SalahUiIntent.ToggleCurrentPrayerCompleted)
-                                        }
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Check,
-                                            contentDescription = if (isCompleted) "Prayer completed" else "Mark prayer complete",
-                                            tint = if (isCompleted) Color.White else Color(0xFF8FA8C8),
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(10.dp)
-                                    .clip(RoundedCornerShape(50))
-                                    .background(Color(0xFF22324A))
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.CenterStart)
-                                        .fillMaxWidth(animatedProgress)
-                                        .fillMaxHeight()
-                                        .clip(RoundedCornerShape(50))
-                                        .background(barBrush)
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "${state.countdownText} left",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = Color(0xFFE2EEFF)
-                                )
-                                Text(
-                                    text = "$remainingPercent%",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = progressPercentColor
-                                )
-                            }
-
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isCompleted) Color(0xFF132A22) else Color(0xFF17253B)
-                            ) {
-                                Row(
-                                    modifier = Modifier.height(IntrinsicSize.Min)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .width(3.dp)
-                                            .fillMaxHeight()
-                                            .background(accentColor)
-                                    )
-                                    AnimatedContent(
-                                        targetState = Pair(isCompleted, bucketIndex),
-                                        transitionSpec = { fadeIn() togetherWith fadeOut() },
-                                        label = "currentPrayerReminder"
-                                    ) { (checked, bucket) ->
-                                        val reminders = if (checked) checkedPrayerReminders else uncheckedPrayerReminders
-                                        val reminder = reminders[bucket.coerceIn(0, reminders.lastIndex)]
-                                        Column(
-                                            modifier = Modifier.padding(12.dp),
-                                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            Surface(
-                                                shape = RoundedCornerShape(50),
-                                                color = Color(0xFF223452)
-                                            ) {
-                                                Text(
-                                                    text = reminder.source.uppercase(),
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                                    fontSize = 11.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color.White
-                                                )
-                                            }
-                                            Text(
-                                                text = "\"${reminder.text}\"",
-                                                fontSize = 13.sp,
-                                                lineHeight = 18.sp,
-                                                color = Color(0xFFE6EEF8)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (state.isTraveler) {
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = Color(0xFF22C55E).copy(alpha = 0.14f),
-                                    border = BorderStroke(1.dp, Color(0xFF22C55E))
-                                ) {
-                                    Text(
-                                        text = "Safar (Qasr) • ${state.distanceFromHomeKm.toInt()} km from Home",
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                             }
                         }
+
+                        if (salahHomeLayout == SalahHomeLayout.TIMELINE_STRIP) {
+                            TimelineStrip(
+                                prayers = state.prayersList,
+                                currentPrayerName = state.currentPrayerName
+                            )
+                        }
+
+                        SalahHomeHero(
+                            layout = salahHomeLayout,
+                            state = state,
+                            onToggleCurrent = {
+                                viewModel?.onIntent(SalahUiIntent.ToggleCurrentPrayerCompleted)
+                            }
+                        )
                     }
 
-
-                    // 4. Unified Sub-Mode Switcher (Times | Qibla | Guide) — always visible so
-                    // the Qibla tab is never hidden, including in Focus Mode.
-                    SegmentedPillBar(
-                        options = listOf("Times", "Qibla", "Guide"),
-                        selectedIndex = selectedSegment,
-                        onSelect = { selectedSegment = it }
+                    SalahTabBar(
+                        selectedSegment = selectedSegment,
+                        onSelect = { selectedSegment = it },
+                        underline = salahHomeLayout == SalahHomeLayout.CIRCULAR_RING
                     )
                 }
             }
 
             when (selectedSegment) {
                 0 -> {
+                    if (salahHomeLayout == SalahHomeLayout.ALL_DAY_GRID) {
+                        item {
+                            PrayerGrid(
+                                prayers = state.prayersList,
+                                currentPrayerName = state.currentPrayerName,
+                                onTogglePrayer = { prayer ->
+                                    val prayerType = runCatching {
+                                        PrayerType.valueOf(prayer.nameEnglish.uppercase())
+                                    }.getOrDefault(PrayerType.DHUHR)
+                                    viewModel?.onIntent(
+                                        SalahUiIntent.ToggleSalahCompletion(prayerType, prayer.isJamaah)
+                                    )
+                                }
+                            )
+                        }
+                    } else {
                     // Daily Prayer Matrix (5-prayer checklist in Focus Mode)
                     val visiblePrayers = if (focusMode) {
                         state.prayersList.filter { it.id != "sunrise" }
@@ -752,6 +448,7 @@ fun SalahScreen(
                                 }
                             }
                         }
+                    }
                     }
                 }
 

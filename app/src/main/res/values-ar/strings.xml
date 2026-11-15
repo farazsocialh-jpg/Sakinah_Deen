@@ -61,4 +61,6 @@
     <string name="city_picker_no_match">لا توجد مدينة مطابقة.</string>
     <string name="city_picker_use_gps">استخدام GPS الجهاز</string>
     <string name="action_cancel">إلغاء</string>
+    <string name="salah_home_layout_title">تخطيط الصفحة الرئيسية للصلاة</string>
+    <string name="salah_home_layout_caption">اختر طريقة عرض الصلاة الحالية وجدول الصلوات في الصفحة الرئيسية.</string>
 </resources>

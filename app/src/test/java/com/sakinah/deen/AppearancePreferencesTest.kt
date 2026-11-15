@@ -1,6 +1,7 @@
 package com.sakinah.deen
 
 import com.sakinah.deen.data.prefs.AppearancePreferences
+import com.sakinah.deen.data.prefs.SalahHomeLayout
 import com.sakinah.deen.fakes.FakeSharedPreferences
 import com.sakinah.deen.ui.theme.FontScalePreset
 import com.sakinah.deen.ui.theme.SakinahPalette
@@ -50,6 +51,24 @@ class AppearancePreferencesTest {
 
         val reloaded = AppearancePreferences(fake).config.value
         assertEquals(custom, reloaded)
+    }
+
+    @Test
+    fun salahHomeLayoutPersistsAndInvalidValueFallsBack() {
+        val fake = FakeSharedPreferences()
+        val store = AppearancePreferences(fake)
+
+        store.updateSalahHomeLayout(SalahHomeLayout.CIRCULAR_RING)
+        assertEquals(
+            SalahHomeLayout.CIRCULAR_RING,
+            AppearancePreferences(fake).config.value.salahHomeLayout
+        )
+
+        fake.edit().putString("salah_home_layout", "OBSOLETE_LAYOUT").apply()
+        assertEquals(
+            SalahHomeLayout.CLASSIC_COMPACT,
+            AppearancePreferences(fake).config.value.salahHomeLayout
+        )
     }
 
     @Test

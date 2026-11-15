@@ -67,6 +67,7 @@ import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.theme.FontScalePreset
 import com.sakinah.deen.ui.theme.PrayerGuideGender
 import com.sakinah.deen.ui.theme.SakinahPalette
+import com.sakinah.deen.data.prefs.SalahHomeLayout
 import com.sakinah.deen.ui.theme.SakinahTheme
 import com.sakinah.deen.ui.theme.ThemeMode
 import com.sakinah.deen.ui.theme.UserAppearanceConfig
@@ -85,6 +86,7 @@ private val UserAppearanceConfigSaver = listSaver<UserAppearanceConfig, String>(
             config.focusModeHideDistractions.toString(),
             config.autoHideBarsOnScroll.toString(),
             config.prayerGuideGender.name,
+            config.salahHomeLayout.name,
             config.onboardingCompleted.toString()
         )
     },
@@ -99,7 +101,10 @@ private val UserAppearanceConfigSaver = listSaver<UserAppearanceConfig, String>(
             focusModeHideDistractions = values[6].toBoolean(),
             autoHideBarsOnScroll = values[7].toBoolean(),
             prayerGuideGender = PrayerGuideGender.valueOf(values[8]),
-            onboardingCompleted = values[9].toBoolean()
+            salahHomeLayout = values.getOrNull(9)
+                ?.let { runCatching { SalahHomeLayout.valueOf(it) }.getOrNull() }
+                ?: SalahHomeLayout.CLASSIC_COMPACT,
+            onboardingCompleted = values.getOrNull(10)?.toBoolean() ?: values[9].toBoolean()
         )
     }
 )

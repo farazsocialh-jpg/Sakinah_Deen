@@ -60,6 +60,7 @@ data class SalahUiState(
     val currentPrayerName: String = "Dhuhr",
     val currentPrayerArabic: String = "الظهر",
     val isCurrentPrayerCompleted: Boolean = false,
+    val dailyCompletionByPrayer: Map<String, Boolean> = emptyMap(),
     val nextPrayerName: String = "Asr",
     val nextPrayerStartTimeFormatted: String = "",
     val remainingMillis: Long = 0L,
@@ -476,6 +477,7 @@ class SalahViewModel(
                             currentPrayerName = prayerDisplayName(countdown.currentPrayer),
                             currentPrayerArabic = prayerArabicName(countdown.currentPrayer),
                             isCurrentPrayerCompleted = completedRecordsByPrayer[countdown.currentPrayer]?.isCompleted == true,
+                            dailyCompletionByPrayer = dailyCompletionMap(),
                             nextPrayerName = prayerDisplayName(countdown.nextPrayer),
                             nextPrayerStartTimeFormatted = formatPrayerTime(nextStart),
                             remainingMillis = remainingMillis,
@@ -581,6 +583,7 @@ class SalahViewModel(
                 currentPrayerName = prayerDisplayName(countdown.currentPrayer),
                 currentPrayerArabic = prayerArabicName(countdown.currentPrayer),
                 isCurrentPrayerCompleted = completedRecordsByPrayer[countdown.currentPrayer]?.isCompleted == true,
+                dailyCompletionByPrayer = dailyCompletionMap(),
                 nextPrayerName = prayerDisplayName(countdown.nextPrayer),
                 nextPrayerStartTimeFormatted = formatPrayerTime(times[countdown.nextPrayer]),
                 remainingMillis = (countdown.remainingMinutes * 60L + countdown.remainingSeconds) * 1000L,
@@ -693,7 +696,8 @@ class SalahViewModel(
                         }
                         state.copy(
                             prayersList = updatedList,
-                            isCurrentPrayerCompleted = completedRecordsByPrayer[state.currentPrayer]?.isCompleted == true
+                            isCurrentPrayerCompleted = completedRecordsByPrayer[state.currentPrayer]?.isCompleted == true,
+                            dailyCompletionByPrayer = dailyCompletionMap()
                         )
                     }
                 }
@@ -746,7 +750,8 @@ class SalahViewModel(
             _uiState.update {
                 it.copy(
                     prayersList = updated,
-                    isCurrentPrayerCompleted = if (prayerType == it.currentPrayer) newCompleted else it.isCurrentPrayerCompleted
+                    isCurrentPrayerCompleted = if (prayerType == it.currentPrayer) newCompleted else it.isCurrentPrayerCompleted,
+                    dailyCompletionByPrayer = dailyCompletionMap()
                 )
             }
 
@@ -813,6 +818,10 @@ class SalahViewModel(
         return if (hrs > 0) "${hrs}h ${mins}m ${info.remainingSeconds}s"
         else "${mins}m ${info.remainingSeconds}s"
     }
+
+    private fun dailyCompletionMap(): Map<String, Boolean> =
+        listOf(PrayerType.FAJR, PrayerType.DHUHR, PrayerType.ASR, PrayerType.MAGHRIB, PrayerType.ISHA)
+            .associate { prayerDisplayName(it) to (completedRecordsByPrayer[it]?.isCompleted == true) }
 
     private fun prayerDisplayName(type: PrayerType): String = when (type) {
         PrayerType.FAJR -> "Fajr"

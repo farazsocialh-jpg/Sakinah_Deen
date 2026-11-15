@@ -6,9 +6,10 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.hardware.display.DisplayManager
 import android.location.Location
+import android.view.Display
 import android.view.Surface
-import android.view.WindowManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -375,14 +376,9 @@ class QiblaSensorManager(
     }
 
     private fun currentDisplayRotation(): Int {
-        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            appContext.display?.rotation ?: Surface.ROTATION_0
-        } else {
-            @Suppress("DEPRECATION")
-            val windowManager = appContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
-            @Suppress("DEPRECATION")
-            windowManager?.defaultDisplay?.rotation ?: Surface.ROTATION_0
-        }
+        val displayManager = appContext.getSystemService(DisplayManager::class.java)
+        return displayManager?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation
+            ?: Surface.ROTATION_0
     }
 
     private fun calculateTilt(orientation: FloatArray): Float {

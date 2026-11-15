@@ -13,6 +13,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
+enum class SalahHomeLayout(val displayName: String, val subtitle: String) {
+    CLASSIC_COMPACT("Classic Compact", "Single hero card with draining bar & prayer list"),
+    BENTO_SPLIT("Bento Split", "Side-by-side current & next prayer cards"),
+    CIRCULAR_RING("Circular Ring", "Circular draining ring beside current prayer"),
+    ALL_DAY_GRID("All-Day Grid", "Hero card with 2x3 prayer grid (no scrolling)"),
+    TIMELINE_STRIP("Timeline Strip", "5-prayer horizontal pill bar above hero card"),
+    SEAMLESS_EDITORIAL("Seamless Hero", "Borderless gradient top flowing into prayer list"),
+    DAILY_STREAK_DOTS("Daily Status Dots", "Hero card with F-D-A-M-I completion dots")
+}
+
 /**
  * Persists personalized onboarding choices, theme/palette/font presets,
  * Focus Mode, and auto-hiding chrome preferences as reactive [StateFlow]s.
@@ -35,6 +45,7 @@ class AppearancePreferences internal constructor(
         private const val KEY_FOCUS_MODE = "focus_mode_hide_distractions"
         private const val KEY_AUTO_HIDE_BARS = "auto_hide_bars_on_scroll"
         private const val KEY_PRAYER_GUIDE_GENDER = "prayer_guide_gender"
+        private const val KEY_SALAH_HOME_LAYOUT = "salah_home_layout"
         private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
     }
 
@@ -79,6 +90,10 @@ class AppearancePreferences internal constructor(
         update { it.copy(onboardingCompleted = false) }
     }
 
+    fun updateSalahHomeLayout(layout: SalahHomeLayout) {
+        update { it.copy(salahHomeLayout = layout) }
+    }
+
     private fun load(): UserAppearanceConfig {
         val defaults = UserAppearanceConfig()
         return UserAppearanceConfig(
@@ -92,6 +107,7 @@ class AppearancePreferences internal constructor(
             focusModeHideDistractions = prefs.getBoolean(KEY_FOCUS_MODE, defaults.focusModeHideDistractions),
             autoHideBarsOnScroll = prefs.getBoolean(KEY_AUTO_HIDE_BARS, defaults.autoHideBarsOnScroll),
             prayerGuideGender = safeEnum(KEY_PRAYER_GUIDE_GENDER, defaults.prayerGuideGender),
+            salahHomeLayout = safeEnum(KEY_SALAH_HOME_LAYOUT, defaults.salahHomeLayout),
             onboardingCompleted = prefs.getBoolean(KEY_ONBOARDING_COMPLETED, defaults.onboardingCompleted)
         )
     }
@@ -107,6 +123,7 @@ class AppearancePreferences internal constructor(
             .putBoolean(KEY_FOCUS_MODE, value.focusModeHideDistractions)
             .putBoolean(KEY_AUTO_HIDE_BARS, value.autoHideBarsOnScroll)
             .putString(KEY_PRAYER_GUIDE_GENDER, value.prayerGuideGender.name)
+            .putString(KEY_SALAH_HOME_LAYOUT, value.salahHomeLayout.name)
             .putBoolean(KEY_ONBOARDING_COMPLETED, value.onboardingCompleted)
             .apply()
     }

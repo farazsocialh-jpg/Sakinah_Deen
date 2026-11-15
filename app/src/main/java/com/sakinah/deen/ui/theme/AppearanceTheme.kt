@@ -4,6 +4,7 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
+import com.sakinah.deen.data.prefs.SalahHomeLayout
 
 enum class UserObjective(
     val title: String,
@@ -102,6 +103,7 @@ data class UserAppearanceConfig(
     val focusModeHideDistractions: Boolean = false,
     val autoHideBarsOnScroll: Boolean = true,
     val prayerGuideGender: PrayerGuideGender = PrayerGuideGender.MALE,
+    val salahHomeLayout: SalahHomeLayout = SalahHomeLayout.CLASSIC_COMPACT,
     val onboardingCompleted: Boolean = false
 )
 
