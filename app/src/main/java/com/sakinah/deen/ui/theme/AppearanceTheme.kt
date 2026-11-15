@@ -29,7 +29,7 @@ enum class UserObjective(
         recommendedStartTab = "Hadith"
     ),
     ALL_IN_ONE(
-        title = "Complete Sunni Companion",
+        title = "Complete Islamic Companion",
         subtitle = "Balanced daily home for Salah, Quran, Hadith, Scholar Q&A, Zakat, and Safar tools.",
         recommendedStartTab = "DailySalah"
     )

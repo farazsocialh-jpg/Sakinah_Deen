@@ -32,9 +32,11 @@ data class AiScholarUiState(
     val messages: List<ChatMessageModel> = emptyList(),
     val inputText: String = "",
     val isStreaming: Boolean = false,
-    val guardrailNotice: String = "Educational Reference Notice: Sourced from verified Sunni texts (Quran, Hadith, 4 Madhhabs). For binding personal fatwas, consult a local Mufti.",
+    val guardrailNotice: String = "Educational Reference Notice: Sourced from authentic Islamic texts (Quran, Hadith, 4 Madhhabs). For binding personal fatwas, consult a local Mufti.",
     val activeMadhhabTab: String = "hanafi",
-    val error: String? = null
+    val error: String? = null,
+    /** True once the pre-chat research disclaimer is accepted for the active session. */
+    val disclaimerAcceptedForCurrentChat: Boolean = false
 )
 
 sealed class AiScholarUiIntent {
@@ -42,6 +44,7 @@ sealed class AiScholarUiIntent {
     data class SendQuery(val query: String) : AiScholarUiIntent()
     data class SelectMadhhabTab(val tab: String) : AiScholarUiIntent()
     data class ClickCitation(val sourceTitle: String, val deepLink: String? = null) : AiScholarUiIntent()
+    data object AcceptDisclaimer : AiScholarUiIntent()
     data object RetryLastQuery : AiScholarUiIntent()
     data object ClearConversation : AiScholarUiIntent()
     data object NewChat : AiScholarUiIntent()
@@ -74,6 +77,7 @@ class AiScholarViewModel(
         private val SURAH_AYAH_REGEX = Regex("(\\d{1,3})\\s*:\\s*(\\d{1,3})")
         private val HADITH_NUMBER_REGEX = Regex("#?(\\d{1,5})")
         private const val NEW_CHAT_TITLE = "New chat"
+        private val LEGACY_SEED_MESSAGE_IDS = setOf("init-1", "sample-1", "sample-2")
 
         internal fun describeScholarFailure(error: Throwable): String {
             val message = error.localizedMessage.orEmpty()
@@ -101,7 +105,7 @@ class AiScholarViewModel(
                     "No connection to the AI Scholar. Check your network — the Quran, " +
                         "hadith and nisab caches keep working offline."
 
-                else -> message.ifBlank { "Failed to connect to the Sunni Scholar service." }
+                else -> message.ifBlank { "Failed to connect to the Islamic Scholar service." }
             }
         }
     }
@@ -116,7 +120,8 @@ class AiScholarViewModel(
 
     private val _uiState = MutableStateFlow(
         AiScholarUiState(
-            messages = _sessions.value.first().messages.map { it.toUiModel() }
+            messages = _sessions.value.first().messages.map { it.toUiModel() },
+            disclaimerAcceptedForCurrentChat = _sessions.value.first().messages.isNotEmpty()
         )
     )
     val uiState: StateFlow<AiScholarUiState> = _uiState.asStateFlow()
@@ -141,6 +146,9 @@ class AiScholarViewModel(
             is AiScholarUiIntent.ClickCitation -> {
                 handleCitationClick(intent.sourceTitle, intent.deepLink)
             }
+            is AiScholarUiIntent.AcceptDisclaimer -> {
+                _uiState.update { it.copy(disclaimerAcceptedForCurrentChat = true) }
+            }
             is AiScholarUiIntent.RetryLastQuery -> {
                 val last = lastSubmittedQuery ?: _uiState.value.messages.lastOrNull { it.role == "user" }?.content
                 if (!last.isNullOrBlank()) {
@@ -155,7 +163,8 @@ class AiScholarViewModel(
                     it.copy(
                         messages = emptyList(),
                         isStreaming = false,
-                        error = null
+                        error = null,
+                        disclaimerAcceptedForCurrentChat = false
                     )
                 }
                 syncActiveSession(emptyList(), resetTitle = true)
@@ -180,7 +189,13 @@ class AiScholarViewModel(
         _sessions.update { listOf(session) + it }
         _activeSessionId.value = session.id
         _uiState.update {
-            it.copy(messages = emptyList(), inputText = "", isStreaming = false, error = null)
+            it.copy(
+                messages = emptyList(),
+                inputText = "",
+                isStreaming = false,
+                error = null,
+                disclaimerAcceptedForCurrentChat = false
+            )
         }
         persistSessions()
     }
@@ -196,7 +211,8 @@ class AiScholarViewModel(
                 messages = session.messages.map { it.toUiModel() },
                 inputText = "",
                 isStreaming = false,
-                error = null
+                error = null,
+                disclaimerAcceptedForCurrentChat = session.messages.isNotEmpty()
             )
         }
     }
@@ -218,7 +234,8 @@ class AiScholarViewModel(
                     messages = next.messages.map { it.toUiModel() },
                     inputText = "",
                     isStreaming = false,
-                    error = null
+                    error = null,
+                    disclaimerAcceptedForCurrentChat = next.messages.isNotEmpty()
                 )
             }
             lastSubmittedQuery = next.messages.lastOrNull { it.role == "user" }?.text
@@ -239,7 +256,13 @@ class AiScholarViewModel(
         _sessions.value = listOf(session)
         _activeSessionId.value = session.id
         _uiState.update {
-            it.copy(messages = emptyList(), inputText = "", isStreaming = false, error = null)
+            it.copy(
+                messages = emptyList(),
+                inputText = "",
+                isStreaming = false,
+                error = null,
+                disclaimerAcceptedForCurrentChat = false
+            )
         }
         persistSessions()
     }
@@ -469,34 +492,29 @@ class AiScholarViewModel(
     private fun initialSessions(): List<ScholarChatSession> {
         val stored = historyStore?.load().orEmpty()
             .filter { it.id.isNotBlank() }
+            .map { session ->
+                val cleaned = session.messages.filterNot { it.id in LEGACY_SEED_MESSAGE_IDS }
+                val legacyTitle = session.title.contains("Sunni", ignoreCase = true) ||
+                    session.title.startsWith("Welcome to", ignoreCase = true)
+                val recoveredTitle = cleaned.firstOrNull { it.role == "user" }
+                    ?.text
+                    ?.trim()
+                    ?.take(40)
+                    ?.takeIf { it.isNotBlank() }
+                session.copy(
+                    title = if (legacyTitle) recoveredTitle ?: NEW_CHAT_TITLE else session.title,
+                    messages = cleaned
+                )
+            }
             .sortedByDescending { it.updatedAtMs }
-        return stored.ifEmpty { listOf(seedSession()) }
+        return stored.ifEmpty { listOf(emptySession()) }
     }
 
-    private fun seedSession(): ScholarChatSession = ScholarChatSession(
+    private fun emptySession(): ScholarChatSession = ScholarChatSession(
         id = UUID.randomUUID().toString(),
-        title = "Welcome to the Sunni AI Scholar",
+        title = NEW_CHAT_TITLE,
         updatedAtMs = System.currentTimeMillis(),
-        messages = listOf(
-            ScholarChatMessage(
-                id = "init-1",
-                role = "assistant",
-                text = "As-salāmu ‘alaykum wa raḥmatullāhi wa barakātuh. I am your Sunni Deen research companion, grounded in the Holy Quran, Kutub al-Tis‘ah, and the four classical legal schools.",
-                timestampMs = System.currentTimeMillis()
-            ),
-            ScholarChatMessage(
-                id = "sample-1",
-                role = "user",
-                text = "How do I perform Sujud as-Sahw (Prostration of Forgetfulness)?",
-                timestampMs = System.currentTimeMillis()
-            ),
-            ScholarChatMessage(
-                id = "sample-2",
-                role = "assistant",
-                text = "Sujud as-Sahw (سجود السهو) consists of two prostrations performed to rectify unintentional omissions or additions in prayer, followed by Salam.\n\nGrounding Proof: In Sahih Muslim #1272 (Kitab al-Masajid — Book of Mosques and Places of Prayer), Abu Sa‘id al-Khudri reported that the Prophet (ﷺ) instructed to discard doubt, build upon certainty, and make two prostrations before concluding the prayer.",
-                timestampMs = System.currentTimeMillis()
-            )
-        )
+        messages = emptyList()
     )
 
     private fun syncActiveSession(messages: List<ChatMessageModel>, resetTitle: Boolean = false) {

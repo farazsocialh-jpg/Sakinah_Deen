@@ -30,7 +30,7 @@ class KtorAiCompanionClient(
     override fun streamScholar(request: RagQueryRequest): Flow<RagStreamChunk> = flow {
         emit(
             RagStreamChunk.GuardrailDisclaimer(
-                "Educational Reference Guide: Verified against authentic Sunni Quran, Hadith, and classical Fiqh texts. " +
+                "Educational Reference Guide: Verified against authentic Islamic Quran, Hadith, and classical Fiqh texts. " +
                     "For personal binding fatwas, consult a local qualified Mufti."
             )
         )

@@ -79,7 +79,7 @@ fun OnboardingScreen(
             color = MaterialTheme.colorScheme.primary
         )
         Text(
-            text = "Your Sunni Deen Companion · Step 1 of 3",
+            text = "Your Islamic Deen Companion · Step 1 of 3",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
         )

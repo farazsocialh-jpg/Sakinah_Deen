@@ -8,6 +8,7 @@ import com.sakinah.deen.network.model.RagStreamChunk
 import com.sakinah.deen.ui.viewmodel.AiScholarUiIntent
 import com.sakinah.deen.ui.viewmodel.AiScholarViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -26,10 +27,32 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class AiScholarViewModelTest {
     private lateinit var testDispatcher: TestDispatcher
     @Before fun setUp() { testDispatcher = StandardTestDispatcher(); Dispatchers.setMain(testDispatcher) }
     @After fun tearDown() { Dispatchers.resetMain() }
+    @Test
+    fun newViewModel_startsWithEmptyChatAndDisclaimerPending() = runTest(testDispatcher) {
+        val vm = AiScholarViewModel(FakeSunniAiScholarRepository())
+
+        assertTrue(vm.uiState.value.messages.isEmpty())
+        assertFalse(vm.uiState.value.disclaimerAcceptedForCurrentChat)
+        assertEquals("New chat", vm.sessions.value.single().title)
+    }
+
+    @Test
+    fun acceptDisclaimer_isScopedToCurrentChat() = runTest(testDispatcher) {
+        val vm = AiScholarViewModel(FakeSunniAiScholarRepository())
+
+        vm.onIntent(AiScholarUiIntent.AcceptDisclaimer)
+        assertTrue(vm.uiState.value.disclaimerAcceptedForCurrentChat)
+
+        vm.onIntent(AiScholarUiIntent.NewChat)
+        assertFalse(vm.uiState.value.disclaimerAcceptedForCurrentChat)
+        assertTrue(vm.uiState.value.messages.isEmpty())
+    }
+
     @Test
     fun sendQuery_appendsMessages() = runTest(testDispatcher) {
         val repo = FakeSunniAiScholarRepository()

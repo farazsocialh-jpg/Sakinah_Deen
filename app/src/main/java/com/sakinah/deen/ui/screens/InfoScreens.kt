@@ -50,7 +50,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun DataSourcesScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     SimpleInfoScreen("Islamic Data Sources & Attribution", onBack, modifier) {
-        Text("• AlAdhan API & Sunni authorities — prayer times and methods.")
+        Text("• AlAdhan API & Islamic authorities — prayer times and methods.")
         Text("• Quran.com v4 API — Quran text, translations, audio.")
         Text("• fawazahmed0/hadith-api — Kutub al-Tis'ah hadith collections.")
         Text("• Juz Amma / Al-Fatihah, the 40 Nawawi hadith, and Hisn al-Muslim adhkar — offline seeds.")

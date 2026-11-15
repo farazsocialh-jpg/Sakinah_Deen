@@ -203,7 +203,7 @@ fun SettingsScreen(
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Calculation method") },
-                        supportingText = { Text("Automatic uses your country's Sunni authority.") },
+                        supportingText = { Text("Automatic uses your country's Islamic authority.") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = calcExpanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth()
                     )

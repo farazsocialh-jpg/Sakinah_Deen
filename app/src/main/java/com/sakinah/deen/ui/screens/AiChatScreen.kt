@@ -3,9 +3,9 @@ package com.sakinah.deen.ui.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
@@ -20,26 +21,26 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,20 +60,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sakinah.deen.data.model.ChatMessageModel
 import com.sakinah.deen.data.scholar.ScholarChatSession
 import com.sakinah.deen.ui.components.CitationChip
 import com.sakinah.deen.ui.components.ClickableCitationText
-import com.sakinah.deen.ui.components.SakinahCard
 import com.sakinah.deen.ui.components.SegmentedPillBar
-import com.sakinah.deen.ui.theme.EmeraldDeep
-import com.sakinah.deen.ui.theme.MintGreen
 import com.sakinah.deen.ui.viewmodel.AiScholarNavigationEvent
 import com.sakinah.deen.ui.viewmodel.AiScholarUiIntent
 import com.sakinah.deen.ui.viewmodel.AiScholarViewModel
@@ -81,8 +81,15 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private const val AI_DISCLAIMER =
-    "This response is AI-generated. Please verify rulings and references through authentic Islamic sources and qualified scholars."
+private const val PER_MESSAGE_DISCLAIMER =
+    "AI-generated · Please verify rulings with authentic Islamic sources and qualified scholars."
+
+private val STARTER_PROMPTS = listOf(
+    "How do I perform Sujud as-Sahw?",
+    "Explain Zakat on gold & savings",
+    "Virtues of Fajr in Sahih Hadith",
+    "Rules of Qasr prayer while traveling"
+)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -104,6 +111,9 @@ fun AiChatScreen(
     var showChats by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<ScholarChatSession?>(null) }
     var confirmClearAll by remember { mutableStateOf(false) }
+    var showDisclaimer by remember { mutableStateOf(false) }
+    var pendingPrompt by remember { mutableStateOf<String?>(null) }
+    var pendingNewChat by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     LaunchedEffect(vm) {
@@ -149,125 +159,125 @@ fun AiChatScreen(
         }
     }
 
+    fun requestNewChat() {
+        pendingPrompt = null
+        pendingNewChat = true
+        showDisclaimer = true
+    }
+
+    fun requestPrompt(text: String) {
+        val trimmed = text.trim()
+        if (trimmed.isBlank() || state.isStreaming) return
+        if (state.disclaimerAcceptedForCurrentChat) {
+            vm.onIntent(AiScholarUiIntent.SendQuery(trimmed))
+        } else {
+            pendingPrompt = trimmed
+            pendingNewChat = false
+            showDisclaimer = true
+        }
+    }
+
+    fun cancelDisclaimer() {
+        showDisclaimer = false
+        pendingPrompt = null
+        pendingNewChat = false
+    }
+
+    fun acceptDisclaimer() {
+        if (pendingNewChat) {
+            vm.onIntent(AiScholarUiIntent.NewChat)
+            vm.onIntent(AiScholarUiIntent.AcceptDisclaimer)
+        } else {
+            vm.onIntent(AiScholarUiIntent.AcceptDisclaimer)
+            pendingPrompt?.let { vm.onIntent(AiScholarUiIntent.SendQuery(it)) }
+        }
+        showDisclaimer = false
+        pendingPrompt = null
+        pendingNewChat = false
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .padding(contentPadding)
             .consumeWindowInsets(contentPadding)
             .imePadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Sunni AI Scholar",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = sessions.firstOrNull { it.id == activeSessionId }?.title ?: "New chat",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
-                )
-            }
-            TextButton(onClick = { vm.onIntent(AiScholarUiIntent.NewChat) }) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("New", fontSize = 11.sp)
-            }
-            TextButton(onClick = { showChats = true }) {
-                Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Chats", fontSize = 11.sp)
-            }
-        }
-
-        // 1. Orthodoxy & Fatwa Guardrail Disclaimer + Clear Action
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = Color(0xFFFEF3C7),
-            border = BorderStroke(1.dp, Color(0xFFFDE68A)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Text(
+                text = "Islamic AI Scholar",
+                modifier = Modifier.weight(1f),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            IconButton(onClick = { showChats = true }) {
                 Icon(
-                    imageVector = Icons.Default.Shield,
-                    contentDescription = "Guardrail",
-                    tint = Color(0xFF92400E),
-                    modifier = Modifier.size(18.dp)
+                    imageVector = Icons.Default.History,
+                    contentDescription = "Chats",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = state.guardrailNotice,
-                        fontSize = 11.sp,
-                        color = Color(0xFF78350F),
-                        lineHeight = 15.sp
-                    )
-                    Spacer(Modifier.size(3.dp))
-                    Text(
-                        text = AI_DISCLAIMER,
-                        fontSize = 10.sp,
-                        color = Color(0xFF92400E),
-                        lineHeight = 14.sp
-                    )
-                }
-                if (state.messages.isNotEmpty()) {
-                    IconButton(
-                        onClick = { vm.onIntent(AiScholarUiIntent.ClearConversation) },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DeleteSweep,
-                            contentDescription = "Clear conversation",
-                            tint = Color(0xFF92400E),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
+            }
+            IconButton(onClick = { requestNewChat() }) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "New chat",
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
         }
 
-        // 2. Streaming Chat Message Feed
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(state.messages, key = { it.id }) { msg ->
-                val isUser = msg.role == "user"
-                val isPendingStream = !isUser && msg.content.isBlank() && state.isStreaming
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
-                ) {
-                    Card(
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isUser) EmeraldDeep else MaterialTheme.colorScheme.surface
-                        ),
-                        border = if (!isUser) {
-                            BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.65f))
-                        } else null,
-                        modifier = Modifier
-                            .fillMaxWidth(0.92f)
-                            .widthIn(max = 560.dp)
-                    ) {
+        if (state.messages.isEmpty()) {
+            EmptyScholarState(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                onPromptClick = ::requestPrompt
+            )
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(vertical = 6.dp)
+            ) {
+                items(state.messages, key = { it.id }) { msg ->
+                    val isUser = msg.role == "user"
+                    val isPendingStream = !isUser && msg.content.isBlank() && state.isStreaming
+                    if (isUser) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(20.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.fillMaxWidth(0.82f)
+                            ) {
+                                Text(
+                                    text = msg.content,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    fontSize = 13.sp,
+                                    lineHeight = 19.sp
+                                )
+                            }
+                        }
+                    } else {
                         Column(
-                            modifier = Modifier.padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .widthIn(max = 760.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             if (isPendingStream) {
                                 Row(
@@ -279,25 +289,18 @@ fun AiChatScreen(
                                         strokeWidth = 2.dp
                                     )
                                     Text(
-                                        text = "Consulting verified Sunni sources…",
+                                        text = "Consulting authentic Islamic sources…",
                                         fontSize = 13.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                            } else if (isUser) {
-                                Text(
-                                    text = msg.content,
-                                    color = Color.White,
-                                    fontSize = 13.sp,
-                                    lineHeight = 19.sp
-                                )
                             } else {
                                 ClickableCitationText(
                                     text = msg.content,
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         color = MaterialTheme.colorScheme.onSurface,
-                                        fontSize = 13.sp,
-                                        lineHeight = 19.sp
+                                        fontSize = 14.sp,
+                                        lineHeight = 21.sp
                                     ),
                                     onQuranClick = { surah, ayah ->
                                         if (onNavigateToQuranDetail != null) {
@@ -314,73 +317,43 @@ fun AiChatScreen(
                                         }
                                     }
                                 )
-                            }
 
-                            // Madhhab Divergence / Consensus Box
-                            val hasMadhhabBreakdown = !msg.hanafiStance.isNullOrBlank() ||
-                                !msg.malikiStance.isNullOrBlank() ||
-                                !msg.shafiiStance.isNullOrBlank() ||
-                                !msg.hanbaliStance.isNullOrBlank()
-                            if (hasMadhhabBreakdown) {
-                                SakinahCard(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-                                    contentPadding = 10.dp
-                                ) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Text(
-                                            text = "Four Sunni Madhahib Positions",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                        val tabs = listOf("hanafi" to "Hanafi", "maliki" to "Maliki", "shafii" to "Shafi'i", "hanbali" to "Hanbali")
-                                        val currentIdx = tabs.indexOfFirst { it.first == state.activeMadhhabTab }.coerceAtLeast(0)
-                                        SegmentedPillBar(
-                                            options = tabs.map { it.second },
-                                            selectedIndex = currentIdx,
-                                            onSelect = { idx ->
-                                                vm.onIntent(AiScholarUiIntent.SelectMadhhabTab(tabs[idx].first))
-                                            }
-                                        )
+                                if (hasMadhhabBreakdown(msg)) {
+                                    MadhhabBreakdown(
+                                        message = msg,
+                                        activeTab = state.activeMadhhabTab,
+                                        onSelectTab = {
+                                            vm.onIntent(AiScholarUiIntent.SelectMadhhabTab(it))
+                                        }
+                                    )
+                                }
 
-                                        val stanceText = when (state.activeMadhhabTab) {
-                                            "maliki" -> msg.malikiStance
-                                            "shafii" -> msg.shafiiStance
-                                            "hanbali" -> msg.hanbaliStance
-                                            else -> msg.hanafiStance
-                                        }.orEmpty().ifBlank { "No school-specific note recorded for this position." }
-
-                                        Text(
-                                            text = stanceText,
-                                            fontSize = 12.sp,
-                                            lineHeight = 17.sp,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
+                                val citations = buildList {
+                                    msg.sourceTitle?.takeIf { it.isNotBlank() }?.let {
+                                        add(it to msg.sourceDeepLink)
+                                    }
+                                    msg.citations.forEach { citation ->
+                                        if (citation.title.isNotBlank()) {
+                                            add(citation.title to (citation.deepLink ?: msg.sourceDeepLink))
+                                        }
+                                    }
+                                }.distinctBy { it.first }
+                                if (citations.isNotEmpty()) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        citations.forEach { (title, deepLink) ->
+                                            CitationChip(
+                                                sourceTitle = title,
+                                                onClick = {
+                                                    vm.onIntent(
+                                                        AiScholarUiIntent.ClickCitation(title, deepLink)
+                                                    )
+                                                }
+                                            )
+                                        }
                                     }
                                 }
-                            }
 
-                            // Clickable Source Proof Chip
-                            msg.sourceTitle?.takeIf { it.isNotBlank() }?.let { title ->
-                                CitationChip(
-                                    sourceTitle = title,
-                                    onClick = {
-                                        vm.onIntent(AiScholarUiIntent.ClickCitation(title, msg.sourceDeepLink))
-                                    }
-                                )
-                            }
-
-                            if (!isUser && !isPendingStream) {
-                                Text(
-                                    text = AI_DISCLAIMER,
-                                    fontSize = 9.sp,
-                                    lineHeight = 12.sp,
-                                    color = if (isUser) {
-                                        Color.White.copy(alpha = 0.78f)
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    }
-                                )
+                                AiMessageDisclaimer()
                             }
                         }
                     }
@@ -388,7 +361,6 @@ fun AiChatScreen(
             }
         }
 
-        // Inline Network / Timeout Error Card with Retry
         state.error?.let { err ->
             Surface(
                 shape = RoundedCornerShape(14.dp),
@@ -416,7 +388,6 @@ fun AiChatScreen(
             }
         }
 
-        // 3. Input Dock
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -425,7 +396,7 @@ fun AiChatScreen(
                 value = state.inputText,
                 onValueChange = { vm.onIntent(AiScholarUiIntent.InputTextChanged(it)) },
                 placeholder = { Text("Ask any Islamic question...", fontSize = 12.sp) },
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(50),
                 modifier = Modifier.weight(1f),
                 singleLine = false,
                 maxLines = 4,
@@ -434,22 +405,17 @@ fun AiChatScreen(
                     imeAction = ImeAction.Send
                 ),
                 keyboardActions = KeyboardActions(
-                    onSend = {
-                        if (state.inputText.isNotBlank() && !state.isStreaming) {
-                            vm.onIntent(AiScholarUiIntent.SendQuery(state.inputText))
-                        }
-                    }
+                    onSend = { requestPrompt(state.inputText) }
                 )
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Button(
-                onClick = { vm.onIntent(AiScholarUiIntent.SendQuery(state.inputText)) },
+            FilledIconButton(
+                onClick = { requestPrompt(state.inputText) },
                 enabled = state.inputText.isNotBlank() && !state.isStreaming,
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                modifier = Modifier.size(48.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Send,
+                    imageVector = Icons.AutoMirrored.Filled.Send,
                     contentDescription = "Send",
                     tint = MaterialTheme.colorScheme.onPrimary
                 )
@@ -533,6 +499,53 @@ fun AiChatScreen(
         }
     }
 
+    if (showDisclaimer) {
+        AlertDialog(
+            onDismissRequest = ::cancelDisclaimer,
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.VerifiedUser,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(30.dp)
+                )
+            },
+            title = { Text("Before You Begin") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Islamic AI Scholar is an educational research companion grounded in the Quran, Kutub al-Tis'ah, and the four classical legal schools.",
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                    ) {
+                        Text(
+                            text = "For binding personal fatwas or sensitive rulings, always consult a qualified local Mufti or scholar.",
+                            modifier = Modifier.padding(10.dp),
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = ::acceptDisclaimer) {
+                    Text("I Understand · Start Chat")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = ::cancelDisclaimer) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     pendingDelete?.let { chat ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
@@ -574,6 +587,152 @@ fun AiChatScreen(
                 TextButton(onClick = { confirmClearAll = false }) { Text("Cancel") }
             }
         )
+    }
+}
+
+@Composable
+private fun EmptyScholarState(
+    modifier: Modifier = Modifier,
+    onPromptClick: (String) -> Unit
+) {
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 520.dp)
+                .padding(vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                modifier = Modifier.size(64.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
+            }
+            Text(
+                text = "Assalamu Alaikum",
+                fontFamily = FontFamily.Serif,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "Ask anything about Quran, Hadith, or Fiqh",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(6.dp))
+            STARTER_PROMPTS.forEach { prompt ->
+                Surface(
+                    onClick = { onPromptClick(prompt) },
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = prompt,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiMessageDisclaimer() {
+    Row(
+        modifier = Modifier.padding(top = 6.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Info,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+            modifier = Modifier.size(12.dp)
+        )
+        Text(
+            text = PER_MESSAGE_DISCLAIMER,
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+        )
+    }
+}
+
+private fun hasMadhhabBreakdown(message: ChatMessageModel): Boolean =
+    !message.hanafiStance.isNullOrBlank() ||
+        !message.malikiStance.isNullOrBlank() ||
+        !message.shafiiStance.isNullOrBlank() ||
+        !message.hanbaliStance.isNullOrBlank()
+
+@Composable
+private fun MadhhabBreakdown(
+    message: ChatMessageModel,
+    activeTab: String,
+    onSelectTab: (String) -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Four Classical Madhahib Positions",
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.primary
+            )
+            val tabs = listOf(
+                "hanafi" to "Hanafi",
+                "maliki" to "Maliki",
+                "shafii" to "Shafi'i",
+                "hanbali" to "Hanbali"
+            )
+            val currentIdx = tabs.indexOfFirst { it.first == activeTab }.coerceAtLeast(0)
+            SegmentedPillBar(
+                options = tabs.map { it.second },
+                selectedIndex = currentIdx,
+                onSelect = { idx -> onSelectTab(tabs[idx].first) }
+            )
+
+            val stanceText = when (activeTab) {
+                "maliki" -> message.malikiStance
+                "shafii" -> message.shafiiStance
+                "hanbali" -> message.hanbaliStance
+                else -> message.hanafiStance
+            }.orEmpty().ifBlank { "No school-specific note recorded for this position." }
+
+            Text(
+                text = stanceText,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
     }
 }
 

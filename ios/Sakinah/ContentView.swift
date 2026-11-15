@@ -159,7 +159,7 @@ struct WealthView: View {
 struct AiScholarView: View {
     var body: some View {
         NavigationView {
-            Text("Sunni Scholar Research Assistant")
+            Text("Islamic Scholar Research Assistant")
                 .navigationTitle("Scholar")
         }
     }

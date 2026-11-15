@@ -319,7 +319,7 @@ fun RootNavHost() {
         SakinahScreen.DailySalah -> "Sakinah"
         SakinahScreen.Quran -> quranLabel
         SakinahScreen.Hadith -> hadithLabel
-        SakinahScreen.AiScholar -> "Sunni AI Scholar"
+        SakinahScreen.AiScholar -> "Islamic AI Scholar"
         SakinahScreen.ToolsHub -> toolsLabel
         SakinahScreen.VisualGuide -> "Visual Salah Guide"
         SakinahScreen.Travel -> "Safar & Qibla"
@@ -350,7 +350,8 @@ fun RootNavHost() {
             if (currentScreen != SakinahScreen.Onboarding &&
                 currentScreen != SakinahScreen.DailySalah &&
                 currentScreen != SakinahScreen.Quran &&
-                currentScreen != SakinahScreen.Hadith
+                currentScreen != SakinahScreen.Hadith &&
+                currentScreen != SakinahScreen.AiScholar
             ) {
                 TopAppBar(
                     title = {

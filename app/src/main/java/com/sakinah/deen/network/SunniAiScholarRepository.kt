@@ -29,7 +29,7 @@ class SunniAiScholarRepositoryImpl(
         // 1. Emit Initial Orthodoxy Guardrail Disclaimer
         emit(
             RagStreamChunk.GuardrailDisclaimer(
-                notice = "Educational Reference Guide: Verified against authentic Sunni Quran, Hadith, and classical Fiqh texts. For personal binding fatwas, consult a local qualified Mufti."
+                notice = "Educational Reference Guide: Verified against authentic Islamic Quran, Hadith, and classical Fiqh texts. For personal binding fatwas, consult a local qualified Mufti."
             )
         )
 
@@ -129,7 +129,7 @@ class SunniAiScholarRepositoryImpl(
         val text = when {
             qLower.contains("sahw") || qLower.contains("forget") -> {
                 "Sujud as-Sahw (سجود السهو) consists of two prostrations performed to compensate for deficiencies or unintentional additions/omissions during Salah, followed by Salam.\n\n" +
-                        "The classical Sunni jurists established consensus that it is prescribed for inadvertent omissions or doubtful additions in the prayer, grounded in the authentic hadith of Abu Sa‘id al-Khudri in Sahih Muslim:\n" +
+                        "The classical Islamic jurists established consensus that it is prescribed for inadvertent omissions or doubtful additions in the prayer, grounded in the authentic hadith of Abu Sa‘id al-Khudri in Sahih Muslim:\n" +
                         "> إِذَا شَكَّ أَحَدُكُمْ فِي صَلاَتِهِ فَلَمْ يَدْرِ كَمْ صَلَّى ثَلاَثًا أَمْ أَرْبَعًا فَلْيَطْرَحِ الشَّكَّ وَلْيَبْنِ عَلَى مَا اسْتَيْقَنَ ثُمَّ يَسْجُدُ سَجْدَتَيْنِ قَبْلَ أَنْ يُسَلِّمَ\n" +
                         "> \"When any of you is in doubt during prayer and does not know how much he prayed—three or four—let him discard doubt and build upon certainty, then prostrate twice before giving Salam.\""
             }
@@ -145,7 +145,7 @@ class SunniAiScholarRepositoryImpl(
                         "2. Long-term dividend investment: Zakat is calculated strictly on the company's underlying liquid and net trade assets (~25-30% proxy) at 2.5%."
             }
             else -> {
-                "In classical Sunni jurisprudence, answers are derived strictly from the four established Usul:\n" +
+                "In classical Islamic jurisprudence, answers are derived strictly from the four established Usul:\n" +
                         "1. The Holy Quran\n" +
                         "2. The authentic Prophetic Sunnah (Kutub al-Tis‘ah)\n" +
                         "3. Ijma‘ (Scholarly consensus of the Sahabah and Salaf)\n" +
