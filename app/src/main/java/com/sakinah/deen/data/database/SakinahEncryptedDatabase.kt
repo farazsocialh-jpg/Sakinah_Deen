@@ -129,7 +129,27 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
             INSTANCE?.let { return it }
             return synchronized(this) {
                 // Re-check inside the lock; two threads can race past the first read.
-                INSTANCE ?: build(context.applicationContext, passphraseBytes).also { INSTANCE = it }
+                INSTANCE ?: buildWithRecovery(context.applicationContext, passphraseBytes).also {
+                    INSTANCE = it
+                }
+            }
+        }
+
+        /**
+         * A regenerated keystore passphrase cannot open the previous SQLCipher file. In that
+         * case the old database is unreadable anyway, so remove it once and recreate a clean
+         * encrypted database instead of crash-looping at startup.
+         */
+        private fun buildWithRecovery(
+            context: Context,
+            passphraseBytes: ByteArray
+        ): SakinahEncryptedDatabase = try {
+            build(context, passphraseBytes)
+        } catch (first: Exception) {
+            runCatching { context.deleteDatabase(DB_NAME) }
+            runCatching { build(context, passphraseBytes) }.getOrElse { rebuildError ->
+                first.addSuppressed(rebuildError)
+                throw first
             }
         }
 

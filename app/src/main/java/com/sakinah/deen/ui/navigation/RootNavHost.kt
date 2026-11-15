@@ -172,7 +172,9 @@ fun RootNavHost() {
         // Cancel/X during a re-run must discard the live preview and restore the last saved
         // config, then return to Settings instead of trapping the user on Step 1.
         fun cancelOnboarding() {
-            appearancePrefs.setPreview(appearanceConfig)
+            // Clearing the preview is essential: a non-null preview stays active forever
+            // and silently blocks all later theme/layout updates.
+            appearancePrefs.setPreview(null)
             rerunOnboarding = false
         }
         BackHandler(enabled = rerunOnboarding) { cancelOnboarding() }
@@ -197,6 +199,7 @@ fun RootNavHost() {
                         repo.updateAppearance(repo.settings.value.appearance.copy(theme = mappedTheme))
                     }
                 }
+                appearancePrefs.setPreview(null)
                 val wasRerun = rerunOnboarding
                 rerunOnboarding = false
                 backStack.clear()
@@ -318,28 +321,32 @@ fun RootNavHost() {
         SakinahScreen.Onboarding -> "Welcome to Sakinah"
     }
 
-    val scaffoldScrollModifier = if (autoHideBars) {
-        Modifier
+    val showsRootTopBar = currentScreen != SakinahScreen.Onboarding &&
+        currentScreen != SakinahScreen.DailySalah &&
+        currentScreen != SakinahScreen.Quran &&
+        currentScreen != SakinahScreen.Hadith &&
+        currentScreen != SakinahScreen.AiScholar &&
+        currentScreen != SakinahScreen.VisualGuide &&
+        currentScreen != SakinahScreen.DataSources &&
+        currentScreen != SakinahScreen.Help &&
+        currentScreen != SakinahScreen.Privacy &&
+        currentScreen != SakinahScreen.About
+
+    // enterAlwaysScrollBehavior belongs only to screens that actually render the root
+    // TopAppBar. Attaching its connection to screens without one lets the app bar offset
+    // state participate in gestures and can consume otherwise valid list scroll.
+    val scaffoldScrollModifier = when {
+        autoHideBars && showsRootTopBar -> Modifier
             .nestedScroll(scrollBehavior.nestedScrollConnection)
             .nestedScroll(bottomBarScrollConnection)
-    } else {
-        Modifier
+        autoHideBars -> Modifier.nestedScroll(bottomBarScrollConnection)
+        else -> Modifier
     }
 
     Scaffold(
         modifier = scaffoldScrollModifier,
         topBar = {
-            if (currentScreen != SakinahScreen.Onboarding &&
-                currentScreen != SakinahScreen.DailySalah &&
-                currentScreen != SakinahScreen.Quran &&
-                currentScreen != SakinahScreen.Hadith &&
-                currentScreen != SakinahScreen.AiScholar &&
-                currentScreen != SakinahScreen.VisualGuide &&
-                currentScreen != SakinahScreen.DataSources &&
-                currentScreen != SakinahScreen.Help &&
-                currentScreen != SakinahScreen.Privacy &&
-                currentScreen != SakinahScreen.About
-            ) {
+            if (showsRootTopBar) {
                 TopAppBar(
                     title = {
                         Text(
@@ -359,7 +366,7 @@ fun RootNavHost() {
                             }
                         }
                     },
-                    scrollBehavior = if (autoHideBars) scrollBehavior else null
+                    scrollBehavior = if (autoHideBars && showsRootTopBar) scrollBehavior else null
                 )
             }
         },

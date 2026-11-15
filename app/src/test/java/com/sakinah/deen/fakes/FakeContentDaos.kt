@@ -76,9 +76,16 @@ class FakeQuranDao : QuranDao {
     override fun observeSurahs(): Flow<List<SurahMetadataEntity>> =
         flow { emit(surahs.values.sortedBy { it.surahNumber }) }
 
-    override suspend fun upsertAyahs(ayahs: List<QuranAyahEntity>) {
+    override suspend fun insertAyahsRaw(ayahs: List<QuranAyahEntity>) {
         this.ayahs += ayahs.associateBy { it.surahNumber to it.ayahNumber }
         ayahWrites += ayahs.size
+    }
+
+    override suspend fun getAyahsForSurah(surahNumber: Int): List<QuranAyahEntity> =
+        ayahs.values.filter { it.surahNumber == surahNumber }.sortedBy { it.ayahNumber }
+
+    override suspend fun upsertAyahs(ayahs: List<QuranAyahEntity>) {
+        insertAyahsRaw(ayahs)
     }
 
     override suspend fun upsertSurahs(surahs: List<SurahMetadataEntity>) {

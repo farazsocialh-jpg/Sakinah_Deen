@@ -19,7 +19,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone as KTimeZone
 import kotlinx.datetime.toJavaLocalTime
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -150,9 +149,10 @@ class PrayerTimeRepositoryImpl(
         val epochDay = date.toEpochDay()
         val deviceZone = zoneId.id
 
-        // A timetable computed for another timezone would be shown at the wrong hour, so
-        // treat it as a miss and let the local engine (which uses the device zone) answer.
-        val cached = dao?.getForDay(cacheKey, epochDay)?.takeIf { it.matchesZone(deviceZone) }
+        // AlAdhan timings are wall-clock values for the saved coordinates. They remain valid
+        // regardless of the phone's current zone, so never discard a matching cache row just
+        // because the device/system zone differs from the location zone.
+        val cached = dao?.getForDay(cacheKey, epochDay)
 
         // 1. Cache: fresh authoritative rows work instantly and offline.
         if (cached != null && cached.isFreshOnline(clock())) {
@@ -162,7 +162,7 @@ class PrayerTimeRepositoryImpl(
         // 2. Network: month missing, context changed, or rows older than the fresh window.
         // A timezone mismatch in the cache must not suppress a network refresh.
         if (refreshMonth(date, coordinates, authority, schoolId, cacheKey, zoneId)) {
-            val fetched = dao?.getForDay(cacheKey, epochDay)?.takeIf { it.matchesZone(deviceZone) }
+            val fetched = dao?.getForDay(cacheKey, epochDay)
             if (fetched != null && fetched.isFreshOnline(clock())) {
                 return@withContext publish(fetched, PrayerTimeSource.ONLINE, authority, adjustments)
             }
@@ -173,7 +173,8 @@ class PrayerTimeRepositoryImpl(
             return@withContext publish(cached, PrayerTimeSource.CACHE, authority, adjustments)
         }
 
-        val local = localCalculation(date, coordinates, authority, madhhab, zoneId, adjustments)
+        // Adjustments are applied exactly once in publish(), never here as well.
+        val local = localCalculation(date, coordinates, authority, madhhab, zoneId)
         persistFallback(date, coordinates, authority, schoolId, cacheKey, local, deviceZone)
         publish(local, PrayerTimeSource.OFFLINE_FALLBACK, authority, clock())
     }
@@ -208,42 +209,29 @@ class PrayerTimeRepositoryImpl(
             schoolId = schoolId
         ) ?: return false
 
-        val sourceZone = timetable.timeZone
-            ?.let { runCatching { ZoneId.of(it) }.getOrNull() }
-            ?: targetZone
         val rows = timetable.days.mapNotNull { day ->
             val required = listOf(
                 PrayerType.FAJR, PrayerType.SUNRISE, PrayerType.DHUHR,
                 PrayerType.ASR, PrayerType.MAGHRIB, PrayerType.ISHA
             )
             if (required.any { it !in day.times }) return@mapNotNull null
-            // AlAdhan timings are wall-clock values in the response's meta timezone.
-            // Normalise them into the selected location's zone before persisting; otherwise
-            // a cached/remote row can be shown with a multi-hour offset after a settings
-            // change or a restart in another device timezone.
-            fun local(type: PrayerType): LocalTime {
-                val time = day.times.getValue(type)
-                if (sourceZone == targetZone) return time
-                return LocalDateTime.of(day.date, time)
-                    .atZone(sourceZone)
-                    .withZoneSameInstant(targetZone)
-                    .toLocalTime()
-            }
+            // Keep the API's wall-clock timings untouched. Converting them to another zone
+            // double-applies offsets (the reported Fajr 05:35 -> 21:34 shift).
             PrayerTimetableEntity(
                 cacheKey = cacheKey,
                 dateEpochDay = day.date.toEpochDay(),
-                fajr = formatTime(local(PrayerType.FAJR)),
-                sunrise = formatTime(local(PrayerType.SUNRISE)),
-                dhuhr = formatTime(local(PrayerType.DHUHR)),
-                asr = formatTime(local(PrayerType.ASR)),
-                maghrib = formatTime(local(PrayerType.MAGHRIB)),
-                isha = formatTime(local(PrayerType.ISHA)),
+                fajr = formatTime(day.times.getValue(PrayerType.FAJR)),
+                sunrise = formatTime(day.times.getValue(PrayerType.SUNRISE)),
+                dhuhr = formatTime(day.times.getValue(PrayerType.DHUHR)),
+                asr = formatTime(day.times.getValue(PrayerType.ASR)),
+                maghrib = formatTime(day.times.getValue(PrayerType.MAGHRIB)),
+                isha = formatTime(day.times.getValue(PrayerType.ISHA)),
                 methodName = timetable.methodName.ifBlank { authority.displayName },
                 methodId = authority.methodId,
                 schoolId = schoolId,
-                // Values above are normalised to targetZone, so record that zone (not the
-                // response zone) or the cache would be rejected by matchesZone().
-                timeZone = targetZone.id,
+                // Record the zone the wall-clock values belong to. This is metadata for
+                // countdown/formatting; the values themselves stay in the location's zone.
+                timeZone = timetable.timeZone ?: targetZone.id,
                 source = PrayerTimeSource.ONLINE.name,
                 fetchedAt = now
             )
@@ -279,8 +267,7 @@ class PrayerTimeRepositoryImpl(
         coordinates: Pair<Double, Double>,
         authority: SunniAuthority,
         madhhab: Madhhab,
-        zoneId: ZoneId,
-        adjustments: PrayerAdjustments
+        zoneId: ZoneId
     ): Map<PrayerType, LocalTime> {
         val zone = runCatching { KTimeZone.of(zoneId.id) }.getOrElse { KTimeZone.currentSystemDefault() }
         val kDate = KLocalDate(date.year, date.monthValue, date.dayOfMonth)
@@ -290,7 +277,7 @@ class PrayerTimeRepositoryImpl(
             method = SunniMethodMapper.localCalculationMethod(authority),
             madhhab = madhhab,
             timeZone = zone,
-            adjustments = adjustments
+            adjustments = PrayerAdjustments()
         ).mapValues { it.value.toJavaLocalTime() }
     }
 
@@ -354,9 +341,6 @@ class PrayerTimeRepositoryImpl(
     }
 
     private fun snapshotKey(cacheKey: String, epochDay: Long): String = "$cacheKey#$epochDay"
-
-    private fun PrayerTimetableEntity.matchesZone(deviceZone: String): Boolean =
-        timeZone.isBlank() || timeZone == deviceZone
 
     private fun PrayerTimetableEntity.isFreshOnline(now: Long): Boolean =
         source == PrayerTimeSource.ONLINE.name && now - fetchedAt <= FRESH_WINDOW_MS

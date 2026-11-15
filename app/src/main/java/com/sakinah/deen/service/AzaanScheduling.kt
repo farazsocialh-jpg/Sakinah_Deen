@@ -18,7 +18,6 @@ object AzaanScheduling {
         locationProvider: UserLocationProvider? = null
     ) {
         val prefs = SakinahPreferences(context)
-        prefs.alarmsEnabled = true
 
         val saved = prefs.locationCoordinates
         val coordinates = when {
@@ -39,30 +38,32 @@ object AzaanScheduling {
                     )
                     Pair(resolved.latitude, resolved.longitude)
                 } else {
-                    saved ?: resolved?.let { Pair(it.latitude, it.longitude) } ?: defaultCoordinates(prefs)
+                    saved ?: resolved?.let { Pair(it.latitude, it.longitude) }
                 }
             }
-            else -> defaultCoordinates(prefs)
+            else -> saved
         }
 
+        // Never arm alarms for a placeholder city. If no real location exists yet, leave
+        // alarms disabled until onboarding/GPS or a manual city supplies coordinates.
+        if (coordinates == null) {
+            prefs.alarmsEnabled = false
+            return
+        }
+        prefs.alarmsEnabled = true
         schedule(context, prefs, coordinates)
     }
 
     /** Re-arms alarms from the already persisted location, without touching GPS. */
     fun scheduleStoredLocation(context: Context) {
         val prefs = SakinahPreferences(context)
+        val coordinates = prefs.locationCoordinates
+        if (coordinates == null) {
+            prefs.alarmsEnabled = false
+            return
+        }
         prefs.alarmsEnabled = true
-        val coordinates = prefs.locationCoordinates ?: defaultCoordinates(prefs)
         schedule(context, prefs, coordinates)
-    }
-
-    private fun defaultCoordinates(prefs: SakinahPreferences): Pair<Double, Double> {
-        val fallback = Pair(
-            SakinahPreferences.DEFAULT_LATITUDE,
-            SakinahPreferences.DEFAULT_LONGITUDE
-        )
-        prefs.saveLocation(fallback.first, fallback.second, SakinahPreferences.DEFAULT_LOCATION_LABEL)
-        return fallback
     }
 
     private fun schedule(

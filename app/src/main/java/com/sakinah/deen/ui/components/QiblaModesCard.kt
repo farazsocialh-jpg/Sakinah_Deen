@@ -118,7 +118,11 @@ fun QiblaModesCard(
         Spacer(modifier = Modifier.height(14.dp))
 
         when (mode) {
-            QiblaMode.MAP -> QiblaMapView(latitude = latitude, longitude = longitude)
+            QiblaMode.MAP -> QiblaMapView(
+                latitude = latitude,
+                longitude = longitude,
+                qiblaBearing = qiblaBearing
+            )
             QiblaMode.COMPASS -> QiblaCompassDial(
                 latitude = latitude,
                 longitude = longitude,
@@ -135,7 +139,7 @@ fun QiblaModesCard(
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-private fun QiblaMapView(latitude: Double, longitude: Double) {
+private fun QiblaMapView(latitude: Double, longitude: Double, qiblaBearing: Float) {
     var mapFailed by remember(latitude, longitude) { mutableStateOf(false) }
     var mapLoading by remember(latitude, longitude) { mutableStateOf(true) }
     var reloadToken by remember(latitude, longitude) { mutableIntStateOf(0) }
@@ -225,14 +229,42 @@ private fun QiblaMapView(latitude: Double, longitude: Double) {
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "Map tiles unavailable — switch to Compass or Sun, or tap Retry",
+                            text = "Map tiles unavailable — native Qibla bearing shown below.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(10.dp))
+                        val fallbackRing = MaterialTheme.colorScheme.outline
+                        val fallbackPrimary = MaterialTheme.colorScheme.primary
+                        Canvas(modifier = Modifier.size(96.dp)) {
+                            val centre = Offset(size.width / 2f, size.height / 2f)
+                            val radius = size.minDimension / 2f - 6f
+                            drawCircle(
+                                color = fallbackRing,
+                                radius = radius,
+                                center = centre,
+                                style = Stroke(width = 3f)
+                            )
+                            rotate(degrees = qiblaBearing, pivot = centre) {
+                                drawLine(
+                                    color = fallbackPrimary,
+                                    start = centre,
+                                    end = Offset(centre.x, centre.y - radius + 16f),
+                                    strokeWidth = 7f,
+                                    cap = StrokeCap.Round
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Qibla ${qiblaBearing.roundToInt()}° from true north",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
                         Button(onClick = { reloadToken++ }) {
-                            Text("Retry", fontSize = 12.sp)
+                            Text("Retry map", fontSize = 12.sp)
                         }
                     }
                 }

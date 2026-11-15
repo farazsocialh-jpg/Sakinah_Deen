@@ -95,6 +95,8 @@ object SafarPolicy {
         current: Pair<Double, Double>?
     ): Boolean {
         if (sanitize(home) == null) return false
+        // An unresolved/zero GPS fix must not silently cancel a manual Travel Mode.
+        if (sanitize(current) == null) return false
         return distanceFromHomeKm(home, current) < THRESHOLD_KM
     }
 }

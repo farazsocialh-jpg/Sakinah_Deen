@@ -107,8 +107,9 @@ interface QadhaDao {
         if (delta <= 0) return
         val existing = getQadhaForPrayer(prayerType)
         if (existing != null) {
-            val newMissed = (existing.totalMissed - delta).coerceAtLeast(0)
-            val newMadeUp = minOf(delta, existing.totalMissed) + existing.totalMadeUp
+            val credited = minOf(delta, existing.totalMissed)
+            val newMissed = (existing.totalMissed - credited).coerceAtLeast(0)
+            val newMadeUp = credited + existing.totalMadeUp
             upsertQadha(
                 existing.copy(
                     totalMissed = newMissed,
@@ -194,7 +195,29 @@ interface QuranDao {
     suspend fun countSurahs(): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertAyahs(ayahs: List<QuranAyahEntity>)
+    suspend fun insertAyahsRaw(ayahs: List<QuranAyahEntity>)
+
+    /**
+     * Refreshing Quran text must not wipe the user's bookmark/reading position. REPLACE
+     * deletes and reinserts the row, so carry those columns over explicitly.
+     */
+    @Transaction
+    suspend fun upsertAyahs(ayahs: List<QuranAyahEntity>) {
+        ayahs.forEach { incoming ->
+            val existing = getAyah(incoming.surahNumber, incoming.ayahNumber)
+            insertAyahsRaw(
+                listOf(
+                    if (existing == null) incoming else incoming.copy(
+                        isBookmarked = existing.isBookmarked,
+                        lastReadAt = existing.lastReadAt
+                    )
+                )
+            )
+        }
+    }
+
+    @Query("SELECT * FROM quran_ayahs WHERE surahNumber = :surahNumber")
+    suspend fun getAyahsForSurah(surahNumber: Int): List<QuranAyahEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSurahs(surahs: List<SurahMetadataEntity>)
@@ -205,8 +228,18 @@ interface QuranDao {
     /** Replaces a downloaded surah in one transaction so readers never see a half-surah. */
     @Transaction
     suspend fun replaceSurah(surahNumber: Int, ayahs: List<QuranAyahEntity>) {
+        val preserved = getAyahsForSurah(surahNumber)
+            .associateBy { it.ayahNumber }
         deleteSurah(surahNumber)
-        upsertAyahs(ayahs)
+        insertAyahsRaw(
+            ayahs.map { incoming ->
+                val existing = preserved[incoming.ayahNumber]
+                if (existing == null) incoming else incoming.copy(
+                    isBookmarked = existing.isBookmarked,
+                    lastReadAt = existing.lastReadAt
+                )
+            }
+        )
     }
 }
 

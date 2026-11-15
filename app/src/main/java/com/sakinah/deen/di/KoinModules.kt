@@ -42,7 +42,6 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.viewmodel.dsl.viewModel
-import org.koin.core.context.GlobalContext
 import org.koin.dsl.module
 
 val preferencesModule = module {
@@ -175,7 +174,9 @@ val repositoryModule = module {
 }
 
 val workerModule = module {
-    single { KoinWorkerFactory(GlobalContext.get()) }
+    // Never reach into GlobalContext here: this module may be loaded in a test or a
+    // secondary Koin application, and the worker factory must use the same container.
+    single { KoinWorkerFactory(getKoin()) }
 }
 
 val accountModule = module {

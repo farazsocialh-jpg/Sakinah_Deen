@@ -2,6 +2,7 @@ package com.sakinah.deen.ui.screens
 
 import android.Manifest
 import android.app.AlarmManager
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -9,6 +10,7 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -58,6 +60,7 @@ import com.sakinah.deen.service.AdhanAudio
 import com.sakinah.deen.service.AzaanScheduling
 import com.sakinah.deen.service.PrayerAlarmScheduler
 import com.sakinah.deen.ui.components.SakinahCard
+import com.sakinah.deen.work.PrayerAlarmWorker
 import kotlinx.coroutines.launch
 
 /**
@@ -86,6 +89,8 @@ fun NotificationSettingsScreen(
     }
     var notificationsGranted by remember { mutableStateOf(notificationsPermissionGranted(context)) }
     var exactAlarmsAllowed by remember { mutableStateOf(canScheduleExactAlarms(context)) }
+    var batteryOptimized by remember { mutableStateOf(isBatteryOptimizationActive(context)) }
+    var azaanChannelBlocked by remember { mutableStateOf(isAzaanChannelBlocked(context)) }
     var testScheduled by remember { mutableStateOf(false) }
 
     val previewPlayer = remember(context, previewPlayerFactory) { previewPlayerFactory(context) }
@@ -99,6 +104,8 @@ fun NotificationSettingsScreen(
                 Lifecycle.Event.ON_RESUME -> {
                     notificationsGranted = notificationsPermissionGranted(context)
                     exactAlarmsAllowed = canScheduleExactAlarms(context)
+                    batteryOptimized = isBatteryOptimizationActive(context)
+                    azaanChannelBlocked = isAzaanChannelBlocked(context)
                 }
                 Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
                     previewPlayer.stop()
@@ -163,7 +170,7 @@ fun NotificationSettingsScreen(
         // 2. Permission health
         val needsNotificationPermission = !notificationsGranted
         val needsExactAlarmPermission = !exactAlarmsAllowed
-        if (needsNotificationPermission || needsExactAlarmPermission) {
+        if (needsNotificationPermission || needsExactAlarmPermission || azaanChannelBlocked) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.errorContainer,
@@ -197,6 +204,23 @@ fun NotificationSettingsScreen(
                             Text("Enable Notifications", fontSize = 12.sp)
                         }
                     }
+                    if (azaanChannelBlocked) {
+                        Text(
+                            text = "The Azaan notification channel is silenced in Android settings.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+                                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                    putExtra(Settings.EXTRA_CHANNEL_ID, PrayerAlarmWorker.CHANNEL_ID)
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                runCatching { context.startActivity(intent) }
+                            }
+                        ) { Text("Open channel settings", fontSize = 12.sp) }
+                    }
                     if (needsExactAlarmPermission) {
                         Text(
                             text = "Exact alarms are disabled; reminders may arrive late.",
@@ -218,6 +242,53 @@ fun NotificationSettingsScreen(
                             Text("Allow Exact Alarms", fontSize = 12.sp)
                         }
                     }
+                }
+            }
+        }
+
+        // 2b. Reliability health: a real location and unrestricted battery are required
+        // for alarms to be both scheduled and delivered on time.
+        val savedCoordinates = appPrefs.locationCoordinates
+        SakinahCard(contentPadding = 14.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "Reminder reliability",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = if (savedCoordinates == null) {
+                        "No prayer location saved. Choose a city on the Prayer tab before alarms can be armed."
+                    } else {
+                        "Location: ${appPrefs.locationLabel} · ${appPrefs.locationTimeZoneId ?: "zone pending"}"
+                    },
+                    fontSize = 12.sp,
+                    color = if (savedCoordinates == null) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+                if (batteryOptimized) {
+                    Text(
+                        text = "Battery optimisation may delay Fajr reminders. Allow unrestricted battery use for reliable alarms.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            runCatching { context.startActivity(intent) }
+                        }
+                    ) { Text("Battery settings", fontSize = 12.sp) }
+                } else {
+                    Text(
+                        text = "Battery optimisation is off — background reminders can fire on time.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -376,6 +447,20 @@ private fun notificationsPermissionGranted(context: Context): Boolean =
     } else {
         true
     }
+
+private fun isAzaanChannelBlocked(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        ?: return false
+    return manager.getNotificationChannel(PrayerAlarmWorker.CHANNEL_ID)?.importance ==
+        NotificationManager.IMPORTANCE_NONE
+}
+
+private fun isBatteryOptimizationActive(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
+    val power = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
+    return !power.isIgnoringBatteryOptimizations(context.packageName)
+}
 
 private fun canScheduleExactAlarms(context: Context): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true

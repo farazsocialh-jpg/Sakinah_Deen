@@ -31,10 +31,10 @@ data class WealthUiState(
     val sadaqahJarCollected: Float = 0f,
     val sadaqahGoal: Float = 100f,
     val nisabThreshold: Float = 85f * 88.40f, // 7514.0f
-    val grossAssets: Float = 14200f + 4500f + 6800f,
-    val netEligible: Float = (14200f + 4500f + 6800f) - 1800f,
-    val isEligible: Boolean = true,
-    val zakatPayable: Float = ((14200f + 4500f + 6800f) - 1800f) * 0.025f,
+    val grossAssets: Float = 0f,
+    val netEligible: Float = 0f,
+    val isEligible: Boolean = false,
+    val zakatPayable: Float = 0f,
     val recentSadaqahLogs: List<SadaqahLogEntity> = emptyList(),
     val isRefreshingRates: Boolean = false,
     /** Surfaced failure for nisab/sadaqah work, retried through [WealthUiIntent.RefreshNisabRates]. */

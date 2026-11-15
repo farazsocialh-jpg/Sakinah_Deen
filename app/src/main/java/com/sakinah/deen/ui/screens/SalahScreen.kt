@@ -477,7 +477,7 @@ fun SalahScreen(
                             if (compassData.isMagneticInterference) {
                                 Surface(
                                     shape = RoundedCornerShape(16.dp),
-                                    color = Color(0xFFFFC107),
+                                    color = SalahAmber,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Row(
