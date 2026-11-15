@@ -4,6 +4,7 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
+import com.sakinah.deen.data.prefs.HadithReadingLayout
 import com.sakinah.deen.data.prefs.QuranReadingLayout
 import com.sakinah.deen.data.prefs.SalahHomeLayout
 
@@ -106,6 +107,7 @@ data class UserAppearanceConfig(
     val prayerGuideGender: PrayerGuideGender = PrayerGuideGender.MALE,
     val salahHomeLayout: SalahHomeLayout = SalahHomeLayout.CLASSIC_COMPACT,
     val quranReadingLayout: QuranReadingLayout = QuranReadingLayout.DIVIDER_HAIRLINE,
+    val hadithReadingLayout: HadithReadingLayout = HadithReadingLayout.COMPACT_DROPDOWN,
     val onboardingCompleted: Boolean = false
 )
 

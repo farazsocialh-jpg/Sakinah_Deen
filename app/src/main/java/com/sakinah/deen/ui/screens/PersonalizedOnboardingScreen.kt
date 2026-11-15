@@ -67,6 +67,7 @@ import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.theme.FontScalePreset
 import com.sakinah.deen.ui.theme.PrayerGuideGender
 import com.sakinah.deen.ui.theme.SakinahPalette
+import com.sakinah.deen.data.prefs.HadithReadingLayout
 import com.sakinah.deen.data.prefs.QuranReadingLayout
 import com.sakinah.deen.data.prefs.SalahHomeLayout
 import com.sakinah.deen.ui.theme.SakinahTheme
@@ -89,6 +90,7 @@ private val UserAppearanceConfigSaver = listSaver<UserAppearanceConfig, String>(
             config.prayerGuideGender.name,
             config.salahHomeLayout.name,
             config.quranReadingLayout.name,
+            config.hadithReadingLayout.name,
             config.onboardingCompleted.toString()
         )
     },
@@ -109,8 +111,11 @@ private val UserAppearanceConfigSaver = listSaver<UserAppearanceConfig, String>(
             quranReadingLayout = values.getOrNull(10)
                 ?.let { runCatching { QuranReadingLayout.valueOf(it) }.getOrNull() }
                 ?: QuranReadingLayout.DIVIDER_HAIRLINE,
-            onboardingCompleted = values.getOrNull(11)?.toBoolean()
-                ?: values.getOrNull(10)?.toBoolean()
+            hadithReadingLayout = values.getOrNull(11)
+                ?.let { runCatching { HadithReadingLayout.valueOf(it) }.getOrNull() }
+                ?: HadithReadingLayout.COMPACT_DROPDOWN,
+            onboardingCompleted = values.getOrNull(12)?.toBoolean()
+                ?: values.getOrNull(11)?.toBoolean()
                 ?: false
         )
     }

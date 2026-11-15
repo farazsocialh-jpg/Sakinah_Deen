@@ -65,4 +65,6 @@
     <string name="salah_home_layout_caption">اختر طريقة عرض الصلاة الحالية وجدول الصلوات في الصفحة الرئيسية.</string>
     <string name="quran_reading_layout_title">تخطيط قراءة القرآن</string>
     <string name="quran_reading_layout_caption">اختر طريقة عرض آيات القرآن في القارئ.</string>
+    <string name="hadith_reading_layout_title">تخطيط قراءة الحديث</string>
+    <string name="hadith_reading_layout_caption">اختر طريقة عرض نص الحديث في القارئ.</string>
 </resources>

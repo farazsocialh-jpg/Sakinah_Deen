@@ -26,6 +26,19 @@ enum class QuranReadingLayout(val displayName: String, val subtitle: String) {
     LEFT_ACCENT_RIBBON("Surah Ribbon", "Surah info ribbon + 2dp left accent bar per verse")
 }
 
+enum class HadithReadingLayout(val displayName: String, val subtitle: String) {
+    COMPACT_DROPDOWN("Compact Hairline", "Single filter bar with borderless hairline feed"),
+    ENGLISH_FIRST_TAP("English-First", "Compact English cards with inline Arabic toggle"),
+    BOOK_LIBRARY_GRID("Book Library Grid", "2-column Kutub al-Tis'ah grid into clean reader"),
+    LANGUAGE_TABBED("Language Split", "English | Arabic | Both segmented reader"),
+    SINGLE_BAR_CARDS("Compact Cards", "One filter row with tight-padded cards"),
+    ALTERNATING_ROWS("Alternating Rows", "Edge-to-edge tinted rows with left accent bar"),
+    FEATURED_AND_LIST("Featured + List", "Active hadith card on top + expandable previews"),
+    THUMB_BOTTOM_DOCK("Thumb-Zone Dock", "Floating bottom filter pill for one-handed use"),
+    SANAD_MATN_STUDY("Sanad / Matn Study", "Collapsible narrator chain + highlighted Matn"),
+    MINIMALIST_ZEN("Minimalist Zen", "Single floating top pill with pure typography")
+}
+
 enum class SalahHomeLayout(val displayName: String, val subtitle: String) {
     CLASSIC_COMPACT("Classic Compact", "Single hero card with draining bar & prayer list"),
     BENTO_SPLIT("Bento Split", "Side-by-side current & next prayer cards"),
@@ -60,6 +73,7 @@ class AppearancePreferences internal constructor(
         private const val KEY_PRAYER_GUIDE_GENDER = "prayer_guide_gender"
         private const val KEY_SALAH_HOME_LAYOUT = "salah_home_layout"
         private const val KEY_QURAN_READING_LAYOUT = "quran_reading_layout"
+        private const val KEY_HADITH_READING_LAYOUT = "hadith_reading_layout"
         private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
     }
 
@@ -112,6 +126,10 @@ class AppearancePreferences internal constructor(
         update { it.copy(quranReadingLayout = layout) }
     }
 
+    fun updateHadithReadingLayout(layout: HadithReadingLayout) {
+        update { it.copy(hadithReadingLayout = layout) }
+    }
+
     private fun load(): UserAppearanceConfig {
         val defaults = UserAppearanceConfig()
         return UserAppearanceConfig(
@@ -127,6 +145,7 @@ class AppearancePreferences internal constructor(
             prayerGuideGender = safeEnum(KEY_PRAYER_GUIDE_GENDER, defaults.prayerGuideGender),
             salahHomeLayout = safeEnum(KEY_SALAH_HOME_LAYOUT, defaults.salahHomeLayout),
             quranReadingLayout = safeEnum(KEY_QURAN_READING_LAYOUT, defaults.quranReadingLayout),
+            hadithReadingLayout = safeEnum(KEY_HADITH_READING_LAYOUT, defaults.hadithReadingLayout),
             onboardingCompleted = prefs.getBoolean(KEY_ONBOARDING_COMPLETED, defaults.onboardingCompleted)
         )
     }
@@ -144,6 +163,7 @@ class AppearancePreferences internal constructor(
             .putString(KEY_PRAYER_GUIDE_GENDER, value.prayerGuideGender.name)
             .putString(KEY_SALAH_HOME_LAYOUT, value.salahHomeLayout.name)
             .putString(KEY_QURAN_READING_LAYOUT, value.quranReadingLayout.name)
+            .putString(KEY_HADITH_READING_LAYOUT, value.hadithReadingLayout.name)
             .putBoolean(KEY_ONBOARDING_COMPLETED, value.onboardingCompleted)
             .apply()
     }

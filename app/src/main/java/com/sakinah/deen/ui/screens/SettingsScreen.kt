@@ -74,6 +74,7 @@ import com.sakinah.deen.data.model.PrayerAlertMode
 import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.R
 import com.sakinah.deen.data.prefs.AppearancePreferences
+import com.sakinah.deen.data.prefs.HadithReadingLayout
 import com.sakinah.deen.data.prefs.QuranReadingLayout
 import com.sakinah.deen.data.prefs.SalahHomeLayout
 import com.sakinah.deen.data.prefs.SakinahPreferences
@@ -613,6 +614,61 @@ fun SettingsScreen(
                                     modifier = Modifier
                                         .width(190.dp)
                                         .clickable { appearancePrefs.updateQuranReadingLayout(layout) }
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Text(
+                                            text = layout.displayName,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp
+                                        )
+                                        Text(
+                                            text = layout.subtitle,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 10.sp,
+                                            lineHeight = 13.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = stringResource(R.string.hadith_reading_layout_title),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = stringResource(R.string.hadith_reading_layout_caption),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(HadithReadingLayout.entries) { layout ->
+                                val selected = appearanceConfig.hadithReadingLayout == layout
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (selected) {
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    },
+                                    contentColor = if (selected) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    border = if (selected) {
+                                        BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                                    } else {
+                                        null
+                                    },
+                                    modifier = Modifier
+                                        .width(190.dp)
+                                        .clickable { appearancePrefs.updateHadithReadingLayout(layout) }
                                 ) {
                                     Column(
                                         modifier = Modifier.padding(10.dp),

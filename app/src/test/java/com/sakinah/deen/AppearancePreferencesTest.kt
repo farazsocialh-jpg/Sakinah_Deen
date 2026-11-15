@@ -1,6 +1,7 @@
 package com.sakinah.deen
 
 import com.sakinah.deen.data.prefs.AppearancePreferences
+import com.sakinah.deen.data.prefs.HadithReadingLayout
 import com.sakinah.deen.data.prefs.QuranReadingLayout
 import com.sakinah.deen.data.prefs.SalahHomeLayout
 import com.sakinah.deen.fakes.FakeSharedPreferences
@@ -87,6 +88,24 @@ class AppearancePreferencesTest {
         assertEquals(
             QuranReadingLayout.DIVIDER_HAIRLINE,
             AppearancePreferences(fake).config.value.quranReadingLayout
+        )
+    }
+
+    @Test
+    fun hadithReadingLayoutPersistsAndInvalidValueFallsBack() {
+        val fake = FakeSharedPreferences()
+        val store = AppearancePreferences(fake)
+
+        store.updateHadithReadingLayout(HadithReadingLayout.SANAD_MATN_STUDY)
+        assertEquals(
+            HadithReadingLayout.SANAD_MATN_STUDY,
+            AppearancePreferences(fake).config.value.hadithReadingLayout
+        )
+
+        fake.edit().putString("hadith_reading_layout", "OBSOLETE_LAYOUT").apply()
+        assertEquals(
+            HadithReadingLayout.COMPACT_DROPDOWN,
+            AppearancePreferences(fake).config.value.hadithReadingLayout
         )
     }
 
