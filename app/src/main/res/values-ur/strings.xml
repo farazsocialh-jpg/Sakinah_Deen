@@ -63,4 +63,6 @@
     <string name="action_cancel">منسوخ کریں</string>
     <string name="salah_home_layout_title">نماز ہوم لے آؤٹ</string>
     <string name="salah_home_layout_caption">منتخب کریں کہ نماز ہوم اسکرین موجودہ نماز اور اوقات کیسے دکھائے۔</string>
+    <string name="quran_reading_layout_title">قرآن ریڈنگ لے آؤٹ</string>
+    <string name="quran_reading_layout_caption">منتخب کریں کہ قرآن کی آیات ریڈر میں کیسے دکھائی جائیں۔</string>
 </resources>

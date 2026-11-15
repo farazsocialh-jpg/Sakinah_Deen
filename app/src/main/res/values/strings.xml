@@ -66,6 +66,8 @@
     <!-- Appearance -->
     <string name="salah_home_layout_title">Salah Home Layout</string>
     <string name="salah_home_layout_caption">Choose how the Salah home screen presents the current prayer and timetable.</string>
+    <string name="quran_reading_layout_title">Quran Reading Layout</string>
+    <string name="quran_reading_layout_caption">Choose how Quran verses are presented in the reader.</string>
 
     <!-- City picker -->
     <string name="city_picker_title">Choose Home City</string>

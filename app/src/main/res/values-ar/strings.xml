@@ -63,4 +63,6 @@
     <string name="action_cancel">إلغاء</string>
     <string name="salah_home_layout_title">تخطيط الصفحة الرئيسية للصلاة</string>
     <string name="salah_home_layout_caption">اختر طريقة عرض الصلاة الحالية وجدول الصلوات في الصفحة الرئيسية.</string>
+    <string name="quran_reading_layout_title">تخطيط قراءة القرآن</string>
+    <string name="quran_reading_layout_caption">اختر طريقة عرض آيات القرآن في القارئ.</string>
 </resources>

@@ -347,7 +347,10 @@ fun RootNavHost() {
     Scaffold(
         modifier = scaffoldScrollModifier,
         topBar = {
-            if (currentScreen != SakinahScreen.Onboarding && currentScreen != SakinahScreen.DailySalah) {
+            if (currentScreen != SakinahScreen.Onboarding &&
+                currentScreen != SakinahScreen.DailySalah &&
+                currentScreen != SakinahScreen.Quran
+            ) {
                 TopAppBar(
                     title = {
                         Text(

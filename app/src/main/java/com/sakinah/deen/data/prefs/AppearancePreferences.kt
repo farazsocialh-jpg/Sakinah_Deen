@@ -13,6 +13,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
+enum class QuranReadingLayout(val displayName: String, val subtitle: String) {
+    DIVIDER_HAIRLINE("Divider Hairline", "Zero boxes, thin horizontal dividers, 6+ ayahs"),
+    CONTINUOUS_MUSHAF("Continuous Mushaf", "Book-like flowing page with inline verse markers"),
+    ALTERNATING_ROWS("Alternating Rows", "Edge-to-edge subtle alternating row tints"),
+    COMPACT_CARDS("Compact Cards", "Tight-padded cards with inline Tafseer chip"),
+    SPLIT_COLUMN("Split-Column Study", "Translation left, Arabic right side-by-side"),
+    IMMERSIVE_ZEN("Immersive Zen", "Single floating top pill, 90%+ reading area"),
+    FOCUS_SPOTLIGHT("Focus Spotlight", "Active ayah highlighted; others compact"),
+    THUMB_BOTTOM_DOCK("Thumb-Zone Dock", "Floating bottom utility pill for one-handed use"),
+    ARABIC_TAP_EXPAND("Arabic + Tap Expand", "Arabic-only flow; tap verse for English & Tafseer"),
+    LEFT_ACCENT_RIBBON("Surah Ribbon", "Surah info ribbon + 2dp left accent bar per verse")
+}
+
 enum class SalahHomeLayout(val displayName: String, val subtitle: String) {
     CLASSIC_COMPACT("Classic Compact", "Single hero card with draining bar & prayer list"),
     BENTO_SPLIT("Bento Split", "Side-by-side current & next prayer cards"),
@@ -46,6 +59,7 @@ class AppearancePreferences internal constructor(
         private const val KEY_AUTO_HIDE_BARS = "auto_hide_bars_on_scroll"
         private const val KEY_PRAYER_GUIDE_GENDER = "prayer_guide_gender"
         private const val KEY_SALAH_HOME_LAYOUT = "salah_home_layout"
+        private const val KEY_QURAN_READING_LAYOUT = "quran_reading_layout"
         private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
     }
 
@@ -94,6 +108,10 @@ class AppearancePreferences internal constructor(
         update { it.copy(salahHomeLayout = layout) }
     }
 
+    fun updateQuranReadingLayout(layout: QuranReadingLayout) {
+        update { it.copy(quranReadingLayout = layout) }
+    }
+
     private fun load(): UserAppearanceConfig {
         val defaults = UserAppearanceConfig()
         return UserAppearanceConfig(
@@ -108,6 +126,7 @@ class AppearancePreferences internal constructor(
             autoHideBarsOnScroll = prefs.getBoolean(KEY_AUTO_HIDE_BARS, defaults.autoHideBarsOnScroll),
             prayerGuideGender = safeEnum(KEY_PRAYER_GUIDE_GENDER, defaults.prayerGuideGender),
             salahHomeLayout = safeEnum(KEY_SALAH_HOME_LAYOUT, defaults.salahHomeLayout),
+            quranReadingLayout = safeEnum(KEY_QURAN_READING_LAYOUT, defaults.quranReadingLayout),
             onboardingCompleted = prefs.getBoolean(KEY_ONBOARDING_COMPLETED, defaults.onboardingCompleted)
         )
     }
@@ -124,6 +143,7 @@ class AppearancePreferences internal constructor(
             .putBoolean(KEY_AUTO_HIDE_BARS, value.autoHideBarsOnScroll)
             .putString(KEY_PRAYER_GUIDE_GENDER, value.prayerGuideGender.name)
             .putString(KEY_SALAH_HOME_LAYOUT, value.salahHomeLayout.name)
+            .putString(KEY_QURAN_READING_LAYOUT, value.quranReadingLayout.name)
             .putBoolean(KEY_ONBOARDING_COMPLETED, value.onboardingCompleted)
             .apply()
     }

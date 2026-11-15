@@ -1,6 +1,7 @@
 package com.sakinah.deen
 
 import com.sakinah.deen.data.prefs.AppearancePreferences
+import com.sakinah.deen.data.prefs.QuranReadingLayout
 import com.sakinah.deen.data.prefs.SalahHomeLayout
 import com.sakinah.deen.fakes.FakeSharedPreferences
 import com.sakinah.deen.ui.theme.FontScalePreset
@@ -68,6 +69,24 @@ class AppearancePreferencesTest {
         assertEquals(
             SalahHomeLayout.CLASSIC_COMPACT,
             AppearancePreferences(fake).config.value.salahHomeLayout
+        )
+    }
+
+    @Test
+    fun quranReadingLayoutPersistsAndInvalidValueFallsBack() {
+        val fake = FakeSharedPreferences()
+        val store = AppearancePreferences(fake)
+
+        store.updateQuranReadingLayout(QuranReadingLayout.SPLIT_COLUMN)
+        assertEquals(
+            QuranReadingLayout.SPLIT_COLUMN,
+            AppearancePreferences(fake).config.value.quranReadingLayout
+        )
+
+        fake.edit().putString("quran_reading_layout", "OBSOLETE_LAYOUT").apply()
+        assertEquals(
+            QuranReadingLayout.DIVIDER_HAIRLINE,
+            AppearancePreferences(fake).config.value.quranReadingLayout
         )
     }
 
