@@ -57,6 +57,13 @@ data class SalahUiState(
     val nextPrayer: PrayerType = PrayerType.ASR,
     val countdownText: String = "00m 00s",
     val elapsedWindowRatio: Float = 0.0f,
+    val currentPrayerName: String = "Dhuhr",
+    val currentPrayerArabic: String = "الظهر",
+    val isCurrentPrayerCompleted: Boolean = false,
+    val nextPrayerName: String = "Asr",
+    val nextPrayerStartTimeFormatted: String = "",
+    val remainingMillis: Long = 0L,
+    val totalWindowMillis: Long = 1L,
     val prayersList: List<PrayerModel> = emptyList(),
     val qadhaDeficits: Map<PrayerType, Int> = emptyMap(),
     val calculationMethod: CalculationMethod = CalculationMethod.UMM_AL_QURA,
@@ -85,6 +92,7 @@ data class SalahUiState(
 
 sealed class SalahUiIntent {
     data class ToggleSalahCompletion(val prayerType: PrayerType, val isJamaah: Boolean) : SalahUiIntent()
+    data object ToggleCurrentPrayerCompleted : SalahUiIntent()
     data class ToggleNaflCompletion(val prayerType: PrayerType, val nafl: NaflType) : SalahUiIntent()
     data class IncrementQadha(val prayerType: PrayerType) : SalahUiIntent()
     data class DecrementQadha(val prayerType: PrayerType) : SalahUiIntent()
@@ -248,6 +256,7 @@ class SalahViewModel(
     fun onIntent(intent: SalahUiIntent) {
         when (intent) {
             is SalahUiIntent.ToggleSalahCompletion -> toggleSalahCompletion(intent.prayerType, intent.isJamaah)
+            is SalahUiIntent.ToggleCurrentPrayerCompleted -> toggleCurrentPrayerCompleted()
             is SalahUiIntent.ToggleNaflCompletion -> toggleNaflCompletion(intent.prayerType, intent.nafl)
             is SalahUiIntent.IncrementQadha -> incrementQadha(intent.prayerType)
             is SalahUiIntent.DecrementQadha -> decrementQadha(intent.prayerType)
@@ -454,12 +463,23 @@ class SalahViewModel(
                         times,
                         now.time
                     )
+                    val currentStart = times[countdown.currentPrayer]
+                    val nextStart = times[countdown.nextPrayer]
+                    val remainingMillis = (countdown.remainingMinutes * 60L + countdown.remainingSeconds) * 1000L
+                    val totalWindowMillis = windowMillis(currentStart, nextStart)
                     _uiState.update {
                         it.copy(
                             currentPrayer = countdown.currentPrayer,
                             nextPrayer = countdown.nextPrayer,
                             countdownText = formatCountdown(countdown),
-                            elapsedWindowRatio = countdown.elapsedRatio
+                            elapsedWindowRatio = countdown.elapsedRatio,
+                            currentPrayerName = prayerDisplayName(countdown.currentPrayer),
+                            currentPrayerArabic = prayerArabicName(countdown.currentPrayer),
+                            isCurrentPrayerCompleted = completedRecordsByPrayer[countdown.currentPrayer]?.isCompleted == true,
+                            nextPrayerName = prayerDisplayName(countdown.nextPrayer),
+                            nextPrayerStartTimeFormatted = formatPrayerTime(nextStart),
+                            remainingMillis = remainingMillis,
+                            totalWindowMillis = totalWindowMillis
                         )
                     }
                 }
@@ -558,6 +578,13 @@ class SalahViewModel(
                 nextPrayer = countdown.nextPrayer,
                 countdownText = formatCountdown(countdown),
                 elapsedWindowRatio = countdown.elapsedRatio,
+                currentPrayerName = prayerDisplayName(countdown.currentPrayer),
+                currentPrayerArabic = prayerArabicName(countdown.currentPrayer),
+                isCurrentPrayerCompleted = completedRecordsByPrayer[countdown.currentPrayer]?.isCompleted == true,
+                nextPrayerName = prayerDisplayName(countdown.nextPrayer),
+                nextPrayerStartTimeFormatted = formatPrayerTime(times[countdown.nextPrayer]),
+                remainingMillis = (countdown.remainingMinutes * 60L + countdown.remainingSeconds) * 1000L,
+                totalWindowMillis = windowMillis(times[countdown.currentPrayer], times[countdown.nextPrayer]),
                 prayersList = prayerModels,
                 isTraveler = isSafar,
                 distanceFromHomeKm = travel.distanceKm,
@@ -664,7 +691,10 @@ class SalahViewModel(
                                 isNawafilCompleted = type != null && type in completedNawafilPrayers
                             )
                         }
-                        state.copy(prayersList = updatedList)
+                        state.copy(
+                            prayersList = updatedList,
+                            isCurrentPrayerCompleted = completedRecordsByPrayer[state.currentPrayer]?.isCompleted == true
+                        )
                     }
                 }
             }
@@ -713,10 +743,21 @@ class SalahViewModel(
                     p.copy(isFardCompleted = newCompleted, isJamaah = newJamaah)
                 } else p
             }
-            _uiState.update { it.copy(prayersList = updated) }
+            _uiState.update {
+                it.copy(
+                    prayersList = updated,
+                    isCurrentPrayerCompleted = if (prayerType == it.currentPrayer) newCompleted else it.isCurrentPrayerCompleted
+                )
+            }
 
             salahDao.upsertSalahRecord(entity)
         }
+    }
+
+    private fun toggleCurrentPrayerCompleted() {
+        val current = _uiState.value.currentPrayer
+        if (current == PrayerType.SUNRISE) return
+        toggleSalahCompletion(current, false)
     }
 
     private fun toggleNaflCompletion(prayerType: PrayerType, nafl: NaflType) {
@@ -771,6 +812,35 @@ class SalahViewModel(
         val mins = info.remainingMinutes % 60
         return if (hrs > 0) "${hrs}h ${mins}m ${info.remainingSeconds}s"
         else "${mins}m ${info.remainingSeconds}s"
+    }
+
+    private fun prayerDisplayName(type: PrayerType): String = when (type) {
+        PrayerType.FAJR -> "Fajr"
+        PrayerType.SUNRISE -> "Sunrise"
+        PrayerType.DHUHR -> "Dhuhr"
+        PrayerType.ASR -> "Asr"
+        PrayerType.MAGHRIB -> "Maghrib"
+        PrayerType.ISHA -> "Isha"
+    }
+
+    private fun prayerArabicName(type: PrayerType): String = when (type) {
+        PrayerType.FAJR -> "الفجر"
+        PrayerType.SUNRISE -> "الشروق"
+        PrayerType.DHUHR -> "الظهر"
+        PrayerType.ASR -> "العصر"
+        PrayerType.MAGHRIB -> "المغرب"
+        PrayerType.ISHA -> "العشاء"
+    }
+
+    private fun formatPrayerTime(time: KLocalTime?): String =
+        time?.toJavaLocalTime()?.format(DateTimeFormatter.ofPattern("hh:mm a")) ?: ""
+
+    private fun windowMillis(start: KLocalTime?, end: KLocalTime?): Long {
+        if (start == null || end == null) return 1L
+        val s = start.toSecondOfDay().toLong()
+        val e = end.toSecondOfDay().toLong()
+        val diff = if (e > s) e - s else if (e < s) e + 86400L - s else 86400L
+        return diff.coerceAtLeast(1L) * 1000L
     }
 
     private fun fromSettingsAsr(asr: AsrMethod): Madhhab =

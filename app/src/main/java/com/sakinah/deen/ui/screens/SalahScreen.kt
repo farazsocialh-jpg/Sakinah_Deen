@@ -4,7 +4,12 @@ import android.Manifest
 import android.location.Location
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,6 +20,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
@@ -25,10 +31,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -36,6 +44,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Button
@@ -65,6 +74,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -72,9 +82,11 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import kotlin.math.roundToInt
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -395,119 +407,207 @@ fun SalahScreen(
                         }
                     }
 
-                    // 3. Hero Active Prayer Card (palette-aware, so Black & White is monochrome)
-                    Card(
+                    // 3. Redesigned Current-Prayer Hero Card
+                    val remainingFraction = (state.remainingMillis.toFloat() / state.totalWindowMillis.coerceAtLeast(1L)).coerceIn(0f, 1f)
+                    val remainingPercent = (remainingFraction * 100f).roundToInt().coerceIn(0, 100)
+                    val bucketIndex = ((100 - remainingPercent).coerceIn(0, 99)) / 10
+                    val animatedProgress by animateFloatAsState(targetValue = remainingFraction, label = "currentPrayerProgress")
+                    val isCompleted = state.isCurrentPrayerCompleted
+                    val uncheckedBorder = if (remainingPercent <= 20) Color(0xFFEF4444) else Color(0xFF223452)
+                    val barBrush = if (isCompleted) {
+                        Brush.horizontalGradient(listOf(Color(0xFF22C55E), Color(0xFF4ADE80)))
+                    } else if (remainingPercent <= 20) {
+                        Brush.horizontalGradient(listOf(Color(0xFFF59E0B), Color(0xFFEF4444)))
+                    } else {
+                        Brush.horizontalGradient(listOf(Color(0xFF8EC5FC), Color(0xFF5BA4F8)))
+                    }
+                    val accentColor = if (isCompleted) Color(0xFF22C55E) else if (remainingPercent <= 20) Color(0xFFF59E0B) else Color(0xFF8EC5FC)
+                    val nextColor = if (isCompleted) Color(0xFF4ADE80) else Color(0xFF8EC5FC)
+                    val progressPercentColor = if (isCompleted) Color(0xFF4ADE80) else Color(0xFF8EC5FC)
+
+                    Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color(0xFF111C2D),
+                        border = BorderStroke(1.dp, if (isCompleted) Color(0xFF1E3A2F) else uncheckedBorder)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .background(MaterialTheme.colorScheme.primaryContainer)
-                                .padding(20.dp)
+                        Column(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "CURRENT: ${state.currentPrayer.name} · NEXT: ${state.nextPrayer.name}",
-                                        color = MaterialTheme.colorScheme.primary,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.8.sp,
-                                        modifier = Modifier.weight(1f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Outlined.Timer,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = state.countdownText,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.Bottom
-                                ) {
-                                    Text(
-                                        text = "${state.nextPrayer.name} · الصلاة القادمة",
-                                        fontSize = 22.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    if (!focusMode) {
-                                        val nextRakats = state.prayersList
-                                            .firstOrNull { it.nameEnglish.equals(state.nextPrayer.name, ignoreCase = true) }
-                                            ?.fardRakats
-                                            ?: 2
-                                        Button(
-                                            onClick = { launchPrayerGuide(state.nextPrayer.name, nextRakats) },
-                                            shape = RoundedCornerShape(16.dp),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = MaterialTheme.colorScheme.primary,
-                                                contentColor = MaterialTheme.colorScheme.onPrimary
-                                            )
-                                        ) {
-                                            Text("Visual Guide", fontSize = 11.sp)
-                                        }
-                                    }
-                                }
-
-                                LinearProgressIndicator(
-                                    progress = { state.elapsedWindowRatio },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(6.dp),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "NEXT: ${state.nextPrayerName.uppercase()}",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    letterSpacing = 0.6.sp,
+                                    color = nextColor
                                 )
-
-                                if (state.isTraveler) {
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = Color(0xFF1B2A42)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Schedule,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = "Safar (Qasr) • ${state.distanceFromHomeKm.toInt()} km from Home",
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                            text = state.nextPrayerStartTimeFormatted,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color.White
                                         )
                                     }
                                 }
                             }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${state.currentPrayerName.uppercase()} · ${state.currentPrayerArabic}",
+                                    fontSize = 28.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Surface(
+                                    shape = CircleShape,
+                                    color = if (isCompleted) Color(0xFF22C55E) else Color(0xFF162338),
+                                    border = if (isCompleted) null else BorderStroke(1.5.dp, Color(0xFF5B7699)),
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clickable {
+                                            viewModel?.onIntent(SalahUiIntent.ToggleCurrentPrayerCompleted)
+                                        }
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = if (isCompleted) "Prayer completed" else "Mark prayer complete",
+                                            tint = if (isCompleted) Color.White else Color(0xFF8FA8C8),
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(10.dp)
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Color(0xFF22324A))
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.CenterStart)
+                                        .fillMaxWidth(animatedProgress)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(50))
+                                        .background(barBrush)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${state.countdownText} left",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFFE2EEFF)
+                                )
+                                Text(
+                                    text = "$remainingPercent%",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = progressPercentColor
+                                )
+                            }
+
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isCompleted) Color(0xFF132A22) else Color(0xFF17253B)
+                            ) {
+                                Row(
+                                    modifier = Modifier.height(IntrinsicSize.Min)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(3.dp)
+                                            .fillMaxHeight()
+                                            .background(accentColor)
+                                    )
+                                    AnimatedContent(
+                                        targetState = Pair(isCompleted, bucketIndex),
+                                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                                        label = "currentPrayerReminder"
+                                    ) { (checked, bucket) ->
+                                        val reminders = if (checked) checkedPrayerReminders else uncheckedPrayerReminders
+                                        val reminder = reminders[bucket.coerceIn(0, reminders.lastIndex)]
+                                        Column(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Surface(
+                                                shape = RoundedCornerShape(50),
+                                                color = Color(0xFF223452)
+                                            ) {
+                                                Text(
+                                                    text = reminder.source.uppercase(),
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color.White
+                                                )
+                                            }
+                                            Text(
+                                                text = "\"${reminder.text}\"",
+                                                fontSize = 13.sp,
+                                                lineHeight = 18.sp,
+                                                color = Color(0xFFE6EEF8)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (state.isTraveler) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFF22C55E).copy(alpha = 0.14f),
+                                    border = BorderStroke(1.dp, Color(0xFF22C55E))
+                                ) {
+                                    Text(
+                                        text = "Safar (Qasr) • ${state.distanceFromHomeKm.toInt()} km from Home",
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                            }
                         }
                     }
+
 
                     // 4. Unified Sub-Mode Switcher (Times | Qibla | Guide) — always visible so
                     // the Qibla tab is never hidden, including in Focus Mode.
