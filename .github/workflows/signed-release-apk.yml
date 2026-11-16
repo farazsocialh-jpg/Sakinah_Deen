@@ -50,6 +50,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
         run: |
           missing=0
           for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
@@ -58,6 +59,11 @@ jobs:
               missing=1
             fi
           done
+          # Not fatal: the app builds without it, but "Continue with Google" would only
+          # show the inline "not configured" notice in the shipped build.
+          if [ -z "${GOOGLE_WEB_CLIENT_ID:-}" ]; then
+            echo "::warning::GOOGLE_WEB_CLIENT_ID secret is not set — Google Sign-In will be disabled in this build."
+          fi
           exit "$missing"
 
       - name: Resolve version metadata
@@ -128,6 +134,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           AI_PROXY_URL: ${{ secrets.AI_PROXY_URL }}
           NISAB_RATE_URL: ${{ secrets.NISAB_RATE_URL }}
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
           VERSION_CODE: ${{ env.VERSION_CODE }}
           VERSION_NAME: ${{ env.VERSION_NAME }}
         run: ./gradlew :app:assembleRelease --stacktrace --no-daemon
