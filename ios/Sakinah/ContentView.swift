@@ -105,7 +105,7 @@ struct DailySalahView: View {
                     .padding()
                 }
             }
-            .navigationTitle("Sakinah")
+            .navigationTitle("ImanCore")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {

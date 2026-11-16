@@ -302,9 +302,13 @@ class HadithViewModel(
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
-            } catch (e: Exception) {
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                // Includes OutOfMemoryError from an oversized edition: report it instead of
+                // letting the download crash the whole app.
                 _uiState.update {
-                    it.copy(errorMessage = "Could not load $bookKey ($effectiveLanguage): ${e.message ?: "network error"}")
+                    it.copy(errorMessage = "Could not load $bookKey ($effectiveLanguage): ${t.message ?: t::class.simpleName ?: "download failed"}")
                 }
                 failPendingDeepLink()
             } finally {
@@ -416,6 +420,7 @@ class HadithViewModel(
             }
             val fallbackBooks = mutableListOf<String>()
             val failures = mutableListOf<String>()
+            try {
             catalog.forEachIndexed { index, book ->
                 val supported = book.editions.map { it.languageCode.lowercase() }
                     .filter { it.isNotBlank() }
@@ -449,6 +454,11 @@ class HadithViewModel(
                 _uiState.update {
                     it.copy(downloadProgress = (index + 1f) / catalog.size.toFloat())
                 }
+            }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                failures += "Download aborted: ${t.message ?: t::class.simpleName ?: "unknown error"}"
             }
             _uiState.update {
                 it.copy(
@@ -507,23 +517,25 @@ class HadithViewModel(
                     hasReceivedDatabaseRows = true
                     // "All Books" chooses the selected edition per collection, with an
                     // English/Arabic fallback for books that do not publish that language.
-                    val entries = if (bookKey == "all") {
-                        preferredAllBookEntries(rawEntries, languageCode)
-                    } else {
-                        rawEntries
-                    }
-
+                    // Filtering and mapping 30,000+ rows must never run on the main thread.
                     val bookmarked = _uiState.value.bookmarkedIds
-                    val mapped = entries.map { entry ->
-                        val canonicalId = "${entry.bookKey}-${entry.languageCode}-${entry.hadithNumber}"
-                        entry.toModel(
-                            bookmarked = isBookmarkMatch(
-                                canonicalId, entry.bookKey, entry.hadithNumber, bookmarked
-                            ),
-                            selectedLanguageCode = languageCode,
-                            detectFallback = bookKey == "all" ||
-                                !queryLanguageCode.equals(languageCode, ignoreCase = true)
-                        )
+                    val mapped = withContext(Dispatchers.Default) {
+                        val entries = if (bookKey == "all") {
+                            preferredAllBookEntries(rawEntries, languageCode)
+                        } else {
+                            rawEntries
+                        }
+                        entries.map { entry ->
+                            val canonicalId = "${entry.bookKey}-${entry.languageCode}-${entry.hadithNumber}"
+                            entry.toModel(
+                                bookmarked = isBookmarkMatch(
+                                    canonicalId, entry.bookKey, entry.hadithNumber, bookmarked
+                                ),
+                                selectedLanguageCode = languageCode,
+                                detectFallback = bookKey == "all" ||
+                                    !queryLanguageCode.equals(languageCode, ignoreCase = true)
+                            )
+                        }
                     }
 
                     val pending = pendingDeepLinkTarget

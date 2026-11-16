@@ -335,13 +335,18 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                             TextButton(onClick = {
                                 showSignOut = false
                                 scope.launch {
+                                    // Only drop the session once the repository confirms the
+                                    // sign-out; a failed sign-out must not lose the profile.
+                                    // clearActiveSession() keeps the stored profile intact.
                                     runCatching { authRepo.signOut() }
+                                        .onSuccess {
+                                            profileRepo.clearActiveSession()
+                                            onBack()
+                                        }
                                         .onFailure { err ->
                                             if (err is kotlinx.coroutines.CancellationException) throw err
                                             validationError = err.message ?: "Could not sign out."
                                         }
-                                    profileRepo.clear()
-                                    onBack()
                                 }
                             }) { Text("Sign Out") }
                         },

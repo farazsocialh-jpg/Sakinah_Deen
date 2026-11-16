@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ImanCore iOS bundle metadata.
+
+  When an Xcode project is added, set PRODUCT_BUNDLE_IDENTIFIER = com.imancore.app in the
+  target's build settings (the CFBundleIdentifier below uses the concrete value because no
+  build-setting substitution exists yet) and keep the display name as ImanCore.
+-->
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>ImanCore</string>
+    <key>CFBundleName</key>
+    <string>ImanCore</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.imancore.app</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    <key>UILaunchScreen</key>
+    <dict/>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+</dict>
+</plist>

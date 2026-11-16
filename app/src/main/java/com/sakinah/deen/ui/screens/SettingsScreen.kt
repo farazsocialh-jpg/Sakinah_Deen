@@ -1,6 +1,7 @@
 package com.sakinah.deen.ui.screens
 
 import android.Manifest
+import android.media.MediaPlayer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -27,15 +29,22 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -46,9 +55,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,6 +78,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.R
 import com.sakinah.deen.data.model.CalculationMethod as AppMethod
+import com.sakinah.deen.data.model.QuranArabicScript
+import com.sakinah.deen.data.model.QuranTranslationResource
 import com.sakinah.deen.data.model.Madhhab as AppMadhhab
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.HadithReadingLayout
@@ -73,7 +87,9 @@ import com.sakinah.deen.data.prefs.QuranReadingLayout
 import com.sakinah.deen.data.prefs.SalahHomeLayout
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.TafseerDownloadRepository
+import com.sakinah.deen.data.repository.TafseerPackage
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
+import com.sakinah.deen.network.IslamicDataRepository
 import com.sakinah.deen.settings.AsrMethod
 import com.sakinah.deen.settings.CalculationMethod
 import com.sakinah.deen.settings.SettingsRepository
@@ -133,18 +149,50 @@ fun SettingsScreen(
     val appearanceConfig by appearancePrefs.config.collectAsStateWithLifecycle()
     val locationProvider = rememberInject<UserLocationProvider>()
     val tafseerRepository = rememberInject<TafseerDownloadRepository>()
+    val islamicRepository = rememberInject<IslamicDataRepository>()
     val tafseerPackages by tafseerRepository.packages.collectAsStateWithLifecycle(initialValue = emptyList())
     var downloadingPackId by remember { mutableStateOf<String?>(null) }
+    var packDownloadProgress by remember { mutableStateOf(0f) }
+
+    var translationCatalog by remember { mutableStateOf<List<QuranTranslationResource>>(emptyList()) }
+    var isLoadingCatalog by remember { mutableStateOf(false) }
+    var catalogReloadNonce by remember { mutableIntStateOf(0) }
+    var showTranslationSheet by remember { mutableStateOf(false) }
+    var translationQuery by remember { mutableStateOf("") }
+    val translationSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    var travelModeActive by remember { mutableStateOf(appPrefs.travelModeActive) }
+    var isDuaPlaying by remember { mutableStateOf(false) }
+    var duaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
 
     LaunchedEffect(section, tafseerRepository) {
         if (section == SettingsSection.QURAN_OFFLINE) {
             tafseerRepository.refreshDownloadStatus()
         }
     }
+
+    LaunchedEffect(section, catalogReloadNonce) {
+        if (section == SettingsSection.QURAN_OFFLINE && translationCatalog.isEmpty() && !isLoadingCatalog) {
+            isLoadingCatalog = true
+            translationCatalog = runCatching {
+                islamicRepository.fetchTranslationCatalog()
+            }.getOrDefault(emptyList())
+            isLoadingCatalog = false
+        }
+    }
+
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            runCatching {
+                duaPlayer?.stop()
+                duaPlayer?.release()
+            }
+            duaPlayer = null
+        }
+    }
     val snackbarHostState = remember { SnackbarHostState() }
 
     var hasHomeLocation by remember { mutableStateOf(appPrefs.homeCoordinates != null) }
-    var translationExpanded by remember { mutableStateOf(false) }
     var homeCityName by remember { mutableStateOf(appPrefs.homeCityName) }
     var showHomeCityPicker by remember { mutableStateOf(false) }
     var gpsHomeRequested by remember { mutableStateOf(false) }
@@ -315,15 +363,16 @@ fun SettingsScreen(
                             }
                         }
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
                                 text = "Asr juristic school",
-                                modifier = Modifier.weight(1f),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            Switch(
-                                checked = settings.prayer.asrMethod == AsrMethod.HANAFI,
-                                onCheckedChange = { hanafi ->
+                            SegmentedPillBar(
+                                options = listOf("Shafi‘i / Maliki / Hanbali", "Hanafi"),
+                                selectedIndex = if (settings.prayer.asrMethod == AsrMethod.HANAFI) 1 else 0,
+                                onSelect = { index ->
+                                    val hanafi = index == 1
                                     appPrefs.madhhab = if (hanafi) {
                                         AppMadhhab.HANAFI
                                     } else {
@@ -340,13 +389,12 @@ fun SettingsScreen(
                             )
                             Text(
                                 text = if (settings.prayer.asrMethod == AsrMethod.HANAFI) {
-                                    "Hanafi"
+                                    "Asr begins when an object's shadow is twice its length."
                                 } else {
-                                    "Shafi'i"
+                                    "Asr begins when an object's shadow equals its length."
                                 },
-                                modifier = Modifier.padding(start = 8.dp),
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
 
@@ -402,6 +450,123 @@ fun SettingsScreen(
                                 steps = 3,
                                 modifier = Modifier.weight(1f)
                             )
+                        }
+
+                        Text(
+                            text = "Travel & Car",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        SakinahCard(contentPadding = 14.dp) {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Travel Mode",
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "Keep Qasr prayer lengths and the Safar dua active while travelling",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Switch(
+                                        checked = travelModeActive,
+                                        onCheckedChange = { enabled ->
+                                            appPrefs.travelModeActive = enabled
+                                            appPrefs.qasrActive = enabled
+                                            travelModeActive = enabled
+                                        }
+                                    )
+                                }
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Car Bluetooth Dua al-Safar auto-play",
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "Play the travel dua when your vehicle audio connects",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Switch(
+                                        checked = settings.adhan.carBluetoothAutoPlay,
+                                        onCheckedChange = { enabled ->
+                                            scope.launch {
+                                                repo.updateAdhan(
+                                                    settings.adhan.copy(carBluetoothAutoPlay = enabled)
+                                                )
+                                            }
+                                        }
+                                    )
+                                }
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Dua al-Safar",
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "Safar (travel) supplication with its Arabic text",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            if (isDuaPlaying) {
+                                                runCatching {
+                                                    duaPlayer?.stop()
+                                                    duaPlayer?.release()
+                                                }
+                                                duaPlayer = null
+                                                isDuaPlaying = false
+                                            } else {
+                                                runCatching {
+                                                    duaPlayer?.release()
+                                                    duaPlayer = MediaPlayer.create(
+                                                        context,
+                                                        R.raw.dua_al_safar
+                                                    )?.apply {
+                                                        setOnCompletionListener {
+                                                            isDuaPlaying = false
+                                                            release()
+                                                        }
+                                                        start()
+                                                    }
+                                                    isDuaPlaying = duaPlayer != null
+                                                }.onFailure {
+                                                    scope.launch {
+                                                        snackbarHostState.showSnackbar(
+                                                            "Dua al-Safar audio could not be played."
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isDuaPlaying) Icons.Default.Stop
+                                            else Icons.Default.PlayArrow,
+                                            contentDescription = if (isDuaPlaying) {
+                                                "Stop Dua al-Safar"
+                                            } else {
+                                                "Play Dua al-Safar"
+                                            },
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -649,57 +814,66 @@ fun SettingsScreen(
 
                     SettingsSection.QURAN_OFFLINE -> {
                         Text("Quran Translation", style = MaterialTheme.typography.titleMedium)
+                        val currentTranslationLabel = translationCatalog
+                            .firstOrNull { it.id == appPrefs.quranTranslationId }
+                            ?.let { resource ->
+                                "${resource.name} (${resource.languageName.ifBlank { resource.isoCode }})"
+                            }
+                            ?: appPrefs.quranTranslationLanguage
                         Text(
-                            "Current: ${appPrefs.quranTranslationLanguage} (ID ${appPrefs.quranTranslationId})",
+                            "Current: $currentTranslationLabel",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        val currentTranslation = quranTranslationOptions.firstOrNull {
-                            it.id == appPrefs.quranTranslationId
-                        } ?: quranTranslationOptions.first()
-                        ExposedDropdownMenuBox(
-                            expanded = translationExpanded,
-                            onExpandedChange = { translationExpanded = it }
-                        ) {
-                            OutlinedTextField(
-                                value = "${currentTranslation.name} (${currentTranslation.language})",
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("Quran translation edition") },
-                                trailingIcon = {
-                                    ExposedDropdownMenuDefaults.TrailingIcon(
-                                        expanded = translationExpanded
-                                    )
-                                },
-                                modifier = Modifier
-                                    .menuAnchor()
-                                    .fillMaxWidth()
-                            )
-                            ExposedDropdownMenu(
-                                expanded = translationExpanded,
-                                onDismissRequest = { translationExpanded = false }
-                            ) {
-                                quranTranslationOptions.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = { Text("${option.name} · ${option.language}") },
-                                        onClick = {
-                                            appPrefs.quranTranslationId = option.id
-                                            appPrefs.quranTranslationLanguage = option.name
-                                            scope.launch {
-                                                repo.updateAppearance(
-                                                    settings.appearance.copy(
-                                                        translationId = option.id,
-                                                        translationLanguage = option.isoCode,
-                                                        translationName = option.name
-                                                    )
-                                                )
-                                            }
-                                            translationExpanded = false
-                                        }
-                                    )
+                        OutlinedButton(
+                            onClick = {
+                                if (translationCatalog.isEmpty()) {
+                                    catalogReloadNonce++
+                                } else {
+                                    showTranslationSheet = true
                                 }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            if (isLoadingCatalog) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Text("  Loading all languages…", fontSize = 12.sp)
+                            } else {
+                                Text(
+                                    if (translationCatalog.isEmpty()) {
+                                        "Load translation catalog"
+                                    } else {
+                                        "Choose translation · ${translationCatalog.size} editions"
+                                    },
+                                    fontSize = 12.sp
+                                )
                             }
                         }
+                        if (translationCatalog.isEmpty() && !isLoadingCatalog) {
+                            Text(
+                                text = "The full Quran.com translation catalog could not be loaded. Check your connection and retry.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+
+                        Text("Arabic Script", style = MaterialTheme.typography.titleMedium)
+                        SegmentedPillBar(
+                            options = QuranArabicScript.entries.map { it.label },
+                            selectedIndex = appPrefs.quranArabicScript.ordinal,
+                            onSelect = { index ->
+                                appPrefs.quranArabicScript = QuranArabicScript.entries[index]
+                            }
+                        )
+                        Text(
+                            text = "Uthmani is the standard Madani script. IndoPak and Imlaei are cached with each downloaded surah.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
 
                         Text("Offline Storage", style = MaterialTheme.typography.titleMedium)
                         Text(
@@ -724,14 +898,25 @@ fun SettingsScreen(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(pack.author, fontSize = 12.sp)
                                     Text(
-                                        text = pack.languageCode.uppercase() +
-                                            " · " + formatBytes(pack.sizeBytes) +
-                                            if (pack.isDownloaded) " · Downloaded" else "",
+                                        text = buildString {
+                                            append(pack.languageCode.uppercase())
+                                            append(" · Quran.com v4 · ")
+                                            append("${pack.downloadedChapters}/${TafseerPackage.TOTAL_CHAPTERS} surahs")
+                                            if (pack.isDownloaded) append(" · Downloaded")
+                                        },
                                         fontSize = 10.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                    if (downloadingPackId == pack.id) {
+                                        LinearProgressIndicator(
+                                            progress = { packDownloadProgress },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(top = 4.dp)
+                                        )
+                                    }
                                 }
-                                if (pack.isDownloaded) {
+                                if (pack.downloadedChapters > 0) {
                                     TextButton(
                                         enabled = downloadingPackId == null,
                                         onClick = {
@@ -755,30 +940,39 @@ fun SettingsScreen(
                                         enabled = downloadingPackId == null,
                                         onClick = {
                                             downloadingPackId = pack.id
+                                            packDownloadProgress = 0f
                                             scope.launch {
-                                                val result =
-                                                    tafseerRepository.downloadTafseerPackage(pack.id)
+                                                val result = tafseerRepository
+                                                    .downloadTafseerPackage(pack.id) { progress ->
+                                                        packDownloadProgress = progress
+                                                    }
                                                 tafseerRepository.refreshDownloadStatus()
                                                 downloadingPackId = null
+                                                packDownloadProgress = 0f
                                                 snackbarHostState.showSnackbar(
-                                                    if (result.isSuccess) {
-                                                        "${pack.author} downloaded for offline use."
-                                                    } else {
-                                                        "Tafseer download failed: " +
-                                                            (result.exceptionOrNull()?.message
-                                                                ?: "network error")
-                                                    }
+                                                    result.fold(
+                                                        onSuccess = { chapters ->
+                                                            "${pack.author}: $chapters surahs cached offline."
+                                                        },
+                                                        onFailure = { error ->
+                                                            "Tafseer download failed: " +
+                                                                (error.message ?: "network error")
+                                                        }
+                                                    )
                                                 )
                                             }
                                         }
                                     ) {
                                         if (downloadingPackId == pack.id) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(14.dp),
-                                                strokeWidth = 2.dp
+                                            Text(
+                                                "${(packDownloadProgress * 100).toInt()}%",
+                                                fontSize = 11.sp
                                             )
                                         } else {
-                                            Text("Download", fontSize = 11.sp)
+                                            Text(
+                                                if (pack.isPartiallyDownloaded) "Resume" else "Download",
+                                                fontSize = 11.sp
+                                            )
                                         }
                                     }
                                 }
@@ -800,6 +994,126 @@ fun SettingsScreen(
                 showHomeCityPicker = false
             }
         )
+    }
+
+    if (showTranslationSheet) {
+        val filtered = remember(translationCatalog, translationQuery) {
+            val query = translationQuery.trim()
+            if (query.isBlank()) {
+                translationCatalog
+            } else {
+                translationCatalog.filter { resource ->
+                    resource.name.contains(query, ignoreCase = true) ||
+                        resource.authorName.contains(query, ignoreCase = true) ||
+                        resource.languageName.contains(query, ignoreCase = true) ||
+                        resource.isoCode.contains(query, ignoreCase = true)
+                }
+            }
+        }
+        ModalBottomSheet(
+            onDismissRequest = {
+                showTranslationSheet = false
+                translationQuery = ""
+            },
+            sheetState = translationSheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "Quran translation · all languages",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                OutlinedTextField(
+                    value = translationQuery,
+                    onValueChange = { translationQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Search language, translator or name") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp)
+                )
+                if (filtered.isEmpty()) {
+                    Text(
+                        text = "No translations match “$translationQuery”.",
+                        modifier = Modifier.padding(vertical = 18.dp),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        items(
+                            filtered,
+                            key = { "${it.id}_${it.isoCode}_${it.editionKey}" }
+                        ) { resource ->
+                            val selected = resource.id == appPrefs.quranTranslationId
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        appPrefs.quranTranslationId = resource.id
+                                        appPrefs.quranTranslationLanguage = resource.languageName
+                                            .ifBlank { resource.name }
+                                        appPrefs.quranTranslationEditionKey = resource.editionKey
+                                        appPrefs.quranTranslationSource = resource.source
+                                        scope.launch {
+                                            repo.updateAppearance(
+                                                settings.appearance.copy(
+                                                    translationId = resource.id,
+                                                    translationLanguage = resource.isoCode
+                                                        .ifBlank { settings.appearance.translationLanguage },
+                                                    translationName = resource.languageName
+                                                        .ifBlank { resource.name }
+                                                )
+                                            )
+                                        }
+                                        showTranslationSheet = false
+                                        translationQuery = ""
+                                    }
+                                    .padding(horizontal = 6.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = resource.name,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (selected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = listOf(
+                                            resource.languageName.ifBlank { resource.isoCode },
+                                            resource.authorName
+                                        ).filter { it.isNotBlank() }.joinToString(" · "),
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (selected) {
+                                    Text(
+                                        text = "Selected",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -861,23 +1175,6 @@ private fun formatBytes(bytes: Long): String = when {
     bytes >= 1_024L -> String.format(Locale.US, "%.1f KB", bytes / 1_024.0)
     else -> "$bytes bytes"
 }
-
-private data class QuranTranslationOption(
-    val id: Int,
-    val name: String,
-    val language: String,
-    val isoCode: String
-)
-
-/** Quran.com / QuranEnc translation editions that the sync layer can actually fetch. */
-private val quranTranslationOptions = listOf(
-    QuranTranslationOption(20, "Saheeh International", "English", "en"),
-    QuranTranslationOption(234, "Fatah Muhammad Jalandhari", "Urdu", "ur"),
-    QuranTranslationOption(54, "Maulana Muhammad Junagarhi", "Urdu", "ur"),
-    QuranTranslationOption(131, "Dr. Mustafa Khattab (The Clear Quran)", "English", "en"),
-    QuranTranslationOption(85, "Muhammad Hamidullah", "French", "fr"),
-    QuranTranslationOption(27, "Sheikh Muhammad Rida", "Arabic", "ar")
-)
 
 /** Mirrors an Android override into the shared settings store (closest equivalent authority). */
 private fun sharedMethodFor(method: AppMethod): CalculationMethod? = when (method) {

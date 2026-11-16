@@ -1,55 +1,60 @@
 package com.sakinah.deen.data.repository
 
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
-import androidx.sqlite.db.SupportSQLiteDatabase
-import com.sakinah.deen.data.database.SakinahEncryptedDatabase
 import com.sakinah.deen.data.database.dao.TafsirDao
-import com.sakinah.deen.data.model.TafseerEntry
+import com.sakinah.deen.network.IslamicDataRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 
+/**
+ * A Quran.com v4 tafsir edition that can be cached in Room's `tafsir_entries` table.
+ *
+ * There is no downloadable database file anymore: every chapter is fetched from
+ * `api.quran.com/api/v4/tafsirs/{id}/by_chapter/{chapter}` and stored as rows, so progress
+ * and partial downloads are real rather than a simulated file transfer.
+ */
 data class TafseerPackage(
     val id: String,
     val author: String,
     val languageCode: String,
-    val filename: String,
-    val remoteCdnUrl: String,
-    val sizeBytes: Long,
-    /** Quran.com API v4 tafsir resource id used to fill Room's tafsir_entries table. */
+    /** Quran.com API v4 tafsir resource id used for every Room row of this pack. */
     val tafsirId: Int,
-    val isDownloaded: Boolean = false,
-    val isAttached: Boolean = false,
-    val attachedAlias: String = "tafseer_${id}"
-)
+    /** Chapters with at least one cached commentary row. */
+    val downloadedChapters: Int = 0
+) {
+    val isDownloaded: Boolean get() = downloadedChapters >= TOTAL_CHAPTERS
+
+    val isPartiallyDownloaded: Boolean
+        get() = downloadedChapters in 1 until TOTAL_CHAPTERS
+
+    companion object {
+        const val TOTAL_CHAPTERS = 114
+    }
+}
 
 class TafseerDownloadRepository(
-    private val context: Context,
-    private val tafsirDao: TafsirDao? = null
+    @Suppress("UNUSED_PARAMETER") context: Context,
+    private val tafsirDao: TafsirDao? = null,
+    private val islamicRepository: IslamicDataRepository? = null
 ) {
     companion object {
         private val TAFSIR_ID_BY_PACK = mapOf(
             "ibn_kathir_en" to 169,
             "al_tabari_ar" to 15,
             "al_qurtubi_ar" to 90,
-            "al_saadi_ur" to 91,
+            "al_saadi_ar" to 91,
             "maariful_quran_en" to 168
         )
 
@@ -57,7 +62,7 @@ class TafseerDownloadRepository(
             "Ibn Kathir" to "ibn_kathir_en",
             "Al-Tabari" to "al_tabari_ar",
             "Al-Qurtubi" to "al_qurtubi_ar",
-            "Al-Sa'di" to "al_saadi_ur",
+            "Al-Sa'di" to "al_saadi_ar",
             "Ma'ariful Quran" to "maariful_quran_en"
         )
 
@@ -73,47 +78,32 @@ class TafseerDownloadRepository(
         listOf(
             TafseerPackage(
                 id = "ibn_kathir_en",
-                author = "Tafseer Ibn Kathir",
+                author = "Tafsir Ibn Kathir (Abridged)",
                 languageCode = "en",
-                filename = "tafsir_ibnkathir_en.db",
-                remoteCdnUrl = "https://cdn.sakinah.deen/tafseer/tafsir_ibnkathir_en.db",
-                sizeBytes = 18_400_000L,
                 tafsirId = 169
             ),
             TafseerPackage(
                 id = "al_tabari_ar",
                 author = "Jami‘ al-Bayan (Al-Tabari)",
                 languageCode = "ar",
-                filename = "tafsir_tabari_ar.db",
-                remoteCdnUrl = "https://cdn.sakinah.deen/tafseer/tafsir_tabari_ar.db",
-                sizeBytes = 32_100_000L,
                 tafsirId = 15
             ),
             TafseerPackage(
                 id = "al_qurtubi_ar",
                 author = "Al-Jami‘ li Ahkam al-Qur'an (Al-Qurtubi)",
                 languageCode = "ar",
-                filename = "tafsir_qurtubi_ar.db",
-                remoteCdnUrl = "https://cdn.sakinah.deen/tafseer/tafsir_qurtubi_ar.db",
-                sizeBytes = 26_700_000L,
                 tafsirId = 90
             ),
             TafseerPackage(
-                id = "al_saadi_ur",
+                id = "al_saadi_ar",
                 author = "Taysir al-Karim al-Rahman (Al-Sa'di)",
-                languageCode = "ur",
-                filename = "tafsir_saadi_ur.db",
-                remoteCdnUrl = "https://cdn.sakinah.deen/tafseer/tafsir_saadi_ur.db",
-                sizeBytes = 14_800_000L,
+                languageCode = "ar",
                 tafsirId = 91
             ),
             TafseerPackage(
                 id = "maariful_quran_en",
                 author = "Ma'ariful Quran (Mufti Shafi)",
                 languageCode = "en",
-                filename = "tafsir_maariful_quran_en.db",
-                remoteCdnUrl = "https://cdn.sakinah.deen/tafseer/tafsir_maariful_quran_en.db",
-                sizeBytes = 22_500_000L,
                 tafsirId = 168
             )
         )
@@ -129,247 +119,118 @@ class TafseerDownloadRepository(
     }
 
     init {
-        // Disk scans must never run on the constructing (main) thread.
-        scope.launch { checkLocalDownloads() }
+        // Room reads must never run on the constructing (main) thread.
+        scope.launch { refreshDownloadStatus() }
     }
 
-    /**
-     * Verifies package files. A `.db` with zero tafsir rows is not a usable download;
-     * remove it so the UI cannot claim the pack is available offline.
-     */
-    private fun checkLocalDownloads() {
-        deleteEmptyTafseerDatabases()
-        _packages.update { packages ->
-            packages.map { pkg ->
-                val file = databaseFile(pkg)
-                pkg.copy(isDownloaded = databaseHasEntries(file))
-            }
-        }
-    }
-
-    /**
-     * Reconciles the pack list with Room and on-disk databases. Room is the source of truth
-     * for Quran.com downloads, while a verified attached-pack `.db` is also accepted.
-     */
+    /** Reconciles the pack list with the chapters actually present in Room. */
     suspend fun refreshDownloadStatus() = withContext(Dispatchers.IO) {
-        deleteEmptyTafseerDatabases()
+        val dao = tafsirDao ?: return@withContext
         _packages.update { packages ->
             packages.map { pkg ->
-                val file = databaseFile(pkg)
-                val fileCount = if (databaseHasEntries(file)) 1 else 0
-                val roomCount = tafsirDao
-                    ?.takeIf { pkg.tafsirId > 0 }
-                    ?.countForSource("tafsir_${pkg.tafsirId}")
-                    ?: 0
-                pkg.copy(isDownloaded = fileCount > 0 || roomCount > 0)
+                val chapters = runCatching {
+                    dao.countSurahsForSource("tafsir_${pkg.tafsirId}")
+                }.getOrDefault(pkg.downloadedChapters)
+                pkg.copy(downloadedChapters = chapters)
             }
         }
     }
 
+    /**
+     * Downloads every chapter of an edition from Quran.com v4 into Room.
+     *
+     * Chapters are fetched and written one at a time, so memory stays bounded and a failure
+     * late in the run never discards the chapters already cached. [onProgress] receives
+     * 0f..1f of the chapters completed; cancelled downloads keep their partial rows.
+     */
     suspend fun downloadTafseerPackage(
         packageId: String,
         onProgress: (Float) -> Unit = {}
-    ): Result<File> = withContext(Dispatchers.IO) {
+    ): Result<Int> = withContext(Dispatchers.IO) {
         val pkg = _packages.value.find { it.id == packageId }
-            ?: return@withContext Result.failure(IllegalArgumentException("Tafseer package $packageId not found"))
+            ?: return@withContext Result.failure(
+                IllegalArgumentException("Tafseer package $packageId not found")
+            )
+        val repo = islamicRepository
+            ?: return@withContext Result.failure(
+                IOException("Quran.com tafsir service is not available right now")
+            )
+
+        val sourceKey = "tafsir_${pkg.tafsirId}"
 
         mutexFor(packageId).withLock {
-        val targetFile = databaseFile(pkg)
-        val tempFile = File(targetFile.absolutePath + ".download")
-        targetFile.parentFile?.mkdirs()
-        tempFile.delete()
+            var savedChapters = 0
+            var firstError: Throwable? = null
 
-        try {
-            val url = URL(pkg.remoteCdnUrl)
-            val connection = url.openConnection() as HttpURLConnection
             try {
-                connection.connectTimeout = 15000
-                connection.readTimeout = 15000
-
-                val responseCode = connection.responseCode
-                if (responseCode != HttpURLConnection.HTTP_OK) {
-                    throw IOException("Tafsir download failed with HTTP $responseCode")
-                }
-
-                val totalLength = connection.contentLength.toFloat()
-                connection.inputStream.use { input ->
-                    FileOutputStream(tempFile).use { output ->
-                        val buffer = ByteArray(8192)
-                        var bytesRead: Int
-                        var downloaded = 0L
-
-                        while (input.read(buffer).also { bytesRead = it } != -1) {
-                            ensureActive()
-                            output.write(buffer, 0, bytesRead)
-                            downloaded += bytesRead
-                            if (totalLength > 0) {
-                                onProgress(downloaded / totalLength)
+                for (surahNumber in 1..TafseerPackage.TOTAL_CHAPTERS) {
+                    ensureActive()
+                    val alreadyCached = runCatching {
+                        (tafsirDao?.countForSurah(sourceKey, surahNumber) ?: 0) > 0
+                    }.getOrDefault(false)
+                    if (alreadyCached) {
+                        savedChapters++
+                        onProgress(surahNumber.toFloat() / TafseerPackage.TOTAL_CHAPTERS)
+                        continue
+                    }
+                    val result = repo.syncTafsirForChapter(
+                        tafsirId = pkg.tafsirId,
+                        surahNumber = surahNumber,
+                        languageCode = pkg.languageCode
+                    )
+                    if (result.isSuccess) {
+                        savedChapters++
+                    } else {
+                        val error = result.exceptionOrNull()
+                        if (error is kotlinx.coroutines.CancellationException) throw error
+                        if (firstError == null) firstError = error
+                    }
+                    onProgress(surahNumber.toFloat() / TafseerPackage.TOTAL_CHAPTERS)
+                    _packages.update { packages ->
+                        packages.map {
+                            if (it.id == packageId) {
+                                it.copy(downloadedChapters = maxOf(it.downloadedChapters, savedChapters))
+                            } else {
+                                it
                             }
                         }
                     }
+                    // Stay a polite consumer of the free API.
+                    delay(60)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                refreshDownloadStatus()
+                throw e
+            } catch (e: Exception) {
+                if (firstError == null) firstError = e
             } finally {
-                connection.disconnect()
+                refreshDownloadStatus()
             }
 
-            if (!databaseHasEntries(tempFile)) {
-                throw IOException("Downloaded tafsir pack contains no tafsir entries")
+            if (savedChapters > 0) {
+                Result.success(savedChapters)
+            } else {
+                Result.failure(
+                    firstError ?: IOException("Quran.com returned no commentary for this edition")
+                )
             }
-
-            if (targetFile.exists() && !targetFile.delete()) {
-                throw IOException("Could not replace the existing tafsir pack")
-            }
-            if (!tempFile.renameTo(targetFile)) {
-                tempFile.copyTo(targetFile, overwrite = true)
-                tempFile.delete()
-            }
-
-            _packages.update { packages ->
-                packages.map { if (it.id == packageId) it.copy(isDownloaded = true) else it }
-            }
-
-            Result.success(targetFile)
-        } catch (e: Exception) {
-            tempFile.delete()
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            Result.failure(e)
-        }
         }
     }
 
-    /** Removes a single downloaded tafseer pack and its Room commentary rows. */
+    /** Removes every cached commentary row for an edition. */
     suspend fun removeTafseerPackage(packageId: String) = withContext(Dispatchers.IO) {
         val pkg = _packages.value.find { it.id == packageId } ?: return@withContext
-        databaseFile(pkg).delete()
-        File(databaseFile(pkg).absolutePath + ".download").delete()
         tafsirDao?.deleteBySource("tafsir_${pkg.tafsirId}")
         _packages.update { packages ->
-            packages.map { if (it.id == packageId) it.copy(isDownloaded = false) else it }
+            packages.map {
+                if (it.id == packageId) it.copy(downloadedChapters = 0) else it
+            }
         }
     }
 
-    /** Removes both Room commentary and downloaded pack files used as an offline cache. */
+    /** Removes every cached tafsir edition from Room. */
     suspend fun clearCachedTafsir() = withContext(Dispatchers.IO) {
         tafsirDao?.deleteAll()
-        _packages.value.forEach { pkg ->
-            databaseFile(pkg).delete()
-            File(databaseFile(pkg).absolutePath + ".download").delete()
-        }
-        _packages.update { packages -> packages.map { it.copy(isDownloaded = false) } }
-    }
-
-    suspend fun attachTafseerDatabase(
-        roomDb: SakinahEncryptedDatabase,
-        packageId: String
-    ): Result<String> = withContext(Dispatchers.IO) {
-        val pkg = _packages.value.find { it.id == packageId }
-            ?: return@withContext Result.failure(IllegalArgumentException("Package not found"))
-
-        val dbFile = databaseFile(pkg)
-        if (!databaseHasEntries(dbFile)) {
-            return@withContext Result.failure(IllegalStateException("Tafseer DB has no entries"))
-        }
-
-        try {
-            val db: SupportSQLiteDatabase = roomDb.openHelper.writableDatabase
-            val alias = pkg.attachedAlias
-            db.execSQL("ATTACH DATABASE '${dbFile.absolutePath}' AS $alias")
-
-            _packages.value = _packages.value.map {
-                if (it.id == packageId) it.copy(isAttached = true) else it
-            }
-
-            Result.success(alias)
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            Result.failure(e)
-        }
-    }
-
-    suspend fun detachTafseerDatabase(
-        roomDb: SakinahEncryptedDatabase,
-        packageId: String
-    ): Result<Unit> = withContext(Dispatchers.IO) {
-        val pkg = _packages.value.find { it.id == packageId }
-            ?: return@withContext Result.failure(IllegalArgumentException("Package not found"))
-
-        try {
-            val db: SupportSQLiteDatabase = roomDb.openHelper.writableDatabase
-            db.execSQL("DETACH DATABASE ${pkg.attachedAlias}")
-
-            _packages.value = _packages.value.map {
-                if (it.id == packageId) it.copy(isAttached = false) else it
-            }
-
-            Result.success(Unit)
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            Result.failure(e)
-        }
-    }
-
-    fun queryAyahWithTafseer(
-        roomDb: SakinahEncryptedDatabase,
-        surahNumber: Int,
-        ayahNumber: Int,
-        attachedAlias: String
-    ): Flow<TafseerEntry?> = flow {
-        val db: SupportSQLiteDatabase = roomDb.openHelper.readableDatabase
-        val query = """
-            SELECT tafseerId, surahNumber, ayahNumber, author, languageCode, contentMarkdown 
-            FROM $attachedAlias.tafseer_entries 
-            WHERE surahNumber = ? AND ayahNumber = ? 
-            LIMIT 1
-        """.trimIndent()
-
-        val cursor = db.query(query, arrayOf(surahNumber, ayahNumber))
-        var entry: TafseerEntry? = null
-        if (cursor.moveToFirst()) {
-            entry = TafseerEntry(
-                tafseerId = cursor.getString(0),
-                surahNumber = cursor.getInt(1),
-                ayahNumber = cursor.getInt(2),
-                author = cursor.getString(3),
-                languageCode = cursor.getString(4),
-                contentMarkdown = cursor.getString(5)
-            )
-        }
-        cursor.close()
-        emit(entry)
-    }.flowOn(Dispatchers.IO)
-
-    private fun databaseFile(pkg: TafseerPackage): File =
-        context.getDatabasePath(pkg.filename)
-
-    private fun databaseHasEntries(file: File): Boolean {
-        if (!file.isFile || file.length() == 0L) return false
-        return runCatching {
-            val database = SQLiteDatabase.openDatabase(
-                file.absolutePath,
-                null,
-                SQLiteDatabase.OPEN_READONLY
-            )
-            try {
-                database.rawQuery("SELECT COUNT(*) FROM tafseer_entries", null).use { cursor ->
-                    cursor.moveToFirst() && cursor.getInt(0) > 0
-                }
-            } finally {
-                database.close()
-            }
-        }.getOrDefault(false)
-    }
-
-    private fun deleteEmptyTafseerDatabases() {
-        val databaseDir = context.getDatabasePath("sakinah.db").parentFile ?: return
-        databaseDir.listFiles()
-            ?.filter { file ->
-                file.isFile && file.name.startsWith("tafsir_") &&
-                    (file.name.endsWith(".db") || file.name.endsWith(".db.download"))
-            }
-            ?.forEach { file ->
-                if (file.name.endsWith(".db.download") || !databaseHasEntries(file)) {
-                    file.delete()
-                }
-            }
+        _packages.update { packages -> packages.map { it.copy(downloadedChapters = 0) } }
     }
 }

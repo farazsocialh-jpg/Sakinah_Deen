@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.sakinah.deen.MainActivity
@@ -26,6 +27,10 @@ import org.koin.core.context.GlobalContext
 
 class PrayerAlarmReceiver : BroadcastReceiver() {
 
+    private companion object {
+        const val TAG = "PrayerAlarmReceiver"
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != PrayerAlarmScheduler.ACTION_PRAYER_ALARM) return
 
@@ -34,9 +39,14 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         val prayerName = intent.getStringExtra(PrayerAlarmScheduler.EXTRA_PRAYER_NAME) ?: "Salah"
         val prayerTime = intent.getStringExtra(PrayerAlarmScheduler.EXTRA_PRAYER_TIME_FORMATTED) ?: ""
         val prayerTypeName = intent.getStringExtra(PrayerAlarmScheduler.EXTRA_PRAYER_TYPE)
+        // Never guess the prayer: defaulting to Dhuhr used to fire a wrong Dhuhr alert for any
+        // malformed/legacy alarm. Without a valid type there is nothing correct to show.
         val prayerType = prayerTypeName
             ?.let { name -> runCatching { PrayerType.valueOf(name) }.getOrNull() }
-            ?: PrayerType.DHUHR
+        if (prayerType == null) {
+            Log.w(TAG, "Ignoring prayer alarm with missing/invalid EXTRA_PRAYER_TYPE=$prayerTypeName")
+            return
+        }
         val isSnooze = intent.getBooleanExtra(PrayerAlarmScheduler.EXTRA_IS_SNOOZE, false)
         val isTest = intent.getBooleanExtra(PrayerAlarmScheduler.EXTRA_IS_TEST, false)
 
@@ -55,13 +65,24 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
                 val alreadyCompleted = !isTest && isPrayerAlreadyCompleted(appContext, prefs, prayerType)
 
                 if (notificationsAllowed && alertMode != PrayerAlertMode.OFF && !alreadyCompleted) {
-                    startAdhanPlayback(
-                        context = appContext,
-                        prayerName = prayerName,
-                        prayerType = prayerType,
-                        prayerTime = prayerTime,
-                        alertMode = alertMode
-                    )
+                    if (alertMode == PrayerAlertMode.SILENT) {
+                        // Notification-only mode must not depend on a foreground service that
+                        // Android may refuse to start; post the alert straight from here.
+                        showAdhanNotificationFallback(
+                            context = appContext,
+                            prayerName = prayerName,
+                            prayerTime = prayerTime,
+                            alertMode = alertMode
+                        )
+                    } else {
+                        startAdhanPlayback(
+                            context = appContext,
+                            prayerName = prayerName,
+                            prayerType = prayerType,
+                            prayerTime = prayerTime,
+                            alertMode = alertMode
+                        )
+                    }
                 }
 
                 // A fired PendingIntent is consumed. Re-register the full daily table so the
@@ -184,6 +205,8 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             builder.setFullScreenIntent(fullScreenPendingIntent, true)
         }
 
-        notificationManager.notify(prayerName.hashCode(), builder.build())
+        // Reuse the playback notification slot so a silent/failed-service alert replaces the
+        // previous prayer notification instead of stacking duplicates.
+        notificationManager.notify(AdhanPlaybackService.NOTIFICATION_ID, builder.build())
     }
 }

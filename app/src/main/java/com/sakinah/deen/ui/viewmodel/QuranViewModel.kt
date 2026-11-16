@@ -8,6 +8,7 @@ import com.sakinah.deen.data.database.entity.HifzMistakeEntity
 import com.sakinah.deen.data.database.entity.QuranAyahEntity
 import com.sakinah.deen.data.database.entity.SurahMetadataEntity
 import com.sakinah.deen.data.model.AyahModel
+import com.sakinah.deen.data.model.QuranArabicScript
 import com.sakinah.deen.data.model.QuranTranslationResource
 import com.sakinah.deen.data.model.SurahModel
 import com.sakinah.deen.data.prefs.SakinahPreferences
@@ -49,6 +50,8 @@ data class QuranUiState(
     val selectedScholar: String = "Ibn Kathir",
     val hifzMistakes: Map<Pair<Int, Int>, String> = emptyMap(),
     val isDownloadingTafseer: Boolean = false,
+    /** Share of the 114 chapters fetched from Quran.com for the current tafsir download. */
+    val tafseerDownloadProgress: Float = 0f,
     val searchQuery: String = "",
     val searchResults: List<AyahSearchResult> = emptyList(),
     val isSearching: Boolean = false,
@@ -61,6 +64,8 @@ data class QuranUiState(
     val selectedTranslationIsoCode: String = "en",
     val selectedTranslationEditionKey: String = "",
     val selectedTranslationSource: String = QuranTranslationResource.SOURCE_QURAN_COM,
+    /** Arabic script edition shown in the reader (Uthmani, IndoPak or Imlaei). */
+    val arabicScript: QuranArabicScript = QuranArabicScript.UTHMANI,
     val arabicFontSize: Int = 24,
     val availableTranslations: List<QuranTranslationResource> = emptyList(),
     val isLoadingTranslation: Boolean = false
@@ -71,6 +76,7 @@ sealed class QuranUiIntent {
     data class SelectSurahAtAyah(val surahNumber: Int, val ayahNumber: Int) : QuranUiIntent()
     data object ClearScrollTarget : QuranUiIntent()
     data class SelectAyahForTafseer(val ayahNumber: Int) : QuranUiIntent()
+    data class SelectArabicScript(val script: QuranArabicScript) : QuranUiIntent()
     data class SelectScholar(val scholarName: String) : QuranUiIntent()
     data class SetHifzMistakeTag(val surah: Int, val ayah: Int, val wordPos: Int, val tag: String) : QuranUiIntent()
     data class DownloadTafseerPack(val packageId: String) : QuranUiIntent()
@@ -150,6 +156,7 @@ class QuranViewModel(
                 selectedTranslationEditionKey = sakinahPreferences?.quranTranslationEditionKey.orEmpty(),
                 selectedTranslationSource = sakinahPreferences?.quranTranslationSource
                     ?: QuranTranslationResource.SOURCE_QURAN_COM,
+                arabicScript = sakinahPreferences?.quranArabicScript ?: QuranArabicScript.UTHMANI,
                 arabicFontSize = (settingsRepository?.settings?.value?.appearance?.arabicFontSize ?: 24).coerceIn(16, 39)
             )
         }
@@ -170,6 +177,7 @@ class QuranViewModel(
             is QuranUiIntent.SelectSurahAtAyah -> selectSurah(intent.surahNumber, targetAyah = intent.ayahNumber)
             is QuranUiIntent.ClearScrollTarget -> _uiState.update { it.copy(scrollTargetAyah = null) }
             is QuranUiIntent.SelectAyahForTafseer -> selectAyahForTafseer(intent.ayahNumber)
+            is QuranUiIntent.SelectArabicScript -> selectArabicScript(intent.script)
             is QuranUiIntent.SelectScholar -> {
                 _uiState.update { it.copy(selectedScholar = intent.scholarName) }
                 onIntent(QuranUiIntent.SelectAyahForTafseer(_uiState.value.activeHighlightedAyah))
@@ -501,6 +509,33 @@ class QuranViewModel(
         }
     }
 
+    /**
+     * Switches the Arabic script edition. Chapters cached before the script columns existed
+     * are re-synced once so the chosen script is actually available offline.
+     */
+    private fun selectArabicScript(script: QuranArabicScript) {
+        if (_uiState.value.arabicScript == script) return
+        _uiState.update { it.copy(arabicScript = script) }
+        sakinahPreferences?.quranArabicScript = script
+
+        val repo = islamicRepository ?: return
+        val surah = _uiState.value.currentSurah
+        val missing = surah.ayahs.any { ayah ->
+            when (script) {
+                QuranArabicScript.UTHMANI -> ayah.arabicText.isBlank()
+                QuranArabicScript.INDOPAK -> ayah.arabicIndopak.isBlank()
+                QuranArabicScript.IMLAEI -> ayah.arabicImlaei.isBlank()
+            }
+        }
+        if (!missing || surah.ayahs.isEmpty()) return
+        syncSurah(
+            surahNumber = surah.number,
+            translationId = selectedTranslationIdFlow.value,
+            editionKey = _uiState.value.selectedTranslationEditionKey,
+            source = _uiState.value.selectedTranslationSource
+        )
+    }
+
     private fun selectAyahForTafseer(ayahNumber: Int) {
         val state = _uiState.value
         val ayah = state.currentSurah.ayahs.find { it.numberInSurah == ayahNumber }
@@ -693,6 +728,7 @@ class QuranViewModel(
 
     private fun downloadTafseerPack(packageId: String) {
         val repo = islamicRepository
+        val packRepo = tafseerRepository
         val tafsirId = TafseerDownloadRepository.tafsirIdForPack(packageId)
         if (repo == null || tafsirId == null) {
             _uiState.update {
@@ -710,23 +746,27 @@ class QuranViewModel(
             _uiState.update {
                 it.copy(
                     isDownloadingTafseer = true,
+                    tafseerDownloadProgress = 0f,
                     contentNotice = null,
                     tafseerErrorMessage = null
                 )
             }
             try {
-                val result = repo.syncTafsirForSurah(
-                    surahNumber = surahNumber,
-                    tafsirId = tafsirId
-                )
+                val result = if (packRepo != null) {
+                    packRepo.downloadTafseerPackage(packageId) { progress ->
+                        _uiState.update { it.copy(tafseerDownloadProgress = progress) }
+                    }
+                } else {
+                    repo.syncTafsirForSurah(surahNumber = surahNumber, tafsirId = tafsirId)
+                }
                 val error = result.exceptionOrNull()
-                val savedRows = result.getOrNull() ?: 0
+                val savedChapters = result.getOrNull() ?: 0
 
                 if (error != null) {
                     _uiState.update {
                         it.copy(tafseerErrorMessage = friendlyTafseerError(scholar, error))
                     }
-                } else if (savedRows <= 0) {
+                } else if (savedChapters <= 0) {
                     _uiState.update {
                         it.copy(
                             tafseerErrorMessage = "No $scholar commentary was returned for Surah $surahNumber. " +
@@ -734,7 +774,7 @@ class QuranViewModel(
                         )
                     }
                 } else {
-                    tafseerRepository?.refreshDownloadStatus()
+                    packRepo?.refreshDownloadStatus()
                     _uiState.update {
                         it.copy(
                             activeHighlightedAyah = ayahNumber,
@@ -752,7 +792,9 @@ class QuranViewModel(
                     it.copy(tafseerErrorMessage = friendlyTafseerError(scholar, e))
                 }
             } finally {
-                _uiState.update { it.copy(isDownloadingTafseer = false) }
+                _uiState.update {
+                    it.copy(isDownloadingTafseer = false, tafseerDownloadProgress = 0f)
+                }
             }
         }
     }
@@ -785,6 +827,8 @@ class QuranViewModel(
     private fun QuranAyahEntity.toAyahModel(): AyahModel = AyahModel(
         numberInSurah = ayahNumber,
         arabicText = textUthmani,
+        arabicIndopak = textIndopak,
+        arabicImlaei = textImlaei,
         transliteration = transliteration.orEmpty(),
         translation = translation.orEmpty(),
         tafseerIbnKathir = "",

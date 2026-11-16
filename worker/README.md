@@ -1,4 +1,4 @@
-# Sakinah AI Scholar proxy
+# ImanCore AI Scholar proxy
 
 Cloudflare Worker that keeps the model provider key server-side. The mobile apps only know
 `AI_PROXY_URL` and receive Gemini's SSE stream through this proxy.

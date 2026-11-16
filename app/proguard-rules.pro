@@ -1,5 +1,5 @@
 # ==============================================================================
-# Sakinah Production R8 / ProGuard Configuration
+# ImanCore Production R8 / ProGuard Configuration
 # Package: com.sakinah.deen
 # ==============================================================================
 
@@ -12,7 +12,7 @@
 -keep class net.zetetic.database.sqlcipher.** { *; }
 -dontwarn net.zetetic.database.sqlcipher.**
 
-# Keep Sakinah Room Entities, DAOs, and Type Converters
+# Keep ImanCore Room Entities, DAOs, and Type Converters
 -keep class com.sakinah.deen.data.database.entity.** { *; }
 -keep class com.sakinah.deen.data.database.dao.** { *; }
 -keep class com.sakinah.deen.data.database.converter.** { *; }
@@ -86,7 +86,7 @@
 -keep class androidx.work.** { *; }
 -dontwarn androidx.work.**
 
-# Sakinah background components resolved by name from the manifest
+# ImanCore background components resolved by name from the manifest
 -keep class com.sakinah.deen.service.** { *; }
 -keep class com.sakinah.deen.receiver.** { *; }
 -keep class com.sakinah.deen.work.** { *; }

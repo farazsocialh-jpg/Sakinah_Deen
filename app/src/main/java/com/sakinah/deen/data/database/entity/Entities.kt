@@ -71,6 +71,10 @@ data class QuranAyahEntity(
     val ayahNumber: Int,
     val verseKey: String,
     val textUthmani: String,
+    @ColumnInfo(defaultValue = "")
+    val textIndopak: String = "",
+    @ColumnInfo(defaultValue = "")
+    val textImlaei: String = "",
     val translation: String? = null,
     val transliteration: String? = null,
     val audioUrl: String? = null,

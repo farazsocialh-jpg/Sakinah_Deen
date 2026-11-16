@@ -96,6 +96,13 @@ interface UserProfileRepository {
 
     /** Drops the active profile (used by "Continue as Guest" and account deletion). */
     suspend fun clear()
+
+    /**
+     * Ends the active session without deleting anything: the stored profile (gender, date of
+     * birth, city, country) stays on disk and is restored the next time this account signs in.
+     */
+    suspend fun clearActiveSession()
+
     suspend fun syncCloud()
     fun validate(profile: UserProfile): Boolean
 }
@@ -113,6 +120,10 @@ class InMemoryUserProfileRepository : UserProfileRepository {
     }
 
     override suspend fun clear() {
+        _profile.value = null
+    }
+
+    override suspend fun clearActiveSession() {
         _profile.value = null
     }
 
@@ -168,6 +179,14 @@ class PersistentUserProfileRepository(
 
     override suspend fun clear() {
         prefs.remove(profileKey(activeKey))
+        prefs.remove(KEY_ACTIVE_USER)
+        activeKey = DEFAULT_KEY
+        _profile.value = null
+    }
+
+    override suspend fun clearActiveSession() {
+        // Forget which account is active but keep its stored profile: signing out must never
+        // wipe gender, date of birth, city or country. Only deleteAccount() does that.
         prefs.remove(KEY_ACTIVE_USER)
         activeKey = DEFAULT_KEY
         _profile.value = null

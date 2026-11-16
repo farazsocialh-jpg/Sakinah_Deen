@@ -1,4 +1,4 @@
-# Sakinah — Islamic Companion (Android + iOS)
+# ImanCore — Islamic Companion (Android + iOS)
 
 Kotlin Multiplatform project sharing business logic and data between the
 Android (Jetpack Compose) and iOS (SwiftUI) apps.

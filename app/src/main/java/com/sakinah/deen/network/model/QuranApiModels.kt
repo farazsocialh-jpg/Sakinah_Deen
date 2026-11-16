@@ -73,6 +73,20 @@ data class TafsirDto(
     @SerialName("resource_name") val resourceName: String = ""
 )
 
+/** `/tafsirs/{id}/by_chapter/{chapter}` returns every ayah commentary in one payload. */
+@Serializable
+data class TafsirChapterResponse(
+    val tafsirs: List<TafsirChapterDto> = emptyList()
+)
+
+@Serializable
+data class TafsirChapterDto(
+    @SerialName("resource_id") val resourceId: Int = 0,
+    @SerialName("verse_key") val verseKey: String = "",
+    @SerialName("resource_name") val resourceName: String = "",
+    val text: String = ""
+)
+
 @Serializable
 data class TranslationCatalogResponse(
     val translations: List<QuranTranslationCatalogDto> = emptyList()
@@ -98,6 +112,8 @@ data class VerseByChapterDto(
     @SerialName("verse_number") val verseNumber: Int = 0,
     @SerialName("verse_key") val verseKey: String = "",
     @SerialName("text_uthmani") val textUthmani: String = "",
+    @SerialName("text_indopak") val textIndopak: String = "",
+    @SerialName("text_imlaei") val textImlaei: String = "",
     val translations: List<TranslationDto> = emptyList()
 )
 

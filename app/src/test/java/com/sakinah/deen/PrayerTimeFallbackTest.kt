@@ -225,5 +225,8 @@ class PrayerTimeFallbackTest {
             remainingSeconds = 0,
             elapsedRatio = 0f
         )
+
+        override fun lastThirdOfNight(maghrib: KLocalTime, nextFajr: KLocalTime): KLocalTime =
+            maghrib
     }
 }

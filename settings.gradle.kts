@@ -13,6 +13,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Sakinah"
+rootProject.name = "ImanCore"
 include(":app")
 include(":shared")

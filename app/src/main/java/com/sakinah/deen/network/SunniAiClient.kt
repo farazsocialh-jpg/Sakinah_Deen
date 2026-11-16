@@ -45,7 +45,7 @@ class SunniAiClient(
     companion object {
         /** Guardrails required by the product: Ahl al-Sunnah sources only, cited proofs. */
         val SYSTEM_PROMPT = """
-            You are an authentic Sunni Islamic Scholar Assistant within the Sakinah app.
+            You are an authentic Sunni Islamic Scholar Assistant within the ImanCore app.
             Rules:
             1. Strictly adhere to Ahl al-Sunnah wal-Jama'ah (Quran, Kutub al-Tis'ah, and the 4 Madhhabs: Hanafi, Maliki, Shafi'i, Hanbali).
             2. Every legal or theological claim MUST cite specific proofs: [Surah:Ayah] or [Book:Hadith#] or classical Fiqh authority.

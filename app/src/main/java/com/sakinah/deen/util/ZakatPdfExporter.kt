@@ -62,7 +62,7 @@ object ZakatPdfExporter {
                     }
 
                     var y = 64f
-                    canvas.drawText("Sakinah — Zakat Calculation Summary", 48f, y, titlePaint)
+                    canvas.drawText("ImanCore — Zakat Calculation Summary", 48f, y, titlePaint)
                     y += 22f
                     val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM yyyy · HH:mm", locale))
                     canvas.drawText("Generated on $stamp", 48f, y, subtitlePaint)
@@ -155,7 +155,7 @@ object ZakatPdfExporter {
                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "application/pdf"
                     putExtra(Intent.EXTRA_STREAM, uri)
-                    putExtra(Intent.EXTRA_SUBJECT, "Sakinah Zakat Summary")
+                    putExtra(Intent.EXTRA_SUBJECT, "ImanCore Zakat Summary")
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 val chooser = Intent.createChooser(shareIntent, "Export Zakat PDF Summary").apply {

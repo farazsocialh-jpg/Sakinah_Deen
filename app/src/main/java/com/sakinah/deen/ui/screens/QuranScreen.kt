@@ -40,6 +40,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -73,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.data.model.AyahModel
+import com.sakinah.deen.data.model.QuranArabicScript
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.QuranReadingLayout
 import com.sakinah.deen.ui.components.ArabicVerseBlock
@@ -102,6 +104,18 @@ fun QuranScreen(
     val vm: QuranViewModel = viewModel ?: koinViewModel()
     val state by vm.uiState.collectAsStateWithLifecycle()
     val surah = state.currentSurah
+    // The reader renders the selected Arabic script without re-querying Room.
+    val displaySurah = remember(surah, state.arabicScript) {
+        if (surah.ayahs.isEmpty()) {
+            surah
+        } else {
+            surah.copy(
+                ayahs = surah.ayahs.map { ayah ->
+                    ayah.copy(arabicText = ayah.arabicFor(state.arabicScript))
+                }
+            )
+        }
+    }
 
     var studioSheetTab by remember { mutableIntStateOf(-1) } // -1 closed; 0=Surah, 1=Translation, 2=Tafsir
     var translationQuery by remember { mutableStateOf("") }
@@ -319,7 +333,7 @@ fun QuranScreen(
                     ) {
                         QuranReadingLayoutContent(
                             layout = readingLayout,
-                            surah = surah,
+                            surah = displaySurah,
                             state = ayahUiState,
                             onAyahClick = onAyahClick,
                             onTafseer = onTafseerClick,
@@ -359,9 +373,9 @@ fun QuranScreen(
                                 }
 
                                 val accent = MaterialTheme.colorScheme.primary
-                                val mushafText = remember(surah.ayahs, selectedAyahNumber, accent) {
+                                val mushafText = remember(displaySurah.ayahs, selectedAyahNumber, accent) {
                                     buildAnnotatedString {
-                                        surah.ayahs.forEachIndexed { index, ayah ->
+                                        displaySurah.ayahs.forEachIndexed { index, ayah ->
                                             if (index > 0) append(" ")
                                             val isHighlighted = ayah.numberInSurah == selectedAyahNumber
                                             if (isHighlighted) {
@@ -412,7 +426,7 @@ fun QuranScreen(
                                     .horizontalScroll(rememberScrollState()),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                surah.ayahs.forEach { ayah ->
+                                displaySurah.ayahs.forEach { ayah ->
                                     val active = ayah.numberInSurah == selectedAyahNumber
                                     Surface(
                                         shape = RoundedCornerShape(10.dp),
@@ -578,6 +592,23 @@ fun QuranScreen(
                     }
 
                     1 -> {
+                        Text(
+                            text = "Arabic script",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        SegmentedPillBar(
+                            options = QuranArabicScript.entries.map { it.label },
+                            selectedIndex = state.arabicScript.ordinal,
+                            onSelect = { index ->
+                                vm.onIntent(
+                                    QuranUiIntent.SelectArabicScript(
+                                        QuranArabicScript.entries[index]
+                                    )
+                                )
+                            }
+                        )
                         OutlinedTextField(
                             value = translationQuery,
                             onValueChange = { translationQuery = it },
@@ -724,12 +755,28 @@ fun QuranScreen(
                             if (state.selectedTafseerContent.isBlank()) {
                                 val packId = tafseerPackIdFor(state.selectedScholar)
                                 if (state.isDownloadingTafseer) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
-                                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                        Text("Downloading tafseer pack…", fontSize = 12.sp)
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(18.dp),
+                                                strokeWidth = 2.dp
+                                            )
+                                            Text(
+                                                text = "Downloading ${state.selectedScholar} from Quran.com · " +
+                                                    "${(state.tafseerDownloadProgress * 100).toInt()}%",
+                                                fontSize = 12.sp
+                                            )
+                                        }
+                                        LinearProgressIndicator(
+                                            progress = { state.tafseerDownloadProgress },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
                                     }
                                 } else if (packId != null) {
                                     Button(

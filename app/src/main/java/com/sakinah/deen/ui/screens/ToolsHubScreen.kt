@@ -19,7 +19,6 @@ import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.AccessibilityNew
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.DownloadForOffline
-import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.MonetizationOn
@@ -178,13 +177,6 @@ fun ToolsHubScreen(
                 )
                 HubDivider()
                 HubRow(
-                    icon = Icons.Outlined.Explore,
-                    title = "Safar Travel Mode & Qibla",
-                    subtitle = "Home anchor distance, Qasr (2 rakats) & Dua al-Safar",
-                    onClick = { onNavigate(SakinahScreen.Travel) }
-                )
-                HubDivider()
-                HubRow(
                     icon = Icons.Outlined.MonetizationOn,
                     title = "Zakat & Sadaqah Jar",
                     subtitle = "Gold/Silver Nisab, PDF summary & monthly charity log",
@@ -197,7 +189,7 @@ fun ToolsHubScreen(
                 HubRow(
                     icon = Icons.Outlined.Place,
                     title = "Prayer & Location",
-                    subtitle = "Calculation method, home location, Asr school & Hijri offset",
+                    subtitle = "Calculation method, home location, Asr school, travel & car",
                     onClick = { onNavigate(SakinahScreen.SettingsPrayer) }
                 )
                 HubDivider()
@@ -228,7 +220,7 @@ fun ToolsHubScreen(
                 HubRow(
                     icon = Icons.AutoMirrored.Outlined.HelpOutline,
                     title = "Help & Feedback",
-                    subtitle = "Contact support@sakinah.app or report a bug",
+                    subtitle = "Contact support@imancore.app or report a bug",
                     onClick = { onNavigate(SakinahScreen.Help) }
                 )
                 HubDivider()
@@ -248,7 +240,7 @@ fun ToolsHubScreen(
                 HubDivider()
                 HubRow(
                     icon = Icons.Outlined.Info,
-                    title = "About Sakinah",
+                    title = "About ImanCore",
                     subtitle = "Version & build details",
                     onClick = { onNavigate(SakinahScreen.About) }
                 )

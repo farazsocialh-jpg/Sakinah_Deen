@@ -160,6 +160,14 @@ class FakeHadithDao : HadithDao {
     override suspend fun countForBook(bookKey: String, languageCode: String): Int =
         entries.keys.count { it.first == bookKey && it.second == languageCode }
 
+    override suspend fun getHadithByLanguage(
+        bookKey: String,
+        languageCode: String
+    ): List<HadithEntryEntity> =
+        entries.values
+            .filter { it.bookKey == bookKey && it.languageCode == languageCode }
+            .sortedBy { it.hadithNumber }
+
     override suspend fun upsertAll(entries: List<HadithEntryEntity>) {
         this.entries += entries.associateBy { Triple(it.bookKey, it.languageCode, it.hadithNumber) }
         writes += entries.size
@@ -206,6 +214,10 @@ class FakeTafsirDao : TafsirDao {
     override suspend fun countForSource(sourceKey: String): Int = entries.count {
         it.sourceKey == sourceKey
     }
+
+    override suspend fun countSurahsForSource(sourceKey: String): Int = entries.filter {
+        it.sourceKey == sourceKey
+    }.map { it.surahNumber }.distinct().size
 
     override suspend fun upsertAll(entries: List<TafsirEntryEntity>) {
         this.entries += entries

@@ -44,7 +44,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.sakinah.deen"
+        applicationId = "com.imancore.app"
         minSdk = 28
         targetSdk = 36
         // CI overrides these from the git tag / run number; local builds keep the defaults.

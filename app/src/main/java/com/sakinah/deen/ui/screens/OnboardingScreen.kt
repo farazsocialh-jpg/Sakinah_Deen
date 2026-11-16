@@ -78,7 +78,7 @@ fun OnboardingScreen(
         ) {
         // 1. Header Section
         Text(
-            text = "Sakinah",
+            text = "ImanCore",
             fontFamily = FontFamily.Serif,
             fontSize = 34.sp,
             fontWeight = FontWeight.Bold,

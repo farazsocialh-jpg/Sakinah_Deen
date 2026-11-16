@@ -82,6 +82,41 @@ class PersistentGoogleAccountTest {
     }
 
     @Test
+    fun linkingGoogleToLocalAccount_preservesTheExistingUserId() = runTest {
+        val repo = PersistentAuthRepository(InMemorySettings())
+
+        val local = repo.signUp("umar@sakinah.app", "secret12", "Umar").getOrThrow()
+        repo.signOut()
+
+        // The stored UserProfile is keyed by the account id, so linking must not replace it
+        // with "google:<uniqueId>" or the profile the user already filled in is orphaned.
+        val linked = repo.signInWithGoogle(
+            uniqueId = "google-unique-555",
+            email = "umar@sakinah.app",
+            displayName = "Umar Faruq",
+            givenName = "Umar",
+            familyName = "Faruq",
+            photoUrl = null
+        ).getOrThrow()
+
+        assertEquals(local.id, linked.id)
+        assertEquals("Umar Faruq", linked.displayName)
+    }
+
+    @Test
+    fun googleOnlyAccount_keepsItsOwnIdAcrossSignIns() = runTest {
+        val repo = PersistentAuthRepository(InMemorySettings())
+
+        val first = repo.signInWithGoogle("unique-777", "hamza@sakinah.app", "Hamza", null, null, null)
+            .getOrThrow()
+        repo.signOut()
+        val second = repo.signInWithGoogle("unique-777", "hamza@sakinah.app", "Hamza", null, null, null)
+            .getOrThrow()
+
+        assertEquals(first.id, second.id)
+    }
+
+    @Test
     fun signOut_runsPlatformCredentialHook() = runTest {
         var hookCalls = 0
         val repo = PersistentAuthRepository(

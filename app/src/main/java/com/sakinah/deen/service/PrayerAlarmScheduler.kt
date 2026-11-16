@@ -4,6 +4,7 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import com.sakinah.deen.MainActivity
 import com.sakinah.deen.data.model.AzaanSettings
@@ -23,6 +24,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlinx.datetime.LocalDate as KLocalDate
+import kotlinx.datetime.TimeZone as KTimeZone
 import kotlinx.datetime.toJavaLocalTime
 
 class PrayerAlarmScheduler(
@@ -51,6 +53,8 @@ class PrayerAlarmScheduler(
         private const val TEST_REQUEST_CODE = 9600
         private const val ALARM_CLOCK_SHOW_REQUEST_CODE = 9700
         private const val SNOOZE_MINUTES = 10
+        private const val KIND_SNOOZE = "snooze"
+        private const val KIND_TEST = "test"
 
         private val PRAYERS_TO_SCHEDULE = AzaanSettings.ALERT_PRAYERS
     }
@@ -81,7 +85,7 @@ class PrayerAlarmScheduler(
         val school = madhhab ?: preferences.madhhab
         val authority = authorityFor(method)
 
-        val today = JLocalDate.now()
+        val today = JLocalDate.now(activeZone())
         val todayTimes = resolvedTimes(today, coords, authority, school) ?: engineTimes(today, coords, school)
         val tomorrow = today.plusDays(1)
         val tomorrowTimes = resolvedTimes(tomorrow, coords, authority, school) ?: engineTimes(tomorrow, coords, school)
@@ -103,9 +107,11 @@ class PrayerAlarmScheduler(
         val repository = prayerTimes ?: return scheduleAllDailyAlarms(coordinates)
         val coords = coordinates ?: preferences.locationCoordinates ?: return
         val school = preferences.madhhab
-        val zone = ZoneId.systemDefault()
+        // The saved location's zone, not the device's: a manual city in another timezone must
+        // still trigger at its own local prayer time.
+        val zone = activeZone()
 
-        val today = JLocalDate.now()
+        val today = JLocalDate.now(zone)
         val tomorrow = today.plusDays(1)
 
         val todayTimes = runCatching {
@@ -131,7 +137,7 @@ class PrayerAlarmScheduler(
         val settings = preferences.azaanSettings
         if (!settings.enabled) return
 
-        val zone = ZoneId.systemDefault()
+        val zone = activeZone()
         val nowZoned = ZonedDateTime.now(zone)
         val todayJ = nowZoned.toLocalDate()
         val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a")
@@ -199,9 +205,13 @@ class PrayerAlarmScheduler(
             coordinates = coordinates,
             date = KLocalDate.parse(date.toString()),
             method = method,
-            madhhab = school
+            madhhab = school,
+            timeZone = KTimeZone.of(activeZone().id)
         ).mapValues { (_, time) -> time.toJavaLocalTime() }
     }
+
+    /** Timezone in which the saved prayer location's timings are expressed. */
+    private fun activeZone(): ZoneId = AzaanScheduling.activeZoneId(preferences)
 
     fun scheduleSingleAlarm(
         prayerType: PrayerType,
@@ -277,13 +287,13 @@ class PrayerAlarmScheduler(
     fun cancelAllAlarms() {
         val am = alarmManager ?: return
         for (prayer in PrayerType.entries) {
-            val intent = Intent(context, PrayerAlarmReceiver::class.java).apply {
-                action = ACTION_PRAYER_ALARM
-            }
+            val requestCode = BASE_REQUEST_CODE + prayer.ordinal
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
-                BASE_REQUEST_CODE + prayer.ordinal,
-                intent,
+                requestCode,
+                // The data URI is part of PendingIntent identity, so cancellation must
+                // rebuild exactly the same intent or the alarm would leak.
+                alarmIntent(requestCode, prayer.name),
                 PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
             )
             if (pendingIntent != null) {
@@ -292,22 +302,33 @@ class PrayerAlarmScheduler(
             }
         }
         // Snooze and test alarms also need to be cleared.
-        listOf(SNOOZE_REQUEST_CODE, TEST_REQUEST_CODE).forEach { requestCode ->
-            val intent = Intent(context, PrayerAlarmReceiver::class.java).apply {
-                action = ACTION_PRAYER_ALARM
-            }
-            val pendingIntent = PendingIntent.getBroadcast(
-                context,
-                requestCode,
-                intent,
-                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-            )
-            if (pendingIntent != null) {
-                am.cancel(pendingIntent)
-                pendingIntent.cancel()
-            }
+        cancelByRequestCode(SNOOZE_REQUEST_CODE, KIND_SNOOZE)
+        cancelByRequestCode(TEST_REQUEST_CODE, KIND_TEST)
+    }
+
+    private fun cancelByRequestCode(requestCode: Int, kind: String) {
+        val am = alarmManager ?: return
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            alarmIntent(requestCode, kind),
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        )
+        if (pendingIntent != null) {
+            am.cancel(pendingIntent)
+            pendingIntent.cancel()
         }
     }
+
+    /**
+     * Unique data URI per alarm. Together with the request code this guarantees AlarmManager
+     * never merges two prayers' PendingIntents (which mixed extras and fired wrong alerts).
+     */
+    private fun alarmIntent(requestCode: Int, kind: String): Intent =
+        Intent(context, PrayerAlarmReceiver::class.java).apply {
+            action = ACTION_PRAYER_ALARM
+            data = Uri.parse("sakinah://prayer_alarm/$requestCode/$kind")
+        }
 
     private fun buildPrayerPendingIntent(
         requestCode: Int,
@@ -320,8 +341,12 @@ class PrayerAlarmScheduler(
         muezzin: Muezzin,
         isTest: Boolean = false
     ): PendingIntent {
-        val intent = Intent(context, PrayerAlarmReceiver::class.java).apply {
-            action = ACTION_PRAYER_ALARM
+        val kind = when {
+            isTest -> KIND_TEST
+            isSnooze -> KIND_SNOOZE
+            else -> prayerType.name
+        }
+        val intent = alarmIntent(requestCode, kind).apply {
             putExtra(EXTRA_PRAYER_NAME, prayerName)
             putExtra(EXTRA_PRAYER_TYPE, prayerType.name)
             putExtra(EXTRA_PRAYER_TIME_FORMATTED, timeFormatted)

@@ -230,9 +230,12 @@ class PersistentAuthRepository(
             )
         }
 
-        val id = if (cleanUniqueId.isNotBlank()) "google:$cleanUniqueId" else "google:$cleanEmail"
-        val accountKey = cleanEmail.ifBlank { id }
+        val accountKey = cleanEmail.ifBlank { "google:$cleanUniqueId" }
         val existing = accounts[accountKey]
+        // Linking Google onto an existing local/Google account must keep that account's id:
+        // the stored UserProfile is keyed by it, so a new id would orphan the profile.
+        val id = existing?.id
+            ?: if (cleanUniqueId.isNotBlank()) "google:$cleanUniqueId" else "google:$cleanEmail"
         val resolvedName = displayName.trim().ifBlank {
             listOfNotNull(givenName?.trim(), familyName?.trim())
                 .filter { it.isNotBlank() }

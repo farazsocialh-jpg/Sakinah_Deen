@@ -14,6 +14,7 @@ import com.sakinah.deen.data.database.entity.SurahMetadataEntity
 import com.sakinah.deen.data.database.entity.TafsirEntryEntity
 import com.sakinah.deen.network.model.ChapterAudioResponse
 import com.sakinah.deen.network.model.ChaptersResponse
+import com.sakinah.deen.network.model.TafsirChapterResponse
 import com.sakinah.deen.network.model.TafsirResponse
 import com.sakinah.deen.network.model.TranslationsResponse
 import com.sakinah.deen.network.model.UthmaniVersesResponse
@@ -78,13 +79,14 @@ class IslamicDataRepository(
         const val DEFAULT_TRANSLATION_ID = 20
         const val DEFAULT_RECITER_ID = 7 // Mishari Rashid al-`Afasy
         const val IBN_KATHIR_TAFSIR_ID = 169
+        private const val TAFSIR_UPSERT_CHUNK = 50
 
         val SUPPORTED_HADITH_BOOKS = listOf(
             "bukhari", "muslim", "nawawi", "abudawud",
             "tirmidhi", "nasai", "ibnmajah", "malik"
         )
 
-        private const val USER_AGENT = "Sakinah-Android/1.0 (offline-first Islamic companion)"
+        private const val USER_AGENT = "ImanCore-Android/1.0 (offline-first Islamic companion)"
         private val HTML_TAG = Regex("<[^>]+>")
         private val WHITESPACE = Regex("\\s+")
 
@@ -370,6 +372,8 @@ class IslamicDataRepository(
                 ayahNumber = ayahNumber,
                 verseKey = verse.verseKey.ifBlank { "$surahNumber:$ayahNumber" },
                 textUthmani = verse.textUthmani,
+                textIndopak = verse.textIndopak,
+                textImlaei = verse.textImlaei,
                 translation = translationByAyah[ayahNumber],
                 audioUrl = audioUrl,
                 surahNameEnglish = chapter?.nameSimple,
@@ -403,7 +407,7 @@ class IslamicDataRepository(
         return json.decodeFromString<VerseByChapterResponse>(
             fetch(
                 "$QURAN_API_BASE/verses/by_chapter/$surahNumber" +
-                    "?fields=text_uthmani&per_page=300$translationQuery"
+                    "?fields=text_uthmani,text_indopak,text_imlaei&per_page=300$translationQuery"
             )
         ).verses
     }
@@ -541,28 +545,21 @@ class IslamicDataRepository(
         bookKey: String,
         languageCode: String = "eng",
         onProgress: (Float) -> Unit = {}
-    ): Result<Int> = runCatching {
+    ): Result<Int> = try {
         onProgress(0.05f)
 
-        val primaryBody = withContext(Dispatchers.IO) {
-            fetchHadithEdition(languageCode, bookKey)
-        }
-        onProgress(0.45f)
-
+        // Arabic is resolved (from Room when already cached) and released before the target
+        // edition is downloaded. This version never holds two raw bodies or two parsed DOMs
+        // at the same time, which is what exhausted the heap on large collections.
         val arabicEdition = if (languageCode == "ara") {
             ArabicEditionIndex()
         } else {
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    parseArabicTexts(fetchHadithEdition("ara", bookKey))
-                }
-            }.getOrDefault(ArabicEditionIndex())
+            cachedArabicIndex(bookKey) ?: downloadArabicIndex(bookKey)
         }
-        onProgress(0.70f)
+        onProgress(0.50f)
 
-        // Parsing multi-megabyte Urdu/Bengali editions must never run on the main thread.
-        val entries = withContext(Dispatchers.Default) {
-            parseHadithEdition(primaryBody, bookKey, languageCode, arabicEdition)
+        val entries = withContext(Dispatchers.IO) {
+            downloadEdition(bookKey, languageCode, arabicEdition)
         }
         if (entries.isEmpty()) error("No hadith parsed for $bookKey")
 
@@ -570,7 +567,50 @@ class IslamicDataRepository(
             hadithDao.replaceBook(bookKey, languageCode, entries)
         }
         onProgress(1f)
-        entries.size
+        Result.success(entries.size)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (t: Throwable) {
+        // An OutOfMemoryError (or any other fatal) from a huge edition must surface as an
+        // error banner in the UI instead of killing the process.
+        Result.failure(t)
+    }
+
+    /**
+     * Downloads and parses one edition. The raw JSON lives only inside this function so it
+     * becomes collectible as soon as the parsed rows are handed back.
+     */
+    private suspend fun downloadEdition(
+        bookKey: String,
+        languageCode: String,
+        arabicEdition: ArabicEditionIndex
+    ): List<HadithEntryEntity> {
+        val body = withContext(Dispatchers.IO) { fetchHadithEdition(languageCode, bookKey) }
+        return withContext(Dispatchers.Default) {
+            parseHadithEdition(body, bookKey, languageCode, arabicEdition)
+        }
+    }
+
+    private suspend fun downloadArabicIndex(bookKey: String): ArabicEditionIndex {
+        val body = runCatching {
+            withContext(Dispatchers.IO) { fetchHadithEdition("ara", bookKey) }
+        }.getOrNull() ?: return ArabicEditionIndex()
+        return withContext(Dispatchers.Default) { parseArabicTexts(body) }
+    }
+
+    /**
+     * Reuses Arabic text this collection already stores instead of re-downloading the
+     * `ara` edition. Only the number index is needed: the parser falls back to it.
+     */
+    private suspend fun cachedArabicIndex(bookKey: String): ArabicEditionIndex? {
+        val rows = runCatching { hadithDao.getHadithByLanguage(bookKey, "ara") }.getOrNull()
+            ?: return null
+        if (rows.isEmpty()) return null
+        val byNumber = HashMap<Int, String>(rows.size)
+        rows.forEach { row ->
+            if (row.arabicText.isNotBlank()) byNumber[row.hadithNumber] = row.arabicText
+        }
+        return if (byNumber.isEmpty()) null else ArabicEditionIndex(byNumber = byNumber)
     }
 
     fun observeHadiths(
@@ -736,6 +776,51 @@ class IslamicDataRepository(
             tafsirDao.upsertAll(collected)
         }
         collected.size
+    }
+
+    /**
+     * Downloads one whole chapter of commentary in a single Quran.com v4 request. Large
+     * chapters are inserted in chunks so the parsed list and the Room rows are never all
+     * held at once beyond a small window.
+     */
+    suspend fun syncTafsirForChapter(
+        tafsirId: Int,
+        surahNumber: Int,
+        languageCode: String = "en"
+    ): Result<Int> = runCatching {
+        require(surahNumber in 1..114) { "Surah number must be between 1 and 114" }
+        val response = json.decodeFromString<TafsirChapterResponse>(
+            fetch("$QURAN_API_BASE/tafsirs/$tafsirId/by_chapter/$surahNumber")
+        )
+        val sourceName = response.tafsirs.firstOrNull { it.resourceName.isNotBlank() }
+            ?.resourceName
+            ?: "Tafsir $tafsirId"
+        val sourceKey = "tafsir_$tafsirId"
+        var saved = 0
+
+        response.tafsirs.chunked(TAFSIR_UPSERT_CHUNK).forEach { chunk ->
+            val entities = chunk.mapNotNull { dto ->
+                val ayahNumber = dto.verseKey.substringAfter(':', "").toIntOrNull()
+                    ?: return@mapNotNull null
+                val text = cleanText(dto.text)
+                if (text.isBlank()) return@mapNotNull null
+                TafsirEntryEntity(
+                    sourceKey = sourceKey,
+                    sourceName = sourceName,
+                    surahNumber = surahNumber,
+                    ayahNumber = ayahNumber,
+                    languageCode = languageCode,
+                    text = text
+                )
+            }
+            if (entities.isNotEmpty()) {
+                tafsirDao.upsertAll(entities)
+                saved += entities.size
+            }
+        }
+
+        if (saved == 0) error("Quran.com returned no tafsir for Surah $surahNumber")
+        saved
     }
 
     suspend fun getTafsir(

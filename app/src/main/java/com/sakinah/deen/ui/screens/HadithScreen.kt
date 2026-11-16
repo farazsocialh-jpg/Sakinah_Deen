@@ -108,7 +108,7 @@ fun HadithScreen(
             if (hadith.sanad.isNotBlank()) appendLine(hadith.sanad)
             if (hadith.arabicText.isNotBlank()) appendLine(hadith.arabicText)
             if (hadith.matnTranslation.isNotBlank()) appendLine(hadith.matnTranslation)
-            append("Shared from Sakinah")
+            append("Shared from ImanCore")
         }
         val sendIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"

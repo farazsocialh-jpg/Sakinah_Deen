@@ -1,6 +1,6 @@
 # Release signing & Play-ready builds
 
-Sakinah builds a signed **AAB** (Android App Bundle) in CI from repository secrets.
+ImanCore builds a signed **AAB** (Android App Bundle) in CI from repository secrets.
 No keystore, password, or key is ever committed to this repository.
 
 ## 1. Create the upload keystore (once)
@@ -124,7 +124,7 @@ no Firebase project or billing is involved. Two OAuth clients are configured onc
 [Google Cloud Console](https://console.cloud.google.com/apis/credentials):
 
 1. **Android client** — *Create credentials → OAuth client ID → Android*.
-   - Package name: `com.sakinah.deen`
+   - Package name: `com.imancore.app` (the Gradle `namespace` stays `com.sakinah.deen`)
    - SHA-1: the fingerprint of the keystore that signs the build
      (`keytool -list -v -keystore <your.jks> -alias <alias>`). Add one entry per key
      (debug, upload, Play App Signing).

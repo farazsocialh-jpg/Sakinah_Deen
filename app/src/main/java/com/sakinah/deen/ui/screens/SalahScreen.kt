@@ -282,20 +282,45 @@ fun SalahScreen(
                             }
                         }
 
-                        if (salahHomeLayout == SalahHomeLayout.TIMELINE_STRIP) {
-                            TimelineStrip(
-                                prayers = state.prayersList,
-                                currentPrayerName = state.currentPrayerName
-                            )
-                        }
-
-                        SalahHomeHero(
-                            layout = salahHomeLayout,
-                            state = state,
-                            onToggleCurrent = {
-                                viewModel?.onIntent(SalahUiIntent.ToggleCurrentPrayerCompleted)
+                        if (state.isLocationPending) {
+                            // Never show another city's solar times against the device clock:
+                            // stay pending until a saved location or a GPS fix exists.
+                            SakinahCard(contentPadding = 16.dp) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        text = "Locating your position…",
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = "Prayer times need your location. Enable location " +
+                                            "or pick a city to get exact local timings.",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    OutlinedButton(onClick = { showManualCityDialog = true }) {
+                                        Text("Choose city")
+                                    }
+                                }
                             }
-                        )
+                        } else {
+                            if (salahHomeLayout == SalahHomeLayout.TIMELINE_STRIP) {
+                                TimelineStrip(
+                                    prayers = state.prayersList,
+                                    currentPrayerName = state.currentPrayerName
+                                )
+                            }
+
+                            SalahHomeHero(
+                                layout = salahHomeLayout,
+                                state = state,
+                                onToggleCurrent = {
+                                    viewModel?.onIntent(SalahUiIntent.ToggleCurrentPrayerCompleted)
+                                }
+                            )
+
+                            TahajjudCard(state)
+                        }
                     }
 
                     SalahTabBar(
@@ -740,7 +765,7 @@ fun SalahScreen(
                 title = { Text("Location permission needed") },
                 text = {
                     Text(
-                        "Device GPS is blocked. Enable Location for Sakinah Deen in Android Settings, " +
+                        "Device GPS is blocked. Enable Location for ImanCore in Android Settings, " +
                             "then tap Use Device GPS again."
                     )
                 },
@@ -886,4 +911,50 @@ internal fun prayerTypeOf(prayer: PrayerModel): PrayerType? = when (prayer.id.lo
     "maghrib" -> PrayerType.MAGHRIB
     "isha" -> PrayerType.ISHA
     else -> null
+}
+
+/**
+ * Tahajjud window: the last third of the night, from Maghrib + 2/3 of the night until Fajr.
+ * Shown on the home screen instead of being buried in a subtitle so the time is easy to find.
+ */
+@Composable
+private fun TahajjudCard(state: SalahUiState) {
+    if (state.tahajjudStartTimeFormatted.isBlank() || state.tahajjudEndTimeFormatted.isBlank()) {
+        return
+    }
+    SakinahCard(contentPadding = 14.dp) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Schedule,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Tahajjud · Last Third of the Night",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "${state.tahajjudStartTimeFormatted} — ${state.tahajjudEndTimeFormatted}",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            if (state.tahajjudDurationText.isNotBlank()) {
+                Text(
+                    text = state.tahajjudDurationText,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
 }

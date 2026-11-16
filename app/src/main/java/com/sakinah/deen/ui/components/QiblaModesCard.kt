@@ -278,7 +278,7 @@ private fun QiblaMapView(latitude: Double, longitude: Double, qiblaBearing: Floa
                             // OpenStreetMap tile servers reject requests without a real UA.
                             settings.userAgentString = System.getProperty("http.agent")
                                 ?.takeIf { it.isNotBlank() }
-                                ?: "Mozilla/5.0 (Linux; Android ${android.os.Build.VERSION.RELEASE}) SakinahQibla/1.0"
+                                ?: "Mozilla/5.0 (Linux; Android ${android.os.Build.VERSION.RELEASE}) ImanCoreQibla/1.0"
                             setBackgroundColor(android.graphics.Color.TRANSPARENT)
                             webViewClient = object : WebViewClient() {
                                 override fun onReceivedError(

@@ -68,7 +68,7 @@ class NisabRateRepositoryImpl(
 ) : NisabRateRepository {
 
     companion object {
-        private const val USER_AGENT = "Sakinah-Android/1.0 (offline-first Islamic companion)"
+        private const val USER_AGENT = "ImanCore-Android/1.0 (offline-first Islamic companion)"
         private val GOLD_KEYS = listOf("gold", "goldPerGram", "goldPricePerGram")
         private val SILVER_KEYS = listOf("silver", "silverPerGram", "silverPricePerGram")
         private val TIMESTAMP_KEYS = listOf("updatedAt", "timestamp", "lastUpdated")

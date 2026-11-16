@@ -184,7 +184,7 @@ fun PersonalizedOnboardingScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Sakinah",
+                            text = "ImanCore",
                             fontFamily = FontFamily.Serif,
                             fontSize = 28.sp,
                             fontWeight = FontWeight.Bold,
@@ -240,7 +240,7 @@ fun PersonalizedOnboardingScreen(
                                 color = MaterialTheme.colorScheme.onBackground
                             )
                             Text(
-                                text = "Tell us a little about your journey so Sakinah can tailor your daily experience.",
+                                text = "Tell us a little about your journey so ImanCore can tailor your daily experience.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -365,7 +365,7 @@ fun PersonalizedOnboardingScreen(
                                 color = MaterialTheme.colorScheme.onBackground
                             )
                             Text(
-                                text = "We will open Sakinah directly to the space that serves you most.",
+                                text = "We will open ImanCore directly to the space that serves you most.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -696,7 +696,7 @@ fun PersonalizedOnboardingScreen(
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Text(
-                        text = if (step < totalSteps - 1) "Continue" else "Enter Sakinah",
+                        text = if (step < totalSteps - 1) "Continue" else "Enter ImanCore",
                         fontWeight = FontWeight.Bold
                     )
                 }

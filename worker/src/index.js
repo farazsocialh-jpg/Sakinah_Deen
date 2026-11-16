@@ -1,5 +1,6 @@
 /**
- * Sakinah AI Scholar proxy (Cloudflare Worker).
+ * ImanCore AI Scholar proxy (Cloudflare Worker).
+ * The deployed route/name stays sakinah-ai-proxy so existing app builds keep working.
  *
  * The Android/iOS apps POST a Gemini-shaped request body here and read the SSE stream back.
  * The upstream provider credential lives only in this Worker's environment

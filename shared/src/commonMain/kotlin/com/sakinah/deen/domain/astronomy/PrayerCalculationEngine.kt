@@ -32,4 +32,13 @@ interface PrayerCalculationEngine {
         prayerTimes: Map<PrayerType, LocalTime>,
         currentTime: LocalTime
     ): PrayerCountdownInfo
+
+    /**
+     * Start of the last third of the night — the Tahajjud window — between this evening's
+     * Maghrib and the following day's Fajr: `maghrib + 2/3 * (nextFajr - maghrib)`.
+     *
+     * Handles the midnight wrap, so an Isha/Maghrib near 20:00 with Fajr near 04:30
+     * resolves to roughly 01:50 rather than a negative time.
+     */
+    fun lastThirdOfNight(maghrib: LocalTime, nextFajr: LocalTime): LocalTime
 }

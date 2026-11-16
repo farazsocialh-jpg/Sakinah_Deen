@@ -330,7 +330,7 @@ fun RootNavHost(
     val toolsLabel = stringResource(R.string.nav_tools)
 
     val topBarTitle = when (currentScreen) {
-        SakinahScreen.DailySalah -> "Sakinah"
+        SakinahScreen.DailySalah -> "ImanCore"
         SakinahScreen.Quran -> quranLabel
         SakinahScreen.Hadith -> hadithLabel
         SakinahScreen.AiScholar -> "Islamic AI Scholar"
@@ -348,9 +348,9 @@ fun RootNavHost(
         SakinahScreen.DataSources -> "Islamic Data Sources"
         SakinahScreen.Help -> "Help & Feedback"
         SakinahScreen.Privacy -> "Privacy & Terms"
-        SakinahScreen.About -> "About Sakinah"
+        SakinahScreen.About -> "About ImanCore"
         SakinahScreen.NotificationSettings -> "Azaan & Notifications"
-        SakinahScreen.Onboarding -> "Welcome to Sakinah"
+        SakinahScreen.Onboarding -> "Welcome to ImanCore"
     }
 
     val showsRootTopBar = currentScreen != SakinahScreen.Onboarding &&

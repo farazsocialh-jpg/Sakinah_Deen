@@ -90,7 +90,18 @@ data class SalahUiState(
     /** Whether a Home location has been saved (drives the "Set Home Location" prompt). */
     val hasHomeLocation: Boolean = false,
     /** Drives the pull-to-refresh indicator; cleared when a refresh attempt finishes. */
-    val isRefreshing: Boolean = false
+    val isRefreshing: Boolean = false,
+    /**
+     * True until a saved or freshly resolved location exists. Prevents showing Makkah's
+     * solar times against the device timezone on a cold start.
+     */
+    val isLocationPending: Boolean = false,
+    /** Start of the last third of the night (Tahajjud); empty when not computed yet. */
+    val tahajjudStartTimeFormatted: String = "",
+    /** Tahajjud lasts until the next Fajr. */
+    val tahajjudEndTimeFormatted: String = "",
+    /** Length of the Tahajjud window, e.g. "2h 45m". */
+    val tahajjudDurationText: String = ""
 )
 
 sealed class SalahUiIntent {
@@ -141,6 +152,9 @@ class SalahViewModel(
     /** Guards against a slow online resolution overwriting a newer one. */
     private var scheduleRequest = 0
 
+    /** True once the saved location or a GPS/network fix gives real coordinates. */
+    private var hasUsableCoordinates = preferences?.locationCoordinates != null
+
     private var salahObserverJob: Job? = null
     private var observedEpochDay: Long? = null
     private var completedRecordsByPrayer: Map<PrayerType, SalahRecordEntity> = emptyMap()
@@ -173,7 +187,8 @@ class SalahViewModel(
                 userCoordinates = savedCoords ?: it.userCoordinates,
                 locationName = if (savedCoords != null) preferences?.locationLabel ?: it.locationName else it.locationName,
                 timeZoneId = savedZone,
-                timeZoneAbbr = TimeZoneResolver.shortAbbreviation(savedZone)
+                timeZoneAbbr = TimeZoneResolver.shortAbbreviation(savedZone),
+                isLocationPending = !hasUsableCoordinates
             )
         }
 
@@ -385,6 +400,8 @@ class SalahViewModel(
         observeTodaySalahRecords(currentLocationLocalDate(zoneNow).toEpochDay())
 
         if (locationProvider == null) {
+            hasUsableCoordinates = true
+            _uiState.update { it.copy(isLocationPending = false) }
             loadDailySchedule()
             return
         }
@@ -400,9 +417,10 @@ class SalahViewModel(
         viewModelScope.launch {
             val resolved = runCatching { locationProvider.getFreshOrCachedLocation() }.getOrNull()
             if (resolved == null) {
-                // Resolution failed outright: keep the current schedule and stop refreshing.
+                // Resolution failed outright. Without any real coordinates, stay in the
+                // pending state instead of rendering Makkah times in the device timezone.
                 _uiState.update { it.copy(isRefreshing = false) }
-                loadDailySchedule()
+                if (hasUsableCoordinates) loadDailySchedule()
                 return@launch
             }
             // Guard against overwriting if user switched to manual city while GPS resolved.
@@ -428,9 +446,11 @@ class SalahViewModel(
                 countryCode = countryCode,
                 timeZoneId = resolvedZone
             )
+            hasUsableCoordinates = true
             _uiState.update {
                 it.copy(
                     userCoordinates = Pair(resolved.latitude, resolved.longitude),
+                    isLocationPending = false,
                     locationName = resolvedLabel,
                     timeZoneId = resolvedZone,
                     timeZoneAbbr = TimeZoneResolver.shortAbbreviation(resolvedZone),
@@ -470,11 +490,7 @@ class SalahViewModel(
                 if (times.isNotEmpty()) {
                     val zone = locationKTimeZone(state.timeZoneId)
                     val now = Clock.System.now().toLocalDateTime(zone)
-                    val countdown = withoutSunriseAsNext(
-                        astronomyEngine.calculateCountdown(times, now.time),
-                        times,
-                        now.time
-                    )
+                    val countdown = astronomyEngine.calculateCountdown(times, now.time)
                     val currentStart = times[countdown.currentPrayer]
                     val nextStart = times[countdown.nextPrayer]
                     val remainingMillis = (countdown.remainingMinutes * 60L + countdown.remainingSeconds) * 1000L
@@ -573,11 +589,10 @@ class SalahViewModel(
         val coords = state.userCoordinates
 
         val nowTime = Clock.System.now().toLocalDateTime(userZone).time
-        val countdown: PrayerCountdownInfo = withoutSunriseAsNext(
-            astronomyEngine.calculateCountdown(times, nowTime),
-            times,
-            nowTime
-        )
+        // Fajr ends at Shuruq: the engine reports Sunrise between sunrise and Dhuhr, which is
+        // accurate — rewriting it to Fajr->Dhuhr claimed Fajr was still active after sunrise.
+        val countdown: PrayerCountdownInfo = astronomyEngine.calculateCountdown(times, nowTime)
+        val tahajjud = tahajjudWindow(times, state)
         val travel = travelManager.evaluateTravelState(coords)
 
         val manualTravelMode = preferences?.travelModeActive == true
@@ -611,41 +626,46 @@ class SalahViewModel(
                 sourceLabel = sourceLabel,
                 authorityName = authorityName ?: it.authorityName,
                 timeZoneAbbr = TimeZoneResolver.shortAbbreviation(it.timeZoneId),
-                isRefreshing = false
+                isRefreshing = false,
+                tahajjudStartTimeFormatted = formatPrayerTime(tahajjud?.first),
+                tahajjudEndTimeFormatted = formatPrayerTime(tahajjud?.second),
+                tahajjudDurationText = tahajjud?.let { (start, end) ->
+                    formatNightDuration(start, end)
+                }.orEmpty()
             )
         }
     }
 
     /**
-     * Sunrise is not a prayer, so it can never be the hero banner's "next prayer" target (or
-     * the Visual Guide shortcut). Between Fajr and Dhuhr the countdown runs to Dhuhr instead.
+     * Tahajjud window for today: last third of the night after Maghrib, ending at the next
+     * day's Fajr. Returns null until both are known.
      */
-    private fun withoutSunriseAsNext(
-        countdown: PrayerCountdownInfo,
+    private fun tahajjudWindow(
         times: Map<PrayerType, KLocalTime>,
-        now: KLocalTime
-    ): PrayerCountdownInfo {
-        if (countdown.nextPrayer != PrayerType.SUNRISE && countdown.currentPrayer != PrayerType.SUNRISE) {
-            return countdown
-        }
-        val fajr = times[PrayerType.FAJR] ?: return countdown
-        val dhuhr = times[PrayerType.DHUHR] ?: return countdown
+        state: SalahUiState
+    ): Pair<KLocalTime, KLocalTime>? {
+        val maghrib = times[PrayerType.MAGHRIB] ?: return null
+        val nextFajr = runCatching {
+            val tomorrow = currentLocationLocalDate(state.timeZoneId).plusDays(1)
+            astronomyEngine.getPrayerTimes(
+                coordinates = state.userCoordinates,
+                date = KLocalDate.parse(tomorrow.toString()),
+                method = state.calculationMethod,
+                madhhab = state.madhhab,
+                timeZone = locationKTimeZone(state.timeZoneId),
+                adjustments = state.adjustments
+            )[PrayerType.FAJR]
+        }.getOrNull() ?: return null
+        return astronomyEngine.lastThirdOfNight(maghrib, nextFajr) to nextFajr
+    }
 
-        val startSec = fajr.toSecondOfDay().toLong()
-        val endSec = dhuhr.toSecondOfDay().toLong()
-        val nowSec = now.toSecondOfDay().toLong()
-        var window = endSec - startSec
-        if (window <= 0L) window += SECONDS_PER_DAY
-        var remaining = endSec - nowSec
-        if (remaining < 0L) remaining += SECONDS_PER_DAY
-        val elapsed = (window - remaining).coerceIn(0L, window)
-        return PrayerCountdownInfo(
-            currentPrayer = PrayerType.FAJR,
-            nextPrayer = PrayerType.DHUHR,
-            remainingMinutes = remaining / 60L,
-            remainingSeconds = remaining % 60L,
-            elapsedRatio = (elapsed.toFloat() / window.toFloat()).coerceIn(0f, 1f)
-        )
+    /** "2h 45m" for the length of the night window between two local times. */
+    private fun formatNightDuration(start: KLocalTime, end: KLocalTime): String {
+        var seconds = end.toSecondOfDay().toLong() - start.toSecondOfDay().toLong()
+        if (seconds <= 0L) seconds += SECONDS_PER_DAY
+        val hours = seconds / 3600L
+        val minutes = (seconds % 3600L) / 60L
+        return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
     }
 
     private fun buildPrayerModels(

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">سکینہ</string>
+    <string name="app_name">ImanCore</string>
 
     <string name="nav_salah">نماز</string>
     <string name="nav_quran">قرآن</string>

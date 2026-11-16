@@ -299,6 +299,10 @@ interface HadithDao {
     @Query("SELECT COUNT(*) FROM hadith_entries WHERE bookKey = :bookKey AND languageCode = :languageCode")
     suspend fun countForBook(bookKey: String, languageCode: String = "eng"): Int
 
+    /** Rows of one edition, used to reuse cached Arabic instead of re-downloading it. */
+    @Query("SELECT * FROM hadith_entries WHERE bookKey = :bookKey AND languageCode = :languageCode")
+    suspend fun getHadithByLanguage(bookKey: String, languageCode: String = "ara"): List<HadithEntryEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(entries: List<HadithEntryEntity>)
 
@@ -378,6 +382,10 @@ interface TafsirDao {
 
     @Query("SELECT COUNT(*) FROM tafsir_entries WHERE sourceKey = :sourceKey")
     suspend fun countForSource(sourceKey: String): Int
+
+    /** Number of chapters with at least one cached commentary row for an edition. */
+    @Query("SELECT COUNT(DISTINCT surahNumber) FROM tafsir_entries WHERE sourceKey = :sourceKey")
+    suspend fun countSurahsForSource(sourceKey: String): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(entries: List<TafsirEntryEntity>)

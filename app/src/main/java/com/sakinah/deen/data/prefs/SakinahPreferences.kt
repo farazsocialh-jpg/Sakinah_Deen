@@ -8,6 +8,7 @@ import com.sakinah.deen.data.model.Madhhab
 import com.sakinah.deen.data.model.Muezzin
 import com.sakinah.deen.data.model.PrayerAlertMode
 import com.sakinah.deen.data.model.PrayerType
+import com.sakinah.deen.data.model.QuranArabicScript
 import com.sakinah.deen.data.model.QuranTranslationResource
 import com.sakinah.deen.network.IslamicDataRepository
 import com.sakinah.deen.domain.travel.HomeAnchorStore
@@ -61,6 +62,7 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         private const val KEY_QURAN_TRANSLATION_LANGUAGE = "quran_translation_language"
         private const val KEY_QURAN_TRANSLATION_EDITION_KEY = "quran_translation_edition_key"
         private const val KEY_QURAN_TRANSLATION_SOURCE = "quran_translation_source"
+        private const val KEY_QURAN_ARABIC_SCRIPT = "quran_arabic_script"
         private const val KEY_HADITH_LANGUAGE = "hadith_language_code"
         private const val KEY_BOOKMARKED_HADITH_IDS = "bookmarked_hadith_ids"
         private const val KEY_HADITH_BOOKMARKS_INITIALIZED = "hadith_bookmarks_initialized"
@@ -237,6 +239,11 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
             QuranTranslationResource.SOURCE_QURAN_COM
         ) ?: QuranTranslationResource.SOURCE_QURAN_COM
         set(value) = prefs.edit().putString(KEY_QURAN_TRANSLATION_SOURCE, value).apply()
+
+    /** Selected Arabic script edition for the Quran reader. */
+    var quranArabicScript: QuranArabicScript
+        get() = QuranArabicScript.fromKey(prefs.getString(KEY_QURAN_ARABIC_SCRIPT, null))
+        set(value) = prefs.edit().putString(KEY_QURAN_ARABIC_SCRIPT, value.name).apply()
 
     /**
      * Background Azaan scheduling is on after onboarding (or whenever a location has already

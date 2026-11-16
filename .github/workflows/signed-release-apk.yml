@@ -93,7 +93,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           # The SHA-1 of this certificate is the value to register in the Google Cloud Console
-          # "Android OAuth client" (package com.sakinah.deen) for Credential Manager sign-in.
+          # "Android OAuth client" (package com.imancore.app) for Credential Manager sign-in.
           # Fingerprints are public certificate metadata, never secret material.
           keytool -list -v \
             -keystore "$RUNNER_TEMP/sakinah_release.jks" \

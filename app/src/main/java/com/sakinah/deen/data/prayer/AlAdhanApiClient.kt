@@ -63,7 +63,7 @@ class AlAdhanApiClient(
 
     companion object {
         const val DEFAULT_BASE_URL = "https://api.aladhan.com"
-        private const val USER_AGENT = "Sakinah-Android/1.0 (offline-first Islamic companion)"
+        private const val USER_AGENT = "ImanCore-Android/1.0 (offline-first Islamic companion)"
         private val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy")
         private val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
         private val TIME_PATTERN = Regex("""\d{2}:\d{2}""")

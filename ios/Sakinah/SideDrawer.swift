@@ -30,7 +30,7 @@ struct SideDrawer: View {
                     drawerItem("Islamic Data Sources", systemImage: "books.vertical") { open(.sources) }
                     drawerItem("Help, Feedback & Bug Report", systemImage: "questionmark.circle") { open(.help) }
                     drawerItem("Privacy & Terms", systemImage: "hand.raised") { open(.privacy) }
-                    drawerItem("About Sakinah", systemImage: "info.circle") { open(.about) }
+                    drawerItem("About ImanCore", systemImage: "info.circle") { open(.about) }
 
                     if store.isSignedIn {
                         Divider().padding(.vertical, 8)
@@ -55,10 +55,10 @@ struct SideDrawer: View {
                     case .sources: InfoView(title: "Islamic Data Sources & Attribution",
                                             body: "Quran text: Tanzil / King Fahd Complex. Tafsir: Ibn Kathir, As-Sa'di, Al-Jalalayn. Hadith: nine canonical collections. Audio: Makkah adhan recordings.")
                     case .help: InfoView(title: "Help, Feedback & Bug Report",
-                                         body: "Send feedback to support@sakinah.app and include your app version and device model.")
+                                         body: "Send feedback to support@imancore.app and include your app version and device model.")
                     case .privacy: InfoView(title: "Privacy Policy & Terms",
                                             body: "Guest data stays on device. Signed-in profiles sync only what you choose to share.")
-                    case .about: InfoView(title: "About Sakinah",
+                    case .about: InfoView(title: "About ImanCore",
                                           body: "Version 1.0.0 (1)\nOpen-source licenses: see NOTICE in the repository.")
                     }
                 }
@@ -78,7 +78,7 @@ struct SideDrawer: View {
                     .fill(Color.emeraldSurface)
                     .frame(width: 56, height: 56)
                     .overlay(Text(String(store.displayName.prefix(1))).font(.title2.bold()).foregroundColor(.white))
-                Text(store.displayName.isEmpty ? "Sakinah member" : store.displayName)
+                Text(store.displayName.isEmpty ? "ImanCore member" : store.displayName)
                     .font(.headline)
                     .foregroundColor(.emeraldDeep)
                 Text(store.email)

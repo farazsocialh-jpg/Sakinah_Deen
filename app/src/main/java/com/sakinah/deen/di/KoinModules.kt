@@ -162,7 +162,7 @@ val prayerTimeModule = module {
 }
 
 val repositoryModule = module {
-    single { TafseerDownloadRepository(androidContext(), get()) }
+    single { TafseerDownloadRepository(androidContext(), get(), get()) }
     single<NisabRateRepository> {
         val prefs = androidContext().getSharedPreferences("sakinah_nisab_rates", android.content.Context.MODE_PRIVATE)
         NisabRateRepositoryImpl(

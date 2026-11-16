@@ -75,7 +75,7 @@ fun HelpScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             onBack = onBack,
             modifier = Modifier.padding(innerPadding)
         ) {
-            Text("Contact support and report issues to support@sakinah.app.")
+            Text("Contact support and report issues to support@imancore.app.")
             Button(onClick = {
                 val opened = sendFeedbackEmail(context)
                 if (!opened) {
@@ -96,7 +96,7 @@ fun HelpScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     Text("No email client is configured on this device. Send feedback directly to:")
                     SelectionContainer {
                         Text(
-                            text = "support@sakinah.app",
+                            text = "support@imancore.app",
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -105,10 +105,10 @@ fun HelpScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             },
             confirmButton = {
                 TextButton(onClick = {
-                    clipboard.setText(AnnotatedString("support@sakinah.app"))
+                    clipboard.setText(AnnotatedString("support@imancore.app"))
                     showEmailFallback = false
                     scope.launch {
-                        snackbarHostState.showSnackbar("Copied support@sakinah.app")
+                        snackbarHostState.showSnackbar("Copied support@imancore.app")
                     }
                 }) {
                     Text("Copy Email")
@@ -143,12 +143,12 @@ fun PrivacyScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             Text("Bluetooth: used only to detect vehicle connection for travel mode; no data is transmitted.")
             Text("AI Scholar queries: sent to the AI proxy only when you ask a question; not stored beyond the session.")
             TextButton(onClick = {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://sakinah.app/privacy"))
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://imancore.app/privacy"))
                 try {
                     context.startActivity(intent)
                 } catch (_: ActivityNotFoundException) {
                     scope.launch {
-                        snackbarHostState.showSnackbar("No browser app found to open https://sakinah.app/privacy")
+                        snackbarHostState.showSnackbar("No browser app found to open https://imancore.app/privacy")
                     }
                 }
             }) { Text("Open Full Privacy Policy") }
@@ -158,7 +158,7 @@ fun PrivacyScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
 @Composable
 fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
-    SimpleInfoScreen("About Sakinah", onBack, modifier) {
+    SimpleInfoScreen("About ImanCore", onBack, modifier) {
         Text("Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
     }
 }
@@ -213,8 +213,8 @@ private fun SimpleInfoScreen(
 
 private fun sendFeedbackEmail(context: Context): Boolean {
     val intent = Intent(Intent.ACTION_SENDTO).apply {
-        data = Uri.parse("mailto:support@sakinah.app")
-        putExtra(Intent.EXTRA_SUBJECT, "Sakinah Feedback v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+        data = Uri.parse("mailto:support@imancore.app")
+        putExtra(Intent.EXTRA_SUBJECT, "ImanCore Feedback v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
         putExtra(
             Intent.EXTRA_TEXT,
             "Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\nAndroid: ${android.os.Build.VERSION.RELEASE}"

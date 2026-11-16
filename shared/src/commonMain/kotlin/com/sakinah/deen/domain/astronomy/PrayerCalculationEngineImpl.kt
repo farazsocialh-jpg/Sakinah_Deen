@@ -33,6 +33,7 @@ class PrayerCalculationEngineImpl : PrayerCalculationEngine {
     companion object {
         private const val KAABA_LATITUDE = 21.422487
         private const val KAABA_LONGITUDE = 39.826206
+        private const val SECONDS_PER_DAY = 24 * 60 * 60
     }
 
     override fun getQiblaAzimuth(coordinates: Pair<Double, Double>): Double {
@@ -79,10 +80,19 @@ class PrayerCalculationEngineImpl : PrayerCalculationEngine {
         // 2. Dynamic Local TimeZone Resolution: Use the exact device ZoneId offset for this date
         // Never estimate timezone using (lon / 15.0) which causes multi-hour errors in regions with non-solar political timezones!
         val noonUtcInstant = LocalDateTime(date.year, date.monthNumber, date.dayOfMonth, 12, 0).toInstant(TimeZone.UTC)
+        // Local-minus-UTC for this date, taken via the zone's own civil time so DST is
+        // respected. Subtracting in the other order shifted every timing by twice the zone
+        // offset (~6h in Asia/Qatar).
         val localNoon = noonUtcInstant.toLocalDateTime(timeZone)
-        val localAsUtc = LocalDateTime(localNoon.year, localNoon.monthNumber, localNoon.dayOfMonth, localNoon.hour, localNoon.minute, localNoon.second)
-        val offsetSeconds = (noonUtcInstant.epochSeconds - localAsUtc.toInstant(TimeZone.UTC).epochSeconds).toInt()
-        val zoneOffsetHours = offsetSeconds / 3600.0
+        val localNoonAsUtc = LocalDateTime(
+            localNoon.year,
+            localNoon.monthNumber,
+            localNoon.dayOfMonth,
+            localNoon.hour,
+            localNoon.minute,
+            localNoon.second
+        ).toInstant(TimeZone.UTC)
+        val zoneOffsetHours = (localNoonAsUtc.epochSeconds - noonUtcInstant.epochSeconds) / 3600.0
 
         val solarNoonLocalHours = (solarNoonUtcMinutes / 60.0) + zoneOffsetHours
 
@@ -220,6 +230,14 @@ class PrayerCalculationEngineImpl : PrayerCalculationEngine {
             remainingSeconds = remainingSecs % 60,
             elapsedRatio = ratio
         )
+    }
+
+    /** 2/3 of the way from Maghrib to the next Fajr, i.e. the start of the last third. */
+    override fun lastThirdOfNight(maghrib: LocalTime, nextFajr: LocalTime): LocalTime {
+        var nightSeconds = nextFajr.toSecondOfDay() - maghrib.toSecondOfDay()
+        if (nightSeconds <= 0) nightSeconds += SECONDS_PER_DAY
+        val startSeconds = (maghrib.toSecondOfDay() + (nightSeconds * 2) / 3) % SECONDS_PER_DAY
+        return LocalTime(startSeconds / 3600, (startSeconds % 3600) / 60, startSeconds % 60)
     }
 
     private fun hoursToLocalTime(hoursDouble: Double): LocalTime {

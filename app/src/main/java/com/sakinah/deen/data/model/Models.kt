@@ -40,6 +40,18 @@ data class PostureStepModel(
     val durationSec: Int = 4
 )
 
+/** Arabic script editions served by the Quran.com v4 verses endpoint. */
+enum class QuranArabicScript(val label: String) {
+    UTHMANI("Uthmani"),
+    INDOPAK("IndoPak"),
+    IMLAEI("Imlaei");
+
+    companion object {
+        fun fromKey(key: String?): QuranArabicScript =
+            entries.firstOrNull { it.name.equals(key, ignoreCase = true) } ?: UTHMANI
+    }
+}
+
 data class AyahModel(
     val numberInSurah: Int,
     val arabicText: String,
@@ -51,8 +63,18 @@ data class AyahModel(
     val tafseerSadi: String,
     val tafseerMaarifulQuran: String,
     val hadithProofQuote: String? = null,
-    val memorizationMistake: String? = null
-)
+    val memorizationMistake: String? = null,
+    /** Alternate Arabic scripts cached alongside [arabicText] (which is Uthmani). */
+    val arabicIndopak: String = "",
+    val arabicImlaei: String = ""
+) {
+    /** Script text for the reader, falling back to Uthmani when a script was not cached. */
+    fun arabicFor(script: QuranArabicScript): String = when (script) {
+        QuranArabicScript.UTHMANI -> arabicText
+        QuranArabicScript.INDOPAK -> arabicIndopak.ifBlank { arabicText }
+        QuranArabicScript.IMLAEI -> arabicImlaei.ifBlank { arabicText }
+    }
+}
 
 data class SurahModel(
     val number: Int,
