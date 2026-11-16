@@ -66,6 +66,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -318,8 +319,6 @@ fun SalahScreen(
                                     viewModel?.onIntent(SalahUiIntent.ToggleCurrentPrayerCompleted)
                                 }
                             )
-
-                            TahajjudCard(state)
                         }
                     }
 
@@ -349,6 +348,7 @@ fun SalahScreen(
                                 }
                             )
                         }
+                        item { TahajjudCard(state) }
                     } else {
                     // Daily Prayer Matrix (5-prayer checklist in Focus Mode)
                     val visiblePrayers = if (focusMode) {
@@ -390,12 +390,28 @@ fun SalahScreen(
                                 }
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = prayer.time,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            text = if (prayer.endTime.isNotBlank()) "${prayer.time} – ${prayer.endTime}" else prayer.time,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        if (prayer.id == "isha" && prayer.endTime.isNotBlank()) {
+                                            Text(
+                                                text = "Necessity until Fajr",
+                                                fontSize = 9.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        if (prayer.id == "asr") {
+                                            Text(
+                                                text = "Preferred before ~15m pre-sunset",
+                                                fontSize = 9.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
                                     Spacer(modifier = Modifier.width(8.dp))
                                     if (!isSunrise) {
                                         Surface(
@@ -480,9 +496,10 @@ fun SalahScreen(
                                         Text("Open ${prayer.nameEnglish} Step Guide (${prayer.fardRakats} Rakats)", fontSize = 12.sp)
                                     }
                                 }
+                                                            }
                             }
                         }
-                    }
+                        item { TahajjudCard(state) }
                     }
                 }
 
@@ -560,6 +577,7 @@ fun SalahScreen(
             var draftIsAutomatic by remember(showSettingsDialog) { mutableStateOf(state.isAutomaticMethod) }
             var draftMethod by remember(showSettingsDialog) { mutableStateOf(state.calculationMethod) }
             var draftMadhhab by remember(showSettingsDialog) { mutableStateOf(state.madhhab) }
+            var methodSearch by remember(showSettingsDialog) { mutableStateOf("") }
 
             Dialog(onDismissRequest = { showSettingsDialog = false }) {
                 Surface(
@@ -619,18 +637,35 @@ fun SalahScreen(
                             )
                         }
 
-                        val methods = listOf(
-                            CalculationMethod.UMM_AL_QURA to "Umm Al-Qura (Makkah & Gulf)",
-                            CalculationMethod.QATAR to "Qatar Awqaf (18° / 90m)",
-                            CalculationMethod.DUBAI to "Dubai / UAE Awqaf",
-                            CalculationMethod.KARACHI to "Karachi (South Asia - 18°)",
-                            CalculationMethod.NORTH_AMERICA to "North America (ISNA 15°)",
-                            CalculationMethod.MUSLIM_WORLD_LEAGUE to "Muslim World League (Europe)",
-                            CalculationMethod.EGYPTIAN to "Egyptian General Survey"
+                        val query = methodSearch.trim().lowercase()
+                        val filteredMethods = CalculationMethod.entries.filter { m ->
+                            if (query.isBlank()) true else m.name.replace('_', ' ').lowercase().contains(query)
+                        }
+
+                        OutlinedTextField(
+                            value = methodSearch,
+                            onValueChange = { methodSearch = it },
+                            placeholder = { Text("Search by body, country or region", fontSize = 12.sp) },
+                            singleLine = true,
+                            trailingIcon = {
+                                if (methodSearch.isNotBlank()) {
+                                    IconButton(onClick = { methodSearch = "" }) {
+                                        Icon(Icons.Filled.Close, contentDescription = "Clear")
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
                         )
 
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            methods.forEach { (m, label) ->
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 320.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            items(filteredMethods.size) { idx ->
+                                val m = filteredMethods[idx]
+                                val label = m.name.replace('_', ' ')
                                 val isSelected = !draftIsAutomatic && draftMethod == m
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
@@ -694,7 +729,12 @@ fun SalahScreen(
                                 shape = RoundedCornerShape(14.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
-                                Text("Apply Settings", color = MaterialTheme.colorScheme.onPrimary)
+                                Text(
+                                    text = "Apply",
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
                             }
                         }
                     }

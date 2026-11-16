@@ -91,15 +91,15 @@ class SunniMethodMapperTest {
     @Test
     fun authoritiesWithoutALocalEquivalent_reuseTheClosestEngineMethod() {
         assertEquals(
-            CalculationMethod.MUSLIM_WORLD_LEAGUE,
+            CalculationMethod.DIYANET,
             SunniMethodMapper.localCalculationMethod(SunniAuthority.DIYANET)
         )
         assertEquals(
-            CalculationMethod.KARACHI,
+            CalculationMethod.JAKIM,
             SunniMethodMapper.localCalculationMethod(SunniAuthority.JAKIM)
         )
         assertEquals(
-            CalculationMethod.MUSLIM_WORLD_LEAGUE,
+            CalculationMethod.KUWAIT,
             SunniMethodMapper.localCalculationMethod(SunniAuthority.KUWAIT)
         )
     }

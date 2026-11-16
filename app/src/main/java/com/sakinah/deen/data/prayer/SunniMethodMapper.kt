@@ -9,17 +9,25 @@ import com.sakinah.deen.data.model.Madhhab
  * can be shown as an on-screen source label ("Qatar Awqaf (Online)").
  */
 enum class SunniAuthority(val methodId: Int, val displayName: String) {
-    UMM_AL_QURA(4, "Umm Al-Qura (Makkah)"),
+    UMM_AL_QURA(4, "Umm Al-Qura (Makkah & Saudi Arabia)"),
     QATAR(10, "Qatar Awqaf"),
-    DUBAI(16, "Dubai Awqaf"),
+    DUBAI(16, "Dubai / UAE Awqaf"),
     KUWAIT(9, "Kuwait Awqaf"),
-    EGYPTIAN(5, "Egyptian Survey"),
+    GULF_REGION(8, "Gulf Region"),
+    EGYPTIAN(5, "Egyptian General Survey"),
+    MUSLIM_WORLD_LEAGUE(3, "Muslim World League (MWL)"),
+    ISNA(2, "North America (ISNA)"),
+    KARACHI(1, "Karachi (South Asia)"),
     DIYANET(13, "Diyanet (Turkey)"),
     JAKIM(17, "JAKIM (Malaysia)"),
     MUIS(11, "MUIS (Singapore)"),
-    KARACHI(1, "Karachi"),
-    ISNA(2, "ISNA (N. America)"),
-    MUSLIM_WORLD_LEAGUE(3, "Muslim World League");
+    KEMENAG(20, "KEMENAG (Indonesia)"),
+    MOONSIGHTING_COMMITTEE(15, "Moonsighting Committee Worldwide"),
+    UOIF(12, "UOIF (France)"),
+    SAMR(14, "Spiritual Administration of Muslims of Russia"),
+    JORDAN(23, "Jordan Awqaf"),
+    TUNISIA(18, "Tunisia / Algeria / Morocco"),
+    TEHRAN(7, "Tehran (Institute of Geophysics)");
 
     companion object {
         fun fromMethodId(methodId: Int): SunniAuthority? = entries.firstOrNull { it.methodId == methodId }
@@ -60,6 +68,18 @@ object SunniMethodMapper {
         CalculationMethod.EGYPTIAN -> SunniAuthority.EGYPTIAN
         CalculationMethod.NORTH_AMERICA -> SunniAuthority.ISNA
         CalculationMethod.MUSLIM_WORLD_LEAGUE -> SunniAuthority.MUSLIM_WORLD_LEAGUE
+        CalculationMethod.KUWAIT -> SunniAuthority.KUWAIT
+        CalculationMethod.GULF_REGION -> SunniAuthority.GULF_REGION
+        CalculationMethod.DIYANET -> SunniAuthority.DIYANET
+        CalculationMethod.JAKIM -> SunniAuthority.JAKIM
+        CalculationMethod.MUIS -> SunniAuthority.MUIS
+        CalculationMethod.KEMENAG -> SunniAuthority.KEMENAG
+        CalculationMethod.MOONSIGHTING_COMMITTEE -> SunniAuthority.MOONSIGHTING_COMMITTEE
+        CalculationMethod.UOIF -> SunniAuthority.UOIF
+        CalculationMethod.SAMR -> SunniAuthority.SAMR
+        CalculationMethod.JORDAN -> SunniAuthority.JORDAN
+        CalculationMethod.TUNISIA -> SunniAuthority.TUNISIA
+        CalculationMethod.TEHRAN -> SunniAuthority.TEHRAN
     }
 
     /** Manual selection wins; otherwise the country's authority is used. */
@@ -79,11 +99,22 @@ object SunniMethodMapper {
         SunniAuthority.UMM_AL_QURA -> CalculationMethod.UMM_AL_QURA
         SunniAuthority.QATAR -> CalculationMethod.QATAR
         SunniAuthority.DUBAI -> CalculationMethod.DUBAI
-        SunniAuthority.KARACHI, SunniAuthority.JAKIM, SunniAuthority.MUIS -> CalculationMethod.KARACHI
+        SunniAuthority.KARACHI -> CalculationMethod.KARACHI
         SunniAuthority.EGYPTIAN -> CalculationMethod.EGYPTIAN
         SunniAuthority.ISNA -> CalculationMethod.NORTH_AMERICA
-        SunniAuthority.KUWAIT, SunniAuthority.DIYANET, SunniAuthority.MUSLIM_WORLD_LEAGUE ->
-            CalculationMethod.MUSLIM_WORLD_LEAGUE
+        SunniAuthority.MUSLIM_WORLD_LEAGUE -> CalculationMethod.MUSLIM_WORLD_LEAGUE
+        SunniAuthority.KUWAIT -> CalculationMethod.KUWAIT
+        SunniAuthority.GULF_REGION -> CalculationMethod.GULF_REGION
+        SunniAuthority.DIYANET -> CalculationMethod.DIYANET
+        SunniAuthority.JAKIM -> CalculationMethod.JAKIM
+        SunniAuthority.MUIS -> CalculationMethod.MUIS
+        SunniAuthority.KEMENAG -> CalculationMethod.KEMENAG
+        SunniAuthority.MOONSIGHTING_COMMITTEE -> CalculationMethod.MOONSIGHTING_COMMITTEE
+        SunniAuthority.UOIF -> CalculationMethod.UOIF
+        SunniAuthority.SAMR -> CalculationMethod.SAMR
+        SunniAuthority.JORDAN -> CalculationMethod.JORDAN
+        SunniAuthority.TUNISIA -> CalculationMethod.TUNISIA
+        SunniAuthority.TEHRAN -> CalculationMethod.TEHRAN
     }
 }
 

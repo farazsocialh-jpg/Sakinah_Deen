@@ -98,4 +98,43 @@ class PrayerWindowAndTahajjudTest {
             "prayer times must increase through the day, was $ordered"
         )
     }
+
+    @Test
+    fun islamicMidnight_isHalfwayBetweenMaghribAndNextFajr() {
+        // Night = 18:10 -> 05:00 = 10h50m; half = 5h25m, so midnight = 23:35.
+        assertEquals(
+            LocalTime(23, 35),
+            engine.islamicMidnight(LocalTime(18, 10), LocalTime(5, 0))
+        )
+        // Night = 20:00 -> 04:30 = 8h30m; half = 4h15m, so midnight = 00:15.
+        assertEquals(
+            LocalTime(0, 15),
+            engine.islamicMidnight(LocalTime(20, 0), LocalTime(4, 30))
+        )
+    }
+
+    @Test
+    fun worldwideMethods_produceOrderedPrayerTimes() {
+        CalculationMethod.entries.forEach { method ->
+            val table = engine.getPrayerTimes(
+                coordinates = 25.2854 to 51.5310,
+                date = LocalDate(2026, 3, 20),
+                method = method,
+                madhhab = Madhhab.SHAFI_HANBALI_MALIKI,
+                timeZone = kotlinx.datetime.TimeZone.of("Asia/Qatar")
+            )
+            val ordered = listOf(
+                PrayerType.FAJR,
+                PrayerType.SUNRISE,
+                PrayerType.DHUHR,
+                PrayerType.ASR,
+                PrayerType.MAGHRIB,
+                PrayerType.ISHA
+            ).map { table.getValue(it) }
+            assertTrue(
+                ordered.zipWithNext().all { (earlier, later) -> earlier < later },
+                "method $method produced out-of-order times: $ordered"
+            )
+        }
+    }
 }

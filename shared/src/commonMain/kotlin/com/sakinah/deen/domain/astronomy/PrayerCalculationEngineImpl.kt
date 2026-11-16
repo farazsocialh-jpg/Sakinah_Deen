@@ -117,6 +117,18 @@ class PrayerCalculationEngineImpl : PrayerCalculationEngine {
             CalculationMethod.DUBAI -> 18.2
             CalculationMethod.QATAR -> 18.0
             CalculationMethod.NORTH_AMERICA -> 15.0
+            CalculationMethod.KUWAIT -> 18.0
+            CalculationMethod.GULF_REGION -> 18.2
+            CalculationMethod.DIYANET -> 18.0
+            CalculationMethod.JAKIM -> 20.0
+            CalculationMethod.MUIS -> 20.0
+            CalculationMethod.KEMENAG -> 20.0
+            CalculationMethod.MOONSIGHTING_COMMITTEE -> 18.0
+            CalculationMethod.UOIF -> 12.0
+            CalculationMethod.SAMR -> 16.0
+            CalculationMethod.JORDAN -> 18.0
+            CalculationMethod.TUNISIA -> 18.0
+            CalculationMethod.TEHRAN -> 17.7
         }
         val fajrAltRad = -fajrAngle * PI / 180.0
         val cosHourAngleFajr = (sin(fajrAltRad) - sin(latRad) * sin(declRad)) / (cos(latRad) * cos(declRad))
@@ -133,8 +145,15 @@ class PrayerCalculationEngineImpl : PrayerCalculationEngine {
 
         // 6. Isha Angle / Interval Calculation
         val ishaHours = when (method) {
-            CalculationMethod.UMM_AL_QURA, CalculationMethod.QATAR -> {
-                // Fixed 90-minute interval after Maghrib (120 minutes during Ramadan)
+            CalculationMethod.UMM_AL_QURA,
+            CalculationMethod.QATAR,
+            CalculationMethod.KUWAIT,
+            CalculationMethod.GULF_REGION,
+            CalculationMethod.JAKIM,
+            CalculationMethod.MUIS,
+            CalculationMethod.KEMENAG,
+            CalculationMethod.JORDAN -> {
+                // Fixed 90-minute interval after Maghrib
                 maghribHours + (90.0 / 60.0)
             }
             CalculationMethod.DUBAI -> {
@@ -146,6 +165,12 @@ class PrayerCalculationEngineImpl : PrayerCalculationEngine {
                     CalculationMethod.EGYPTIAN -> 17.5
                     CalculationMethod.KARACHI -> 18.0
                     CalculationMethod.NORTH_AMERICA -> 15.0
+                    CalculationMethod.DIYANET -> 17.0
+                    CalculationMethod.MOONSIGHTING_COMMITTEE -> 18.0
+                    CalculationMethod.UOIF -> 12.0
+                    CalculationMethod.SAMR -> 15.0
+                    CalculationMethod.TUNISIA -> 18.0
+                    CalculationMethod.TEHRAN -> 14.0
                     else -> 17.0
                 }
                 val ishaAltRad = -ishaAngle * PI / 180.0
@@ -238,6 +263,14 @@ class PrayerCalculationEngineImpl : PrayerCalculationEngine {
         if (nightSeconds <= 0) nightSeconds += SECONDS_PER_DAY
         val startSeconds = (maghrib.toSecondOfDay() + (nightSeconds * 2) / 3) % SECONDS_PER_DAY
         return LocalTime(startSeconds / 3600, (startSeconds % 3600) / 60, startSeconds % 60)
+    }
+
+    /** Midpoint of the night between Maghrib and the next Fajr: Islamic midnight. */
+    override fun islamicMidnight(maghrib: LocalTime, nextFajr: LocalTime): LocalTime {
+        var nightSeconds = nextFajr.toSecondOfDay() - maghrib.toSecondOfDay()
+        if (nightSeconds <= 0) nightSeconds += SECONDS_PER_DAY
+        val midSeconds = (maghrib.toSecondOfDay() + nightSeconds / 2) % SECONDS_PER_DAY
+        return LocalTime(midSeconds / 3600, (midSeconds % 3600) / 60, midSeconds % 60)
     }
 
     private fun hoursToLocalTime(hoursDouble: Double): LocalTime {

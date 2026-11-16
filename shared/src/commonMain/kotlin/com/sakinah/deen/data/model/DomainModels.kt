@@ -36,7 +36,19 @@ enum class CalculationMethod {
     UMM_AL_QURA,
     DUBAI,
     QATAR,
-    NORTH_AMERICA
+    NORTH_AMERICA,
+    KUWAIT,
+    GULF_REGION,
+    DIYANET,
+    JAKIM,
+    MUIS,
+    KEMENAG,
+    MOONSIGHTING_COMMITTEE,
+    UOIF,
+    SAMR,
+    JORDAN,
+    TUNISIA,
+    TEHRAN
 }
 
 data class PrayerAdjustments(

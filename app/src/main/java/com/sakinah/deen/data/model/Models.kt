@@ -12,7 +12,8 @@ data class PrayerModel(
     val isJamaah: Boolean = false,
     val isSunnahCompleted: Boolean = false,
     val isNawafilCompleted: Boolean = false,
-    val nawafilName: String? = null
+    val nawafilName: String? = null,
+    val endTime: String = ""
 )
 
 data class QadhaLedgerModel(

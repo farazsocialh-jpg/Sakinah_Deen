@@ -41,4 +41,11 @@ interface PrayerCalculationEngine {
      * resolves to roughly 01:50 rather than a negative time.
      */
     fun lastThirdOfNight(maghrib: LocalTime, nextFajr: LocalTime): LocalTime
+
+    /**
+     * Islamic midnight: the midpoint of the night between Maghrib and the next Fajr,
+     * i.e. `maghrib + 1/2 * (nextFajr - maghrib)`. This is the authentic preferred end
+     * time of Isha (Sahih Muslim 612a); necessity (darurah) extends the prayer until Fajr.
+     */
+    fun islamicMidnight(maghrib: LocalTime, nextFajr: LocalTime): LocalTime
 }

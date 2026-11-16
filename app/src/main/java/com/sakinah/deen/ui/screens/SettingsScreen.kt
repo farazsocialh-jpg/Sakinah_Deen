@@ -1183,4 +1183,5 @@ private fun sharedMethodFor(method: AppMethod): CalculationMethod? = when (metho
     AppMethod.KARACHI -> CalculationMethod.KARACHI
     AppMethod.NORTH_AMERICA -> CalculationMethod.ISNA
     AppMethod.MUSLIM_WORLD_LEAGUE -> CalculationMethod.MWL
+    else -> null
 }

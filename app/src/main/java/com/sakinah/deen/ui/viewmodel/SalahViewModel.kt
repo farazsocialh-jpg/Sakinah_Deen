@@ -602,7 +602,7 @@ class SalahViewModel(
         val isSafar = travel.isTraveler || (manualTravelMode && !clearManualTravelMode)
         val rakats = SafarPolicy.rakats(isSafar)
 
-        val prayerModels = buildPrayerModels(times, rakats)
+        val prayerModels = buildPrayerModels(times, rakats, tahajjud?.second)
 
         _uiState.update {
             it.copy(
@@ -670,9 +670,22 @@ class SalahViewModel(
 
     private fun buildPrayerModels(
         times: Map<PrayerType, KLocalTime>,
-        rakats: Map<PrayerType, Int>
+        rakats: Map<PrayerType, Int>,
+        nextFajr: KLocalTime? = null
     ): List<PrayerModel> {
         val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a")
+        // Authentic end of each prayer's window (Sahih Muslim 612a / fiqh):
+        // Fajr ends at Sunrise, Dhuhr at Asr, Asr at Maghrib, Maghrib at Isha, Isha at
+        // Islamic midnight (Maghrib + 1/2 of the night). Isha's end needs the next day's Fajr.
+        val endTimes = mutableMapOf<PrayerType, KLocalTime>()
+        times[PrayerType.SUNRISE]?.let { endTimes[PrayerType.FAJR] = it }
+        times[PrayerType.ASR]?.let { endTimes[PrayerType.DHUHR] = it }
+        times[PrayerType.MAGHRIB]?.let { endTimes[PrayerType.ASR] = it }
+        times[PrayerType.ISHA]?.let { endTimes[PrayerType.MAGHRIB] = it }
+        val maghrib = times[PrayerType.MAGHRIB]
+        if (maghrib != null && nextFajr != null) {
+            endTimes[PrayerType.ISHA] = astronomyEngine.islamicMidnight(maghrib, nextFajr)
+        }
         fun model(
             id: String,
             type: PrayerType,
@@ -690,6 +703,7 @@ class SalahViewModel(
                 nameEnglish = nameEn,
                 nameArabic = nameAr,
                 time = times[type]?.toJavaLocalTime()?.format(timeFormatter) ?: fallbackTime,
+                endTime = endTimes[type]?.toJavaLocalTime()?.format(timeFormatter).orEmpty(),
                 fardRakats = rakats[type] ?: defaultFard,
                 sunnahBefore = sunnahBefore,
                 sunnahAfter = sunnahAfter,
