@@ -24,6 +24,12 @@
     <string name="channel_adhan_desc">تنبيهات الأذان عالية الأولوية عند دخول وقت الصلاة</string>
     <string name="channel_salah_silent_name">العد التنازلي للصلاة</string>
     <string name="channel_salah_silent_desc">عد تنازلي هادئ للصلاة القادمة</string>
+    <string name="channel_prayer_sound_name">تنبيهات الصلاة — صوت</string>
+    <string name="channel_prayer_sound_desc">تنبيهات صلاة بارزة مع نغمة إشعار قياسية واهتزاز</string>
+    <string name="channel_prayer_vibrate_name">تنبيهات الصلاة — اهتزاز فقط</string>
+    <string name="channel_prayer_vibrate_desc">تنبيهات صلاة بارزة تهتز دون تشغيل أي صوت</string>
+    <string name="channel_prayer_silent_name">تنبيهات الصلاة — صامت</string>
+    <string name="channel_prayer_silent_desc">تنبيهات صلاة صامتة لا ترن ولا تهتز</string>
     <string name="channel_safar_name">وضع السفر ودعاء السفر</string>
     <string name="channel_safar_desc">تنبيهات عند الاتصال ببلوتوث السيارة وعند تفعيل القصر</string>
     <string name="channel_habit_name">أذكار وسنن يومية</string>
@@ -35,6 +41,9 @@
     <string name="adhan_action_mute">كتم</string>
     <string name="adhan_action_snooze">تأجيل ١٠ دقائق</string>
     <string name="adhan_fallback_title">الأذان: %1$s · %2$s</string>
+    <string name="notif_action_mark_prayed">تسجيل الصلاة</string>
+    <string name="notif_prayer_fallback_title">الصلاة</string>
+    <string name="notif_prayer_fallback_window">وقت الصلاة</string>
 
     <string name="safar_title">السفر: دعاء السفر</string>
     <string name="safar_dua_arabic">سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَٰذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ</string>

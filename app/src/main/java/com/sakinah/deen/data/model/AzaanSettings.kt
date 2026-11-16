@@ -4,6 +4,7 @@ package com.sakinah.deen.data.model
 enum class PrayerAlertMode(val label: String) {
     FULL_AZAAN("Full Azaan"),
     SHORT_TONE("Short Tone"),
+    VIBRATE_ONLY("Vibrate Only"),
     SILENT("Silent"),
     OFF("Off")
 }

@@ -24,6 +24,12 @@
     <string name="channel_adhan_desc">نماز کے وقت پر اعلیٰ ترجیحی اذان کی یاد دہانی</string>
     <string name="channel_salah_silent_name">نماز کا الٹی گنتی</string>
     <string name="channel_salah_silent_desc">اگلی نماز تک خاموش الٹی گنتی</string>
+    <string name="channel_prayer_sound_name">نماز کے تنبہات — آواز</string>
+    <string name="channel_prayer_sound_desc">معیاری اطلاعی نغمے اور کمپن کے ساتھ نمایاں نماز کے تنبہات</string>
+    <string name="channel_prayer_vibrate_name">نماز کے تنبہات — صرف کمپن</string>
+    <string name="channel_prayer_vibrate_desc">بغیر آواز کے کمپن کرنے والے نمایاں نماز کے تنبہات</string>
+    <string name="channel_prayer_silent_name">نماز کے تنبہات — خاموش</string>
+    <string name="channel_prayer_silent_desc">ایسے خاموش تنبہات جو نہ بجتے ہیں نہ کمپن کرتے ہیں</string>
     <string name="channel_safar_name">سفر موڈ اور دعائے سفر</string>
     <string name="channel_safar_desc">کار بلوٹوتھ اور قصر کے موقع پر اطلاعات</string>
     <string name="channel_habit_name">روزانہ اذکار و سنن</string>
@@ -35,6 +41,9 @@
     <string name="adhan_action_mute">خاموش</string>
     <string name="adhan_action_snooze">10 منٹ بعد</string>
     <string name="adhan_fallback_title">اذان: %1$s · %2$s</string>
+    <string name="notif_action_mark_prayed">نماز ادا کی</string>
+    <string name="notif_prayer_fallback_title">نماز</string>
+    <string name="notif_prayer_fallback_window">نماز کا وقت</string>
 
     <string name="safar_title">سفر: دعائے سفر</string>
     <string name="safar_dua_arabic">سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَٰذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ</string>

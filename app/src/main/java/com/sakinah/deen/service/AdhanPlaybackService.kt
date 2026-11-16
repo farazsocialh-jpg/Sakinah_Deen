@@ -38,9 +38,13 @@ import kotlinx.coroutines.launch
  * Foreground Adhan playback built on Media3/ExoPlayer.
  *
  * Full Azaan plays the Muezzin chosen in Settings (Fajr can use the recording with
- * "As-salatu khayrun min an-nawm"). Short Tone plays a brief chime, and Silent posts the
- * high-priority notification without audio. All recordings are bundled, so playback works
- * with no network and even after the app process was killed.
+ * "As-salatu khayrun min an-nawm"). All recordings are bundled, so playback works with no
+ * network and even after the app process was killed.
+ *
+ * Audio is announced as notification content (USAGE_NOTIFICATION), never as an alarm, and
+ * the reminder card is the notification built by [PrayerNotificationFactory]. Muting — from
+ * the card, a swipe, or a hardware volume key — stops the sound immediately while the card
+ * itself stays in the shade with its live countdown and Mark as Prayed action.
  */
 class AdhanPlaybackService : Service() {
 
@@ -55,16 +59,39 @@ class AdhanPlaybackService : Service() {
         const val EXTRA_PRAYER_TYPE = "extra_prayer_type"
         const val EXTRA_ALERT_MODE = "extra_alert_mode"
         const val EXTRA_MUEZZIN_ID = "extra_muezzin_id"
+        const val EXTRA_WINDOW_START_MILLIS = "extra_window_start_millis"
+        const val EXTRA_WINDOW_END_MILLIS = "extra_window_end_millis"
         const val NOTIFICATION_ID = 4001
 
         /** Observable flag so the Activity can gate volume-key handling on real playback. */
         @Volatile
         var isAdhanActive: Boolean = false
+            private set
+
+        /**
+         * Live service handle. Broadcast actions arrive in the same process, so muting through
+         * this reference avoids background `startService` restrictions on Android 12+.
+         */
+        @Volatile
+        private var activeInstance: AdhanPlaybackService? = null
 
         private const val FADE_STEPS = 20
         private const val FADE_STEP_MS = 250L
         private const val SNOOZE_MINUTES = 10
-        private const val MISSING_AUDIO_STOP_DELAY_MS = 4000L
+        private const val VOLUME_CHANGED_ACTION = "android.media.VOLUME_CHANGED_ACTION"
+
+        /**
+         * Mute from the card, swipe or volume keys: stop the sound, keep the reminder.
+         * Does nothing when no audio is playing, which avoids a background service start.
+         */
+        fun mutePlaybackIfActive() {
+            activeInstance?.mutePlayback()
+        }
+
+        /** Stop audio and drop the card (swipe-away, Mark as Prayed). */
+        fun stopPlaybackIfActive() {
+            activeInstance?.stopPlaybackAndNotification()
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -80,12 +107,15 @@ class AdhanPlaybackService : Service() {
     private var currentPrayerType: PrayerType = PrayerType.DHUHR
     private var currentMode: PrayerAlertMode = PrayerAlertMode.FULL_AZAAN
     private var currentMuezzin: Muezzin = Muezzin.MAKKAH
+    private var currentWindowStart: Long = 0L
+    private var currentWindowEnd: Long = 0L
     private var playerPolicyStopsOnEnd: Boolean = true
     private var isDuaSafar: Boolean = false
     private lateinit var preferences: SakinahPreferences
 
     override fun onCreate() {
         super.onCreate()
+        activeInstance = this
         preferences = SakinahPreferences(this)
         NotificationChannels.createChannels(this)
     }
@@ -105,34 +135,41 @@ class AdhanPlaybackService : Service() {
                 currentPrayerType = intent.getStringExtra(EXTRA_PRAYER_TYPE)
                     ?.let { name -> runCatching { PrayerType.valueOf(name) }.getOrNull() }
                     ?: PrayerType.DHUHR
+                currentWindowStart = intent.getLongExtra(
+                    EXTRA_WINDOW_START_MILLIS,
+                    System.currentTimeMillis()
+                )
+                currentWindowEnd = intent.getLongExtra(
+                    EXTRA_WINDOW_END_MILLIS,
+                    currentWindowStart + 10 * 60_000L
+                )
                 // Live preferences win over the extras baked in when the alarm was armed:
                 // the user may have switched the mode, muezzin or master switch since then.
                 currentMode = preferences.alertModeFor(currentPrayerType)
                 currentMuezzin = preferences.azaanSettings.muezzin
                 isDuaSafar = false
 
-                if (!preferences.alarmsEnabled || currentMode == PrayerAlertMode.OFF) {
+                if (!preferences.alarmsEnabled ||
+                    currentMode == PrayerAlertMode.OFF ||
+                    (currentMode != PrayerAlertMode.FULL_AZAAN && currentMode != PrayerAlertMode.SHORT_TONE)
+                ) {
+                    // OFF/Silent/Vibrate are handled by the alarm receiver as plain cards.
                     // OFF must still satisfy the foreground-service contract before stopping.
                     promoteToForegroundAndStop()
                     return START_NOT_STICKY
                 }
 
-                if (!startPlaybackForeground(buildAdhanNotification(currentPrayerName))) {
+                if (!startPlaybackForeground(buildPrayerNotification())) {
                     return START_NOT_STICKY
                 }
-                when (currentMode) {
-                    PrayerAlertMode.FULL_AZAAN -> playCue(
+                if (currentMode == PrayerAlertMode.FULL_AZAAN) {
+                    playCue(
                         uri = selectedAdhanUri(),
                         stopWhenPlaybackEnds = true
                     )
-
-                    PrayerAlertMode.SHORT_TONE -> playCue(
-                        uri = AdhanAudio.shortToneUri(this),
-                        stopWhenPlaybackEnds = false
-                    )
-
-                    PrayerAlertMode.SILENT -> finishTonePlayback()
-                    PrayerAlertMode.OFF -> stopSelf()
+                } else {
+                    // Short chime: the sound-enabled channel rings, so no extra audio here.
+                    finishTonePlayback()
                 }
             }
 
@@ -160,14 +197,12 @@ class AdhanPlaybackService : Service() {
                         minutes = SNOOZE_MINUTES
                     )
                 }
-                finishPlayback()
+                stopPlaybackAndNotification()
             }
 
-            ACTION_MUTE_ADHAN -> {
-                player?.volume = 0f
-            }
+            ACTION_MUTE_ADHAN -> mutePlayback()
 
-            ACTION_STOP_ADHAN -> finishPlayback()
+            ACTION_STOP_ADHAN -> stopPlaybackAndNotification()
         }
 
         return START_NOT_STICKY
@@ -249,9 +284,11 @@ class AdhanPlaybackService : Service() {
         try {
             exoPlayer.apply {
                 setAudioAttributes(
+                    // Notification content, not an alarm: hardware volume/mute keys, Do Not
+                    // Disturb and audio focus all follow the notification stream.
                     AudioAttributes.Builder()
-                        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                        .setUsage(C.USAGE_ALARM)
+                        .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
+                        .setUsage(C.USAGE_NOTIFICATION)
                         .build(),
                     /* handleAudioFocus = */ true
                 )
@@ -259,12 +296,14 @@ class AdhanPlaybackService : Service() {
                 addListener(object : Player.Listener {
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         if (playbackState == Player.STATE_ENDED) {
-                            if (stopWhenPlaybackEnds) finishPlayback() else finishTonePlayback()
+                            if (stopWhenPlaybackEnds) stopPlaybackAndNotification() else finishTonePlayback()
                         }
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
-                        if (stopWhenPlaybackEnds) finishFallbackNotification() else finishTonePlayback()
+                        // A missing/corrupt recording must not crash or leave a silent
+                        // foreground service: keep the reminder card and stop the audio.
+                        finishTonePlayback()
                     }
                 })
             }
@@ -290,19 +329,34 @@ class AdhanPlaybackService : Service() {
         return exoPlayer
     }
 
-    private fun finishPlayback() {
+    /**
+     * Mute: release the audio immediately (and its focus) but keep the reminder card in the
+     * shade, so the countdown and Mark as Prayed stay usable. Future prayers are unaffected.
+     */
+    private fun mutePlayback() {
         isPlayingAdhan = false
         isAdhanActive = false
         unregisterVolumeReceiver()
         fadeJob?.cancel()
         fadeJob = null
-        try {
-            player?.stop()
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            // Ignore release races.
-        }
+        runCatching { player?.stop() }
+        PrayerAlertSilencer.cancelVibration(this)
+        // DETACH leaves the notification posted instead of removing it.
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
+        stopSelf()
+    }
+
+    /** Stop audio and remove the card (swipe-away, Mark as Prayed, playback finished). */
+    private fun stopPlaybackAndNotification() {
+        isPlayingAdhan = false
+        isAdhanActive = false
+        unregisterVolumeReceiver()
+        fadeJob?.cancel()
+        fadeJob = null
+        runCatching { player?.stop() }
+        PrayerAlertSilencer.cancelVibration(this)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        NotificationChannels.cancelPrayerNotification(this)
         stopSelf()
     }
 
@@ -313,18 +367,9 @@ class AdhanPlaybackService : Service() {
         unregisterVolumeReceiver()
         fadeJob?.cancel()
         fadeJob = null
-        try {
-            player?.stop()
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-        }
+        runCatching { player?.stop() }
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
         stopSelf()
-    }
-
-    private fun finishFallbackNotification() {
-        // A missing/corrupt recording must not crash or leave a silent foreground service.
-        finishTonePlayback()
     }
 
     /**
@@ -332,8 +377,8 @@ class AdhanPlaybackService : Service() {
      * OFF mode) without leaving a stale notification behind.
      */
     private fun promoteToForegroundAndStop() {
-        val notification = NotificationCompat.Builder(this, NotificationChannels.CHANNEL_SALAH_ADHAN)
-            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+        val notification = NotificationCompat.Builder(this, NotificationChannels.CHANNEL_PRAYER_SILENT)
+            .setSmallIcon(R.drawable.ic_stat_app)
             .setContentTitle(getString(R.string.adhan_body))
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
@@ -366,61 +411,48 @@ class AdhanPlaybackService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-    private fun buildAdhanNotification(prayerName: String): Notification {
-        val channel = if (currentMode == PrayerAlertMode.SILENT) {
-            NotificationChannels.CHANNEL_SALAH_SILENT
-        } else {
-            NotificationChannels.CHANNEL_SALAH_ADHAN
-        }
-        return NotificationCompat.Builder(this, channel)
-            .setSmallIcon(R.drawable.ic_launcher_monochrome)
-            .setContentTitle("$prayerName prayer time started")
-            .setContentText(getString(R.string.adhan_body))
-            .setContentIntent(contentPendingIntent())
-            .setOngoing(currentMode == PrayerAlertMode.FULL_AZAAN)
-            .setAutoCancel(false)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setFullScreenIntent(contentPendingIntent(), true)
-            .addAction(
-                android.R.drawable.ic_media_pause,
-                getString(R.string.adhan_action_stop),
-                actionPendingIntent(1, ACTION_STOP_ADHAN)
+    /**
+     * The card is the same rich reminder the alarm receiver posts: countdown, progress,
+     * rotating reminder, Mute and Mark as Prayed, all themed from the active palette.
+     */
+    private fun buildPrayerNotification(): Notification =
+        PrayerNotificationFactory.build(
+            context = this,
+            spec = PrayerNotificationFactory.Spec(
+                prayerType = currentPrayerType,
+                prayerName = currentPrayerName,
+                startMillis = currentWindowStart,
+                endMillis = currentWindowEnd,
+                alertMode = currentMode
             )
-            .addAction(
-                android.R.drawable.ic_lock_silent_mode,
-                getString(R.string.adhan_action_mute),
-                actionPendingIntent(2, ACTION_MUTE_ADHAN)
-            )
-            .addAction(
-                android.R.drawable.ic_menu_recent_history,
-                getString(R.string.adhan_action_snooze),
-                actionPendingIntent(3, ACTION_SNOOZE)
-            )
-            .build()
-    }
+        )
 
     private fun buildDuaSafarNotification(): Notification =
         NotificationCompat.Builder(this, NotificationChannels.CHANNEL_TRAVEL_SAFAR)
-            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setSmallIcon(R.drawable.ic_stat_app)
             .setContentTitle(getString(R.string.safar_title))
             .setContentText(getString(R.string.safar_dua_arabic))
             .setContentIntent(contentPendingIntent())
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .addAction(
-                android.R.drawable.ic_media_pause,
+                R.drawable.ic_stat_app,
                 getString(R.string.adhan_action_stop),
                 actionPendingIntent(1, ACTION_STOP_ADHAN)
             )
             .build()
 
+    /**
+     * Hardware volume keys: while Azaan audio plays, any volume change (up, down or mute)
+     * silences it. Only registered during playback and removed as soon as it stops.
+     */
     private fun registerVolumeReceiver() {
         if (volumeReceiver != null) return
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                if (isPlayingAdhan) finishPlayback()
+                if (intent.action == VOLUME_CHANGED_ACTION && isPlayingAdhan) {
+                    mutePlayback()
+                }
             }
         }
         volumeReceiver = receiver
@@ -428,7 +460,7 @@ class AdhanPlaybackService : Service() {
             ContextCompat.registerReceiver(
                 this,
                 receiver,
-                IntentFilter("android.media.VOLUME_CHANGED_ACTION"),
+                IntentFilter(VOLUME_CHANGED_ACTION),
                 ContextCompat.RECEIVER_NOT_EXPORTED
             )
         } catch (e: Exception) {
@@ -449,6 +481,7 @@ class AdhanPlaybackService : Service() {
     override fun onDestroy() {
         isPlayingAdhan = false
         isAdhanActive = false
+        if (activeInstance === this) activeInstance = null
         unregisterVolumeReceiver()
         fadeJob?.cancel()
         mediaSession?.release()

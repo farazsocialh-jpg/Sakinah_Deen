@@ -27,6 +27,7 @@ import com.sakinah.deen.domain.astronomy.UserLocationProvider
 import com.sakinah.deen.receiver.CarBluetoothReceiver
 import com.sakinah.deen.service.AdhanPlaybackService
 import com.sakinah.deen.service.AzaanScheduling
+import com.sakinah.deen.service.PrayerAlertSilencer
 import com.sakinah.deen.ui.navigation.RootNavHost
 import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.SakinahTheme
@@ -131,10 +132,14 @@ class MainActivity : ComponentActivity() {
             ?.takeIf { it.isNotBlank() }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if ((keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) &&
-            AdhanPlaybackService.isAdhanActive
-        ) {
-            sendStopAdhanIntent()
+        // Any hardware volume key mutes a playing Azaan. The key is consumed so pressing
+        // volume does not also change the notification stream level while the Adhan rings.
+        val isVolumeKey = keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
+            keyCode == KeyEvent.KEYCODE_VOLUME_DOWN ||
+            keyCode == KeyEvent.KEYCODE_VOLUME_MUTE
+        if (isVolumeKey && AdhanPlaybackService.isAdhanActive) {
+            PrayerAlertSilencer.muteAzaan(this)
+            return true
         }
         return super.onKeyDown(keyCode, event)
     }

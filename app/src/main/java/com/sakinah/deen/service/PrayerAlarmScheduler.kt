@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import com.sakinah.deen.MainActivity
 import com.sakinah.deen.data.model.AzaanSettings
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
@@ -18,6 +17,7 @@ import com.sakinah.deen.data.prayer.SunniMethodMapper
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.PrayerTimeRepository
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
+import java.time.Duration
 import java.time.LocalDate as JLocalDate
 import java.time.LocalTime as JLocalTime
 import java.time.ZoneId
@@ -45,14 +45,22 @@ class PrayerAlarmScheduler(
         const val EXTRA_ALERT_MODE = "extra_alert_mode"
         const val EXTRA_MUEZZIN_ID = "extra_muezzin_id"
 
+        /** Start of the prayer window shown on the notification (prayer entry time). */
+        const val EXTRA_WINDOW_START_MILLIS = "extra_window_start_millis"
+
+        /** End of the prayer window: the countdown target and progress-bar anchor. */
+        const val EXTRA_WINDOW_END_MILLIS = "extra_window_end_millis"
+
         /** Set by [scheduleTestAlarmInSeconds] so the completion guard never suppresses a test. */
         const val EXTRA_IS_TEST = "extra_is_test"
 
         private const val BASE_REQUEST_CODE = 1000
         private const val SNOOZE_REQUEST_CODE = 9500
         private const val TEST_REQUEST_CODE = 9600
-        private const val ALARM_CLOCK_SHOW_REQUEST_CODE = 9700
         private const val SNOOZE_MINUTES = 10
+
+        /** The test card uses a short window so the countdown and progress bar are visible. */
+        private const val TEST_WINDOW_MS = 3 * 60_000L
         private const val KIND_SNOOZE = "snooze"
         private const val KIND_TEST = "test"
 
@@ -152,12 +160,25 @@ class PrayerAlarmScheduler(
             // Compare full zoned instants: plusMinutes may wrap past midnight, which a
             // LocalTime comparison would treat as "earlier today" and skip or double-schedule.
             val todayAlert = ZonedDateTime.of(todayJ, todayTime, zone).plusMinutes(offset)
-            val triggerZoned = if (todayAlert.isAfter(nowZoned)) {
+            val rollsToTomorrow = !todayAlert.isAfter(nowZoned)
+            val triggerZoned = if (!rollsToTomorrow) {
                 todayAlert
             } else {
                 val tomorrowTime = tomorrowTimes[prayer] ?: todayTime
                 ZonedDateTime.of(todayJ.plusDays(1), tomorrowTime, zone).plusMinutes(offset)
             }
+            // The window a reminder covers always comes from the day it fires on: Fajr ends at
+            // sunrise, Dhuhr at Asr, Asr at Maghrib, Maghrib at Isha, Isha at Islamic midnight.
+            val triggerDate = triggerZoned.toLocalDate()
+            val windowTimes = if (rollsToTomorrow) tomorrowTimes else todayTimes
+            val followingDayTimes = if (rollsToTomorrow) null else tomorrowTimes
+            val windowEnd = prayerWindowEndMillis(
+                prayer = prayer,
+                date = triggerDate,
+                dayTimes = windowTimes,
+                nextDayTimes = followingDayTimes,
+                zone = zone
+            )
 
             scheduleSingleAlarm(
                 prayerType = prayer,
@@ -165,7 +186,8 @@ class PrayerAlarmScheduler(
                 timeFormatted = triggerZoned.toLocalTime().format(timeFormatter),
                 triggerEpochMillis = triggerZoned.toInstant().toEpochMilli(),
                 alertMode = mode,
-                muezzin = settings.muezzin
+                muezzin = settings.muezzin,
+                windowEndMillis = windowEnd
             )
         }
     }
@@ -219,7 +241,8 @@ class PrayerAlarmScheduler(
         timeFormatted: String,
         triggerEpochMillis: Long,
         alertMode: PrayerAlertMode = preferences.azaanSettings.modeFor(prayerType),
-        muezzin: Muezzin = preferences.azaanSettings.muezzin
+        muezzin: Muezzin = preferences.azaanSettings.muezzin,
+        windowEndMillis: Long? = null
     ) {
         if (alarmManager == null) return
         // Never arm an alarm for a time that has already passed.
@@ -233,9 +256,53 @@ class PrayerAlarmScheduler(
             triggerEpochMillis = triggerEpochMillis,
             isSnooze = false,
             alertMode = alertMode,
-            muezzin = muezzin
+            muezzin = muezzin,
+            windowEndMillis = windowEndMillis
         )
         setExactCompat(triggerEpochMillis, pendingIntent)
+    }
+
+    /**
+     * End of the Fard window for [prayer] on [date]: sunrise, Asr, Maghrib, Isha, or the
+     * Islamic midnight that closes Isha (the midpoint between Maghrib and the next Fajr).
+     */
+    internal fun prayerWindowEndMillis(
+        prayer: PrayerType,
+        date: JLocalDate,
+        dayTimes: Map<PrayerType, JLocalTime>,
+        nextDayTimes: Map<PrayerType, JLocalTime>?,
+        zone: ZoneId
+    ): Long? {
+        fun instantOf(time: JLocalTime, day: JLocalDate): Long =
+            ZonedDateTime.of(day, time, zone).toInstant().toEpochMilli()
+
+        return when (prayer) {
+            PrayerType.FAJR -> dayTimes[PrayerType.SUNRISE]?.let { instantOf(it, date) }
+            PrayerType.DHUHR -> dayTimes[PrayerType.ASR]?.let { instantOf(it, date) }
+            PrayerType.ASR -> dayTimes[PrayerType.MAGHRIB]?.let { instantOf(it, date) }
+            PrayerType.MAGHRIB -> dayTimes[PrayerType.ISHA]?.let { instantOf(it, date) }
+            PrayerType.ISHA -> islamicMidnightMillis(date, dayTimes, nextDayTimes, zone)
+            PrayerType.SUNRISE -> null
+        }
+    }
+
+    /** Islamic midnight: half of the span between Maghrib and the following Fajr. */
+    private fun islamicMidnightMillis(
+        date: JLocalDate,
+        dayTimes: Map<PrayerType, JLocalTime>,
+        nextDayTimes: Map<PrayerType, JLocalTime>?,
+        zone: ZoneId
+    ): Long? {
+        val maghribTime = dayTimes[PrayerType.MAGHRIB] ?: return null
+        val fajrTime = nextDayTimes?.get(PrayerType.FAJR) ?: dayTimes[PrayerType.FAJR]
+            ?: return null
+        val maghrib = ZonedDateTime.of(date, maghribTime, zone)
+        // The next Fajr always belongs to the following calendar day; when the next day's
+        // table is unavailable the current table is used as a close approximation.
+        val nextFajr = ZonedDateTime.of(date.plusDays(1), fajrTime, zone)
+        val span = Duration.between(maghrib, nextFajr).toMillis()
+        if (span <= 0) return null
+        return maghrib.toInstant().toEpochMilli() + span / 2
     }
 
     /** Re-fires a prayer reminder once, [minutes] from now. */
@@ -255,7 +322,8 @@ class PrayerAlarmScheduler(
             triggerEpochMillis = triggerAt,
             isSnooze = true,
             alertMode = preferences.azaanSettings.modeFor(prayerType),
-            muezzin = preferences.azaanSettings.muezzin
+            muezzin = preferences.azaanSettings.muezzin,
+            windowEndMillis = triggerAt + SNOOZE_MINUTES * 60_000L
         )
         setExactCompat(triggerAt, pendingIntent)
     }
@@ -279,7 +347,9 @@ class PrayerAlarmScheduler(
             isSnooze = false,
             alertMode = preferences.azaanSettings.modeFor(prayerType),
             muezzin = preferences.azaanSettings.muezzin,
-            isTest = true
+            isTest = true,
+            // A short window makes the live countdown and progress bar visible immediately.
+            windowEndMillis = triggerAt + TEST_WINDOW_MS
         )
         setExactCompat(triggerAt, pendingIntent)
     }
@@ -339,7 +409,8 @@ class PrayerAlarmScheduler(
         isSnooze: Boolean,
         alertMode: PrayerAlertMode,
         muezzin: Muezzin,
-        isTest: Boolean = false
+        isTest: Boolean = false,
+        windowEndMillis: Long? = null
     ): PendingIntent {
         val kind = when {
             isTest -> KIND_TEST
@@ -355,6 +426,11 @@ class PrayerAlarmScheduler(
             putExtra(EXTRA_ALERT_MODE, alertMode.name)
             putExtra(EXTRA_MUEZZIN_ID, muezzin.id)
             putExtra(EXTRA_IS_TEST, isTest)
+            putExtra(EXTRA_WINDOW_START_MILLIS, triggerEpochMillis)
+            putExtra(
+                EXTRA_WINDOW_END_MILLIS,
+                windowEndMillis ?: triggerEpochMillis
+            )
         }
         return PendingIntent.getBroadcast(
             context,
@@ -365,28 +441,25 @@ class PrayerAlarmScheduler(
     }
 
     /**
-     * An alarm clock is the strongest user-visible alarm: it wakes the device out of Doze,
-     * shows the time, and lets the alarm receiver start its media-playback foreground service.
-     * If exact alarms were disabled, keep the reminder with an idle-safe fallback.
+     * Prayer reminders are ordinary notification-type alerts, not alarm-clock alarms: they must
+     * not take over the screen or the alarm stream. The exact-and-idle-safe window keeps the
+     * timing precise through Doze, and falls back to an inexact idle-safe alarm when the user
+     * has not granted exact-alarm scheduling.
      */
     private fun setExactCompat(triggerAtMillis: Long, pendingIntent: PendingIntent) {
         val am = alarmManager ?: return
         val canScheduleExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()
-        val showIntent = PendingIntent.getActivity(
-            context,
-            ALARM_CLOCK_SHOW_REQUEST_CODE,
-            Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
 
         if (canScheduleExact) {
             try {
-                am.setAlarmClock(AlarmManager.AlarmClockInfo(triggerAtMillis, showIntent), pendingIntent)
+                am.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent
+                )
                 return
             } catch (e: SecurityException) {
-                // Permission revoked between the check and the call.
+                // Permission revoked between the check and the call: use the idle-safe path.
             }
         }
         am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)

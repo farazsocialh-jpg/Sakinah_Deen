@@ -19,8 +19,10 @@
     <!-- Alarms, Doze-Bypass & Reboot Restoration -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- Prayer reminders are notification-type alerts: no full-screen intents, no alarm stream. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Required for the vibrate-only Salah alert channel and for cancelling its pattern. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Android 14/15/16 Foreground Service Types -->
@@ -74,6 +76,17 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="com.sakinah.deen.ACTION_PRAYER_ALARM" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Prayer card actions: Mute, swipe dismissal and Mark as Prayed -->
+        <receiver
+            android:name=".service.PrayerNotificationActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.sakinah.deen.ACTION_MUTE_ADHAN" />
+                <action android:name="com.sakinah.deen.ACTION_DISMISS_PRAYER" />
+                <action android:name="com.sakinah.deen.ACTION_MARK_PRAYED" />
             </intent-filter>
         </receiver>
 

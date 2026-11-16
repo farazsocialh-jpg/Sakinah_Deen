@@ -27,6 +27,12 @@
     <string name="channel_adhan_desc">High-priority Adhan reminders at astronomical prayer entry times</string>
     <string name="channel_salah_silent_name">Prayer Countdown (Ongoing)</string>
     <string name="channel_salah_silent_desc">Subtle, non-audible ongoing countdown to the next prayer</string>
+    <string name="channel_prayer_sound_name">Salah Alerts — Sound</string>
+    <string name="channel_prayer_sound_desc">Heads-up Salah reminders with the standard notification chime and vibration</string>
+    <string name="channel_prayer_vibrate_name">Salah Alerts — Vibrate Only</string>
+    <string name="channel_prayer_vibrate_desc">Heads-up Salah reminders that vibrate without playing any sound</string>
+    <string name="channel_prayer_silent_name">Salah Alerts — Silent</string>
+    <string name="channel_prayer_silent_desc">Silent Salah reminders that never ring or vibrate</string>
     <string name="channel_safar_name">Travel Mode &amp; Dua al-Safar</string>
     <string name="channel_safar_desc">Heads-up in-vehicle prompts on car Bluetooth connection and Qasr travel mode</string>
     <string name="channel_habit_name">Daily Sunnah &amp; Adhkar Habits</string>
@@ -39,6 +45,10 @@
     <string name="adhan_action_mute">Mute</string>
     <string name="adhan_action_snooze">Snooze 10m</string>
     <string name="adhan_fallback_title">Adhan: Time for %1$s · %2$s</string>
+    <string name="notif_action_mark_prayed">Mark as Prayed</string>
+    <string name="notif_prayer_fallback_title">Salah</string>
+    <string name="notif_prayer_fallback_window">Prayer window</string>
+    <string name="notif_prayer_window" translatable="false">%1$s – %2$s</string>
 
     <!-- Safar / travel -->
     <string name="safar_title">Safar: Dua al-Safar</string>

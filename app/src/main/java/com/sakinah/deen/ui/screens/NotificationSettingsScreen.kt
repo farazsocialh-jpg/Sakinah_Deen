@@ -2,7 +2,6 @@ package com.sakinah.deen.ui.screens
 
 import android.Manifest
 import android.app.AlarmManager
-import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -58,7 +57,7 @@ import com.sakinah.deen.data.model.PrayerAlertMode
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl
 import com.sakinah.deen.service.AdhanAudio
-import com.sakinah.deen.service.AdhanPlaybackService
+import com.sakinah.deen.service.PrayerAlertSilencer
 import com.sakinah.deen.service.AzaanScheduling
 import com.sakinah.deen.service.NotificationChannels
 import com.sakinah.deen.service.PrayerAlarmScheduler
@@ -215,7 +214,7 @@ fun NotificationSettingsScreen(
                             onClick = {
                                 val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
                                     putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                                    putExtra(Settings.EXTRA_CHANNEL_ID, NotificationChannels.CHANNEL_SALAH_ADHAN)
+                                    putExtra(Settings.EXTRA_CHANNEL_ID, NotificationChannels.CHANNEL_PRAYER_SOUND)
                                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                 }
                                 runCatching { context.startActivity(intent) }
@@ -465,13 +464,8 @@ private fun notificationsPermissionGranted(context: Context): Boolean =
         true
     }
 
-private fun isAzaanChannelBlocked(context: Context): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
-    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-        ?: return false
-    return manager.getNotificationChannel(NotificationChannels.CHANNEL_SALAH_ADHAN)?.importance ==
-        NotificationManager.IMPORTANCE_NONE
-}
+private fun isAzaanChannelBlocked(context: Context): Boolean =
+    NotificationChannels.prayerChannelBlocked(context)
 
 private fun isBatteryOptimizationActive(context: Context): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
@@ -521,14 +515,14 @@ internal class AzaanPreviewPlayer(private val context: Context) : AzaanPreviewCo
 
     override fun play(muezzin: Muezzin): Boolean {
         stop()
-        // A live Adhan playback service would otherwise overlap the preview: stop it first.
+        // A live Adhan playback service would otherwise overlap the preview: mute it first.
         stopActiveAdhanPlayback()
         if (!requestAudioFocus()) return false
         return runCatching {
             val mediaPlayer = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                         .build()
                 )
@@ -554,20 +548,14 @@ internal class AzaanPreviewPlayer(private val context: Context) : AzaanPreviewCo
     }
 
     private fun stopActiveAdhanPlayback() {
-        runCatching {
-            context.startService(
-                android.content.Intent(context, AdhanPlaybackService::class.java).apply {
-                    action = AdhanPlaybackService.ACTION_STOP_ADHAN
-                }
-            )
-        }
+        runCatching { PrayerAlertSilencer.stopAzaan(context) }
     }
 
     /** Transient focus so other audio ducks instead of playing over the preview. */
     private fun requestAudioFocus(): Boolean {
         val manager = audioManager ?: return false
         val attributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
             .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
             .build()
         val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
