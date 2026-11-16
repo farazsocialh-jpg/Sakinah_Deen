@@ -25,6 +25,7 @@ jobs:
   release-bundle:
     name: Build signed AAB
     runs-on: ubuntu-latest
+    environment: Playstore
     timeout-minutes: 45
 
     steps:

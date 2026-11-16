@@ -25,6 +25,7 @@ jobs:
   signed-release-apk:
     name: Build signed release APK
     runs-on: ubuntu-latest
+    environment: Playstore
     timeout-minutes: 45
 
     steps:
