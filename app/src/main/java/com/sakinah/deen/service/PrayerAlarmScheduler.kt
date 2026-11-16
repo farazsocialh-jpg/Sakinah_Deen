@@ -18,9 +18,9 @@ import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.PrayerTimeRepository
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
 import java.time.LocalDate as JLocalDate
-import java.time.LocalDateTime
 import java.time.LocalTime as JLocalTime
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlinx.datetime.LocalDate as KLocalDate
 import kotlinx.datetime.toJavaLocalTime
@@ -42,6 +42,9 @@ class PrayerAlarmScheduler(
         const val EXTRA_IS_SNOOZE = "extra_is_snooze"
         const val EXTRA_ALERT_MODE = "extra_alert_mode"
         const val EXTRA_MUEZZIN_ID = "extra_muezzin_id"
+
+        /** Set by [scheduleTestAlarmInSeconds] so the completion guard never suppresses a test. */
+        const val EXTRA_IS_TEST = "extra_is_test"
 
         private const val BASE_REQUEST_CODE = 1000
         private const val SNOOZE_REQUEST_CODE = 9500
@@ -121,38 +124,40 @@ class PrayerAlarmScheduler(
         todayTimes: Map<PrayerType, JLocalTime>,
         tomorrowTimes: Map<PrayerType, JLocalTime>
     ) {
-        // Re-register the complete table so turning a prayer off removes its old alarm.
+        // Re-register the complete table so a prayer switched to OFF loses its previous
+        // PendingIntent instead of firing an alert the user just disabled.
         cancelAllAlarms()
 
         val settings = preferences.azaanSettings
         if (!settings.enabled) return
 
-        val nowJ = JLocalTime.now()
-        val todayJ = JLocalDate.now()
+        val zone = ZoneId.systemDefault()
+        val nowZoned = ZonedDateTime.now(zone)
+        val todayJ = nowZoned.toLocalDate()
         val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a")
 
         for (prayer in PRAYERS_TO_SCHEDULE) {
             val mode = settings.modeFor(prayer)
+            // cancelAllAlarms() above already removed this prayer's stale PendingIntent.
             if (mode == PrayerAlertMode.OFF) continue
 
             val todayTime = todayTimes[prayer] ?: continue
             val offset = settings.offsetFor(prayer).toLong()
-            val todayAlertTime = todayTime.plusMinutes(offset)
-            val isFutureToday = todayAlertTime.isAfter(nowJ)
-            val triggerDate = if (isFutureToday) todayJ else todayJ.plusDays(1)
-            val baseTime = if (isFutureToday) todayTime else (tomorrowTimes[prayer] ?: todayTime)
-            val alertTime = baseTime.plusMinutes(offset)
-
-            val triggerMillis = LocalDateTime.of(triggerDate, alertTime)
-                .atZone(ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
+            // Compare full zoned instants: plusMinutes may wrap past midnight, which a
+            // LocalTime comparison would treat as "earlier today" and skip or double-schedule.
+            val todayAlert = ZonedDateTime.of(todayJ, todayTime, zone).plusMinutes(offset)
+            val triggerZoned = if (todayAlert.isAfter(nowZoned)) {
+                todayAlert
+            } else {
+                val tomorrowTime = tomorrowTimes[prayer] ?: todayTime
+                ZonedDateTime.of(todayJ.plusDays(1), tomorrowTime, zone).plusMinutes(offset)
+            }
 
             scheduleSingleAlarm(
                 prayerType = prayer,
                 prayerName = prayer.name.lowercase().replaceFirstChar { it.uppercase() },
-                timeFormatted = alertTime.format(timeFormatter),
-                triggerEpochMillis = triggerMillis,
+                timeFormatted = triggerZoned.toLocalTime().format(timeFormatter),
+                triggerEpochMillis = triggerZoned.toInstant().toEpochMilli(),
                 alertMode = mode,
                 muezzin = settings.muezzin
             )
@@ -263,7 +268,8 @@ class PrayerAlarmScheduler(
             triggerEpochMillis = triggerAt,
             isSnooze = false,
             alertMode = preferences.azaanSettings.modeFor(prayerType),
-            muezzin = preferences.azaanSettings.muezzin
+            muezzin = preferences.azaanSettings.muezzin,
+            isTest = true
         )
         setExactCompat(triggerAt, pendingIntent)
     }
@@ -311,7 +317,8 @@ class PrayerAlarmScheduler(
         triggerEpochMillis: Long,
         isSnooze: Boolean,
         alertMode: PrayerAlertMode,
-        muezzin: Muezzin
+        muezzin: Muezzin,
+        isTest: Boolean = false
     ): PendingIntent {
         val intent = Intent(context, PrayerAlarmReceiver::class.java).apply {
             action = ACTION_PRAYER_ALARM
@@ -322,6 +329,7 @@ class PrayerAlarmScheduler(
             putExtra(EXTRA_IS_SNOOZE, isSnooze)
             putExtra(EXTRA_ALERT_MODE, alertMode.name)
             putExtra(EXTRA_MUEZZIN_ID, muezzin.id)
+            putExtra(EXTRA_IS_TEST, isTest)
         }
         return PendingIntent.getBroadcast(
             context,

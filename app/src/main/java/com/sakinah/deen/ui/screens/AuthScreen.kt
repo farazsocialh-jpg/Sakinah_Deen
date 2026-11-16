@@ -62,8 +62,6 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var infoMessage by remember { mutableStateOf<String?>(null) }
 
-    var showForgotDialog by remember { mutableStateOf(false) }
-    var resetEmail by remember { mutableStateOf("") }
 
     val scope = rememberCoroutineScope()
     val authProvidersEnabled = false
@@ -240,18 +238,9 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                     Text(if (isSignUp) "Already have an account?" else "Create account")
                 }
 
-                if (!isSignUp) {
-                    TextButton(
-                        onClick = {
-                            resetEmail = email.trim()
-                            showForgotDialog = true
-                        },
-                        enabled = !isSubmitting
-                    ) {
-                        Text("Forgot password?")
-                    }
-                }
             }
+            // There is no "Forgot password?" action: these accounts exist only on this device
+            // and no reset email can be delivered, so offering one would be misleading.
 
             TextButton(
                 onClick = {
@@ -269,47 +258,4 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
         }
     }
 
-    if (showForgotDialog) {
-        AlertDialog(
-            onDismissRequest = { showForgotDialog = false },
-            title = { Text("Reset Password") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Password reset is recorded on this device only; local accounts are not emailed.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    OutlinedTextField(
-                        value = resetEmail,
-                        onValueChange = { resetEmail = it },
-                        label = { Text("Email") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val target = resetEmail.trim()
-                    scope.launch {
-                        val res = repo.sendPasswordReset(target)
-                        res.onSuccess {
-                            infoMessage = "Password reset recorded locally for $target (local account)."
-                            errorMessage = null
-                        }.onFailure { err ->
-                            errorMessage = err.message ?: "Could not process password reset."
-                        }
-                        showForgotDialog = false
-                    }
-                }) {
-                    Text("Send Reset")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showForgotDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
 }

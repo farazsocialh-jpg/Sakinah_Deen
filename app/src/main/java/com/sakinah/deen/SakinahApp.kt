@@ -2,6 +2,9 @@ package com.sakinah.deen
 
 import android.app.Application
 import androidx.work.Configuration
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.sakinah.deen.data.database.OfflineContentSeeder
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.PrayerTimeRepository
@@ -9,7 +12,11 @@ import com.sakinah.deen.di.appModules
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
 import com.sakinah.deen.service.NotificationChannels
 import com.sakinah.deen.service.PrayerAlarmScheduler
+import com.sakinah.deen.work.DailyHabitResetWorker
 import com.sakinah.deen.work.KoinWorkerFactory
+import java.time.Duration
+import java.time.ZonedDateTime
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -69,14 +76,17 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
 
         NotificationChannels.createChannels(this)
 
-        // Restore exact alarms on cold start only for a location the user actually saved.
-        // Never arm reminders for a bootstrap/default city before onboarding.
-        val coordinates = preferences.locationCoordinates
-        if (coordinates != null && preferences.alarmsEnabled) {
-            val scheduler = PrayerAlarmScheduler(this, astronomyEngine, preferences, prayerTimeRepository)
-            // Keep alarm registration off the main thread; it touches SharedPreferences,
-            // AlarmManager and (potentially) the network-backed timetable cache.
-            applicationScope.launch(Dispatchers.Default) {
+        // Startup disk reads stay off the main thread: StrictMode is enabled in DEBUG and
+        // SharedPreferences/AlarmManager/WorkManager all touch the filesystem.
+        applicationScope.launch(Dispatchers.IO) {
+            scheduleDailyHabitReset()
+
+            // Restore exact alarms on cold start only for a location the user actually saved.
+            // Never arm reminders for a bootstrap/default city before onboarding.
+            val coordinates = preferences.locationCoordinates
+            if (coordinates != null && preferences.alarmsEnabled) {
+                val scheduler =
+                    PrayerAlarmScheduler(this@SakinahApp, astronomyEngine, preferences, prayerTimeRepository)
                 runCatching {
                     scheduler.scheduleAllDailyAlarms(
                         coordinates = coordinates,
@@ -86,6 +96,28 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
                 }
                 runCatching { scheduler.scheduleAllDailyAlarmsRefreshed(coordinates = coordinates) }
             }
+        }
+    }
+
+    /**
+     * Seeds today's Salah slots and rolls yesterday's missed prayers into the Qadha ledger once
+     * a day. KEEP preserves WorkManager's periodic schedule across app restarts.
+     */
+    private fun scheduleDailyHabitReset() {
+        runCatching {
+            val now = ZonedDateTime.now()
+            val nextMidnight = now.toLocalDate().plusDays(1).atStartOfDay(now.zone)
+            val initialDelayMillis = Duration.between(now, nextMidnight)
+                .toMillis()
+                .coerceAtLeast(60_000L)
+            val request = PeriodicWorkRequestBuilder<DailyHabitResetWorker>(1, TimeUnit.DAYS)
+                .setInitialDelay(initialDelayMillis, TimeUnit.MILLISECONDS)
+                .build()
+            WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                DailyHabitResetWorker.UNIQUE_WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                request
+            )
         }
     }
 }

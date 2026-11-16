@@ -31,7 +31,10 @@ class CarBluetoothReceiver : BroadcastReceiver() {
 
     companion object {
         const val VEHICLE_NOTIFICATION_ID = 5001
-        private const val ACTION_OPEN_TRAVEL = "travel"
+
+        /** Extra read by MainActivity to open a screen from a notification tap. */
+        const val EXTRA_NAVIGATE_TO = "navigate_to"
+        const val ACTION_OPEN_TRAVEL = "travel"
 
         /** Address of the Bluetooth device that most recently activated travel mode. */
         @Volatile
@@ -222,12 +225,23 @@ class CarBluetoothReceiver : BroadcastReceiver() {
         qasrActive: Boolean,
         distanceKm: Double?
     ) {
+        // POST_NOTIFICATIONS is a runtime permission on Android 13+; without it notify()
+        // is a silent no-op, so skip the work instead of logging failures.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
 
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("navigate_to", ACTION_OPEN_TRAVEL)
+            putExtra(EXTRA_NAVIGATE_TO, ACTION_OPEN_TRAVEL)
         }
         val openAppPendingIntent = PendingIntent.getActivity(
             context,
@@ -236,14 +250,26 @@ class CarBluetoothReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val playDuaPendingIntent = PendingIntent.getService(
-            context,
-            102,
-            Intent(context, AdhanPlaybackService::class.java).apply {
-                action = AdhanPlaybackService.ACTION_PLAY_DUA_SAFAR
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        // AdhanPlaybackService is a foreground service. getService() is refused from the
+        // background on Android 8.0+, so request a foreground-service start on the tap.
+        val playDuaIntent = Intent(context, AdhanPlaybackService::class.java).apply {
+            action = AdhanPlaybackService.ACTION_PLAY_DUA_SAFAR
+        }
+        val playDuaPendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            PendingIntent.getForegroundService(
+                context,
+                102,
+                playDuaIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        } else {
+            PendingIntent.getService(
+                context,
+                102,
+                playDuaIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
 
         val distanceLine = distanceKm?.let { "%.0f km from home".format(it) }
         val qasrLine = when {

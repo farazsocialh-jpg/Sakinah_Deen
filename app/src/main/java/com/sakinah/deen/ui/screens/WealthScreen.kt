@@ -38,6 +38,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -105,6 +106,24 @@ fun WealthScreen(
     var inventoryText by remember { mutableStateOf(formatFieldInit(state.tradeInventory)) }
     var stocksText by remember { mutableStateOf(formatFieldInit(state.stocksValue)) }
     var debtsText by remember { mutableStateOf(formatFieldInit(state.shortTermDebts)) }
+
+    // A cleared field is an explicit zero, and any balance the view model changes itself
+    // (restored values, reset) re-syncs the buffers so the UI never shows a stale amount.
+    LaunchedEffect(
+        state.cashInBank,
+        state.goldHeld,
+        state.silverHeld,
+        state.tradeInventory,
+        state.stocksValue,
+        state.shortTermDebts
+    ) {
+        if (amountFromInput(cashText) != state.cashInBank) cashText = formatFieldInit(state.cashInBank)
+        if (amountFromInput(goldText) != state.goldHeld) goldText = formatFieldInit(state.goldHeld)
+        if (amountFromInput(silverText) != state.silverHeld) silverText = formatFieldInit(state.silverHeld)
+        if (amountFromInput(inventoryText) != state.tradeInventory) inventoryText = formatFieldInit(state.tradeInventory)
+        if (amountFromInput(stocksText) != state.stocksValue) stocksText = formatFieldInit(state.stocksValue)
+        if (amountFromInput(debtsText) != state.shortTermDebts) debtsText = formatFieldInit(state.shortTermDebts)
+    }
 
     val ratesUpdatedLabel = remember(state.nisabLastUpdatedEpochMillis) {
         formatNisabTimestamp(state.nisabLastUpdatedEpochMillis)
@@ -264,6 +283,8 @@ fun WealthScreen(
                         label = "Cash in Hand & Bank Accounts ($)",
                         onValueChange = { raw ->
                             cashText = raw
+                            // A blank field means zero (amountFromInput maps it) rather than
+                            // leaving the previous amount in the view model.
                             amountFromInput(raw)?.let { viewModel.onIntent(WealthUiIntent.UpdateCash(it)) }
                         }
                     )

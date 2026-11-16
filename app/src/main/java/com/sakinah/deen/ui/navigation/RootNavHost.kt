@@ -117,7 +117,11 @@ private fun startScreenForObjective(objective: UserObjective): SakinahScreen =
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun RootNavHost() {
+fun RootNavHost(
+    /** Screen requested by an incoming Intent extra (e.g. "travel" from the car prompt). */
+    navigateToExtra: String? = null,
+    onNavigateToExtraHandled: () -> Unit = {}
+) {
     val koinStarted = remember { GlobalContext.getOrNull() != null }
     val context = LocalContext.current
     val appearancePrefs = remember(koinStarted, context) {
@@ -257,6 +261,18 @@ fun RootNavHost() {
                 currentScreen = start
             }
         }
+    }
+
+    // Notification taps carry a target screen (the car handshake asks for Travel). The extra
+    // is consumed once so a recomposition or rotation does not re-navigate.
+    LaunchedEffect(navigateToExtra) {
+        if (navigateToExtra.isNullOrBlank()) return@LaunchedEffect
+        val destination = when (navigateToExtra) {
+            com.sakinah.deen.receiver.CarBluetoothReceiver.ACTION_OPEN_TRAVEL -> SakinahScreen.Travel
+            else -> null
+        }
+        if (destination != null) navigateTo(destination)
+        onNavigateToExtraHandled()
     }
 
     val startScreen = startScreenForObjective(appearanceConfig.objective)

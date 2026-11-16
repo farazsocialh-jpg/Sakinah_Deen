@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -58,7 +60,9 @@ fun OnboardingScreen(
     modifier: Modifier = Modifier
 ) {
     var selectedTrack by rememberSaveable { mutableStateOf(JourneyTrack.NEW_TO_ISLAM) }
-    var selectedGender by rememberSaveable { mutableStateOf(initialGender) }
+    // Keyed on the argument so a saved value from a previous configuration does not
+    // override the gender the caller just passed in.
+    var selectedGender by rememberSaveable(initialGender) { mutableStateOf(initialGender) }
     var isHanafiAsr by rememberSaveable { mutableStateOf(false) }
 
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -66,6 +70,8 @@ fun OnboardingScreen(
             modifier = Modifier
                 .widthIn(max = 600.dp)
                 .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -154,7 +160,10 @@ fun OnboardingScreen(
                 }
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    // The whole row toggles, not just the small switch target.
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { isHanafiAsr = !isHanafiAsr },
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -172,7 +181,8 @@ fun OnboardingScreen(
                     }
                     Switch(
                         checked = isHanafiAsr,
-                        onCheckedChange = { isHanafiAsr = it }
+                        // The parent row owns the toggle so a single tap cannot fire twice.
+                        onCheckedChange = null
                     )
                 }
             }

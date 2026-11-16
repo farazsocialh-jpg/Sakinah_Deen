@@ -61,6 +61,9 @@ sealed class AiScholarNavigationEvent {
         val hadithNumber: Int,
         val sectionHint: String? = null
     ) : AiScholarNavigationEvent()
+
+    /** A citation whose source could not be mapped to a Quran/Hadith destination. */
+    data class CitationUnresolved(val sourceTitle: String) : AiScholarNavigationEvent()
 }
 
 typealias Citation = com.sakinah.deen.data.model.Citation
@@ -469,7 +472,10 @@ class AiScholarViewModel(
                 lower.contains("majah") || lower.contains("nawawi") ||
                 lower.contains("malik") || lower.contains("muwatta") ||
                 lower.contains("ahmad") || lower.contains("darimi")
-            if (!recognized) return@launch
+            if (!recognized) {
+                _navigationEvents.emit(AiScholarNavigationEvent.CitationUnresolved(sourceTitle))
+                return@launch
+            }
             val bookKey = when {
                 lower.contains("muslim") -> "muslim"
                 lower.contains("bukhari") -> "bukhari"
@@ -484,7 +490,12 @@ class AiScholarViewModel(
                 else -> return@launch
             }
             val num = HADITH_NUMBER_REGEX.findAll(sourceTitle).lastOrNull()?.groupValues?.getOrNull(1)?.toIntOrNull()
-                ?: return@launch
+            if (num == null) {
+                // Recognised collection without a number, or nothing matched at all: say so
+                // instead of ignoring the tap.
+                _navigationEvents.emit(AiScholarNavigationEvent.CitationUnresolved(sourceTitle))
+                return@launch
+            }
             _navigationEvents.emit(
                 AiScholarNavigationEvent.NavigateToHadith(
                     bookKey = bookKey,

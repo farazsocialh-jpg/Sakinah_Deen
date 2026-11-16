@@ -7,6 +7,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
@@ -57,10 +59,11 @@ import com.sakinah.deen.data.model.PrayerAlertMode
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl
 import com.sakinah.deen.service.AdhanAudio
+import com.sakinah.deen.service.AdhanPlaybackService
 import com.sakinah.deen.service.AzaanScheduling
+import com.sakinah.deen.service.NotificationChannels
 import com.sakinah.deen.service.PrayerAlarmScheduler
 import com.sakinah.deen.ui.components.SakinahCard
-import com.sakinah.deen.work.PrayerAlarmWorker
 import kotlinx.coroutines.launch
 
 /**
@@ -214,7 +217,7 @@ fun NotificationSettingsScreen(
                             onClick = {
                                 val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
                                     putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                                    putExtra(Settings.EXTRA_CHANNEL_ID, PrayerAlarmWorker.CHANNEL_ID)
+                                    putExtra(Settings.EXTRA_CHANNEL_ID, NotificationChannels.CHANNEL_SALAH_ADHAN)
                                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                 }
                                 runCatching { context.startActivity(intent) }
@@ -452,7 +455,7 @@ private fun isAzaanChannelBlocked(context: Context): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
     val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         ?: return false
-    return manager.getNotificationChannel(PrayerAlarmWorker.CHANNEL_ID)?.importance ==
+    return manager.getNotificationChannel(NotificationChannels.CHANNEL_SALAH_ADHAN)?.importance ==
         NotificationManager.IMPORTANCE_NONE
 }
 
@@ -498,9 +501,15 @@ interface AzaanPreviewController {
 internal class AzaanPreviewPlayer(private val context: Context) : AzaanPreviewController {
     override var onFinished: (() -> Unit)? = null
     private var player: MediaPlayer? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private val audioManager: AudioManager? =
+        context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 
     override fun play(muezzin: Muezzin): Boolean {
         stop()
+        // A live Adhan playback service would otherwise overlap the preview: stop it first.
+        stopActiveAdhanPlayback()
+        if (!requestAudioFocus()) return false
         return runCatching {
             val mediaPlayer = MediaPlayer().apply {
                 setAudioAttributes(
@@ -530,12 +539,50 @@ internal class AzaanPreviewPlayer(private val context: Context) : AzaanPreviewCo
         }
     }
 
+    private fun stopActiveAdhanPlayback() {
+        runCatching {
+            context.startService(
+                android.content.Intent(context, AdhanPlaybackService::class.java).apply {
+                    action = AdhanPlaybackService.ACTION_STOP_ADHAN
+                }
+            )
+        }
+    }
+
+    /** Transient focus so other audio ducks instead of playing over the preview. */
+    private fun requestAudioFocus(): Boolean {
+        val manager = audioManager ?: return false
+        val attributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build()
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+            .setAudioAttributes(attributes)
+            .setOnAudioFocusChangeListener { change ->
+                if (change <= AudioManager.AUDIOFOCUS_LOSS_TRANSIENT && player != null) {
+                    runCatching { stop() }
+                }
+            }
+            .build()
+        val granted = manager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        if (granted) audioFocusRequest = request
+        return granted
+    }
+
+    private fun abandonAudioFocus() {
+        audioFocusRequest?.let { request ->
+            runCatching { audioManager?.abandonAudioFocusRequest(request) }
+        }
+        audioFocusRequest = null
+    }
+
     override fun stop() {
         player?.let { mediaPlayer ->
             runCatching { mediaPlayer.stop() }
             runCatching { mediaPlayer.release() }
         }
         player = null
+        abandonAudioFocus()
     }
 
     override fun release() = stop()

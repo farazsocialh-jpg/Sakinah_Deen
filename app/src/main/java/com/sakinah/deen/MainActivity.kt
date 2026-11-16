@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -23,6 +24,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
+import com.sakinah.deen.receiver.CarBluetoothReceiver
 import com.sakinah.deen.service.AdhanPlaybackService
 import com.sakinah.deen.service.AzaanScheduling
 import com.sakinah.deen.ui.navigation.RootNavHost
@@ -32,10 +34,15 @@ import com.sakinah.deen.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+
+    /** Screen requested by a notification tap (e.g. the car handshake's Travel prompt). */
+    private val pendingNavigation = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        pendingNavigation.value = navigationTarget(intent)
         setContent {
             val appearancePrefs = rememberInject<AppearancePreferences>()
             val appearanceConfig by appearancePrefs.effectiveConfig.collectAsStateWithLifecycle()
@@ -100,7 +107,10 @@ class MainActivity : ComponentActivity() {
                 fontScaleMultiplier = appearanceConfig.fontScale.multiplier
             ) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    RootNavHost()
+                    RootNavHost(
+                        navigateToExtra = pendingNavigation.value,
+                        onNavigateToExtraHandled = { pendingNavigation.value = null }
+                    )
                 }
             }
         }
@@ -108,11 +118,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
+        pendingNavigation.value = navigationTarget(intent)
         // Only an explicit stop-Adhan action/extra may interrupt playback.
         val stopRequested = intent.action == AdhanPlaybackService.ACTION_STOP_ADHAN ||
             intent.getBooleanExtra("stop_adhan", false)
         if (stopRequested) sendStopAdhanIntent()
     }
+
+    private fun navigationTarget(intent: Intent?): String? =
+        intent?.getStringExtra(CarBluetoothReceiver.EXTRA_NAVIGATE_TO)
+            ?.takeIf { it.isNotBlank() }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if ((keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) &&

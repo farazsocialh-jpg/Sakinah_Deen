@@ -88,7 +88,9 @@ data class SalahUiState(
     /** Great-circle distance from the saved Home location, in kilometres. */
     val distanceFromHomeKm: Double = 0.0,
     /** Whether a Home location has been saved (drives the "Set Home Location" prompt). */
-    val hasHomeLocation: Boolean = false
+    val hasHomeLocation: Boolean = false,
+    /** Drives the pull-to-refresh indicator; cleared when a refresh attempt finishes. */
+    val isRefreshing: Boolean = false
 )
 
 sealed class SalahUiIntent {
@@ -312,6 +314,9 @@ class SalahViewModel(
                 }
             }
             is SalahUiIntent.RefreshLocation -> {
+                // The indicator is owned here so a failed or empty refresh cannot leave it
+                // spinning forever in the UI.
+                _uiState.update { it.copy(isRefreshing = true) }
                 if (_uiState.value.isManualLocation) {
                     loadDailySchedule()
                 } else {
@@ -393,7 +398,13 @@ class SalahViewModel(
         }
 
         viewModelScope.launch {
-            val resolved = locationProvider.getFreshOrCachedLocation()
+            val resolved = runCatching { locationProvider.getFreshOrCachedLocation() }.getOrNull()
+            if (resolved == null) {
+                // Resolution failed outright: keep the current schedule and stop refreshing.
+                _uiState.update { it.copy(isRefreshing = false) }
+                loadDailySchedule()
+                return@launch
+            }
             // Guard against overwriting if user switched to manual city while GPS resolved.
             if (_uiState.value.isManualLocation) {
                 loadDailySchedule()
@@ -523,18 +534,23 @@ class SalahViewModel(
 
         val repository = prayerTimes ?: return
         viewModelScope.launch {
-            val resolved = repository.resolveDay(
-                date = today,
-                coordinates = state.userCoordinates,
-                madhhab = state.madhhab,
-                zoneId = zoneId,
-                adjustments = state.adjustments,
-                countryCode = countryCode
-            )
+            val resolved = runCatching {
+                repository.resolveDay(
+                    date = today,
+                    coordinates = state.userCoordinates,
+                    madhhab = state.madhhab,
+                    zoneId = zoneId,
+                    adjustments = state.adjustments,
+                    countryCode = countryCode
+                )
+            }.getOrNull()
             if (request != scheduleRequest) return@launch
 
-            if (resolved.times.isEmpty()) {
-                _uiState.update { it.copy(sourceLabel = resolved.label) }
+            if (resolved == null || resolved.times.isEmpty()) {
+                // Offline or failed lookup: the local table already rendered, so finish here.
+                _uiState.update {
+                    it.copy(sourceLabel = resolved?.label ?: it.sourceLabel, isRefreshing = false)
+                }
                 return@launch
             }
             renderTimes(
@@ -594,7 +610,8 @@ class SalahViewModel(
                 hasHomeLocation = travelManager.hasHomeAnchor,
                 sourceLabel = sourceLabel,
                 authorityName = authorityName ?: it.authorityName,
-                timeZoneAbbr = TimeZoneResolver.shortAbbreviation(it.timeZoneId)
+                timeZoneAbbr = TimeZoneResolver.shortAbbreviation(it.timeZoneId),
+                isRefreshing = false
             )
         }
     }

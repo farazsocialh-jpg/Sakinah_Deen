@@ -1,0 +1,10 @@
+name = "sakinah-ai-proxy"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+
+# No secrets belong in this file.
+# Set them once per environment with:
+#   npx wrangler secret put GEMINI_API_KEY
+#   npx wrangler secret put CLIENT_TOKEN   # optional, only if you gate the proxy
+[vars]
+GEMINI_MODEL = "gemini-2.0-flash"

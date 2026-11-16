@@ -29,16 +29,22 @@ import androidx.compose.material.icons.outlined.MonetizationOn
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -67,10 +73,21 @@ fun ToolsHubScreen(
     val signedInUser = (authState as? AuthState.Authenticated)?.user
     val scope = rememberCoroutineScope()
 
+    var isLoadingProfile by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showSignOutConfirm by remember { mutableStateOf(false) }
+
     LaunchedEffect(signedInUser?.id) {
-        if (signedInUser != null) {
-            profileRepo.loadForUser(signedInUser.id)
-        }
+        val user = signedInUser ?: return@LaunchedEffect
+        isLoadingProfile = true
+        errorMessage = null
+        // A failed profile read must not crash the hub; surface it instead.
+        runCatching { profileRepo.loadForUser(user.id) }
+            .onFailure { err ->
+                if (err is kotlinx.coroutines.CancellationException) throw err
+                errorMessage = err.message ?: "Could not load your saved profile."
+            }
+        isLoadingProfile = false
     }
 
     val effectiveName = profile?.displayName?.takeIf { it.isNotBlank() }
@@ -124,9 +141,32 @@ fun ToolsHubScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    StatusBadge(
-                        text = if (signedInUser != null) "Profile" else "Sign In",
-                        accentColor = MaterialTheme.colorScheme.primary
+                    if (isLoadingProfile) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        StatusBadge(
+                            text = if (signedInUser != null) "Profile" else "Sign In",
+                            accentColor = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            errorMessage?.let { message ->
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = message,
+                        modifier = Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
                     )
                 }
             }
@@ -208,7 +248,7 @@ fun ToolsHubScreen(
 
             if (signedInUser != null) {
                 OutlinedButton(
-                    onClick = { scope.launch { authRepo.signOut() } },
+                    onClick = { showSignOutConfirm = true },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(
@@ -222,6 +262,31 @@ fun ToolsHubScreen(
             }
             Spacer(Modifier.height(8.dp))
         }
+    }
+
+    if (showSignOutConfirm) {
+        AlertDialog(
+            onDismissRequest = { showSignOutConfirm = false },
+            title = { Text("Sign out?") },
+            text = { Text("Your saved Quran, Hadith and Salah progress stays on this device.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSignOutConfirm = false
+                        scope.launch {
+                            runCatching { authRepo.signOut() }
+                                .onFailure { err ->
+                                    if (err is kotlinx.coroutines.CancellationException) throw err
+                                    errorMessage = err.message ?: "Could not sign out."
+                                }
+                        }
+                    }
+                ) { Text("Sign Out") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSignOutConfirm = false }) { Text("Cancel") }
+            }
+        )
     }
 }
 

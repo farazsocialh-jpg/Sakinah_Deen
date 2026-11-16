@@ -179,10 +179,49 @@ val workerModule = module {
     single { KoinWorkerFactory(getKoin()) }
 }
 
+/**
+ * Account records (emails, password hashes, profile) live in EncryptedSharedPreferences.
+ * The previous plain store is migrated once and kept only as a fallback when the platform
+ * keystore is unavailable, so a rotated key never locks the user out of the app.
+ */
+private fun encryptedAccountSettings(context: android.content.Context): android.content.SharedPreferences {
+    val legacy = context.getSharedPreferences("sakinah_account_settings", android.content.Context.MODE_PRIVATE)
+    val encrypted = runCatching {
+        val masterKey = androidx.security.crypto.MasterKey.Builder(context)
+            .setKeyScheme(androidx.security.crypto.MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        androidx.security.crypto.EncryptedSharedPreferences.create(
+            context,
+            "sakinah_account_settings_encrypted",
+            masterKey,
+            androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+    }.getOrNull() ?: return legacy
+
+    if (!encrypted.getBoolean("account_store_migrated", false)) {
+        runCatching {
+            val editor = encrypted.edit()
+            legacy.all.forEach { (key, value) ->
+                when (value) {
+                    is String -> editor.putString(key, value)
+                    is Boolean -> editor.putBoolean(key, value)
+                    is Int -> editor.putInt(key, value)
+                    is Long -> editor.putLong(key, value)
+                    is Float -> editor.putFloat(key, value)
+                    is Set<*> -> editor.putStringSet(key, value.filterIsInstance<String>().toSet())
+                }
+            }
+            editor.putBoolean("account_store_migrated", true).apply()
+        }
+    }
+    return encrypted
+}
+
 val accountModule = module {
     single<com.russhwolf.settings.Settings>(qualifier = org.koin.core.qualifier.named("account_settings")) {
         com.russhwolf.settings.SharedPreferencesSettings(
-            androidContext().getSharedPreferences("sakinah_account_settings", android.content.Context.MODE_PRIVATE)
+            encryptedAccountSettings(androidContext())
         )
     }
     single<com.sakinah.deen.auth.AuthRepository> {

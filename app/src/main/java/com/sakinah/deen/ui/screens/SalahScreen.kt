@@ -168,11 +168,7 @@ fun SalahScreen(
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showManualCityDialog by remember { mutableStateOf(false) }
     var expandedId by remember { mutableStateOf<String?>(null) }
-    var isRefreshing by remember { mutableStateOf(false) }
-    // Refresh completes when the view model publishes the refreshed state.
-    LaunchedEffect(state) {
-        if (isRefreshing) isRefreshing = false
-    }
+    // Refresh state lives in the view model: a failed or empty refresh still clears it.
 
     val qiblaManager = rememberInject<QiblaSensorManager>()
     val compassData by qiblaManager.compassFlow.collectAsState()
@@ -217,12 +213,9 @@ fun SalahScreen(
     }
 
     PullToRefreshBox(
-        isRefreshing = isRefreshing,
+        isRefreshing = state.isRefreshing,
         onRefresh = {
-            if (!isRefreshing) {
-                isRefreshing = true
-                viewModel?.onIntent(SalahUiIntent.RefreshLocation)
-            }
+            if (!state.isRefreshing) viewModel?.onIntent(SalahUiIntent.RefreshLocation)
         },
         modifier = modifier.fillMaxSize()
     ) {
@@ -321,12 +314,13 @@ fun SalahScreen(
                                 prayers = state.prayersList,
                                 currentPrayerName = state.currentPrayerName,
                                 onTogglePrayer = { prayer ->
-                                    val prayerType = runCatching {
-                                        PrayerType.valueOf(prayer.nameEnglish.uppercase())
-                                    }.getOrDefault(PrayerType.DHUHR)
-                                    viewModel?.onIntent(
-                                        SalahUiIntent.ToggleSalahCompletion(prayerType, prayer.isJamaah)
-                                    )
+                                    // Sunrise is informational only; never fall back to another
+                                    // prayer's type or tapping it would toggle that prayer.
+                                    prayerTypeOf(prayer)?.let { prayerType ->
+                                        viewModel?.onIntent(
+                                            SalahUiIntent.ToggleSalahCompletion(prayerType, prayer.isJamaah)
+                                        )
+                                    }
                                 }
                             )
                         }
@@ -385,10 +379,11 @@ fun SalahScreen(
                                             modifier = Modifier
                                                 .size(32.dp)
                                                 .clickable {
-                                                    val prayerType = runCatching {
-                                                        PrayerType.valueOf(prayer.nameEnglish.uppercase())
-                                                    }.getOrDefault(PrayerType.DHUHR)
-                                                    viewModel?.onIntent(SalahUiIntent.ToggleSalahCompletion(prayerType, prayer.isJamaah))
+                                                    prayerTypeOf(prayer)?.let { prayerType ->
+                                                        viewModel?.onIntent(
+                                                            SalahUiIntent.ToggleSalahCompletion(prayerType, prayer.isJamaah)
+                                                        )
+                                                    }
                                                 }
                                         ) {
                                             Box(contentAlignment = Alignment.Center) {
@@ -807,7 +802,11 @@ fun SalahScreen(
                         val totalMissed = deficits.values.sum()
                         val daysRemaining = if (totalMissed == 0) 0 else (totalMissed + 1) / 2
                         Text(
-                            text = "Total Missed Prayers: $totalMissed · Pace: 2/day ($daysRemaining days remaining)",
+                            text = if (totalMissed == 0) {
+                                "Total Missed Prayers: 0 · Alhamdulillah, nothing outstanding."
+                            } else {
+                                "Total Missed Prayers: $totalMissed · $daysRemaining days remaining at 2/day"
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.Medium
@@ -832,16 +831,31 @@ fun SalahScreen(
                                     fontSize = 13.sp,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
-                                Button(
-                                    onClick = { viewModel?.onIntent(SalahUiIntent.DecrementQadha(p)) },
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        contentColor = MaterialTheme.colorScheme.onPrimary
-                                    ),
-                                    enabled = count > 0
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("+1 Prayed", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                    // Correct a mistaken entry by adding a missed prayer back.
+                                    OutlinedButton(
+                                        onClick = { viewModel?.onIntent(SalahUiIntent.IncrementQadha(p)) },
+                                        shape = RoundedCornerShape(12.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                    ) {
+                                        Text("+1 Missed", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                    }
+                                    Button(
+                                        onClick = { viewModel?.onIntent(SalahUiIntent.DecrementQadha(p)) },
+                                        shape = RoundedCornerShape(12.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary
+                                        ),
+                                        // Cannot make up more prayers than are outstanding.
+                                        enabled = count > 0
+                                    ) {
+                                        Text("+1 Prayed", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                    }
                                 }
                             }
                         }
@@ -859,4 +873,17 @@ fun SalahScreen(
             }
         }
     }
+}
+
+/**
+ * Maps a displayed row to a recordable prayer. Sunrise has no Salah record, so it returns
+ * null instead of silently defaulting to Dhuhr (which made tapping Sunrise tick Dhuhr off).
+ */
+internal fun prayerTypeOf(prayer: PrayerModel): PrayerType? = when (prayer.id.lowercase()) {
+    "fajr" -> PrayerType.FAJR
+    "dhuhr" -> PrayerType.DHUHR
+    "asr" -> PrayerType.ASR
+    "maghrib" -> PrayerType.MAGHRIB
+    "isha" -> PrayerType.ISHA
+    else -> null
 }

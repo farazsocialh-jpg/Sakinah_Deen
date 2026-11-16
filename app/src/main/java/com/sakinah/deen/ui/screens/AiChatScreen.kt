@@ -62,6 +62,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -69,6 +72,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.data.model.ChatMessageModel
 import com.sakinah.deen.data.scholar.ScholarChatSession
@@ -110,6 +114,9 @@ fun AiChatScreen(
     val activeSessionId by vm.activeSessionId.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val imeVisible = WindowInsets.isImeVisible
+    val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     var showChats by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<ScholarChatSession?>(null) }
     var confirmClearAll by remember { mutableStateOf(false) }
@@ -138,6 +145,14 @@ fun AiChatScreen(
                     } else {
                         onNavigateToHadith()
                     }
+                }
+                is AiScholarNavigationEvent.CitationUnresolved -> {
+                    // Never leave a citation tap feeling broken: tell the user where to look.
+                    Toast.makeText(
+                        context,
+                        "No direct link for \"${event.sourceTitle}\". Search the Quran or Hadith tab.",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
         }
@@ -170,6 +185,9 @@ fun AiChatScreen(
     fun requestPrompt(text: String) {
         val trimmed = text.trim()
         if (trimmed.isBlank() || state.isStreaming) return
+        // Sending ends input: drop focus so the IME closes and the reply is not hidden.
+        focusManager.clearFocus()
+        keyboardController?.hide()
         if (state.disclaimerAcceptedForCurrentChat) {
             vm.onIntent(AiScholarUiIntent.SendQuery(trimmed))
         } else {
@@ -407,7 +425,9 @@ fun AiChatScreen(
                     imeAction = ImeAction.Send
                 ),
                 keyboardActions = KeyboardActions(
-                    onSend = { requestPrompt(state.inputText) }
+                    // requestPrompt itself refuses while streaming; guard here as well so the
+                    // send action never re-submits mid-stream.
+                    onSend = { if (!state.isStreaming) requestPrompt(state.inputText) }
                 )
             )
             Spacer(modifier = Modifier.width(8.dp))
@@ -605,6 +625,9 @@ private fun EmptyScholarState(
             modifier = Modifier
                 .fillMaxWidth()
                 .widthIn(max = 520.dp)
+                // With the keyboard open the greeting and starter prompts no longer fit;
+                // scrolling keeps every prompt reachable instead of clipping them.
+                .verticalScroll(rememberScrollState())
                 .padding(vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)

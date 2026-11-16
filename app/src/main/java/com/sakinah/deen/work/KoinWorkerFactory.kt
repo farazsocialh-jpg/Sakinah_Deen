@@ -7,16 +7,16 @@ import androidx.work.WorkerParameters
 import com.sakinah.deen.data.database.SakinahEncryptedDatabase
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.TafseerDownloadRepository
-import com.sakinah.deen.domain.travel.TravelStatusManager
 import com.sakinah.deen.network.ContentDownloadWorker
-import com.sakinah.deen.work.DailyHabitResetWorker
-import com.sakinah.deen.work.PrayerAlarmWorker
-import com.sakinah.deen.work.TravelDistanceWorker
 import org.koin.core.Koin
 
 /**
  * WorkManager instantiates workers reflectively, so constructor-injected Koin
  * dependencies must be supplied here instead of through the default factory.
+ *
+ * This factory is also the registry of live workers: Azaan reminders run through
+ * AlarmManager ([com.sakinah.deen.service.PrayerAlarmScheduler]), and travel distance is
+ * evaluated by the Travel screen and the car receiver, so no workers are duplicated for them.
  */
 class KoinWorkerFactory(private val koin: Koin) : WorkerFactory() {
 
@@ -29,7 +29,8 @@ class KoinWorkerFactory(private val koin: Koin) : WorkerFactory() {
             DailyHabitResetWorker(
                 appContext,
                 workerParameters,
-                koin.get(SakinahEncryptedDatabase::class)
+                koin.get(SakinahEncryptedDatabase::class),
+                koin.get(SakinahPreferences::class)
             )
 
         ContentDownloadWorker::class.java.name ->
@@ -38,20 +39,6 @@ class KoinWorkerFactory(private val koin: Koin) : WorkerFactory() {
                 workerParameters,
                 koin.get(TafseerDownloadRepository::class),
                 koin.get(SakinahEncryptedDatabase::class)
-            )
-
-        PrayerAlarmWorker::class.java.name ->
-            PrayerAlarmWorker(
-                appContext,
-                workerParameters
-            )
-
-        TravelDistanceWorker::class.java.name ->
-            TravelDistanceWorker(
-                appContext,
-                workerParameters,
-                koin.get(TravelStatusManager::class),
-                koin.get(SakinahPreferences::class)
             )
 
         else -> null

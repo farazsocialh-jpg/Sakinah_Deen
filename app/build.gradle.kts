@@ -131,6 +131,9 @@ dependencies {
     // DataStore Preferences
     implementation(libs.androidx.datastore.preferences)
 
+    // Encrypted SharedPreferences for on-device account records
+    implementation(libs.androidx.security.crypto)
+
     // WorkManager
     implementation(libs.androidx.work.runtime.ktx)
 

@@ -1,17 +1,19 @@
 package com.sakinah.deen.auth
 
 import com.russhwolf.settings.Settings
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 /**
- * Multiplatform persistent [AuthRepository] backed by [Settings] (SharedPreferences on Android,
- * NSUserDefaults on iOS). Restores the active session on startup and hashes passwords with
- * per-account salts before persistence.
+ * Multiplatform persistent [AuthRepository] backed by [Settings] (encrypted
+ * SharedPreferences on Android, NSUserDefaults on iOS). Restores the active session on startup
+ * and stores only PBKDF2-HMAC-SHA256 hashes over a random per-account salt.
  */
 class PersistentAuthRepository(
     private val prefs: Settings = Settings(),
@@ -115,13 +117,17 @@ class PersistentAuthRepository(
         if (accounts.containsKey(cleanEmail)) {
             return Result.failure(IllegalStateException("An account with this email already exists."))
         }
-        val salt = "${cleanEmail.hashCode()}-${cleanName.length}-sakinah"
+        // Random per-account salt: a value derived from the email would let an attacker
+        // precompute hashes and reuse them across accounts.
+        val salt = PasswordHasher.newSalt()
         val stored = StoredAccount(
             id = cleanEmail,
             email = cleanEmail,
             displayName = cleanName,
             salt = salt,
-            passwordHash = hashPassword(salt, password),
+            passwordHash = withContext(Dispatchers.Default) {
+                PasswordHasher.hash(password, salt)
+            },
         )
         accounts[cleanEmail] = stored
         persistAccounts()
@@ -143,8 +149,23 @@ class PersistentAuthRepository(
         }
         val stored = accounts[cleanEmail]
             ?: return Result.failure(IllegalStateException("No account found for this email. Please sign up first."))
-        if (stored.passwordHash != hashPassword(stored.salt, password)) {
+        val verified = withContext(Dispatchers.Default) {
+            PasswordHasher.verify(password, stored.salt, stored.passwordHash)
+        }
+        if (!verified) {
             return Result.failure(IllegalStateException("Incorrect password."))
+        }
+        // Accounts created before the KDF change are re-hashed on their next sign-in.
+        if (PasswordHasher.needsUpgrade(stored.passwordHash)) {
+            val newSalt = PasswordHasher.newSalt()
+            val upgraded = stored.copy(
+                salt = newSalt,
+                passwordHash = withContext(Dispatchers.Default) {
+                    PasswordHasher.hash(password, newSalt)
+                }
+            )
+            accounts[cleanEmail] = upgraded
+            persistAccounts()
         }
         val user = AuthUser(id = stored.id, email = stored.email, displayName = stored.displayName)
         current = user
@@ -161,7 +182,14 @@ class PersistentAuthRepository(
         if (!accounts.containsKey(cleanEmail)) {
             return Result.failure(IllegalStateException("No local account found for $cleanEmail."))
         }
-        return Result.success(Unit)
+        // Accounts live only on this device and there is no mail server, so claiming a reset
+        // was "sent" would be a lie. Report the real limitation to the caller.
+        return Result.failure(
+            IllegalStateException(
+                "Password reset by email is unavailable for on-device accounts. " +
+                    "Create a new account with a new password, or continue as a guest."
+            )
+        )
     }
 
     override suspend fun signInWithGoogle(idToken: String): Result<AuthUser> {
@@ -235,18 +263,6 @@ class PersistentAuthRepository(
         val at = email.indexOf('@')
         val dot = email.lastIndexOf('.')
         return at > 0 && dot > at + 1 && dot < email.length - 1 && !email.contains(' ')
-    }
-
-    private fun hashPassword(salt: String, password: String): String {
-        val input = "$salt:$password:sakinah_v1"
-        var h1 = -3750763034362895579L
-        var h2 = 0x517cc1b727220a95L
-        for (ch in input) {
-            val code = ch.code.toLong()
-            h1 = (h1 xor code) * 1099511628211L
-            h2 = ((h2 shl 7) or (h2 ushr 57)) xor (code * 0x9e3779b97f4a7c15UL.toLong())
-        }
-        return "${h1.toULong().toString(16)}:${h2.toULong().toString(16)}"
     }
 
     companion object {

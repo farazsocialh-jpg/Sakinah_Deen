@@ -105,13 +105,13 @@ class AdhanPlaybackService : Service() {
                 currentPrayerType = intent.getStringExtra(EXTRA_PRAYER_TYPE)
                     ?.let { name -> runCatching { PrayerType.valueOf(name) }.getOrNull() }
                     ?: PrayerType.DHUHR
-                currentMode = intent.getStringExtra(EXTRA_ALERT_MODE)
-                    ?.let { name -> runCatching { PrayerAlertMode.valueOf(name) }.getOrNull() }
-                    ?: preferences.alertModeFor(currentPrayerType)
-                currentMuezzin = Muezzin.fromId(intent.getStringExtra(EXTRA_MUEZZIN_ID))
+                // Live preferences win over the extras baked in when the alarm was armed:
+                // the user may have switched the mode, muezzin or master switch since then.
+                currentMode = preferences.alertModeFor(currentPrayerType)
+                currentMuezzin = preferences.azaanSettings.muezzin
                 isDuaSafar = false
 
-                if (currentMode == PrayerAlertMode.OFF) {
+                if (!preferences.alarmsEnabled || currentMode == PrayerAlertMode.OFF) {
                     // OFF must still satisfy the foreground-service contract before stopping.
                     promoteToForegroundAndStop()
                     return START_NOT_STICKY

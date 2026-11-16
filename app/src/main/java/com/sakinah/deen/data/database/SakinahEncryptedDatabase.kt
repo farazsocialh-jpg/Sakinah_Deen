@@ -144,12 +144,23 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
             context: Context,
             passphraseBytes: ByteArray
         ): SakinahEncryptedDatabase = try {
-            build(context, passphraseBytes)
+            build(context, passphraseBytes).also(::openNow)
         } catch (first: Exception) {
             runCatching { context.deleteDatabase(DB_NAME) }
-            runCatching { build(context, passphraseBytes) }.getOrElse { rebuildError ->
+            runCatching { build(context, passphraseBytes).also(::openNow) }.getOrElse { rebuildError ->
                 first.addSuppressed(rebuildError)
                 throw first
+            }
+        }
+
+        /**
+         * Room.databaseBuilder(...).build() is lazy: without touching the helper, a corrupt or
+         * unreadable SQLCipher file only throws on the first query, outside the recovery block.
+         * Opening it here (on an IO dispatcher) keeps that failure inside buildWithRecovery.
+         */
+        private fun openNow(database: SakinahEncryptedDatabase) {
+            kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+                database.openHelper.writableDatabase
             }
         }
 

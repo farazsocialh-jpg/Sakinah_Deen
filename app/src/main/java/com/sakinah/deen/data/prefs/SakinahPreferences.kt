@@ -65,6 +65,7 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         private const val KEY_BOOKMARKED_HADITH_IDS = "bookmarked_hadith_ids"
         private const val KEY_HADITH_BOOKMARKS_INITIALIZED = "hadith_bookmarks_initialized"
         private const val KEY_ALARMS_ENABLED = "alarms_enabled"
+        private const val KEY_LAST_QADHA_ROLLOVER = "last_qadha_rollover_epoch_day"
         private const val KEY_FIRST_LAUNCH_PERMISSIONS_REQUESTED = "first_launch_permissions_requested"
         private const val KEY_ZAKAT_CASH = "zakat_cash_in_bank"
         private const val KEY_ZAKAT_GOLD = "zakat_gold_held"
@@ -244,6 +245,14 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
     var alarmsEnabled: Boolean
         get() = prefs.getBoolean(KEY_ALARMS_ENABLED, locationCoordinates != null)
         set(value) = prefs.edit().putBoolean(KEY_ALARMS_ENABLED, value).apply()
+
+    /**
+     * Last day (epoch day) whose missed prayers were rolled into the Qadha ledger. Keeps the
+     * daily reset idempotent when WorkManager retries a partially completed run.
+     */
+    var lastQadhaRolloverEpochDay: Long
+        get() = prefs.getLong(KEY_LAST_QADHA_ROLLOVER, Long.MIN_VALUE)
+        set(value) = prefs.edit().putLong(KEY_LAST_QADHA_ROLLOVER, value).apply()
 
     /** True once the first-launch permission request has been shown, so it is not repeated. */
     var firstLaunchPermissionsRequested: Boolean
