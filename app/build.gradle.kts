@@ -20,7 +20,8 @@ val keystoreProperties = Properties().apply {
 }
 
 fun signingValue(propertyKey: String, environmentKey: String): String? =
-    keystoreProperties.getProperty(propertyKey) ?: System.getenv(environmentKey)
+    System.getenv(environmentKey)?.takeIf { it.isNotBlank() }
+        ?: keystoreProperties.getProperty(propertyKey)?.takeIf { it.isNotBlank() }
 
 val releaseStoreFile = signingValue("storeFile", "KEYSTORE_PATH")?.let { configuredPath ->
     rootProject.file(configuredPath).takeIf { it.exists() }

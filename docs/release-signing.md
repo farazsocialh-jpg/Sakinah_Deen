@@ -11,8 +11,10 @@ Losing the upload key means you must request a key reset from Google Play.
 ```bash
 mkdir -p keystore
 keytool -genkeypair -v \
-  -keystore keystore/sakinah_release.jks \
-  -alias sakinah_key \
+  -keystore keystore/sakinah_deen_aqmirza.jks \
+  -alias sakinah_deen_aqmirza \
+  -storepass sakinah_deen_aqmirza \
+  -keypass sakinah_deen_aqmirza \
   -keyalg RSA -keysize 4096 -validity 10000 \
   -storetype JKS
 ```
@@ -22,15 +24,15 @@ Recommended: use an **upload key** (Play App Signing holds the real app signing 
 
 ## 2. Add the repository secrets
 
-GitHub → your repository → **Settings → Secrets and variables → Actions → New repository secret**.
-Create exactly these:
+GitHub → your repository → **Settings → Secrets and variables → Actions → Repository secrets → New repository secret**.
+Create exactly these (under **Repository secrets**, not Environment secrets):
 
 | Secret | Value |
 | --- | --- |
-| `KEYSTORE_BASE64` | Base64 of the `.jks` file (see below) |
-| `KEYSTORE_PASSWORD` | Keystore password |
-| `KEY_ALIAS` | `sakinah_key` (or your alias) |
-| `KEY_PASSWORD` | Key password |
+| `KEYSTORE_BASE64` | Base64 of `keystore/sakinah_deen_aqmirza.jks` (see below) |
+| `KEYSTORE_PASSWORD` | `sakinah_deen_aqmirza` |
+| `KEY_ALIAS` | `sakinah_deen_aqmirza` |
+| `KEY_PASSWORD` | `sakinah_deen_aqmirza` |
 | `AI_PROXY_URL` | Optional — backend proxy for the AI Scholar (raw Gemini key stays server-side) |
 | `NISAB_RATE_URL` | Optional — metal-price endpoint for live nisab rates |
 
@@ -38,22 +40,21 @@ Encode the keystore:
 
 ```bash
 # macOS
-base64 -i keystore/sakinah_release.jks | tr -d '\n'
+base64 -i keystore/sakinah_deen_aqmirza.jks | tr -d '\n'
 # Linux
-base64 -w0 keystore/sakinah_release.jks
+base64 -w0 keystore/sakinah_deen_aqmirza.jks
 # Windows PowerShell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("keystore\sakinah_release.jks"))
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("keystore\sakinah_deen_aqmirza.jks"))
 ```
 
 Or with the GitHub CLI:
 
 ```bash
-base64 -w0 keystore/sakinah_release.jks > /tmp/keystore.b64
-gh secret set KEYSTORE_BASE64 < /tmp/keystore.b64
-gh secret set KEYSTORE_PASSWORD
-gh secret set KEY_ALIAS --body "sakinah_key"
-gh secret set KEY_PASSWORD
-gh secret set AI_PROXY_URL
+base64 -w0 keystore/sakinah_deen_aqmirza.jks > keystore/sakinah_deen_aqmirza.b64
+gh secret set KEYSTORE_BASE64 < keystore/sakinah_deen_aqmirza.b64
+gh secret set KEYSTORE_PASSWORD --body "sakinah_deen_aqmirza"
+gh secret set KEY_ALIAS --body "sakinah_deen_aqmirza"
+gh secret set KEY_PASSWORD --body "sakinah_deen_aqmirza"
 ```
 
 > A leaked `KEYSTORE_BASE64` plus passwords lets someone publish as you. Treat them
@@ -61,14 +62,14 @@ gh secret set AI_PROXY_URL
 
 ## 3. Run the release build
 
-The workflow is `.github/workflows/release.yml` and supports two triggers:
+The workflows are `.github/workflows/release.yml` (AAB + APK) and `.github/workflows/signed-release-apk.yml` (signed APK), and support two triggers:
 
 - **Tag push** — build a versioned release:
   ```bash
   git tag v1.2.0
   git push origin v1.2.0
   ```
-- **Manual** — Actions → *Release* → *Run workflow*. Optionally pass a version name;
+- **Manual** — Actions → *Release* (or *Signed Release APK*) → *Run workflow*. Optionally pass a version name;
   otherwise the tag (minus `v`) or `1.0.0` is used. `versionCode` comes from the
   workflow run number, so it always increases.
 
@@ -82,24 +83,28 @@ crash reports).
 
 ## 4. Build a signed release locally (optional)
 
-`app/build.gradle.kts` reads credentials from `keystore.properties` (git-ignored) or
-environment variables. Environment variables win when both are present.
+`app/build.gradle.kts` reads credentials from environment variables or `keystore.properties` (git-ignored).
+Environment variables win when both are present.
 
 ```bash
-cp keystore.properties.example keystore.properties   # then edit the values
+cp keystore.properties.example keystore.properties   # already prefilled with sakinah_deen_aqmirza
 export VERSION_NAME=1.2.0 VERSION_CODE=42
-./gradlew :app:bundleRelease
+./gradlew :app:bundleRelease :app:assembleRelease
 ```
 
 Or entirely from the environment:
 
 ```bash
-export KEYSTORE_PATH="$PWD/keystore/sakinah_release.jks"
-export KEYSTORE_PASSWORD='…' KEY_ALIAS=sakinah_key KEY_PASSWORD='…'
-./gradlew :app:bundleRelease
+export KEYSTORE_PATH="$PWD/keystore/sakinah_deen_aqmirza.jks"
+export KEYSTORE_PASSWORD=sakinah_deen_aqmirza
+export KEY_ALIAS=sakinah_deen_aqmirza
+export KEY_PASSWORD=sakinah_deen_aqmirza
+./gradlew :app:bundleRelease :app:assembleRelease
 ```
 
-Output: `app/build/outputs/bundle/release/app-release.aab`.
+Outputs:
+- AAB (Play Store): `app/build/outputs/bundle/release/app-release.aab`
+- APK (Direct install): `app/build/outputs/apk/release/app-release.apk`
 
 If no keystore is configured, `bundleRelease`/`assembleRelease` still build but the
 output is **unsigned** (`app-release-unsigned.apk`), which Play will reject. This is
