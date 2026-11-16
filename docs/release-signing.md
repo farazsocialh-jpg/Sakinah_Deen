@@ -3,10 +3,33 @@
 ImanCore builds a signed **AAB** (Android App Bundle) in CI from repository secrets.
 No keystore, password, or key is ever committed to this repository.
 
+## 0. Package identity (read before touching Google Cloud)
+
+The app displays as **ImanCore**, and the identifier that Google Play and the Android OAuth
+client use is `com.imancore.app`. Only the shipped identifier changed; internal identities
+were deliberately kept so installed data and signing keep working.
+
+| What | Value | Notes |
+| --- | --- | --- |
+| `applicationId` / Play package / OAuth package name | `com.imancore.app` | New; must match the Android OAuth client exactly |
+| Gradle `namespace`, Kotlin package, `R` class | `com.sakinah.deen` | Unchanged internal namespace |
+| Upload keystore file and alias | `keystore/sakinah_deen_aqmirza.jks`, alias `sakinah_deen_aqmirza` | Unchanged. The old-looking name is intentional — never regenerate it for the rename |
+| Room database name, SharedPreferences keys, notification channel IDs | unchanged | Keeps existing installs' data readable |
+| App label | `ImanCore` | From `app/src/main/res/values/strings.xml` |
+
+Because `applicationId` changed, this is a **new Play listing**: the Play Console app and the
+Android OAuth client are both created against `com.imancore.app`, and an already-installed
+`com.sakinah.deen` build will not update into it in place.
+
 ## 1. Create the upload keystore (once)
 
 Run this on your own machine and keep the file plus passwords somewhere safe.
 Losing the upload key means you must request a key reset from Google Play.
+
+The example below keeps the original filename, alias and passwords
+(`sakinah_deen_aqmirza`). They are deliberately **not** renamed with the app: the signing
+identity is what Play and Google Sign-In trust, and the alias is what `KEY_ALIAS` in CI
+expects. Only `applicationId` changed.
 
 ```bash
 mkdir -p keystore
@@ -117,20 +140,55 @@ deliberate: the build never silently signs with a default password.
 3. Paste the version's `mapping.txt` under **App bundle explorer → Downloads** for
    deobfuscated stack traces.
 
+The Play Console app must be created for the package `com.imancore.app`. Play derives the
+package from the first uploaded bundle, so check **App information** shows `com.imancore.app`
+before promoting beyond internal testing. If you still have an app registered under
+`com.sakinah.deen`, it stays separate and needs its own listing (or is simply retired).
+
 ## 6. Google Sign-In (Credential Manager)
 
 The app signs in with Google through Android's Credential Manager and a Google ID token —
 no Firebase project or billing is involved. Two OAuth clients are configured once in
-[Google Cloud Console](https://console.cloud.google.com/apis/credentials):
+[Google Cloud Console](https://console.cloud.google.com/apis/credentials). Use the same
+Google Cloud project as before; the rename does not require a new project.
 
-1. **Android client** — *Create credentials → OAuth client ID → Android*.
-   - Package name: `com.imancore.app` (the Gradle `namespace` stays `com.sakinah.deen`)
-   - SHA-1: the fingerprint of the keystore that signs the build
-     (`keytool -list -v -keystore <your.jks> -alias <alias>`). Add one entry per key
-     (debug, upload, Play App Signing).
-2. **Web application client** — *Create credentials → OAuth client ID → Web application*.
-   No redirect URI is needed for the ID-token flow. Its **Client ID** is the value the app
-   passes to Credential Manager as `serverClientId`.
+### 6.1 Android client (the one that changed)
+
+*Create credentials → OAuth client ID → Android*.
+
+- **Package name:** `com.imancore.app` — this is the `applicationId`, not the Gradle
+  `namespace`. A client registered against `com.sakinah.deen` will not authenticate the new
+  build.
+- **SHA-1 certificate fingerprint:** one entry per key that signs a build users run. Add them
+  as separate Android OAuth clients (the console allows multiple clients in the same project)
+  or as additional fingerprints on a single client where the console offers it:
+
+  | Build | Keystore | How to read the SHA-1 |
+  | --- | --- | --- |
+  | Local debug / debug APK | `~/.android/debug.keystore`, alias `androiddebugkey`, password `android` | `keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android` |
+  | Locally built release / CI-signed APK or AAB | `keystore/sakinah_deen_aqmirza.jks`, alias `sakinah_deen_aqmirza` | `keytool -list -v -keystore keystore/sakinah_deen_aqmirza.jks -alias sakinah_deen_aqmirza` |
+  | Installs delivered by Play (Play App Signing) | Google-held key | Play Console → **Test and release → Setup → App signing** → SHA-1 of the *app signing key* |
+
+  Paste the fingerprint exactly as `keytool` prints it under `SHA1:` — uppercase hex with
+  colons, no spaces. Missing the fingerprint of the key Play re-signs with is the usual cause
+  of "sign-in works from Android Studio but not from the Play build".
+
+To confirm what a local build will present, run `./gradlew :app:signingReport`: it lists each
+variant's keystore alias and `SHA-1`/`SHA-256` so you can compare them with the console.
+The package name itself lives in `app/build.gradle.kts` under `defaultConfig.applicationId`; to
+check a built APK, run `"$ANDROID_HOME"/build-tools/*/aapt2 dump badging app-release.apk | head -1`
+and confirm it reports `package: name='com.imancore.app'`, which is the id the Android OAuth
+client must be registered against.
+
+> The rename makes the old Android client for `com.sakinah.deen` unused. Leave it while old
+> test builds still exist, then delete it in **Credentials**; deleting it never affects the
+> new client or the Web client.
+
+### 6.2 Web application client (unchanged)
+
+*Create credentials → OAuth client ID → Web application*. No redirect URI is needed for the
+ID-token flow. If a Web client already exists for the project, keep it — its **Client ID** is
+reused as-is and is the value the app passes to Credential Manager as `serverClientId`.
 
 Supply that Client ID — never hardcode it — in one of these places:
 
@@ -144,6 +202,13 @@ GOOGLE_WEB_CLIENT_ID=1234567890-abcdef.apps.googleusercontent.com
 export GOOGLE_WEB_CLIENT_ID="1234567890-abcdef.apps.googleusercontent.com"
 ```
 
+In CI, the same value is the `GOOGLE_WEB_CLIENT_ID` repository secret. The workflows warn and
+build with sign-in disabled when it is absent; they never fall back to a built-in id, and the
+Android OAuth client above is what makes that id usable from `com.imancore.app`.
+
+Cosmetic but user-visible: set **OAuth consent screen → App name** to `ImanCore`, so the
+account chooser no longer shows the old name. No client id changes when you rename it.
+
 The build reads `local.properties` first, then the environment (and `keystore.properties`
 inside CI). If the value is blank the app still builds; tapping **Continue with Google**
 shows an inline "not configured for this build" message instead of crashing.
@@ -151,3 +216,17 @@ shows an inline "not configured for this build" message instead of crashing.
 Google returns identity only (`uniqueId`, email, name, photo). Gender, date of birth, city
 and country are collected in the profile-completion step after the first sign-in; city and
 country are pre-filled from the device's last known prayer location via `Geocoder`.
+
+### 6.3 Verify on a device
+
+1. Install the debug or signed release build, then confirm the installed package is the new
+   id: `adb shell pm list packages | grep imancore` should print
+   `package:com.imancore.app`.
+2. Sign in with **Continue with Google**. A `DEVELOPER_ERROR` / `10:` from Credential Manager
+   means the package name or SHA-1 does not match an Android OAuth client; a
+   `401 invalid_client` means the Web client id is wrong or belongs to another project.
+3. For a signed release APK, cross-check the certificate:
+   `apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk` should show
+   the same SHA-1 you registered.
+4. If you are testing an internal-testing build from Play, repeat step 2 on that install — it
+   is signed with Play's app signing key, whose fingerprint is registered separately.
