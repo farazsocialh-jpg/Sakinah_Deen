@@ -226,7 +226,12 @@ val accountModule = module {
     }
     single<com.sakinah.deen.auth.AuthRepository> {
         com.sakinah.deen.auth.PersistentAuthRepository(
-            prefs = get(org.koin.core.qualifier.named("account_settings"))
+            prefs = get(org.koin.core.qualifier.named("account_settings")),
+            // Signing out must also clear Credential Manager, otherwise Google would
+            // silently restore the previous session on the next sign-in attempt.
+            onSignOut = {
+                com.sakinah.deen.auth.GoogleSignInManager(androidContext()).clearCredentialState()
+            }
         )
     }
     single<com.sakinah.deen.profile.UserProfileRepository> {

@@ -5,13 +5,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -19,31 +16,28 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
-import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.AccessibilityNew
 import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.DownloadForOffline
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.MonetizationOn
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.PrivacyTip
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,8 +53,13 @@ import com.sakinah.deen.ui.components.SakinahCard
 import com.sakinah.deen.ui.components.StatusBadge
 import com.sakinah.deen.ui.navigation.SakinahScreen
 import com.sakinah.deen.ui.rememberInject
-import kotlinx.coroutines.launch
 
+/**
+ * The single hub for tools, settings entry points and support pages.
+ *
+ * Account lifecycle actions (sign out, delete) live only on the profile screen; each Settings
+ * section has its own destination so nothing is duplicated here.
+ */
 @Composable
 fun ToolsHubScreen(
     onNavigate: (SakinahScreen) -> Unit,
@@ -71,11 +70,9 @@ fun ToolsHubScreen(
     val authState by authRepo.authState.collectAsStateWithLifecycle()
     val profile by profileRepo.profile.collectAsStateWithLifecycle()
     val signedInUser = (authState as? AuthState.Authenticated)?.user
-    val scope = rememberCoroutineScope()
 
     var isLoadingProfile by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var showSignOutConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(signedInUser?.id) {
         val user = signedInUser ?: return@LaunchedEffect
@@ -103,7 +100,7 @@ fun ToolsHubScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Account Header Card
+            // Account card: the only entry point to the profile (or auth when signed out).
             SakinahCard(
                 onClick = {
                     onNavigate(if (signedInUser != null) SakinahScreen.Profile else SakinahScreen.Auth)
@@ -171,8 +168,7 @@ fun ToolsHubScreen(
                 }
             }
 
-            // Worship & Journey
-            HubSectionTitle("Worship & Journey")
+            HubSectionTitle("Islamic Tools")
             SakinahCard(contentPadding = 0.dp) {
                 HubRow(
                     icon = Icons.Outlined.AccessibilityNew,
@@ -180,14 +176,14 @@ fun ToolsHubScreen(
                     subtitle = "Step-by-step Rakat sequence & recitations",
                     onClick = { onNavigate(SakinahScreen.VisualGuide) }
                 )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                HubDivider()
                 HubRow(
                     icon = Icons.Outlined.Explore,
                     title = "Safar Travel Mode & Qibla",
                     subtitle = "Home anchor distance, Qasr (2 rakats) & Dua al-Safar",
                     onClick = { onNavigate(SakinahScreen.Travel) }
                 )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                HubDivider()
                 HubRow(
                     icon = Icons.Outlined.MonetizationOn,
                     title = "Zakat & Sadaqah Jar",
@@ -196,33 +192,38 @@ fun ToolsHubScreen(
                 )
             }
 
-            // Preferences & Attribution
-            HubSectionTitle("Preferences & Sources")
+            HubSectionTitle("Settings")
             SakinahCard(contentPadding = 0.dp) {
                 HubRow(
-                    icon = Icons.Outlined.Settings,
-                    title = "App Settings",
-                    subtitle = "Prayer authority, Asr juristic school, theme & cache",
-                    onClick = { onNavigate(SakinahScreen.Settings) }
+                    icon = Icons.Outlined.Place,
+                    title = "Prayer & Location",
+                    subtitle = "Calculation method, home location, Asr school & Hijri offset",
+                    onClick = { onNavigate(SakinahScreen.SettingsPrayer) }
                 )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                HubDivider()
                 HubRow(
                     icon = Icons.Outlined.Notifications,
                     title = "Azaan & Notifications",
-                    subtitle = "Per-prayer alert mode, muezzin voice & test alert",
+                    subtitle = "Per-prayer alerts, Fajr Azaan, muezzin voice & test alert",
                     onClick = { onNavigate(SakinahScreen.NotificationSettings) }
                 )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                HubDivider()
                 HubRow(
-                    icon = Icons.Outlined.MenuBook,
-                    title = "Islamic Data Sources",
-                    subtitle = "AlAdhan, Quran.com v4, Hadith CDN & offline seeds",
-                    onClick = { onNavigate(SakinahScreen.DataSources) }
+                    icon = Icons.Outlined.Palette,
+                    title = "Appearance & Reading",
+                    subtitle = "Theme, palette, typography & reader layouts",
+                    onClick = { onNavigate(SakinahScreen.SettingsAppearance) }
+                )
+                HubDivider()
+                HubRow(
+                    icon = Icons.Outlined.DownloadForOffline,
+                    title = "Quran & Offline Packs",
+                    subtitle = "Translation edition, tafseer downloads & cache",
+                    onClick = { onNavigate(SakinahScreen.SettingsQuran) }
                 )
             }
 
-            // Support & Legal
-            HubSectionTitle("Support & Information")
+            HubSectionTitle("Support & About")
             SakinahCard(contentPadding = 0.dp) {
                 HubRow(
                     icon = Icons.AutoMirrored.Outlined.HelpOutline,
@@ -230,14 +231,21 @@ fun ToolsHubScreen(
                     subtitle = "Contact support@sakinah.app or report a bug",
                     onClick = { onNavigate(SakinahScreen.Help) }
                 )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                HubDivider()
+                HubRow(
+                    icon = Icons.Outlined.MenuBook,
+                    title = "Islamic Data Sources",
+                    subtitle = "AlAdhan, Quran.com v4, Hadith CDN & offline seeds",
+                    onClick = { onNavigate(SakinahScreen.DataSources) }
+                )
+                HubDivider()
                 HubRow(
                     icon = Icons.Outlined.PrivacyTip,
                     title = "Privacy & Terms",
                     subtitle = "On-device encryption & permissions disclosure",
                     onClick = { onNavigate(SakinahScreen.Privacy) }
                 )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                HubDivider()
                 HubRow(
                     icon = Icons.Outlined.Info,
                     title = "About Sakinah",
@@ -245,48 +253,7 @@ fun ToolsHubScreen(
                     onClick = { onNavigate(SakinahScreen.About) }
                 )
             }
-
-            if (signedInUser != null) {
-                OutlinedButton(
-                    onClick = { showSignOutConfirm = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.Logout,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Sign Out")
-                }
-            }
-            Spacer(Modifier.height(8.dp))
         }
-    }
-
-    if (showSignOutConfirm) {
-        AlertDialog(
-            onDismissRequest = { showSignOutConfirm = false },
-            title = { Text("Sign out?") },
-            text = { Text("Your saved Quran, Hadith and Salah progress stays on this device.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showSignOutConfirm = false
-                        scope.launch {
-                            runCatching { authRepo.signOut() }
-                                .onFailure { err ->
-                                    if (err is kotlinx.coroutines.CancellationException) throw err
-                                    errorMessage = err.message ?: "Could not sign out."
-                                }
-                        }
-                    }
-                ) { Text("Sign Out") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSignOutConfirm = false }) { Text("Cancel") }
-            }
-        )
     }
 }
 
@@ -300,6 +267,11 @@ private fun HubSectionTitle(title: String) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 4.dp)
     )
+}
+
+@Composable
+private fun HubDivider() {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
 }
 
 @Composable

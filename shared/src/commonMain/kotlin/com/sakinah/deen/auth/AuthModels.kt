@@ -22,7 +22,22 @@ interface AuthRepository {
     suspend fun signUp(email: String, password: String, displayName: String): Result<AuthUser>
     suspend fun signIn(email: String, password: String): Result<AuthUser>
     suspend fun sendPasswordReset(email: String): Result<Unit>
-    suspend fun signInWithGoogle(idToken: String): Result<AuthUser>
+
+    /**
+     * Signs in (or links) the Google account described by the Credential Manager ID token.
+     *
+     * Google only supplies identity fields — gender, date of birth, city and country are
+     * collected afterwards by the profile-completion step.
+     */
+    suspend fun signInWithGoogle(
+        uniqueId: String,
+        email: String,
+        displayName: String,
+        givenName: String? = null,
+        familyName: String? = null,
+        photoUrl: String? = null,
+    ): Result<AuthUser>
+
     suspend fun signInWithApple(identityToken: String): Result<AuthUser>
     suspend fun continueAsGuest(): Result<AuthUser>
     suspend fun signOut()

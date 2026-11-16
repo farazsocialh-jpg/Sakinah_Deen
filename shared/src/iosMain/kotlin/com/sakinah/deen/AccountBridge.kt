@@ -77,8 +77,13 @@ class AccountBridge(
     suspend fun resetPassword(email: String): String? =
         auth.sendPasswordReset(email).exceptionOrNull()?.message
 
+    /** iOS passes the Google subject/id token; the richer Android fields stay empty. */
     suspend fun signInWithGoogle(idToken: String): String? =
-        auth.signInWithGoogle(idToken).exceptionOrNull()?.message
+        auth.signInWithGoogle(
+            uniqueId = idToken,
+            email = "",
+            displayName = "Google User"
+        ).exceptionOrNull()?.message
 
     suspend fun signInWithApple(identityToken: String): String? =
         auth.signInWithApple(identityToken).exceptionOrNull()?.message

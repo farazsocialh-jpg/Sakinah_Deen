@@ -37,6 +37,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -64,6 +65,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
+import com.sakinah.deen.settings.SettingsRepository
 import com.sakinah.deen.domain.sensor.QiblaSensorManager
 import com.sakinah.deen.domain.travel.SafarPolicy
 import com.sakinah.deen.domain.travel.TravelStatusManager
@@ -85,6 +87,8 @@ fun TravelScreen(
     val locationProvider = rememberInject<UserLocationProvider>()
     val travelManager = rememberInject<TravelStatusManager>()
     val qiblaManager = rememberInject<QiblaSensorManager>()
+    val settingsRepo = rememberInject<SettingsRepository>()
+    val settings by settingsRepo.settings.collectAsStateWithLifecycle()
 
     val compassData by qiblaManager.compassFlow.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
@@ -418,6 +422,34 @@ fun TravelScreen(
                         fontSize = 12.sp
                     )
                 }
+            }
+        }
+
+        // Car audio preference lives with Safar travel, not in general settings.
+        SakinahCard(contentPadding = 14.dp) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Car Bluetooth Dua al-Safar auto-play",
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Play the travel dua when your vehicle audio connects",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = settings.adhan.carBluetoothAutoPlay,
+                    onCheckedChange = { enabled ->
+                        scope.launch {
+                            settingsRepo.updateAdhan(
+                                settings.adhan.copy(carBluetoothAutoPlay = enabled)
+                            )
+                        }
+                    }
+                )
             }
         }
     }

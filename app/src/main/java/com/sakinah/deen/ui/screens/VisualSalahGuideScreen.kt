@@ -56,6 +56,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -71,11 +72,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.R
+import com.sakinah.deen.data.prefs.AppearancePreferences
+import com.sakinah.deen.profile.UserProfileRepository
 import com.sakinah.deen.ui.components.ArabicVerseBlock
 import com.sakinah.deen.ui.components.SakinahCard
 import com.sakinah.deen.ui.components.SegmentedPillBar
+import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.AmiriFontFamily
+import com.sakinah.deen.ui.theme.PrayerGuideGender
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 private enum class GuideTab(@param:StringRes val labelRes: Int) {
@@ -117,6 +124,11 @@ fun VisualSalahGuideScreen(
     modifier: Modifier = Modifier
 ) {
     val safeTotalRakats = totalRakats.coerceIn(1, 4)
+
+    val appearancePrefs = rememberInject<AppearancePreferences>()
+    val profileRepo = rememberInject<UserProfileRepository>()
+    val appearanceConfig by appearancePrefs.config.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
 
     var tabIndex by rememberSaveable { mutableIntStateOf(GuideTab.SALAH.ordinal) }
     val tab = GuideTab.entries[tabIndex.coerceIn(0, GuideTab.entries.lastIndex)]
@@ -273,6 +285,39 @@ fun VisualSalahGuideScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        // 1b. Guide style (male/female postures) can be switched here so users do not have
+        // to hunt through Settings; it stays in sync with the profile gender.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = "Guide style",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            PrayerGuideGender.entries.forEach { gender ->
+                FilterChip(
+                    selected = appearanceConfig.prayerGuideGender == gender,
+                    onClick = {
+                        appearancePrefs.update { it.copy(prayerGuideGender = gender) }
+                        val stored = profileRepo.profile.value
+                        if (stored != null) {
+                            val value = if (gender == PrayerGuideGender.MALE) "MALE" else "FEMALE"
+                            scope.launch { profileRepo.update(stored.copy(gender = value)) }
+                        }
+                    },
+                    label = {
+                        Text(
+                            text = if (gender == PrayerGuideGender.MALE) "Male" else "Female",
+                            fontSize = 11.sp
+                        )
+                    }
                 )
             }
         }

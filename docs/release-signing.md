@@ -116,3 +116,38 @@ deliberate: the build never silently signs with a default password.
 2. Upload the `.aab` from the workflow artifact.
 3. Paste the version's `mapping.txt` under **App bundle explorer → Downloads** for
    deobfuscated stack traces.
+
+## 6. Google Sign-In (Credential Manager)
+
+The app signs in with Google through Android's Credential Manager and a Google ID token —
+no Firebase project or billing is involved. Two OAuth clients are configured once in
+[Google Cloud Console](https://console.cloud.google.com/apis/credentials):
+
+1. **Android client** — *Create credentials → OAuth client ID → Android*.
+   - Package name: `com.sakinah.deen`
+   - SHA-1: the fingerprint of the keystore that signs the build
+     (`keytool -list -v -keystore <your.jks> -alias <alias>`). Add one entry per key
+     (debug, upload, Play App Signing).
+2. **Web application client** — *Create credentials → OAuth client ID → Web application*.
+   No redirect URI is needed for the ID-token flow. Its **Client ID** is the value the app
+   passes to Credential Manager as `serverClientId`.
+
+Supply that Client ID — never hardcode it — in one of these places:
+
+```properties
+# local.properties (git-ignored)
+GOOGLE_WEB_CLIENT_ID=1234567890-abcdef.apps.googleusercontent.com
+```
+
+```bash
+# or the environment
+export GOOGLE_WEB_CLIENT_ID="1234567890-abcdef.apps.googleusercontent.com"
+```
+
+The build reads `local.properties` first, then the environment (and `keystore.properties`
+inside CI). If the value is blank the app still builds; tapping **Continue with Google**
+shows an inline "not configured for this build" message instead of crashing.
+
+Google returns identity only (`uniqueId`, email, name, photo). Gender, date of birth, city
+and country are collected in the profile-completion step after the first sign-in; city and
+country are pre-filled from the device's last known prayer location via `Geocoder`.

@@ -23,6 +23,18 @@ fun signingValue(propertyKey: String, environmentKey: String): String? =
     System.getenv(environmentKey)?.takeIf { it.isNotBlank() }
         ?: keystoreProperties.getProperty(propertyKey)?.takeIf { it.isNotBlank() }
 
+// local.properties is git-ignored: it is the intended home for machine-local OAuth client ids.
+val localProperties = Properties().apply {
+    val propertiesFile = rootProject.file("local.properties")
+    if (propertiesFile.exists()) {
+        propertiesFile.inputStream().use { load(it) }
+    }
+}
+
+fun localOrSigningValue(key: String): String? =
+    localProperties.getProperty(key)?.takeIf { it.isNotBlank() }
+        ?: signingValue(key, key)
+
 val releaseStoreFile = signingValue("storeFile", "KEYSTORE_PATH")?.let { configuredPath ->
     rootProject.file(configuredPath).takeIf { it.exists() }
 }
@@ -52,6 +64,12 @@ android {
         // fetching, in which case the last cached rate is used.
         val nisabRateUrl = signingValue("NISAB_RATE_URL", "NISAB_RATE_URL").orEmpty()
         buildConfigField("String", "NISAB_RATE_URL", "\"$nisabRateUrl\"")
+
+        // Web OAuth client id used as Credential Manager's serverClientId for Google Sign-In.
+        // Never hardcoded: supply via local.properties or the GOOGLE_WEB_CLIENT_ID env var.
+        // Blank builds compile and simply show an inline "not configured" message.
+        val googleWebClientId = localOrSigningValue("GOOGLE_WEB_CLIENT_ID").orEmpty()
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
     }
 
     signingConfigs {
@@ -133,6 +151,11 @@ dependencies {
 
     // Encrypted SharedPreferences for on-device account records
     implementation(libs.androidx.security.crypto)
+
+    // Credential Manager + Google ID token (Sign in with Google, no Firebase billing)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.googleid)
 
     // WorkManager
     implementation(libs.androidx.work.runtime.ktx)

@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -77,7 +76,6 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NotificationSettingsScreen(
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
     previewPlayerFactory: (Context) -> AzaanPreviewController = { AzaanPreviewPlayer(it) }
 ) {
@@ -376,6 +374,31 @@ fun NotificationSettingsScreen(
             }
         }
 
+        // 4b. Special Fajr Azaan — moved here so every Azaan option lives together.
+        SakinahCard(contentPadding = 14.dp) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Special Fajr Azaan",
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Includes “As-Salatu Khayrun Minan-Nawm”",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = azaanSettings.fajrSpecialAdhan,
+                    enabled = azaanSettings.enabled,
+                    onCheckedChange = { enabled ->
+                        applySettings(azaanSettings.copy(fajrSpecialAdhan = enabled))
+                    }
+                )
+            }
+        }
+
         // 5. Muezzin / Azaan voice picker with a single shared preview player
         Text("Muezzin / Azaan Voice", style = MaterialTheme.typography.titleMedium)
         Text(
@@ -429,15 +452,6 @@ fun NotificationSettingsScreen(
             }
         }
 
-        // 6. Done
-        Spacer(Modifier.height(4.dp))
-        OutlinedButton(
-            onClick = onBack,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Text("Done")
-        }
     }
 }
 

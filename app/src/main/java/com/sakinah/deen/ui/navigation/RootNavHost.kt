@@ -63,6 +63,7 @@ import com.sakinah.deen.settings.ThemeMode as SharedThemeMode
 import com.sakinah.deen.ui.screens.AboutScreen
 import com.sakinah.deen.ui.screens.AiChatScreen
 import com.sakinah.deen.ui.screens.AuthScreen
+import com.sakinah.deen.ui.screens.CompleteProfileScreen
 import com.sakinah.deen.ui.screens.DataSourcesScreen
 import com.sakinah.deen.ui.screens.HadithScreen
 import com.sakinah.deen.ui.screens.HelpScreen
@@ -73,6 +74,7 @@ import com.sakinah.deen.ui.screens.PrivacyScreen
 import com.sakinah.deen.ui.screens.ProfileScreen
 import com.sakinah.deen.ui.screens.QuranScreen
 import com.sakinah.deen.ui.screens.SalahScreen
+import com.sakinah.deen.ui.screens.SettingsSection
 import com.sakinah.deen.ui.screens.SettingsScreen
 import com.sakinah.deen.ui.screens.ToolsHubScreen
 import com.sakinah.deen.ui.screens.TravelScreen
@@ -99,7 +101,15 @@ enum class SakinahScreen(@StringRes val titleRes: Int) {
     AiScholar(R.string.nav_scholar),
     ToolsHub(R.string.nav_tools),
     Auth(R.string.app_name),
+    CompleteProfile(R.string.app_name),
     Profile(R.string.app_name),
+    /** Prayer, location and calculation preferences. */
+    SettingsPrayer(R.string.app_name),
+    /** Theme, palette, typography and reader layouts. */
+    SettingsAppearance(R.string.app_name),
+    /** Quran translation edition, tafseer packs and cache. */
+    SettingsQuran(R.string.app_name),
+    /** Legacy alias kept so a restored back stack from an older build still resolves. */
     Settings(R.string.app_name),
     DataSources(R.string.app_name),
     Help(R.string.app_name),
@@ -242,6 +252,8 @@ fun RootNavHost(
         )
     }
 
+    val profileRepo = com.sakinah.deen.ui.rememberInject<com.sakinah.deen.profile.UserProfileRepository>()
+
     fun navigateTo(destination: SakinahScreen) {
         if (destination == currentScreen) return
         if (destination in topLevelTabs) {
@@ -327,8 +339,12 @@ fun RootNavHost(
         SakinahScreen.Travel -> "Safar & Qibla"
         SakinahScreen.Wealth -> "Zakat & Sadaqah"
         SakinahScreen.Auth -> "Account"
+        SakinahScreen.CompleteProfile -> "Complete your profile"
         SakinahScreen.Profile -> "Profile & Account"
-        SakinahScreen.Settings -> "Settings"
+        SakinahScreen.SettingsPrayer -> "Prayer & Location"
+        SakinahScreen.SettingsAppearance -> "Appearance & Reading"
+        SakinahScreen.SettingsQuran -> "Quran & Offline Packs"
+        SakinahScreen.Settings -> "Prayer & Location"
         SakinahScreen.DataSources -> "Islamic Data Sources"
         SakinahScreen.Help -> "Help & Feedback"
         SakinahScreen.Privacy -> "Privacy & Terms"
@@ -533,19 +549,50 @@ fun RootNavHost(
                     )
                 }
                 SakinahScreen.Auth -> {
-                    AuthScreen(onDone = { navigateBack() })
+                    AuthScreen(
+                        onDone = {
+                            // Sign-in only returns identity, so collect the rest once. Guests
+                            // have no profile and go straight back.
+                            val saved = profileRepo.profile.value
+                            if (saved != null && !saved.isProfileComplete()) {
+                                navigateTo(SakinahScreen.CompleteProfile)
+                            } else {
+                                navigateBack()
+                            }
+                        }
+                    )
+                }
+                SakinahScreen.CompleteProfile -> {
+                    CompleteProfileScreen(
+                        onDone = {
+                            // Leave both the completion step and the auth screen behind.
+                            navigateBack()
+                            navigateBack()
+                        },
+                        onSkip = {
+                            navigateBack()
+                            navigateBack()
+                        }
+                    )
                 }
                 SakinahScreen.Profile -> {
                     ProfileScreen(onBack = { navigateBack() })
                 }
-                SakinahScreen.Settings -> {
+                SakinahScreen.SettingsPrayer -> {
+                    SettingsScreen(section = SettingsSection.PRAYER_LOCATION)
+                }
+                SakinahScreen.SettingsAppearance -> {
                     SettingsScreen(
-                        onBack = { navigateBack() },
-                        onRerunOnboarding = { rerunOnboarding = true },
-                        onOpenNotificationSettings = {
-                            navigateTo(SakinahScreen.NotificationSettings)
-                        }
+                        section = SettingsSection.APPEARANCE_READING,
+                        onRerunOnboarding = { rerunOnboarding = true }
                     )
+                }
+                SakinahScreen.SettingsQuran -> {
+                    SettingsScreen(section = SettingsSection.QURAN_OFFLINE)
+                }
+                // Older builds could persist this route; keep it working as Prayer & Location.
+                SakinahScreen.Settings -> {
+                    SettingsScreen(section = SettingsSection.PRAYER_LOCATION)
                 }
                 SakinahScreen.DataSources -> {
                     DataSourcesScreen(onBack = { navigateBack() })
@@ -560,7 +607,7 @@ fun RootNavHost(
                     AboutScreen(onBack = { navigateBack() })
                 }
                 SakinahScreen.NotificationSettings -> {
-                    NotificationSettingsScreen(onBack = { navigateBack() })
+                    NotificationSettingsScreen()
                 }
             }
         }

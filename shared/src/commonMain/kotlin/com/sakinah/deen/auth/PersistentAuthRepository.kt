@@ -17,6 +17,12 @@ import kotlinx.serialization.json.Json
  */
 class PersistentAuthRepository(
     private val prefs: Settings = Settings(),
+    /**
+     * Platform hook run when the session ends, e.g. Android's
+     * `CredentialManager.clearCredentialState(...)` so a signed-out user is not silently
+     * re-authenticated by Google on the next launch.
+     */
+    private val onSignOut: (suspend () -> Unit)? = null,
 ) : AuthRepository {
 
     @Serializable
@@ -25,7 +31,13 @@ class PersistentAuthRepository(
         val email: String,
         val displayName: String,
         val salt: String,
-        val passwordHash: String,
+        /** Empty for Google-only accounts, which never authenticate with a local password. */
+        val passwordHash: String = "",
+        /** "local" or "google". */
+        val provider: String = "local",
+        val givenName: String = "",
+        val familyName: String = "",
+        val photoUrl: String = "",
     )
 
     @Serializable
@@ -58,7 +70,8 @@ class PersistentAuthRepository(
             runCatching {
                 json.decodeFromString<List<StoredAccount>>(rawAccounts)
             }.getOrNull()?.forEach { acc ->
-                accounts[acc.email.lowercase()] = acc
+                // Google accounts may have no email; key them by id instead of colliding on "".
+                accounts[acc.email.lowercase().ifBlank { acc.id }] = acc
             }
         }
         val rawUser = prefs.getStringOrNull(KEY_CURRENT_USER)
@@ -149,6 +162,11 @@ class PersistentAuthRepository(
         }
         val stored = accounts[cleanEmail]
             ?: return Result.failure(IllegalStateException("No account found for this email. Please sign up first."))
+        if (stored.passwordHash.isBlank()) {
+            return Result.failure(
+                IllegalStateException("This account uses Google Sign-In. Continue with Google instead.")
+            )
+        }
         val verified = withContext(Dispatchers.Default) {
             PasswordHasher.verify(password, stored.salt, stored.passwordHash)
         }
@@ -192,12 +210,54 @@ class PersistentAuthRepository(
         )
     }
 
-    override suspend fun signInWithGoogle(idToken: String): Result<AuthUser> {
-        val clean = idToken.trim().ifBlank { "local" }
+    /**
+     * Creates or links a Google account. Linking keeps an existing local password hash, so a
+     * user who signed up with email first can still sign in either way.
+     */
+    override suspend fun signInWithGoogle(
+        uniqueId: String,
+        email: String,
+        displayName: String,
+        givenName: String?,
+        familyName: String?,
+        photoUrl: String?,
+    ): Result<AuthUser> {
+        val cleanUniqueId = uniqueId.trim()
+        val cleanEmail = email.trim().lowercase()
+        if (cleanUniqueId.isBlank() && cleanEmail.isBlank()) {
+            return Result.failure(
+                IllegalStateException("Google Sign-In did not return an account id. Please try again.")
+            )
+        }
+
+        val id = if (cleanUniqueId.isNotBlank()) "google:$cleanUniqueId" else "google:$cleanEmail"
+        val accountKey = cleanEmail.ifBlank { id }
+        val existing = accounts[accountKey]
+        val resolvedName = displayName.trim().ifBlank {
+            listOfNotNull(givenName?.trim(), familyName?.trim())
+                .filter { it.isNotBlank() }
+                .joinToString(" ")
+                .ifBlank { existing?.displayName ?: "Google User" }
+        }
+        val stored = StoredAccount(
+            id = id,
+            email = cleanEmail,
+            displayName = resolvedName,
+            salt = existing?.salt ?: "",
+            passwordHash = existing?.passwordHash ?: "",
+            provider = "google",
+            givenName = givenName?.trim().orEmpty(),
+            familyName = familyName?.trim().orEmpty(),
+            photoUrl = photoUrl?.trim().orEmpty(),
+        )
+        accounts[accountKey] = stored
+        persistAccounts()
+
         val user = AuthUser(
-            id = "google:$clean",
-            email = "",
-            displayName = "Google User",
+            id = id,
+            email = stored.email,
+            displayName = stored.displayName,
+            avatarUrl = stored.photoUrl.takeIf { it.isNotBlank() },
         )
         current = user
         persistCurrentUser(user)
@@ -229,16 +289,23 @@ class PersistentAuthRepository(
         current = null
         persistCurrentUser(null)
         _authState.value = AuthState.Guest
+        clearPlatformCredentialState()
     }
 
     override suspend fun deleteAccount(): Result<Unit> {
         val c = current ?: return Result.failure(IllegalStateException("Not signed in"))
-        accounts.remove(c.email.lowercase())
+        accounts.remove(c.email.lowercase().ifBlank { c.id })
         persistAccounts()
         current = null
         persistCurrentUser(null)
         _authState.value = AuthState.Guest
+        clearPlatformCredentialState()
         return Result.success(Unit)
+    }
+
+    /** Best effort: a failed provider sign-out must never block the local sign-out. */
+    private suspend fun clearPlatformCredentialState() {
+        runCatching { onSignOut?.invoke() }
     }
 
     override suspend fun updateDisplayName(displayName: String): Result<AuthUser> {
@@ -250,7 +317,7 @@ class PersistentAuthRepository(
         val updated = c.copy(displayName = clean)
         current = updated
         persistCurrentUser(updated)
-        val key = c.email.lowercase()
+        val key = c.email.lowercase().ifBlank { c.id }
         accounts[key]?.let { existing ->
             accounts[key] = existing.copy(displayName = clean)
             persistAccounts()

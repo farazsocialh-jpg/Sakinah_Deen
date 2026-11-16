@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
@@ -185,8 +184,7 @@ fun QuranScreen(
         vm.onIntent(QuranUiIntent.ToggleLayoutMode)
     }
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -484,7 +482,6 @@ fun QuranScreen(
                 )
             }
         }
-    }
 
     // 5. Consolidated Tabbed Reader Studio Sheet (Surah | Translation | Tafsir)
     if (studioSheetTab >= 0) {

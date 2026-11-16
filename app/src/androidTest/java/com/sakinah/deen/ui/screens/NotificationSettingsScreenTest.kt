@@ -130,7 +130,6 @@ class NotificationSettingsScreenTest {
             CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
                 if (showScreen.value) {
                     NotificationSettingsScreen(
-                        onBack = {},
                         previewPlayerFactory = { preview }
                     )
                 }

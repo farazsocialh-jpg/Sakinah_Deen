@@ -37,8 +37,24 @@ class InMemoryAuthRepository : AuthRepository {
         return Result.success(Unit)
     }
 
-    override suspend fun signInWithGoogle(idToken: String): Result<AuthUser> {
-        val user = AuthUser(id = "google:$idToken", email = "", displayName = "Google User")
+    override suspend fun signInWithGoogle(
+        uniqueId: String,
+        email: String,
+        displayName: String,
+        givenName: String?,
+        familyName: String?,
+        photoUrl: String?
+    ): Result<AuthUser> {
+        val cleanId = uniqueId.trim().ifBlank { email.trim() }
+        if (cleanId.isBlank()) {
+            return Result.failure(IllegalStateException("Google Sign-In returned no account id"))
+        }
+        val user = AuthUser(
+            id = "google:$cleanId",
+            email = email.trim(),
+            displayName = displayName.trim().ifBlank { "Google User" },
+            avatarUrl = photoUrl?.takeIf { it.isNotBlank() }
+        )
         current = user
         _authState.value = AuthState.Authenticated(user)
         return Result.success(user)
