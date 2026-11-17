@@ -62,7 +62,9 @@ import com.sakinah.deen.ui.rememberInject
 @Composable
 fun ToolsHubScreen(
     onNavigate: (SakinahScreen) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Re-opens the onboarding wizard so the tour is always discoverable again. */
+    onReplayTour: (() -> Unit)? = null
 ) {
     val authRepo = rememberInject<AuthRepository>()
     val profileRepo = rememberInject<UserProfileRepository>()
@@ -72,6 +74,7 @@ fun ToolsHubScreen(
 
     var isLoadingProfile by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showWhatsNew by remember { mutableStateOf(false) }
 
     LaunchedEffect(signedInUser?.id) {
         val user = signedInUser ?: return@LaunchedEffect
@@ -184,6 +187,31 @@ fun ToolsHubScreen(
                 )
             }
 
+            HubSectionTitle("Discover")
+            SakinahCard(contentPadding = 0.dp) {
+                HubRow(
+                    icon = Icons.Outlined.Palette,
+                    title = "Replay Quick Tour",
+                    subtitle = "Re-run the setup wizard without losing your settings",
+                    onClick = { onReplayTour?.invoke() }
+                )
+                HubDivider()
+                HubRow(
+                    icon = Icons.Outlined.Info,
+                    title = "What's New",
+                    subtitle = "Recent changes in this version",
+                    onClick = { showWhatsNew = true }
+                )
+                HubDivider()
+                HubRow(
+                    icon = Icons.Outlined.DownloadForOffline,
+                    title = "Offline Capabilities",
+                    subtitle = "Quran text, Adhkar, Hadith and Zakat work without internet; " +
+                        "new tafseer, translations and live Nisab rates need a connection",
+                    onClick = { onNavigate(SakinahScreen.SettingsQuran) }
+                )
+            }
+
             HubSectionTitle("Settings")
             SakinahCard(contentPadding = 0.dp) {
                 HubRow(
@@ -244,6 +272,30 @@ fun ToolsHubScreen(
                     subtitle = "Version & build details",
                     onClick = { onNavigate(SakinahScreen.About) }
                 )
+            }
+        }
+    }
+
+    if (showWhatsNew) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showWhatsNew = false }) {
+            Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("What's new", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    listOf(
+                        "Salah times now follow your real location, timezone and high-latitude rule.",
+                        "Zakat shows its Nisab source, currency and last update time.",
+                        "Hadith cards name their collection, number, grading and edition.",
+                        "Qibla, Azaan scheduling and the Quran reader got reliability fixes."
+                    ).forEach { line ->
+                        Text("•  $line", style = MaterialTheme.typography.bodySmall)
+                    }
+                    androidx.compose.material3.TextButton(onClick = { showWhatsNew = false }) {
+                        Text("Close")
+                    }
+                }
             }
         }
     }

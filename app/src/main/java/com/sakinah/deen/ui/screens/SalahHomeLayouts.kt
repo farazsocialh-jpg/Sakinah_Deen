@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -147,7 +148,9 @@ internal fun SalahTopHeader(
                 Surface(
                     shape = RoundedCornerShape(50),
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.clickable(onClick = onOpenQadha)
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .clickable(onClick = onOpenQadha)
                 ) {
                     Text(
                         text = "Qadha",
@@ -162,6 +165,7 @@ internal fun SalahTopHeader(
                 Surface(
                     color = Color.Transparent,
                     modifier = Modifier
+                        .minimumInteractiveComponentSize()
                         .size(36.dp)
                         .clickable(onClick = onOpenNotifications)
                 ) {
@@ -179,6 +183,7 @@ internal fun SalahTopHeader(
                 Surface(
                     color = Color.Transparent,
                     modifier = Modifier
+                        .minimumInteractiveComponentSize()
                         .size(36.dp)
                         .clickable(enabled = !state.isRefreshing, onClick = onRecalculate)
                 ) {
@@ -203,6 +208,7 @@ internal fun SalahTopHeader(
                 Surface(
                     color = Color.Transparent,
                     modifier = Modifier
+                        .minimumInteractiveComponentSize()
                         .size(36.dp)
                         .clickable(onClick = onOpenSettings)
                 ) {

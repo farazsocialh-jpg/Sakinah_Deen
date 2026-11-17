@@ -497,7 +497,8 @@ fun RootNavHost(
                 }
                 SakinahScreen.ToolsHub -> {
                     ToolsHubScreen(
-                        onNavigate = { target -> navigateTo(target) }
+                        onNavigate = { target -> navigateTo(target) },
+                        onReplayTour = { rerunOnboarding = true }
                     )
                 }
                 SakinahScreen.Travel -> {
