@@ -101,7 +101,15 @@ data class SalahUiState(
     /** Tahajjud lasts until the next Fajr. */
     val tahajjudEndTimeFormatted: String = "",
     /** Length of the Tahajjud window, e.g. "2h 45m". */
-    val tahajjudDurationText: String = ""
+    val tahajjudDurationText: String = "",
+    /** True during the Duha/Ishraq window (sunrise+15m .. Dhuhr): hide the top NEXT pill. */
+    val isDuhaWindow: Boolean = false,
+    /** True during Tahajjud (last third of night .. Fajr). */
+    val isTahajjudWindow: Boolean = false,
+    /** Optional override for the hero title (e.g. "Next: Dhuhr · 11:19 am"). */
+    val heroTitleOverride: String? = null,
+    /** Start of Tahajjud window in seconds-of-day (-1 when unknown). */
+    val tahajjudStartSecondOfDay: Int = -1
 )
 
 sealed class SalahUiIntent {
@@ -503,10 +511,16 @@ class SalahViewModel(
                             elapsedWindowRatio = countdown.elapsedRatio,
                             currentPrayerName = if (countdown.currentPrayer == PrayerType.SUNRISE &&
                                 now.time.toSecondOfDay() >= (times[PrayerType.SUNRISE]?.toSecondOfDay() ?: 0) + 15 * 60
-                            ) "" else prayerDisplayName(countdown.currentPrayer),
+                            ) "Next: ${prayerDisplayName(PrayerType.DHUHR)}" else if (isTahajjudWindowNow(countdown, times, _uiState.value.tahajjudStartSecondOfDay.let { if (it >= 0) KLocalTime(it / 3600, (it % 3600) / 60, it % 60) else null })) "Tahajjud" else prayerDisplayName(countdown.currentPrayer),
                             currentPrayerArabic = if (countdown.currentPrayer == PrayerType.SUNRISE &&
                                 now.time.toSecondOfDay() >= (times[PrayerType.SUNRISE]?.toSecondOfDay() ?: 0) + 15 * 60
-                            ) "" else prayerArabicName(countdown.currentPrayer),
+                            ) (times[countdown.nextPrayer]?.let { formatPrayerTime(it) } ?: "") else if (isTahajjudWindowNow(countdown, times, _uiState.value.tahajjudStartSecondOfDay.let { if (it >= 0) KLocalTime(it / 3600, (it % 3600) / 60, it % 60) else null })) "التهجد" else prayerArabicName(countdown.currentPrayer),
+                            isDuhaWindow = countdown.currentPrayer == PrayerType.SUNRISE &&
+                                now.time.toSecondOfDay() >= (times[PrayerType.SUNRISE]?.toSecondOfDay() ?: 0) + 15 * 60,
+                            isTahajjudWindow = isTahajjudWindowNow(countdown, times, _uiState.value.tahajjudStartSecondOfDay.let { if (it >= 0) KLocalTime(it / 3600, (it % 3600) / 60, it % 60) else null }),
+                            heroTitleOverride = if (countdown.currentPrayer == PrayerType.SUNRISE &&
+                                now.time.toSecondOfDay() >= (times[PrayerType.SUNRISE]?.toSecondOfDay() ?: 0) + 15 * 60
+                            ) "Next: ${prayerDisplayName(PrayerType.DHUHR)} · ${formatPrayerTime(times[PrayerType.DHUHR])}" else null,
                             isCurrentPrayerCompleted = completedRecordsByPrayer[countdown.currentPrayer]?.isCompleted == true,
                             dailyCompletionByPrayer = dailyCompletionMap(),
                             nextPrayerName = prayerDisplayName(countdown.nextPrayer),
@@ -617,10 +631,16 @@ class SalahViewModel(
                 elapsedWindowRatio = countdown.elapsedRatio,
                 currentPrayerName = if (countdown.currentPrayer == PrayerType.SUNRISE &&
                     nowTime.toSecondOfDay() >= (times[PrayerType.SUNRISE]?.toSecondOfDay() ?: 0) + 15 * 60
-                ) "" else prayerDisplayName(countdown.currentPrayer),
+                ) "Next: ${prayerDisplayName(PrayerType.DHUHR)}" else if (isTahajjudWindowNow(countdown, times, tahajjud?.first)) "Tahajjud" else prayerDisplayName(countdown.currentPrayer),
                 currentPrayerArabic = if (countdown.currentPrayer == PrayerType.SUNRISE &&
                     nowTime.toSecondOfDay() >= (times[PrayerType.SUNRISE]?.toSecondOfDay() ?: 0) + 15 * 60
-                ) "" else prayerArabicName(countdown.currentPrayer),
+                ) (times[countdown.nextPrayer]?.let { formatPrayerTime(it) } ?: "") else if (isTahajjudWindowNow(countdown, times, tahajjud?.first)) "التهجد" else prayerArabicName(countdown.currentPrayer),
+                isDuhaWindow = countdown.currentPrayer == PrayerType.SUNRISE &&
+                    nowTime.toSecondOfDay() >= (times[PrayerType.SUNRISE]?.toSecondOfDay() ?: 0) + 15 * 60,
+                isTahajjudWindow = isTahajjudWindowNow(countdown, times, tahajjud?.first),
+                heroTitleOverride = if (countdown.currentPrayer == PrayerType.SUNRISE &&
+                    nowTime.toSecondOfDay() >= (times[PrayerType.SUNRISE]?.toSecondOfDay() ?: 0) + 15 * 60
+                ) "Next: ${prayerDisplayName(PrayerType.DHUHR)} · ${formatPrayerTime(times[PrayerType.DHUHR])}" else null,
                 isCurrentPrayerCompleted = completedRecordsByPrayer[countdown.currentPrayer]?.isCompleted == true,
                 dailyCompletionByPrayer = dailyCompletionMap(),
                 nextPrayerName = prayerDisplayName(countdown.nextPrayer),
@@ -636,6 +656,7 @@ class SalahViewModel(
                 timeZoneAbbr = TimeZoneResolver.shortAbbreviation(it.timeZoneId),
                 isRefreshing = false,
                 tahajjudStartTimeFormatted = formatPrayerTime(tahajjud?.first),
+                tahajjudStartSecondOfDay = tahajjud?.first?.toSecondOfDay() ?: -1,
                 tahajjudEndTimeFormatted = formatPrayerTime(tahajjud?.second),
                 tahajjudDurationText = tahajjud?.let { (start, end) ->
                     formatNightDuration(start, end)
@@ -908,6 +929,23 @@ class SalahViewModel(
         PrayerType.ASR -> "Asr"
         PrayerType.MAGHRIB -> "Maghrib"
         PrayerType.ISHA -> "Isha"
+    }
+
+    private fun isTahajjudWindowNow(
+        countdown: PrayerCountdownInfo,
+        times: Map<PrayerType, KLocalTime>,
+        tahajjudStart: KLocalTime?
+    ): Boolean {
+        if (countdown.currentPrayer != PrayerType.ISHA || countdown.nextPrayer != PrayerType.FAJR) return false
+        val start = tahajjudStart ?: return false
+        val fajrSecond = times[PrayerType.FAJR]?.toSecondOfDay() ?: return false
+        val nowSecond = Clock.System.now().toLocalDateTime(locationKTimeZone(_uiState.value.timeZoneId)).time.toSecondOfDay()
+        val startSecond = start.toSecondOfDay()
+        return if (startSecond <= fajrSecond) {
+            nowSecond in startSecond..fajrSecond
+        } else {
+            nowSecond >= startSecond || nowSecond <= fajrSecond
+        }
     }
 
     private fun prayerArabicName(type: PrayerType): String = when (type) {

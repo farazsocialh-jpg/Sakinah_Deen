@@ -423,6 +423,15 @@ private fun CountdownRow(
     }
 }
 
+private fun heroTitle(state: SalahUiState): String {
+    val override = state.heroTitleOverride
+    if (!override.isNullOrBlank()) return override
+    return listOfNotNull(
+        state.currentPrayerName.takeIf { it.isNotBlank() },
+        state.currentPrayerArabic.takeIf { it.isNotBlank() }
+    ).joinToString(" · ").uppercase()
+}
+
 @Composable
 internal fun ClassicHeroCard(
     state: SalahUiState,
@@ -444,8 +453,10 @@ internal fun ClassicHeroCard(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            NextMetaRow(state, completed) {
-                ClockPill(state.nextPrayerStartTimeFormatted)
+            if (!state.isDuhaWindow) {
+                NextMetaRow(state, completed) {
+                    ClockPill(state.nextPrayerStartTimeFormatted)
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -453,7 +464,7 @@ internal fun ClassicHeroCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "${state.currentPrayerName.uppercase()} · ${state.currentPrayerArabic}",
+                    text = heroTitle(state),
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -505,7 +516,7 @@ internal fun BentoHero(
                         PrayerCheckCircle(completed, onToggleCurrent, size = 40.dp)
                     }
                     Text(
-                        text = "${state.currentPrayerName.uppercase()} · ${state.currentPrayerArabic}",
+                        text = heroTitle(state),
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -602,12 +613,14 @@ internal fun CircularHero(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "NEXT: ${state.nextPrayerName.uppercase()} · ${state.nextPrayerStartTimeFormatted.ifBlank { "--:--" }}",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (completed) SalahEmerald else MaterialTheme.colorScheme.primary
-                )
+                if (!state.isDuhaWindow) {
+                    Text(
+                        text = "NEXT: ${state.nextPrayerName.uppercase()} · ${state.nextPrayerStartTimeFormatted.ifBlank { "--:--" }}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (completed) SalahEmerald else MaterialTheme.colorScheme.primary
+                    )
+                }
                 PrayerCheckCircle(completed, onToggleCurrent, size = 40.dp)
             }
             Row(
@@ -639,7 +652,7 @@ internal fun CircularHero(
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        text = "${state.currentPrayerName.uppercase()} · ${state.currentPrayerArabic}",
+                        text = heroTitle(state),
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -674,12 +687,14 @@ internal fun SeamlessHero(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "NEXT: ${state.nextPrayerName.uppercase()} · ${state.nextPrayerStartTimeFormatted.ifBlank { "--:--" }}",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = if (completed) SalahEmerald else MaterialTheme.colorScheme.primary
-            )
+            if (!state.isDuhaWindow) {
+                Text(
+                    text = "NEXT: ${state.nextPrayerName.uppercase()} · ${state.nextPrayerStartTimeFormatted.ifBlank { "--:--" }}",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (completed) SalahEmerald else MaterialTheme.colorScheme.primary
+                )
+            }
             Text(
                 text = state.hijriDate,
                 fontSize = 10.sp,
@@ -692,7 +707,7 @@ internal fun SeamlessHero(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "${state.currentPrayerName.uppercase()} · ${state.currentPrayerArabic}",
+                text = heroTitle(state),
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -736,17 +751,19 @@ internal fun DailyDotsHero(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    Text(
-                        text = "NEXT: ${state.nextPrayerName.uppercase()} · ${state.nextPrayerStartTimeFormatted.ifBlank { "--:--" }}",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (completed) SalahEmerald else MaterialTheme.colorScheme.primary
-                    )
+                if (!state.isDuhaWindow) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Text(
+                            text = "NEXT: ${state.nextPrayerName.uppercase()} · ${state.nextPrayerStartTimeFormatted.ifBlank { "--:--" }}",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (completed) SalahEmerald else MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     dotPrayers.forEach { (letter, name) ->
@@ -777,7 +794,7 @@ internal fun DailyDotsHero(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "${state.currentPrayerName.uppercase()} · ${state.currentPrayerArabic}",
+                    text = heroTitle(state),
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
