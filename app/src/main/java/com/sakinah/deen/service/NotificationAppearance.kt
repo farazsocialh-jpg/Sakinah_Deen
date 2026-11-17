@@ -41,7 +41,10 @@ object NotificationAppearance {
         val config = runCatching {
             AppearancePreferences(context).config.value
         }.getOrNull() ?: UserAppearanceConfig()
-        val isDark = resolveIsDark(context, config.themeMode)
+        // The OS notification card background always follows the phone's system dark/light
+        // mode, regardless of the app's in-app themeMode. Generate all colours from the
+        // system mode so text/track stay readable in every combination.
+        val isDark = isSystemDark(context)
         return runCatching { themeFor(config.palette, isDark) }
             .getOrElse { fallbackTheme(context) }
     }

@@ -1,5 +1,7 @@
 package com.sakinah.deen.service
 
+import android.annotation.SuppressLint
+
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
@@ -8,9 +10,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.util.Log
 import android.net.Uri
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
@@ -236,8 +240,31 @@ class AdhanPlaybackService : Service() {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
             )
         }
-        if (!promoted) stopSelf()
+        if (!promoted) {
+            // Foreground promotion refused (Android 12/14+): fall back to the sound channel so
+            // the user never gets a silent vibration-only reminder when FULL_AZAAN is selected.
+            postFallbackSoundNotification()
+            stopSelf()
+        }
         return promoted
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun postFallbackSoundNotification() {
+        runCatching {
+            val notif = PrayerNotificationFactory.build(
+                context = this,
+                spec = PrayerNotificationFactory.Spec(
+                    prayerType = currentPrayerType,
+                    prayerName = currentPrayerName,
+                    startMillis = currentWindowStart,
+                    endMillis = currentWindowEnd,
+                    alertMode = PrayerAlertMode.SHORT_TONE
+                )
+            )
+            androidx.core.app.NotificationManagerCompat.from(this)
+                .notify(NOTIFICATION_ID, notif)
+        }
     }
 
     private fun playCue(uri: Uri, stopWhenPlaybackEnds: Boolean) {
@@ -247,7 +274,7 @@ class AdhanPlaybackService : Service() {
             return
         }
         exo.setMediaItem(MediaItem.fromUri(uri))
-        exo.volume = 0f
+        exo.volume = 1.0f
         exo.prepare()
         exo.play()
         isPlayingAdhan = true
@@ -255,13 +282,7 @@ class AdhanPlaybackService : Service() {
         registerVolumeReceiver()
 
         fadeJob?.cancel()
-        fadeJob = scope.launch {
-            for (step in 1..FADE_STEPS) {
-                delay(FADE_STEP_MS)
-                val activePlayer = player ?: break
-                activePlayer.volume = step.toFloat() / FADE_STEPS.toFloat()
-            }
-        }
+        fadeJob = null
     }
 
     private fun ensurePlayer(stopWhenPlaybackEnds: Boolean): ExoPlayer? {
@@ -288,7 +309,7 @@ class AdhanPlaybackService : Service() {
                     // Disturb and audio focus all follow the notification stream.
                     AudioAttributes.Builder()
                         .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
-                        .setUsage(C.USAGE_NOTIFICATION)
+                        .setUsage(C.USAGE_MEDIA)
                         .build(),
                     /* handleAudioFocus = */ true
                 )
@@ -302,7 +323,10 @@ class AdhanPlaybackService : Service() {
 
                     override fun onPlayerError(error: PlaybackException) {
                         // A missing/corrupt recording must not crash or leave a silent
-                        // foreground service: keep the reminder card and stop the audio.
+                        // foreground service: fall back to the sound channel so the user
+                        // still hears a notification, then keep the reminder card.
+                        Log.w("AdhanPlaybackService", "ExoPlayer error; falling back to sound channel", error)
+                        postFallbackSoundNotification()
                         finishTonePlayback()
                     }
                 })

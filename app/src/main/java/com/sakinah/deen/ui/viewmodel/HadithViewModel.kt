@@ -88,7 +88,7 @@ class HadithViewModel(
         HadithBookInfo("tirmidhi", "Jami‘ at-Tirmidhi", "3,956 Hadiths"),
         HadithBookInfo("nasai", "Sunan an-Nasa'i", "5,760 Hadiths"),
         HadithBookInfo("ibnmajah", "Sunan Ibn Majah", "4,341 Hadiths"),
-        HadithBookInfo("muwatta", "Muwatta Malik", "1,858 Hadiths"),
+        HadithBookInfo("malik", "Muwatta Malik", "1,858 Hadiths"),
         HadithBookInfo("nawawi", "40 Hadith Nawawi", "42 Hadiths")
     )
 
@@ -320,8 +320,9 @@ class HadithViewModel(
     private fun loadCatalog() {
         val repo = islamicRepository ?: return
         viewModelScope.launch {
-            val catalog = repo.fetchHadithCatalog()
-            hadithCatalog = catalog
+            try {
+                val catalog = repo.fetchHadithCatalog()
+                hadithCatalog = catalog
             _uiState.update { state ->
                 val selectedCatalog = catalog.firstOrNull { it.bookKey == state.selectedBookKey }
                 val editions = if (state.selectedBookKey == "all") {
@@ -363,6 +364,11 @@ class HadithViewModel(
                 pendingDeepLinkSlug = null
                 pendingDeepLinkHint = ""
                 navigateToDeepLink(queuedSlug, queuedHint)
+            }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                _uiState.update { it.copy(errorMessage = "Could not load hadith catalog: ${t.message ?: t::class.simpleName ?: "error"}") }
             }
         }
     }

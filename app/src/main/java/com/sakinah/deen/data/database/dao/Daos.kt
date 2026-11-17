@@ -272,7 +272,15 @@ interface HadithDao {
         "SELECT * FROM hadith_entries " +
             "ORDER BY bookKey ASC, languageCode ASC, hadithNumber ASC LIMIT :limit OFFSET :offset"
     )
-    fun observeAllHadiths(limit: Int = 100000, offset: Int = 0): Flow<List<HadithEntryEntity>>
+    fun observeAllHadiths(limit: Int = 1000, offset: Int = 0): Flow<List<HadithEntryEntity>>
+
+    /** Lightweight catalog summary for download/status UI (no full text rows). */
+    @Query("SELECT bookKey, languageCode, COUNT(*) AS count FROM hadith_entries GROUP BY bookKey, languageCode")
+    fun observeHadithCatalogSummary(): Flow<List<HadithCatalogSummary>>
+
+    /** Distinct sections for one book/edition (no full text rows). */
+    @Query("SELECT DISTINCT sectionNumber, chapterTitle FROM hadith_entries WHERE bookKey = :bookKey AND languageCode = :languageCode ORDER BY sectionNumber ASC")
+    fun observeHadithSections(bookKey: String, languageCode: String): Flow<List<HadithSectionSummary>>
 
     /** "All Books" view restricted to one language edition, so ENG <-> ARA switches every row. */
     @Query(
@@ -281,7 +289,7 @@ interface HadithDao {
     )
     fun observeAllHadithsByLanguage(
         languageCode: String,
-        limit: Int = 100000,
+        limit: Int = 1000,
         offset: Int = 0
     ): Flow<List<HadithEntryEntity>>
 
@@ -396,3 +404,14 @@ interface TafsirDao {
     @Query("DELETE FROM tafsir_entries WHERE sourceKey = :sourceKey")
     suspend fun deleteBySource(sourceKey: String)
 }
+
+data class HadithCatalogSummary(
+    val bookKey: String,
+    val languageCode: String,
+    val count: Int
+)
+
+data class HadithSectionSummary(
+    val sectionNumber: Int,
+    val chapterTitle: String
+)

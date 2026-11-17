@@ -144,7 +144,8 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             // Background-start restrictions (Android 12/14+) or a revoked FGS permission:
             // keep the reminder visible as an ordinary notification instead.
             Log.w(TAG, "Foreground Azaan start refused; posting the reminder card instead", e)
-            postPrayerNotification(context, prayerName, prayerType, windowStart, windowEnd, alertMode)
+            // Fall back to the sound channel so the user still hears a notification.
+            postPrayerNotification(context, prayerName, prayerType, windowStart, windowEnd, PrayerAlertMode.SHORT_TONE)
         }
     }
 

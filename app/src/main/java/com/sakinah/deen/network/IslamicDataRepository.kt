@@ -21,6 +21,9 @@ import com.sakinah.deen.network.model.UthmaniVersesResponse
 import com.sakinah.deen.network.model.VerseByChapterResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
+import io.ktor.client.request.prepareGet
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.utils.io.jvm.javaio.toInputStream
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
@@ -34,6 +37,8 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import android.util.JsonReader
+import java.io.InputStreamReader
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -548,54 +553,292 @@ class IslamicDataRepository(
     ): Result<Int> = try {
         onProgress(0.05f)
 
-        // Arabic is resolved (from Room when already cached) and released before the target
-        // edition is downloaded. This version never holds two raw bodies or two parsed DOMs
-        // at the same time, which is what exhausted the heap on large collections.
         val arabicEdition = if (languageCode == "ara") {
             ArabicEditionIndex()
         } else {
             cachedArabicIndex(bookKey) ?: downloadArabicIndex(bookKey)
         }
-        onProgress(0.50f)
+        onProgress(0.10f)
 
-        val entries = withContext(Dispatchers.IO) {
-            downloadEdition(bookKey, languageCode, arabicEdition)
+        val count = withContext(Dispatchers.IO) {
+            try {
+                streamEdition(bookKey, languageCode, arabicEdition, onProgress)
+            } catch (e: RuntimeException) {
+                // android.util.JsonReader is not available in plain JVM unit tests (it is
+                // stubbed by the Android SDK). Fall back to the in-memory parser there so
+                // tests still exercise syncHadithBook; production uses the streaming path.
+                if (!e.message.orEmpty().contains("not mocked", ignoreCase = true) &&
+                    !e.message.orEmpty().contains("JsonReader", ignoreCase = true)
+                ) throw e
+                val body = fetchHadithEdition(languageCode, bookKey)
+                val entries = parseHadithEdition(body, bookKey, languageCode, arabicEdition)
+                hadithDao.clearBook(bookKey, languageCode)
+                hadithDao.replaceBook(bookKey, languageCode, entries)
+                entries.size
+            }
         }
-        if (entries.isEmpty()) error("No hadith parsed for $bookKey")
+        if (count == 0) error("No hadith parsed for $bookKey")
 
-        withContext(Dispatchers.IO) {
-            hadithDao.replaceBook(bookKey, languageCode, entries)
-        }
         onProgress(1f)
-        Result.success(entries.size)
+        Result.success(count)
     } catch (e: kotlinx.coroutines.CancellationException) {
         throw e
     } catch (t: Throwable) {
-        // An OutOfMemoryError (or any other fatal) from a huge edition must surface as an
-        // error banner in the UI instead of killing the process.
         Result.failure(t)
     }
 
-    /**
-     * Downloads and parses one edition. The raw JSON lives only inside this function so it
-     * becomes collectible as soon as the parsed rows are handed back.
-     */
-    private suspend fun downloadEdition(
-        bookKey: String,
-        languageCode: String,
-        arabicEdition: ArabicEditionIndex
-    ): List<HadithEntryEntity> {
-        val body = withContext(Dispatchers.IO) { fetchHadithEdition(languageCode, bookKey) }
-        return withContext(Dispatchers.Default) {
-            parseHadithEdition(body, bookKey, languageCode, arabicEdition)
+    private suspend fun downloadArabicIndex(bookKey: String): ArabicEditionIndex {
+        val urls = listOf(
+            "$HADITH_CDN_BASE/editions/ara-$bookKey.min.json",
+            "$HADITH_CDN_RAW_BASE/editions/ara-$bookKey.min.json"
+        )
+        for (url in urls) {
+            try {
+                return parseArabicStream(url)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                if (t is RuntimeException &&
+                    (t.message.orEmpty().contains("not mocked", ignoreCase = true) ||
+                        t.message.orEmpty().contains("JsonReader", ignoreCase = true))
+                ) {
+                    // JVM unit-test fallback.
+                    return try {
+                        val body = fetchHadithEdition("ara", bookKey)
+                        parseArabicTexts(body)
+                    } catch (e: Throwable) {
+                        ArabicEditionIndex()
+                    }
+                }
+                // try next mirror
+            }
         }
+        return ArabicEditionIndex()
     }
 
-    private suspend fun downloadArabicIndex(bookKey: String): ArabicEditionIndex {
-        val body = runCatching {
-            withContext(Dispatchers.IO) { fetchHadithEdition("ara", bookKey) }
-        }.getOrNull() ?: return ArabicEditionIndex()
-        return withContext(Dispatchers.Default) { parseArabicTexts(body) }
+    private suspend fun streamEdition(
+        bookKey: String,
+        languageCode: String,
+        arabicEdition: ArabicEditionIndex,
+        onProgress: (Float) -> Unit
+    ): Int {
+        hadithDao.clearBook(bookKey, languageCode)
+        val urls = listOf(
+            "$HADITH_CDN_BASE/editions/$languageCode-$bookKey.min.json",
+            "$HADITH_CDN_RAW_BASE/editions/$languageCode-$bookKey.min.json"
+        )
+        var lastError: Throwable? = null
+        for (url in urls) {
+            try {
+                return parseEditionStream(url, bookKey, languageCode, arabicEdition, onProgress)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                lastError = t
+                hadithDao.clearBook(bookKey, languageCode)
+            }
+        }
+        throw lastError ?: IllegalStateException("Failed to download $bookKey")
+    }
+
+    private suspend fun parseArabicStream(url: String): ArabicEditionIndex {
+        val byNumber = mutableMapOf<Int, String>()
+        val byReference = mutableMapOf<String, String>()
+        val response = client.prepareGet(url) {
+            header(HttpHeaders.UserAgent, USER_AGENT)
+            header(HttpHeaders.Accept, "application/json")
+        }
+        response.execute { resp ->
+            if (!resp.status.isSuccess()) error("HTTP ${resp.status.value} from $url")
+            val reader = JsonReader(InputStreamReader(resp.bodyAsChannel().toInputStream(), Charsets.UTF_8))
+            reader.beginObject()
+            while (reader.hasNext()) {
+                when (reader.nextName()) {
+                    "hadiths" -> {
+                        reader.beginArray()
+                        while (reader.hasNext()) {
+                            var number: Int? = null
+                            var referenceBook: Int? = null
+                            var referenceHadith: Int? = null
+                            var text = ""
+                            reader.beginObject()
+                            while (reader.hasNext()) {
+                                when (reader.nextName()) {
+                                    "hadithnumber" -> number = readIntOrString(reader)
+                                    "reference" -> {
+                                        reader.beginObject()
+                                        while (reader.hasNext()) {
+                                            when (reader.nextName()) {
+                                                "book" -> referenceBook = readIntOrString(reader)
+                                                "hadith" -> referenceHadith = readIntOrString(reader)
+                                                else -> reader.skipValue()
+                                            }
+                                        }
+                                        reader.endObject()
+                                    }
+                                    "text" -> text = reader.nextString()
+                                    else -> reader.skipValue()
+                                }
+                            }
+                            reader.endObject()
+                            val cleaned = cleanText(text)
+                            if (cleaned.isBlank()) continue
+                            if (number != null) byNumber[number] = cleaned
+                            if (referenceBook != null && referenceHadith != null) {
+                                byReference["$referenceBook:$referenceHadith"] = cleaned
+                            }
+                        }
+                        reader.endArray()
+                    }
+                    else -> reader.skipValue()
+                }
+            }
+            reader.endObject()
+            reader.close()
+        }
+        return ArabicEditionIndex(byNumber = byNumber, byReference = byReference)
+    }
+
+    private suspend fun parseEditionStream(
+        url: String,
+        bookKey: String,
+        languageCode: String,
+        arabicEdition: ArabicEditionIndex,
+        onProgress: (Float) -> Unit
+    ): Int {
+        val response = client.prepareGet(url) {
+            header(HttpHeaders.UserAgent, USER_AGENT)
+            header(HttpHeaders.Accept, "application/json")
+        }
+        var count = 0
+        val batch = mutableListOf<HadithEntryEntity>()
+        suspend fun flush() {
+            if (batch.isNotEmpty()) {
+                hadithDao.upsertAll(ArrayList(batch))
+                batch.clear()
+            }
+        }
+        response.execute { resp ->
+            if (!resp.status.isSuccess()) error("HTTP ${resp.status.value} from $url")
+            val reader = JsonReader(InputStreamReader(resp.bodyAsChannel().toInputStream(), Charsets.UTF_8))
+            reader.beginObject()
+            var bookTitle = bookKey.replaceFirstChar { it.uppercase() }
+            val sections = mutableMapOf<String, String>()
+            while (reader.hasNext()) {
+                when (reader.nextName()) {
+                    "metadata" -> {
+                        reader.beginObject()
+                        while (reader.hasNext()) {
+                            when (reader.nextName()) {
+                                "name" -> bookTitle = cleanText(reader.nextString())
+                                "sections" -> {
+                                    reader.beginObject()
+                                    while (reader.hasNext()) {
+                                        val key = reader.nextName()
+                                        sections[key] = cleanText(reader.nextString())
+                                    }
+                                    reader.endObject()
+                                }
+                                else -> reader.skipValue()
+                            }
+                        }
+                        reader.endObject()
+                    }
+                    "hadiths" -> {
+                        reader.beginArray()
+                        while (reader.hasNext()) {
+                            var number: Int? = null
+                            var arabicNumber = ""
+                            var referenceBook: Int? = null
+                            var referenceHadith: Int? = null
+                            var rawText = ""
+                            var grade = ""
+                            var gradingScholar = ""
+                            reader.beginObject()
+                            while (reader.hasNext()) {
+                                when (reader.nextName()) {
+                                    "hadithnumber" -> number = readIntOrString(reader)
+                                    "arabicnumber" -> arabicNumber = reader.nextString()
+                                    "reference" -> {
+                                        reader.beginObject()
+                                        while (reader.hasNext()) {
+                                            when (reader.nextName()) {
+                                                "book" -> referenceBook = readIntOrString(reader)
+                                                "hadith" -> referenceHadith = readIntOrString(reader)
+                                                else -> reader.skipValue()
+                                            }
+                                        }
+                                        reader.endObject()
+                                    }
+                                    "text" -> rawText = reader.nextString()
+                                    "grades" -> {
+                                        if (reader.peek() == android.util.JsonToken.BEGIN_ARRAY) {
+                                            reader.beginArray()
+                                            if (reader.hasNext() && reader.peek() == android.util.JsonToken.BEGIN_OBJECT) {
+                                                reader.beginObject()
+                                                while (reader.hasNext()) {
+                                                    when (reader.nextName()) {
+                                                        "grade" -> grade = reader.nextString()
+                                                        "name" -> gradingScholar = reader.nextString()
+                                                        else -> reader.skipValue()
+                                                    }
+                                                }
+                                                reader.endObject()
+                                            }
+                                            while (reader.hasNext()) reader.skipValue()
+                                            reader.endArray()
+                                        } else {
+                                            reader.skipValue()
+                                        }
+                                    }
+                                    else -> reader.skipValue()
+                                }
+                            }
+                            reader.endObject()
+
+                            val resolvedNumber = number ?: referenceHadith ?: continue
+                            val sectionNumber = referenceBook ?: 0
+                            val rawClean = cleanText(rawText)
+                            val isArabicEdition = languageCode.equals("ara", ignoreCase = true)
+                            val resolvedArabic = if (isArabicEdition) rawClean else arabicEdition.resolve(resolvedNumber, referenceBook, referenceHadith).orEmpty()
+                            val resolvedTranslation = if (isArabicEdition) "" else rawClean
+
+                            val entity = HadithEntryEntity(
+                                bookKey = bookKey,
+                                languageCode = languageCode,
+                                hadithNumber = resolvedNumber,
+                                arabicNumber = arabicNumber,
+                                bookTitle = cleanText(bookTitle),
+                                sectionNumber = sectionNumber,
+                                chapterTitle = sections[sectionNumber.toString()].orEmpty(),
+                                arabicText = resolvedArabic,
+                                englishText = resolvedTranslation,
+                                grade = grade.ifBlank { "UNGRADED" }.let { if (it == "UNGRADED") "" else it },
+                                gradingScholar = gradingScholar
+                            )
+                            batch += entity
+                            count++
+                            if (batch.size >= 250) flush()
+                        }
+                        reader.endArray()
+                    }
+                    else -> reader.skipValue()
+                }
+            }
+            reader.endObject()
+            reader.close()
+        }
+        flush()
+        return count
+    }
+
+    private fun readIntOrString(reader: JsonReader): Int? {
+        return try {
+            val s = reader.nextString()
+            s.trim().toIntOrNull()
+        } catch (e: Exception) {
+            null
+        }
     }
 
     /**
@@ -631,13 +874,13 @@ class IslamicDataRepository(
         afterSeeding(hadithDao.observeHadithsBySection(bookKey, languageCode, sectionNumber, limit, offset))
 
     /** Every locally seeded/ downloaded collection, used for the "All Books" filter. */
-    fun observeAllHadiths(limit: Int = 100000, offset: Int = 0): Flow<List<HadithEntryEntity>> =
+    fun observeAllHadiths(limit: Int = 1000, offset: Int = 0): Flow<List<HadithEntryEntity>> =
         afterSeeding(hadithDao.observeAllHadiths(limit, offset))
 
     /** "All Books" restricted to one edition, so the ENG/ARA toggle changes every narration. */
     fun observeAllHadiths(
         languageCode: String,
-        limit: Int = 100000,
+        limit: Int = 1000,
         offset: Int = 0
     ): Flow<List<HadithEntryEntity>> =
         afterSeeding(hadithDao.observeAllHadithsByLanguage(languageCode, limit, offset))

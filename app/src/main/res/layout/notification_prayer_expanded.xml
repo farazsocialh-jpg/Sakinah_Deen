@@ -46,7 +46,9 @@
         android:layout_marginTop="10dp"
         android:max="100"
         android:progress="100"
-        android:progressDrawable="@drawable/notif_progress_bar" />
+        android:progressDrawable="@drawable/notif_progress_bar"
+        android:progressTint="@color/notif_progress_tint"
+        android:progressBackgroundTint="@color/notif_progress_track" />
 
     <TextView
         android:id="@+id/notif_reminder_arabic"

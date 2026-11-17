@@ -5,4 +5,6 @@
     <color name="sakinah_mint">#10B981</color>
     <color name="sakinah_gold">#FBBF24</color>
     <color name="sakinah_ivory">#F8FAF7</color>
+    <color name="notif_progress_tint">#FF14624A</color>
+    <color name="notif_progress_track">#22000000</color>
 </resources>

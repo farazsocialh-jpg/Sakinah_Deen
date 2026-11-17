@@ -1,7 +1,9 @@
 package com.sakinah.deen.fakes
 
 import com.sakinah.deen.data.database.dao.AdhkarDao
+import com.sakinah.deen.data.database.dao.HadithCatalogSummary
 import com.sakinah.deen.data.database.dao.HadithDao
+import com.sakinah.deen.data.database.dao.HadithSectionSummary
 import com.sakinah.deen.data.database.dao.QuranDao
 import com.sakinah.deen.data.database.dao.TafsirDao
 import com.sakinah.deen.data.database.entity.AdhkarEntity
@@ -139,6 +141,23 @@ class FakeHadithDao : HadithDao {
                 .sortedWith(compareBy({ it.bookKey }, { it.hadithNumber }))
                 .drop(offset)
                 .take(limit)
+        )
+    }
+
+    override fun observeHadithCatalogSummary(): Flow<List<HadithCatalogSummary>> = flow {
+        emit(
+            entries.values.groupBy { it.bookKey to it.languageCode }.map { (key, rows) ->
+                HadithCatalogSummary(key.first, key.second, rows.size)
+            }
+        )
+    }
+
+    override fun observeHadithSections(bookKey: String, languageCode: String): Flow<List<HadithSectionSummary>> = flow {
+        emit(
+            entries.values.filter { it.bookKey == bookKey && it.languageCode == languageCode }
+                .groupBy { it.sectionNumber }
+                .map { (section, rows) -> HadithSectionSummary(section, rows.first().chapterTitle) }
+                .sortedBy { it.sectionNumber }
         )
     }
 

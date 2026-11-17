@@ -26,8 +26,8 @@ object NotificationChannels {
     const val GROUP_TRAVEL = "sakinah_travel_group"
     const val GROUP_HABIT = "sakinah_habit_group"
 
-    /** IMPORTANCE_HIGH + standard notification chime + vibration (Short Chime / Standard sound). */
-    const val CHANNEL_PRAYER_SOUND = "sakinah_prayer_sound_v2"
+    /** IMPORTANCE_HIGH + standard notification chime, no vibration (Short Chime / Standard sound). */
+    const val CHANNEL_PRAYER_SOUND = "sakinah_prayer_sound_v3"
 
     /** IMPORTANCE_HIGH, no sound, vibration on (Vibrate Only, and Full Azaan's card). */
     const val CHANNEL_PRAYER_VIBRATE = "sakinah_prayer_vibrate_v2"
@@ -41,6 +41,7 @@ object NotificationChannels {
     /** Pre-versioning ids, kept only so they can be removed from the user's settings. */
     private const val LEGACY_CHANNEL_SALAH_ADHAN = "salah_adhan_channel"
     private const val LEGACY_CHANNEL_SALAH_SILENT = "salah_silent_channel"
+    private const val LEGACY_CHANNEL_PRAYER_SOUND_V2 = "sakinah_prayer_sound_v2"
 
     /** Bundled Adhan URI, playable even when the app process was killed. */
     fun adhanSoundUri(context: Context): Uri =
@@ -112,8 +113,7 @@ object NotificationChannels {
         ).apply {
             group = GROUP_PRAYER
             description = context.getString(R.string.channel_prayer_sound_desc)
-            enableVibration(true)
-            vibrationPattern = longArrayOf(0, 400, 200, 400)
+            enableVibration(false)
             setSound(standardNotificationSound(), notificationAudioAttributes)
             lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             setShowBadge(true)
@@ -177,6 +177,7 @@ object NotificationChannels {
         runCatching {
             notificationManager.deleteNotificationChannel(LEGACY_CHANNEL_SALAH_ADHAN)
             notificationManager.deleteNotificationChannel(LEGACY_CHANNEL_SALAH_SILENT)
+            notificationManager.deleteNotificationChannel(LEGACY_CHANNEL_PRAYER_SOUND_V2)
         }
     }
 }
