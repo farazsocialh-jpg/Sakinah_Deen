@@ -11,6 +11,7 @@ import com.sakinah.deen.data.prayer.SunniAuthority
 import com.sakinah.deen.data.repository.PrayerTimeRepositoryImpl
 import com.sakinah.deen.data.repository.PrayerTimeSource
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl
+import com.sakinah.deen.settings.HighLatitudeRule
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -171,10 +172,46 @@ class AlAdhanMonthlyCacheTest {
 
         repo.resolve(LocalDate.of(2026, 11, 30))
         assertEquals(1, requests)
-        assertTrue(PrayerTimeRepositoryImpl.cacheKeyOf(startOfNovember, doha, 10, 0).endsWith("|202611"))
+        assertTrue(PrayerTimeRepositoryImpl.cacheKeyOf(startOfNovember, doha, 10, 0).contains("|202611|"))
 
         repo.resolve(LocalDate.of(2026, 12, 1))
         assertEquals(2, requests)
+    }
+
+    @Test
+    fun changingHighLatitudeRule_isANewCacheIdentityAndReachesAlAdhan() = runTest {
+        var requests = 0
+        var requestedParams: Map<String, String> = emptyMap()
+        val engine = MockEngine { request ->
+            requests++
+            requestedParams = request.url.parameters.entries().associate { it.key to it.value.first() }
+            respondJson(monthlyJson())
+        }
+        val dao = FakePrayerTimetableDao()
+        val repo = repository(dao, engine, now = FIXED_NOW)
+
+        repo.resolve(startOfNovember)
+        assertEquals(1, requests)
+        // AlAdhan's default and the app default agree: middle of the night.
+        assertEquals("1", requestedParams["latitudeAdjustmentMethod"])
+
+        val seventh = repo.resolveDay(
+            date = startOfNovember,
+            coordinates = doha,
+            madhhab = Madhhab.SHAFI_HANBALI_MALIKI,
+            zoneId = ZoneId.of("Asia/Qatar"),
+            countryCode = "QA",
+            highLatitudeRule = HighLatitudeRule.SEVENTH_OF_NIGHT
+        )
+
+        // Switching the rule must refetch instead of serving rows computed under the old one.
+        assertEquals(2, requests)
+        assertEquals("2", requestedParams["latitudeAdjustmentMethod"])
+        assertEquals(PrayerTimeSource.ONLINE, seventh.source)
+        assertTrue(
+            PrayerTimeRepositoryImpl.cacheKeyOf(startOfNovember, doha, 10, 0, 1) !=
+                PrayerTimeRepositoryImpl.cacheKeyOf(startOfNovember, doha, 10, 0, 2)
+        )
     }
 
     // ------------------------------------------------------------------ fixtures

@@ -12,6 +12,7 @@ import com.sakinah.deen.data.repository.PrayerTimeSource
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl
 import com.sakinah.deen.domain.astronomy.PrayerCountdownInfo
+import com.sakinah.deen.settings.HighLatitudeRule
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -207,7 +208,8 @@ class PrayerTimeFallbackTest {
             method: com.sakinah.deen.data.model.CalculationMethod,
             madhhab: Madhhab,
             timeZone: KTimeZone,
-            adjustments: PrayerAdjustments
+            adjustments: PrayerAdjustments,
+            highLatitudeRule: HighLatitudeRule
         ): Map<PrayerType, KLocalTime> {
             calls++
             error("local calculation must not run while cached timings exist")

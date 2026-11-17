@@ -74,6 +74,28 @@ class AppearancePreferencesTest {
     }
 
     @Test
+    fun retiredSalahHomeLayoutsMapToTheirSuccessorInsteadOfResetting() {
+        val fake = FakeSharedPreferences()
+        // Both retired presets rendered the classic hero card, so neither choice is lost.
+        fake.edit().putString("salah_home_layout", "ALL_DAY_GRID").apply()
+        assertEquals(
+            SalahHomeLayout.CLASSIC_COMPACT,
+            AppearancePreferences(fake).config.value.salahHomeLayout
+        )
+
+        fake.edit().putString("salah_home_layout", "TIMELINE_STRIP").apply()
+        assertEquals(
+            SalahHomeLayout.CLASSIC_COMPACT,
+            AppearancePreferences(fake).config.value.salahHomeLayout
+        )
+
+        // Every surviving preset still round-trips through its stored name.
+        SalahHomeLayout.entries.forEach { layout ->
+            assertEquals(layout, SalahHomeLayout.fromStoredName(layout.name))
+        }
+    }
+
+    @Test
     fun quranReadingLayoutPersistsAndInvalidValueFallsBack() {
         val fake = FakeSharedPreferences()
         val store = AppearancePreferences(fake)
