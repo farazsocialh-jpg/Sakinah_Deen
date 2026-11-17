@@ -245,16 +245,14 @@ fun QuranScreen(
                         placeholder = { Text("Search ayah text, Arabic or translation…", fontSize = 12.sp) },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search Quran") },
                         trailingIcon = {
-                            IconButton(
-                                onClick = {
-                                    if (state.searchQuery.isNotBlank()) {
-                                        vm.onIntent(QuranUiIntent.ClearSearch)
-                                    } else {
-                                        searchExpanded = false
-                                    }
+                            if (state.searchQuery.isNotBlank()) {
+                                IconButton(onClick = { vm.onIntent(QuranUiIntent.ClearSearch) }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear search")
                                 }
-                            ) {
-                                Icon(Icons.Default.Close, contentDescription = "Close search")
+                            } else {
+                                IconButton(onClick = { searchExpanded = false }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Close search")
+                                }
                             }
                         },
                         shape = RoundedCornerShape(14.dp),
@@ -303,7 +301,7 @@ fun QuranScreen(
                     }
                 }
 
-                if (state.searchQuery.isNotBlank()) {
+                if (searchExpanded && state.searchQuery.isNotBlank()) {
                     Box(
                         modifier = Modifier
                             .weight(1f)

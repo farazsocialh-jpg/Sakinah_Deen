@@ -221,6 +221,10 @@ fun HadithScreen(
                         IconButton(onClick = { vm.onIntent(HadithUiIntent.ClearSearch) }) {
                             Icon(Icons.Default.Close, contentDescription = "Clear search")
                         }
+                    } else {
+                        IconButton(onClick = { searchExpanded = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close search")
+                        }
                     }
                 },
                 shape = RoundedCornerShape(14.dp),
@@ -276,7 +280,9 @@ fun HadithScreen(
 
         // 5. Reading feed
         val showLibraryGrid = readingLayout == HadithReadingLayout.BOOK_LIBRARY_GRID &&
-            state.selectedBookKey == "all"
+            state.selectedBookKey == "all" &&
+            state.searchQuery.isBlank() &&
+            !savedOnly
         if (!showLibraryGrid && displayedHadiths.isEmpty()) {
             if (state.isLoading) {
                 Row(
