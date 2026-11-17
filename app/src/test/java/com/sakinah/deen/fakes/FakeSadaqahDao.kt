@@ -12,6 +12,13 @@ class FakeSadaqahDao : SadaqahDao {
     override fun observeMonthlyTotal(startTimestamp: Long, endTimestamp: Long): Flow<Double?> =
         logs.map { list -> list.filter { it.timestamp in startTimestamp..endTimestamp }.sumOf { it.amount } }
 
+    override fun observeMonthlyTotalsByCurrency(startTimestamp: Long, endTimestamp: Long): Flow<List<com.sakinah.deen.data.database.dao.SadaqahCurrencyTotal>> =
+        logs.map { list ->
+            list.filter { it.timestamp in startTimestamp..endTimestamp }
+                .groupBy { it.currency }
+                .map { (currency, items) -> com.sakinah.deen.data.database.dao.SadaqahCurrencyTotal(currency, items.sumOf { it.amount }) }
+        }
+
     override fun observeRecentLogs(limit: Int): Flow<List<SadaqahLogEntity>> =
         logs.map { it.take(limit) }
 

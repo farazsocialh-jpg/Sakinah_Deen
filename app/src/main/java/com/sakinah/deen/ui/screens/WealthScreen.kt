@@ -149,6 +149,18 @@ fun WealthScreen(
                         fontSize = 22.sp,
                         color = MaterialTheme.colorScheme.primary
                     )
+                    Text(
+                        text = "Currency: ${state.currencyCode}  •  Nisab source: ${state.rateSource}" +
+                            (if (state.nisabLastUpdatedEpochMillis > 0L) "  •  ${ratesUpdatedLabel}" else ""),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Zakat is a scholarly aid, not a universal fatwa; Hawl and local " +
+                            "madhhab assumptions apply.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }

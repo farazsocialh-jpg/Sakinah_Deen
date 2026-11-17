@@ -78,7 +78,8 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         private const val KEY_ALARMS_ENABLED = "alarms_enabled"
         private const val KEY_LAST_QADHA_ROLLOVER = "last_qadha_rollover_epoch_day"
         private const val KEY_FIRST_LAUNCH_PERMISSIONS_REQUESTED = "first_launch_permissions_requested"
-        private const val KEY_ZAKAT_CASH = "zakat_cash_in_bank"
+                 private const val KEY_ZAKAT_CURRENCY = "zakat_currency"
+         private const val KEY_ZAKAT_CASH = "zakat_cash_in_bank"
         private const val KEY_ZAKAT_GOLD = "zakat_gold_held"
         private const val KEY_ZAKAT_SILVER = "zakat_silver_held"
         private const val KEY_ZAKAT_INVENTORY = "zakat_trade_inventory"
@@ -386,6 +387,10 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
      * Zakat balance-sheet values, persisted on every edit (guest mode included) so
      * closing the app never loses an entered amount.
      */
+    var zakatCurrency: String
+        get() = prefs.getString(KEY_ZAKAT_CURRENCY, "USD") ?: "USD"
+        set(value) = prefs.edit().putString(KEY_ZAKAT_CURRENCY, value).apply()
+
     var zakatCashInBank: Float
         get() = prefs.getFloat(KEY_ZAKAT_CASH, 0f)
         set(value) = prefs.edit().putFloat(KEY_ZAKAT_CASH, value).apply()

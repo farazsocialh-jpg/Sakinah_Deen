@@ -19,9 +19,12 @@ import java.util.UUID
 
 data class WealthUiState(
     val isGoldStandard: Boolean = true,
+    val currencyCode: String = "USD",
     val goldPricePerGram: Float = 88.40f,
     val silverPricePerGram: Float = 1.15f,
     val nisabLastUpdatedEpochMillis: Long = 0L,
+    val rateSource: String = "Offline Fallback Estimate",
+    val isManualNisabOverride: Boolean = false,
     val cashInBank: Float = 0f,
     val goldHeld: Float = 0f,
     val silverHeld: Float = 0f,
@@ -30,6 +33,7 @@ data class WealthUiState(
     val shortTermDebts: Float = 0f,
     val sadaqahJarCollected: Float = 0f,
     val sadaqahGoal: Float = 100f,
+    val sadaqahMonthlyTotalsByCurrency: Map<String, Double> = emptyMap(),
     val nisabThreshold: Float = 85f * 88.40f, // 7514.0f
     val grossAssets: Float = 0f,
     val netEligible: Float = 0f,
@@ -43,6 +47,10 @@ data class WealthUiState(
 
 sealed class WealthUiIntent {
     data class SetGoldStandard(val isGold: Boolean) : WealthUiIntent()
+    data class SetCurrency(val code: String) : WealthUiIntent()
+    data class SetManualGoldPrice(val price: Float) : WealthUiIntent()
+    data class SetManualSilverPrice(val price: Float) : WealthUiIntent()
+    data class ToggleManualNisabOverride(val enabled: Boolean) : WealthUiIntent()
     data class UpdateCash(val amount: Float) : WealthUiIntent()
     data class UpdateGoldHeld(val amount: Float) : WealthUiIntent()
     data class UpdateSilverHeld(val amount: Float) : WealthUiIntent()
@@ -68,6 +76,7 @@ class WealthViewModel(
         preferences?.let { prefs ->
             _uiState.update {
                 it.copy(
+                    currencyCode = prefs.zakatCurrency,
                     cashInBank = prefs.zakatCashInBank,
                     goldHeld = prefs.zakatGoldHeld,
                     silverHeld = prefs.zakatSilverHeld,
@@ -86,6 +95,7 @@ class WealthViewModel(
     private fun persistBalances() {
         val prefs = preferences ?: return
         val s = _uiState.value
+        prefs.zakatCurrency = s.currencyCode
         prefs.zakatCashInBank = s.cashInBank
         prefs.zakatGoldHeld = s.goldHeld
         prefs.zakatSilverHeld = s.silverHeld
@@ -98,11 +108,13 @@ class WealthViewModel(
         val repo = nisabRateRepository ?: return
         viewModelScope.launch {
             repo.rates.collectLatest { rates: NisabRates ->
+                if (_uiState.value.isManualNisabOverride) return@collectLatest
                 _uiState.update {
                     it.copy(
                         goldPricePerGram = rates.goldPricePerGram,
                         silverPricePerGram = rates.silverPricePerGram,
-                        nisabLastUpdatedEpochMillis = rates.lastUpdatedEpochMillis
+                        nisabLastUpdatedEpochMillis = rates.lastUpdatedEpochMillis,
+                        rateSource = "Live API"
                     )
                 }
                 recalculateZakat()
@@ -119,11 +131,12 @@ class WealthViewModel(
             try {
                 val result = target.refresh()
                 if (result.isSuccess) {
-                    _uiState.update { it.copy(errorMessage = null) }
+                    _uiState.update { it.copy(errorMessage = null, rateSource = "Live API") }
                 } else {
                     _uiState.update {
                         it.copy(
-                            errorMessage = "Using the built-in Nisab benchmark; live market sync is unavailable."
+                            errorMessage = "Using the built-in Nisab benchmark; live market sync is unavailable.",
+                            rateSource = "Offline Fallback Estimate"
                         )
                     }
                 }
@@ -147,6 +160,27 @@ class WealthViewModel(
                 _uiState.update { it.copy(isGoldStandard = intent.isGold) }
                 recalculateZakat()
                 persistBalances()
+            }
+            is WealthUiIntent.SetCurrency -> {
+                _uiState.update { it.copy(currencyCode = intent.code) }
+                persistBalances()
+            }
+            is WealthUiIntent.ToggleManualNisabOverride -> {
+                _uiState.update {
+                    it.copy(
+                        isManualNisabOverride = intent.enabled,
+                        rateSource = if (intent.enabled) "Manual Override" else it.rateSource
+                    )
+                }
+                recalculateZakat()
+            }
+            is WealthUiIntent.SetManualGoldPrice -> {
+                _uiState.update { it.copy(goldPricePerGram = intent.price.coerceAtLeast(0f)) }
+                recalculateZakat()
+            }
+            is WealthUiIntent.SetManualSilverPrice -> {
+                _uiState.update { it.copy(silverPricePerGram = intent.price.coerceAtLeast(0f)) }
+                recalculateZakat()
             }
             is WealthUiIntent.UpdateCash -> {
                 _uiState.update { it.copy(cashInBank = intent.amount.coerceAtLeast(0f)) }

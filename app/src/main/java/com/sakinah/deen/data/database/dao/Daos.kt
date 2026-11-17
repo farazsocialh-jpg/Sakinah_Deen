@@ -136,10 +136,18 @@ interface HifzDao {
     suspend fun deleteMistakesForAyah(surahNumber: Int, ayahNumber: Int)
 }
 
+data class SadaqahCurrencyTotal(
+    val currency: String,
+    val total: Double
+)
+
 @Dao
 interface SadaqahDao {
     @Query("SELECT SUM(amount) FROM sadaqah_logs WHERE timestamp BETWEEN :startTimestamp AND :endTimestamp")
     fun observeMonthlyTotal(startTimestamp: Long, endTimestamp: Long): Flow<Double?>
+
+    @Query("SELECT currency, SUM(amount) AS total FROM sadaqah_logs WHERE timestamp BETWEEN :startTimestamp AND :endTimestamp GROUP BY currency")
+    fun observeMonthlyTotalsByCurrency(startTimestamp: Long, endTimestamp: Long): Flow<List<SadaqahCurrencyTotal>>
 
     @Query("SELECT * FROM sadaqah_logs ORDER BY timestamp DESC LIMIT :limit")
     fun observeRecentLogs(limit: Int = 20): Flow<List<SadaqahLogEntity>>
