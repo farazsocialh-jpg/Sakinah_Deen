@@ -64,6 +64,9 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             PrayerAlarmScheduler.EXTRA_TRIGGER_MILLIS,
             System.currentTimeMillis()
         )
+        // Read at fire time so enabling the optional critical Fajr channel applies at once.
+        val criticalFajr = runCatching { prefs.azaanSettings.criticalFajrChannel }
+            .getOrDefault(false)
         val windowStart = intent.getLongExtra(
             PrayerAlarmScheduler.EXTRA_WINDOW_START_MILLIS,
             triggerMillis
@@ -98,7 +101,8 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
                         prayerType = prayerType,
                         windowStart = windowStart,
                         windowEnd = windowEnd,
-                        alertMode = alertMode
+                        alertMode = alertMode,
+                        criticalFajr = criticalFajr
                     )
 
                     else -> postPrayerNotification(
@@ -107,7 +111,8 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
                         prayerType = prayerType,
                         windowStart = windowStart,
                         windowEnd = windowEnd,
-                        alertMode = alertMode
+                        alertMode = alertMode,
+                        criticalFajr = criticalFajr
                     )
                 }
 
@@ -127,7 +132,8 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         prayerType: PrayerType,
         windowStart: Long,
         windowEnd: Long,
-        alertMode: PrayerAlertMode
+        alertMode: PrayerAlertMode,
+        criticalFajr: Boolean = false
     ) {
         val serviceIntent = Intent(context, AdhanPlaybackService::class.java).apply {
             action = AdhanPlaybackService.ACTION_PLAY_ADHAN
@@ -145,7 +151,15 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             // keep the reminder visible as an ordinary notification instead.
             Log.w(TAG, "Foreground Azaan start refused; posting the reminder card instead", e)
             // Fall back to the sound channel so the user still hears a notification.
-            postPrayerNotification(context, prayerName, prayerType, windowStart, windowEnd, PrayerAlertMode.SHORT_TONE)
+            postPrayerNotification(
+                context = context,
+                prayerName = prayerName,
+                prayerType = prayerType,
+                windowStart = windowStart,
+                windowEnd = windowEnd,
+                alertMode = PrayerAlertMode.SHORT_TONE,
+                criticalFajr = criticalFajr
+            )
         }
     }
 
@@ -155,7 +169,8 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         prayerType: PrayerType,
         windowStart: Long,
         windowEnd: Long,
-        alertMode: PrayerAlertMode
+        alertMode: PrayerAlertMode,
+        criticalFajr: Boolean = false
     ) {
         // Checked again in place so the notification call is always guarded by a permission
         // test the platform (and the linter) can see.
@@ -174,7 +189,8 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
                 prayerName = prayerName,
                 startMillis = windowStart,
                 endMillis = windowEnd,
-                alertMode = alertMode
+                alertMode = alertMode,
+                criticalFajrChannel = criticalFajr
             )
         )
         runCatching {

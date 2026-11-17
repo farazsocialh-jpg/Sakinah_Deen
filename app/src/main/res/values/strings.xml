@@ -33,6 +33,8 @@
     <string name="channel_prayer_vibrate_desc">Heads-up Salah reminders that vibrate without playing any sound</string>
     <string name="channel_prayer_silent_name">Salah Alerts — Silent</string>
     <string name="channel_prayer_silent_desc">Silent Salah reminders that never ring or vibrate</string>
+    <string name="channel_prayer_critical_name">Fajr Alerts — Highest Priority</string>
+    <string name="channel_prayer_critical_desc">Dedicated Fajr channel at maximum importance. Android may still apply Do Not Disturb unless you grant notification policy access</string>
     <string name="channel_safar_name">Travel Mode &amp; Dua al-Safar</string>
     <string name="channel_safar_desc">Heads-up in-vehicle prompts on car Bluetooth connection and Qasr travel mode</string>
     <string name="channel_habit_name">Daily Sunnah &amp; Adhkar Habits</string>

@@ -1,11 +1,13 @@
 package com.sakinah.deen.service
 
+import android.Manifest
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
+import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
+import androidx.core.content.ContextCompat
 import com.sakinah.deen.data.model.AzaanSettings
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
@@ -27,6 +29,14 @@ import kotlinx.datetime.LocalDate as KLocalDate
 import kotlinx.datetime.TimeZone as KTimeZone
 import kotlinx.datetime.toJavaLocalTime
 
+/**
+ * Arms the exact alarms that wake the app at prayer time.
+ *
+ * Every entry point returns an [AlarmScheduleResult]: the UI is never allowed to say
+ * "scheduled" unless an alarm was really registered. Identity handling lives in
+ * [AlarmIdentity]/[AlarmPendingIntents], so scheduling and cancellation always rebuild the
+ * same PendingIntent and no alarm can be orphaned.
+ */
 class PrayerAlarmScheduler(
     private val context: Context,
     private val astronomyEngine: PrayerCalculationEngine,
@@ -36,6 +46,8 @@ class PrayerAlarmScheduler(
 ) {
 
     companion object {
+        private const val TAG = "PrayerAlarmScheduler"
+
         const val ACTION_PRAYER_ALARM = "com.sakinah.deen.ACTION_PRAYER_ALARM"
         const val EXTRA_PRAYER_NAME = "extra_prayer_name"
         const val EXTRA_PRAYER_TYPE = "extra_prayer_type"
@@ -54,15 +66,10 @@ class PrayerAlarmScheduler(
         /** Set by [scheduleTestAlarmInSeconds] so the completion guard never suppresses a test. */
         const val EXTRA_IS_TEST = "extra_is_test"
 
-        private const val BASE_REQUEST_CODE = 1000
-        private const val SNOOZE_REQUEST_CODE = 9500
-        private const val TEST_REQUEST_CODE = 9600
         private const val SNOOZE_MINUTES = 10
 
         /** The test card uses a short window so the countdown and progress bar are visible. */
         private const val TEST_WINDOW_MS = 3 * 60_000L
-        private const val KIND_SNOOZE = "snooze"
-        private const val KIND_TEST = "test"
 
         private val PRAYERS_TO_SCHEDULE = AzaanSettings.ALERT_PRAYERS
     }
@@ -82,14 +89,14 @@ class PrayerAlarmScheduler(
         coordinates: Pair<Double, Double>? = null,
         method: CalculationMethod? = null,
         madhhab: Madhhab? = null
-    ) {
-        if (alarmManager == null) return
-        val settings = preferences.azaanSettings
-        if (!settings.enabled) {
+    ): AlarmScheduleResult {
+        alarmManager ?: return record(AlarmScheduleResult.Unsupported)
+        if (!preferences.azaanSettings.enabled) {
             cancelAllAlarms()
-            return
+            return record(AlarmScheduleResult.Failed("Azaan notifications are turned off"))
         }
-        val coords = coordinates ?: preferences.locationCoordinates ?: return
+        val coords = coordinates ?: preferences.locationCoordinates
+            ?: return record(AlarmScheduleResult.Failed("No prayer location saved"))
         val school = madhhab ?: preferences.madhhab
         val authority = authorityFor(method)
 
@@ -98,7 +105,7 @@ class PrayerAlarmScheduler(
         val tomorrow = today.plusDays(1)
         val tomorrowTimes = resolvedTimes(tomorrow, coords, authority, school) ?: engineTimes(tomorrow, coords, school)
 
-        scheduleTable(todayTimes, tomorrowTimes)
+        return record(scheduleTable(todayTimes, tomorrowTimes))
     }
 
     /**
@@ -106,14 +113,17 @@ class PrayerAlarmScheduler(
      * then AlAdhan, then a local calculation) and re-registers the alarm table from them. Safe
      * to call at startup: it never throws and a failure leaves the existing alarms untouched.
      */
-    suspend fun scheduleAllDailyAlarmsRefreshed(coordinates: Pair<Double, Double>? = null) {
-        if (alarmManager == null) return
+    suspend fun scheduleAllDailyAlarmsRefreshed(
+        coordinates: Pair<Double, Double>? = null
+    ): AlarmScheduleResult {
+        alarmManager ?: return record(AlarmScheduleResult.Unsupported)
         if (!preferences.azaanSettings.enabled) {
             cancelAllAlarms()
-            return
+            return record(AlarmScheduleResult.Failed("Azaan notifications are turned off"))
         }
         val repository = prayerTimes ?: return scheduleAllDailyAlarms(coordinates)
-        val coords = coordinates ?: preferences.locationCoordinates ?: return
+        val coords = coordinates ?: preferences.locationCoordinates
+            ?: return record(AlarmScheduleResult.Failed("No prayer location saved"))
         val school = preferences.madhhab
         // The saved location's zone, not the device's: a manual city in another timezone must
         // still trigger at its own local prayer time.
@@ -130,25 +140,37 @@ class PrayerAlarmScheduler(
             repository.resolveDay(tomorrow, coords, school, zone).times
         }.getOrDefault(emptyMap()).ifEmpty { engineTimes(tomorrow, coords, school) }
 
-        scheduleTable(todayTimes, tomorrowTimes)
+        return record(scheduleTable(todayTimes, tomorrowTimes))
     }
 
     /** Registers the five prayers, rolling elapsed ones onto tomorrow's table. */
     private fun scheduleTable(
         todayTimes: Map<PrayerType, JLocalTime>,
         tomorrowTimes: Map<PrayerType, JLocalTime>
-    ) {
+    ): AlarmScheduleResult {
         // Re-register the complete table so a prayer switched to OFF loses its previous
         // PendingIntent instead of firing an alert the user just disabled.
         cancelAllAlarms()
 
         val settings = preferences.azaanSettings
-        if (!settings.enabled) return
+        if (!settings.enabled) {
+            return AlarmScheduleResult.Failed("Azaan notifications are turned off")
+        }
+        if (!notificationsGranted()) {
+            // A reminder that can never be posted must not be reported as pending.
+            return AlarmScheduleResult.PermissionMissing
+        }
 
         val zone = activeZone()
         val nowZoned = ZonedDateTime.now(zone)
         val todayJ = nowZoned.toLocalDate()
         val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a")
+
+        var earliestTrigger: Long? = null
+        var earliestPrayer: PrayerType? = null
+        var armedCount = 0
+        var anyInexact = false
+        var lastFailure: AlarmScheduleResult? = null
 
         for (prayer in PRAYERS_TO_SCHEDULE) {
             val mode = settings.modeFor(prayer)
@@ -179,17 +201,39 @@ class PrayerAlarmScheduler(
                 nextDayTimes = followingDayTimes,
                 zone = zone
             )
+            val triggerMillis = triggerZoned.toInstant().toEpochMilli()
 
-            scheduleSingleAlarm(
+            val result = scheduleSingleAlarm(
                 prayerType = prayer,
                 prayerName = prayer.name.lowercase().replaceFirstChar { it.uppercase() },
                 timeFormatted = triggerZoned.toLocalTime().format(timeFormatter),
-                triggerEpochMillis = triggerZoned.toInstant().toEpochMilli(),
+                triggerEpochMillis = triggerMillis,
                 alertMode = mode,
                 muezzin = settings.muezzin,
                 windowEndMillis = windowEnd
             )
+
+            if (result.isArmed) {
+                armedCount++
+                if (result is AlarmScheduleResult.ExactAlarmDenied) anyInexact = true
+                if (earliestTrigger == null || triggerMillis < earliestTrigger) {
+                    earliestTrigger = triggerMillis
+                    earliestPrayer = prayer
+                }
+            } else {
+                lastFailure = result
+                Log.w(TAG, "Could not arm $prayer: ${result.code}")
+            }
         }
+
+        if (armedCount == 0) {
+            return lastFailure ?: AlarmScheduleResult.Failed("No prayer time could be resolved")
+        }
+
+        val trigger = earliestTrigger ?: System.currentTimeMillis()
+        preferences.nextAlarmAtMillis = trigger
+        preferences.nextAlarmPrayer = earliestPrayer?.name.orEmpty()
+        return if (anyInexact) AlarmScheduleResult.ExactAlarmDenied else AlarmScheduleResult.Scheduled(trigger)
     }
 
     /** Authority the repository would use for these settings (manual override or country). */
@@ -243,24 +287,18 @@ class PrayerAlarmScheduler(
         alertMode: PrayerAlertMode = preferences.azaanSettings.modeFor(prayerType),
         muezzin: Muezzin = preferences.azaanSettings.muezzin,
         windowEndMillis: Long? = null
-    ) {
-        if (alarmManager == null) return
-        // Never arm an alarm for a time that has already passed.
-        if (triggerEpochMillis <= System.currentTimeMillis()) return
-
-        val pendingIntent = buildPrayerPendingIntent(
-            requestCode = BASE_REQUEST_CODE + prayerType.ordinal,
-            prayerName = prayerName,
-            prayerType = prayerType,
-            timeFormatted = timeFormatted,
-            triggerEpochMillis = triggerEpochMillis,
-            isSnooze = false,
-            alertMode = alertMode,
-            muezzin = muezzin,
-            windowEndMillis = windowEndMillis
-        )
-        setExactCompat(triggerEpochMillis, pendingIntent)
-    }
+    ): AlarmScheduleResult = arm(
+        key = AlarmIdentity.prayerKey(prayerType.name),
+        prayerName = prayerName,
+        prayerType = prayerType,
+        timeFormatted = timeFormatted,
+        triggerEpochMillis = triggerEpochMillis,
+        isSnooze = false,
+        alertMode = alertMode,
+        muezzin = muezzin,
+        isTest = false,
+        windowEndMillis = windowEndMillis
+    )
 
     /**
      * End of the Fard window for [prayer] on [date]: sunrise, Asr, Maghrib, Isha, or the
@@ -305,17 +343,22 @@ class PrayerAlarmScheduler(
         return maghrib.toInstant().toEpochMilli() + span / 2
     }
 
-    /** Re-fires a prayer reminder once, [minutes] from now. */
+    /**
+     * Re-fires a prayer reminder once, [minutes] from now.
+     *
+     * Each snooze gets its own identity (trigger instant + monotonic sequence), so two snoozes
+     * requested in the same millisecond cannot overwrite each other, and [cancelAllAlarms]
+     * finds them again through the one-off registry.
+     */
     fun scheduleSnooze(
         prayerType: PrayerType = PrayerType.DHUHR,
         prayerName: String = "Salah",
         minutes: Int = SNOOZE_MINUTES,
         timeFormatted: String = ""
-    ) {
-        if (alarmManager == null) return
+    ): AlarmScheduleResult {
         val triggerAt = System.currentTimeMillis() + minutes * 60_000L
-        val pendingIntent = buildPrayerPendingIntent(
-            requestCode = SNOOZE_REQUEST_CODE,
+        return arm(
+            key = AlarmIdentity.snoozeKey(prayerType.name, triggerAt),
             prayerName = prayerName,
             prayerType = prayerType,
             timeFormatted = timeFormatted,
@@ -323,23 +366,25 @@ class PrayerAlarmScheduler(
             isSnooze = true,
             alertMode = preferences.azaanSettings.modeFor(prayerType),
             muezzin = preferences.azaanSettings.muezzin,
+            isTest = false,
             windowEndMillis = triggerAt + SNOOZE_MINUTES * 60_000L
         )
-        setExactCompat(triggerAt, pendingIntent)
     }
 
     /**
      * Fires one real prayer alarm a few seconds from now so the user can verify the
      * notification, sound and alert mode without waiting for the next prayer.
+     *
+     * The returned [AlarmScheduleResult] is what the settings screen must display: a denied
+     * permission or a refused alarm is reported instead of a false "scheduled".
      */
     fun scheduleTestAlarmInSeconds(
         seconds: Long = 5,
         prayerType: PrayerType = PrayerType.DHUHR
-    ) {
-        if (alarmManager == null) return
+    ): AlarmScheduleResult {
         val triggerAt = System.currentTimeMillis() + seconds * 1_000L
-        val pendingIntent = buildPrayerPendingIntent(
-            requestCode = TEST_REQUEST_CODE,
+        return arm(
+            key = AlarmIdentity.testKey(prayerType.name, triggerAt),
             prayerName = "Test ${prayerType.name.lowercase().replaceFirstChar { it.uppercase() }}",
             prayerType = prayerType,
             timeFormatted = "now",
@@ -351,57 +396,41 @@ class PrayerAlarmScheduler(
             // A short window makes the live countdown and progress bar visible immediately.
             windowEndMillis = triggerAt + TEST_WINDOW_MS
         )
-        setExactCompat(triggerAt, pendingIntent)
-    }
-
-    fun cancelAllAlarms() {
-        val am = alarmManager ?: return
-        for (prayer in PrayerType.entries) {
-            val requestCode = BASE_REQUEST_CODE + prayer.ordinal
-            val pendingIntent = PendingIntent.getBroadcast(
-                context,
-                requestCode,
-                // The data URI is part of PendingIntent identity, so cancellation must
-                // rebuild exactly the same intent or the alarm would leak.
-                alarmIntent(requestCode, prayer.name),
-                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-            )
-            if (pendingIntent != null) {
-                am.cancel(pendingIntent)
-                pendingIntent.cancel()
-            }
-        }
-        // Snooze and test alarms also need to be cleared.
-        cancelByRequestCode(SNOOZE_REQUEST_CODE, KIND_SNOOZE)
-        cancelByRequestCode(TEST_REQUEST_CODE, KIND_TEST)
-    }
-
-    private fun cancelByRequestCode(requestCode: Int, kind: String) {
-        val am = alarmManager ?: return
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            requestCode,
-            alarmIntent(requestCode, kind),
-            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-        )
-        if (pendingIntent != null) {
-            am.cancel(pendingIntent)
-            pendingIntent.cancel()
-        }
     }
 
     /**
-     * Unique data URI per alarm. Together with the request code this guarantees AlarmManager
-     * never merges two prayers' PendingIntents (which mixed extras and fired wrong alerts).
+     * Cancels every alarm this app may have armed: the five stable prayer slots plus any
+     * one-off test/snooze keys still recorded in the registry.
+     *
+     * Safe to call repeatedly and safe to call after code changes, because each intent is
+     * rebuilt from its key instead of a hard-coded request-code table.
      */
-    private fun alarmIntent(requestCode: Int, kind: String): Intent =
-        Intent(context, PrayerAlarmReceiver::class.java).apply {
-            action = ACTION_PRAYER_ALARM
-            data = Uri.parse("sakinah://prayer_alarm/$requestCode/$kind")
+    fun cancelAllAlarms() {
+        for (prayer in PrayerType.entries) {
+            cancelKey(AlarmIdentity.prayerKey(prayer.name))
         }
+        AlarmPendingIntents.registeredKeys(context).forEach { cancelKey(it) }
+        AlarmPendingIntents.clearRegistry(context)
+        preferences.nextAlarmAtMillis = 0L
+        preferences.nextAlarmPrayer = ""
+    }
 
-    private fun buildPrayerPendingIntent(
-        requestCode: Int,
+    /**
+     * Cancels one alarm by key, using the exact same factory that armed it. Returns true when a
+     * PendingIntent was actually found, which makes idempotent cancellation observable.
+     */
+    internal fun cancelKey(key: String): Boolean {
+        val am = alarmManager ?: return false
+        val pendingIntent = AlarmPendingIntents.existing(context, key) ?: return false
+        am.cancel(pendingIntent)
+        pendingIntent.cancel()
+        AlarmPendingIntents.unregister(context, key)
+        return true
+    }
+
+    /** Arms one alarm and reports the truth about whether it is actually registered. */
+    private fun arm(
+        key: String,
         prayerName: String,
         prayerType: PrayerType,
         timeFormatted: String,
@@ -409,35 +438,49 @@ class PrayerAlarmScheduler(
         isSnooze: Boolean,
         alertMode: PrayerAlertMode,
         muezzin: Muezzin,
-        isTest: Boolean = false,
-        windowEndMillis: Long? = null
-    ): PendingIntent {
-        val kind = when {
-            isTest -> KIND_TEST
-            isSnooze -> KIND_SNOOZE
-            else -> prayerType.name
-        }
-        val intent = alarmIntent(requestCode, kind).apply {
-            putExtra(EXTRA_PRAYER_NAME, prayerName)
-            putExtra(EXTRA_PRAYER_TYPE, prayerType.name)
-            putExtra(EXTRA_PRAYER_TIME_FORMATTED, timeFormatted)
-            putExtra(EXTRA_TRIGGER_MILLIS, triggerEpochMillis)
-            putExtra(EXTRA_IS_SNOOZE, isSnooze)
-            putExtra(EXTRA_ALERT_MODE, alertMode.name)
-            putExtra(EXTRA_MUEZZIN_ID, muezzin.id)
-            putExtra(EXTRA_IS_TEST, isTest)
-            putExtra(EXTRA_WINDOW_START_MILLIS, triggerEpochMillis)
-            putExtra(
-                EXTRA_WINDOW_END_MILLIS,
-                windowEndMillis ?: triggerEpochMillis
-            )
-        }
-        return PendingIntent.getBroadcast(
-            context,
-            requestCode,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        isTest: Boolean,
+        windowEndMillis: Long?
+    ): AlarmScheduleResult {
+        val preflight = AlarmSchedulePreflight.evaluate(
+            alarmManagerAvailable = alarmManager != null,
+            alarmsEnabled = preferences.alarmsEnabled,
+            notificationsGranted = notificationsGranted(),
+            exactAlarmsAllowed = canScheduleExactAlarms(),
+            triggerAtMillis = triggerEpochMillis,
+            nowMillis = System.currentTimeMillis()
         )
+        // PermissionMissing/Unsupported/Failed mean "do not arm"; ExactAlarmDenied still arms
+        // an inexact fallback so the reminder is not lost.
+        if (preflight != null && preflight !is AlarmScheduleResult.ExactAlarmDenied) {
+            return preflight
+        }
+
+        val pendingIntent = AlarmPendingIntents.create(context, key) { intent ->
+            intent.putExtra(EXTRA_PRAYER_NAME, prayerName)
+            intent.putExtra(EXTRA_PRAYER_TYPE, prayerType.name)
+            intent.putExtra(EXTRA_PRAYER_TIME_FORMATTED, timeFormatted)
+            intent.putExtra(EXTRA_TRIGGER_MILLIS, triggerEpochMillis)
+            intent.putExtra(EXTRA_IS_SNOOZE, isSnooze)
+            intent.putExtra(EXTRA_ALERT_MODE, alertMode.name)
+            intent.putExtra(EXTRA_MUEZZIN_ID, muezzin.id)
+            intent.putExtra(EXTRA_IS_TEST, isTest)
+            intent.putExtra(EXTRA_WINDOW_START_MILLIS, triggerEpochMillis)
+            intent.putExtra(EXTRA_WINDOW_END_MILLIS, windowEndMillis ?: triggerEpochMillis)
+        }
+
+        // One-off alarms cannot be rebuilt from the prayer name alone, so remember them.
+        if (isSnooze || isTest) AlarmPendingIntents.register(context, key)
+
+        val exact = setAlarmCompat(triggerEpochMillis, pendingIntent)
+        if (!exact && preflight is AlarmScheduleResult.ExactAlarmDenied) {
+            return preflight
+        }
+        return if (exact) {
+            AlarmScheduleResult.Scheduled(triggerEpochMillis)
+        } else {
+            // setAndAllowWhileIdle succeeded but the platform refused exactness.
+            AlarmScheduleResult.ExactAlarmDenied
+        }
     }
 
     /**
@@ -445,23 +488,51 @@ class PrayerAlarmScheduler(
      * not take over the screen or the alarm stream. The exact-and-idle-safe window keeps the
      * timing precise through Doze, and falls back to an inexact idle-safe alarm when the user
      * has not granted exact-alarm scheduling.
+     *
+     * Returns true when the exact API was used.
      */
-    private fun setExactCompat(triggerAtMillis: Long, pendingIntent: PendingIntent) {
-        val am = alarmManager ?: return
-        val canScheduleExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()
+    private fun setAlarmCompat(triggerAtMillis: Long, pendingIntent: PendingIntent): Boolean {
+        val am = alarmManager ?: return false
 
-        if (canScheduleExact) {
+        if (canScheduleExactAlarms()) {
             try {
                 am.setExactAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
                     triggerAtMillis,
                     pendingIntent
                 )
-                return
+                return true
             } catch (e: SecurityException) {
                 // Permission revoked between the check and the call: use the idle-safe path.
+                Log.w(TAG, "Exact alarm refused; falling back to the idle-safe alarm", e)
+            } catch (e: IllegalArgumentException) {
+                Log.w(TAG, "AlarmManager rejected the alarm time", e)
+                return false
             }
         }
-        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+        return runCatching {
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+            false
+        }.getOrDefault(false)
+    }
+
+    private fun canScheduleExactAlarms(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager?.canScheduleExactAlarms() == true
+
+    private fun notificationsGranted(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+
+    /** Persists the outcome so the in-app self-test can show what really happened. */
+    private fun record(result: AlarmScheduleResult): AlarmScheduleResult {
+        preferences.lastAlarmScheduleResult = result.code
+        if (!result.isArmed) {
+            preferences.nextAlarmAtMillis = 0L
+            preferences.nextAlarmPrayer = ""
+        }
+        return result
     }
 }

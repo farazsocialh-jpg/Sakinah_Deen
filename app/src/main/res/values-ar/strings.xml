@@ -30,6 +30,8 @@
     <string name="channel_prayer_vibrate_desc">تنبيهات صلاة بارزة تهتز دون تشغيل أي صوت</string>
     <string name="channel_prayer_silent_name">تنبيهات الصلاة — صامت</string>
     <string name="channel_prayer_silent_desc">تنبيهات صلاة صامتة لا ترن ولا تهتز</string>
+    <string name="channel_prayer_critical_name">تنبيهات الفجر — أعلى أولوية</string>
+    <string name="channel_prayer_critical_desc">قناة مخصصة للفجر بأعلى درجة أهمية. قد يطبق أندرويد وضع عدم الإزعاج ما لم تمنح الإذن بالوصول إلى سياسة الإشعارات</string>
     <string name="channel_safar_name">وضع السفر ودعاء السفر</string>
     <string name="channel_safar_desc">تنبيهات عند الاتصال ببلوتوث السيارة وعند تفعيل القصر</string>
     <string name="channel_habit_name">أذكار وسنن يومية</string>

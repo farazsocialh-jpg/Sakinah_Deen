@@ -80,6 +80,10 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         private const val KEY_FAJR_SPECIAL_ADHAN = "azaan_fajr_special"
         private const val KEY_ALERT_MODE_PREFIX = "azaan_mode_"
         private const val KEY_ALERT_OFFSET_PREFIX = "azaan_offset_"
+        private const val KEY_CRITICAL_FAJR_CHANNEL = "azaan_critical_fajr_channel"
+        private const val KEY_NEXT_ALARM_AT = "azaan_next_alarm_at"
+        private const val KEY_NEXT_ALARM_PRAYER = "azaan_next_alarm_prayer"
+        private const val KEY_LAST_ALARM_RESULT = "azaan_last_schedule_result"
     }
 
     /** Double is stored as raw bits so stored coordinates do not lose precision. */
@@ -280,6 +284,7 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
                 enabled = alarmsEnabled,
                 muezzin = Muezzin.fromId(prefs.getString(KEY_MUEZZIN, null)),
                 fajrSpecialAdhan = prefs.getBoolean(KEY_FAJR_SPECIAL_ADHAN, true),
+                criticalFajrChannel = prefs.getBoolean(KEY_CRITICAL_FAJR_CHANNEL, false),
                 modes = modes,
                 offsetsMinutes = offsets
             )
@@ -289,6 +294,7 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
                 putBoolean(KEY_ALARMS_ENABLED, value.enabled)
                 putString(KEY_MUEZZIN, value.muezzin.id)
                 putBoolean(KEY_FAJR_SPECIAL_ADHAN, value.fajrSpecialAdhan)
+                putBoolean(KEY_CRITICAL_FAJR_CHANNEL, value.criticalFajrChannel)
                 AzaanSettings.ALERT_PRAYERS.forEach { prayer ->
                     val suffix = prayer.name.lowercase()
                     putString(
@@ -306,6 +312,24 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
     fun alertModeFor(prayer: PrayerType): PrayerAlertMode = azaanSettings.modeFor(prayer)
 
     fun alertOffsetMinutesFor(prayer: PrayerType): Int = azaanSettings.offsetFor(prayer)
+
+    /**
+     * Next prayer alarm actually armed with AlarmManager (0 when none). Written by
+     * [com.sakinah.deen.service.PrayerAlarmScheduler], read by the in-app self-test so the next
+     * prayer stays visible even while notifications are denied or delayed.
+     */
+    var nextAlarmAtMillis: Long
+        get() = prefs.getLong(KEY_NEXT_ALARM_AT, 0L)
+        set(value) = prefs.edit().putLong(KEY_NEXT_ALARM_AT, value).apply()
+
+    var nextAlarmPrayer: String
+        get() = prefs.getString(KEY_NEXT_ALARM_PRAYER, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_NEXT_ALARM_PRAYER, value).apply()
+
+    /** [com.sakinah.deen.service.AlarmScheduleResult.code] of the last scheduling attempt. */
+    var lastAlarmScheduleResult: String
+        get() = prefs.getString(KEY_LAST_ALARM_RESULT, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_LAST_ALARM_RESULT, value).apply()
 
     var hadithLanguageCode: String
         get() = prefs.getString(KEY_HADITH_LANGUAGE, "eng") ?: "eng"

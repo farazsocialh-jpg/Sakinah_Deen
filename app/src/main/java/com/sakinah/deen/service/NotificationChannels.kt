@@ -12,6 +12,7 @@ import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import com.sakinah.deen.R
 import com.sakinah.deen.data.model.PrayerAlertMode
+import com.sakinah.deen.data.model.PrayerType
 
 /**
  * Notification channels for prayer reminders.
@@ -34,6 +35,15 @@ object NotificationChannels {
 
     /** IMPORTANCE_DEFAULT, no sound, no vibration (Silent). */
     const val CHANNEL_PRAYER_SILENT = "sakinah_prayer_silent_v2"
+
+    /**
+     * Optional dedicated Fajr channel at maximum importance, with sound and vibration.
+     *
+     * It is a normal app channel: Android's Do Not Disturb still decides delivery unless the
+     * user grants notification-policy access to the app, which is why the settings screen
+     * explains the limit instead of promising a bypass.
+     */
+    const val CHANNEL_PRAYER_CRITICAL_FAJR = "sakinah_prayer_fajr_critical_v1"
 
     const val CHANNEL_TRAVEL_SAFAR = "travel_safar_channel"
     const val CHANNEL_HABIT_REMINDERS = "habit_reminders_channel"
@@ -58,22 +68,52 @@ object NotificationChannels {
      * audio is the selected Muezzin recording played by [AdhanPlaybackService], so a channel
      * sound here would ring a second, different sound over the Azaan.
      */
-    fun channelFor(mode: PrayerAlertMode): String = when (mode) {
-        PrayerAlertMode.FULL_AZAAN -> CHANNEL_PRAYER_VIBRATE
-        PrayerAlertMode.SHORT_TONE -> CHANNEL_PRAYER_SOUND
-        PrayerAlertMode.VIBRATE_ONLY -> CHANNEL_PRAYER_VIBRATE
-        PrayerAlertMode.SILENT, PrayerAlertMode.OFF -> CHANNEL_PRAYER_SILENT
+    fun channelFor(
+        mode: PrayerAlertMode,
+        prayerType: PrayerType? = null,
+        criticalFajrEnabled: Boolean = false
+    ): String {
+        // Fajr may be routed to the dedicated high-importance channel when the user opted in.
+        // Silent/Off stay on the silent channel: an explicit user choice outranks the option.
+        val isCriticalFajr = criticalFajrEnabled &&
+            prayerType == PrayerType.FAJR &&
+            mode != PrayerAlertMode.SILENT &&
+            mode != PrayerAlertMode.OFF
+        if (isCriticalFajr) return CHANNEL_PRAYER_CRITICAL_FAJR
+        return when (mode) {
+            PrayerAlertMode.FULL_AZAAN -> CHANNEL_PRAYER_VIBRATE
+            PrayerAlertMode.SHORT_TONE -> CHANNEL_PRAYER_SOUND
+            PrayerAlertMode.VIBRATE_ONLY -> CHANNEL_PRAYER_VIBRATE
+            PrayerAlertMode.SILENT, PrayerAlertMode.OFF -> CHANNEL_PRAYER_SILENT
+        }
     }
 
-    /** True when the user silenced any prayer channel in Android settings. */
+    /** Every channel a prayer reminder can be posted on. */
+    fun prayerChannelIds(): List<String> = listOf(
+        CHANNEL_PRAYER_SOUND,
+        CHANNEL_PRAYER_VIBRATE,
+        CHANNEL_PRAYER_SILENT,
+        CHANNEL_PRAYER_CRITICAL_FAJR
+    )
+
+    /** True when the user silenced every prayer channel in Android settings. */
     fun prayerChannelBlocked(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
             ?: return false
+        // Only the three core channels count: the optional Fajr channel may legitimately be
+        // absent until the user turns it on.
         return listOf(CHANNEL_PRAYER_SOUND, CHANNEL_PRAYER_VIBRATE, CHANNEL_PRAYER_SILENT)
             .all { id ->
                 manager.getNotificationChannel(id)?.importance == NotificationManager.IMPORTANCE_NONE
             }
+    }
+
+    /** True when the app holds notification-policy access, i.e. it may set a DND bypass. */
+    fun hasDndPolicyAccess(context: Context): Boolean {
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            ?: return false
+        return runCatching { manager.isNotificationPolicyAccessGranted }.getOrDefault(false)
     }
 
     /** Removes the single prayer reminder card (used by Mark as Prayed / swipe dismissal). */
@@ -145,6 +185,25 @@ object NotificationChannels {
             setShowBadge(false)
         }
 
+        val criticalFajrChannel = NotificationChannel(
+            CHANNEL_PRAYER_CRITICAL_FAJR,
+            context.getString(R.string.channel_prayer_critical_name),
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            group = GROUP_PRAYER
+            description = context.getString(R.string.channel_prayer_critical_desc)
+            setSound(standardNotificationSound(), notificationAudioAttributes)
+            enableVibration(true)
+            vibrationPattern = longArrayOf(0, 800, 300, 800, 300, 800, 300, 800)
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            setShowBadge(true)
+            // Only meaningful once the user grants notification-policy access; otherwise the
+            // platform ignores (or rejects) the request, so it must never crash channel setup.
+            if (hasDndPolicyAccess(context)) {
+                runCatching { setBypassDnd(true) }
+            }
+        }
+
         // Heads-up banners require IMPORTANCE_HIGH on Android 8+.
         val safarChannel = NotificationChannel(
             CHANNEL_TRAVEL_SAFAR,
@@ -169,7 +228,14 @@ object NotificationChannels {
         }
 
         notificationManager.createNotificationChannels(
-            listOf(soundChannel, vibrateChannel, silentChannel, safarChannel, habitChannel)
+            listOf(
+                soundChannel,
+                vibrateChannel,
+                silentChannel,
+                criticalFajrChannel,
+                safarChannel,
+                habitChannel
+            )
         )
 
         // Old prayer channels carried alarm-type sound/vibration, which Android will not let

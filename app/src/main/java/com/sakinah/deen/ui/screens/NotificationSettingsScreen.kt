@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -57,11 +58,21 @@ import com.sakinah.deen.data.model.PrayerAlertMode
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl
 import com.sakinah.deen.service.AdhanAudio
-import com.sakinah.deen.service.PrayerAlertSilencer
+import com.sakinah.deen.service.AlarmScheduleResult
 import com.sakinah.deen.service.AzaanScheduling
+import com.sakinah.deen.service.BatteryOptimizationGuidance
 import com.sakinah.deen.service.NotificationChannels
+import com.sakinah.deen.service.NotificationSelfTest
+import com.sakinah.deen.service.PrayerAlertSilencer
 import com.sakinah.deen.service.PrayerAlarmScheduler
+import com.sakinah.deen.service.SelfTestAction
+import com.sakinah.deen.service.SelfTestRow
+import com.sakinah.deen.service.SelfTestStatus
 import com.sakinah.deen.ui.components.SakinahCard
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.coroutines.launch
 
 /**
@@ -91,7 +102,16 @@ fun NotificationSettingsScreen(
     var exactAlarmsAllowed by remember { mutableStateOf(canScheduleExactAlarms(context)) }
     var batteryOptimized by remember { mutableStateOf(isBatteryOptimizationActive(context)) }
     var azaanChannelBlocked by remember { mutableStateOf(isAzaanChannelBlocked(context)) }
-    var testScheduled by remember { mutableStateOf(false) }
+    // Truthful outcome of the last test-alert request; null until the user asks for one.
+    var testResult by remember { mutableStateOf<AlarmScheduleResult?>(null) }
+    val selfTestRows = remember { mutableStateOf(emptyList<SelfTestRow>()) }
+    var nextAlarmText by remember { mutableStateOf(describeNextAlarm(appPrefs)) }
+
+    fun refreshSelfTest() {
+        runCatching { NotificationSelfTest.rows(context, appPrefs) }
+            .onSuccess { selfTestRows.value = it }
+        nextAlarmText = describeNextAlarm(appPrefs)
+    }
 
     val previewPlayer = remember(context, previewPlayerFactory) { previewPlayerFactory(context) }
     var previewingMuezzin by remember { mutableStateOf<Muezzin?>(null) }
@@ -106,6 +126,10 @@ fun NotificationSettingsScreen(
                     exactAlarmsAllowed = canScheduleExactAlarms(context)
                     batteryOptimized = isBatteryOptimizationActive(context)
                     azaanChannelBlocked = isAzaanChannelBlocked(context)
+                    // Coming back from a settings page must show the new state immediately.
+                    runCatching { NotificationSelfTest.rows(context, appPrefs) }
+                        .onSuccess { selfTestRows.value = it }
+                    nextAlarmText = describeNextAlarm(appPrefs)
                 }
                 Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
                     previewPlayer.stop()
@@ -115,6 +139,8 @@ fun NotificationSettingsScreen(
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
+        runCatching { NotificationSelfTest.rows(context, appPrefs) }
+            .onSuccess { selfTestRows.value = it }
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             previewPlayer.onFinished = null
@@ -270,40 +296,93 @@ fun NotificationSettingsScreen(
                         MaterialTheme.colorScheme.onSurfaceVariant
                     }
                 )
-                if (batteryOptimized) {
-                    Text(
-                        text = "Battery optimisation may delay Fajr reminders. Allow unrestricted battery use for reliable alarms.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                // The next prayer stays visible in-app even when notifications are blocked.
+                Text(
+                    text = nextAlarmText,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = BatteryOptimizationGuidance.guidanceText(context),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                val oemLabel = BatteryOptimizationGuidance.oemLabel()
+                if (batteryOptimized || oemLabel != null) {
                     OutlinedButton(
-                        onClick = {
-                            val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            runCatching { context.startActivity(intent) }
+                        onClick = { BatteryOptimizationGuidance.openBestSettings(context) }
+                    ) {
+                        Text(
+                            text = if (oemLabel != null) "Open $oemLabel battery settings" else "Battery settings",
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        // 3. Notification & Alarm Self-Test (live system state, never a cached guess)
+        SakinahCard(contentPadding = 14.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Notification & Alarm Self-Test",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Checked live against Android, not from saved settings.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    OutlinedButton(onClick = { refreshSelfTest() }) {
+                        Text("Refresh", fontSize = 11.sp)
+                    }
+                }
+                selfTestRows.value.forEach { row ->
+                    SelfTestLine(
+                        row = row,
+                        onAction = { action ->
+                            when (action) {
+                                SelfTestAction.REQUEST_NOTIFICATIONS -> {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    } else {
+                                        notificationsGranted = notificationsPermissionGranted(context)
+                                    }
+                                }
+
+                                else -> {
+                                    NotificationSelfTest.perform(context, action)
+                                    refreshSelfTest()
+                                }
+                            }
                         }
-                    ) { Text("Battery settings", fontSize = 12.sp) }
-                } else {
-                    Text(
-                        text = "Battery optimisation is off — background reminders can fire on time.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         }
 
-        // 3. Test notification
+        // 4. Test notification — the button reports what Android actually did.
         Button(
             onClick = {
-                runCatching {
+                val scheduler = runCatching {
                     PrayerAlarmScheduler(
                         context = context,
                         astronomyEngine = PrayerCalculationEngineImpl(),
                         preferences = appPrefs
-                    ).scheduleTestAlarmInSeconds(5)
-                }
-                testScheduled = true
+                    )
+                }.getOrNull()
+                testResult = scheduler?.scheduleTestAlarmInSeconds(5)
+                    ?: AlarmScheduleResult.Unsupported
+                refreshSelfTest()
             },
             enabled = azaanSettings.enabled,
             modifier = Modifier.fillMaxWidth(),
@@ -311,11 +390,15 @@ fun NotificationSettingsScreen(
         ) {
             Text("Test Prayer Notification (5s)", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
         }
-        if (testScheduled) {
+        testResult?.let { result ->
             Text(
-                text = "Test alert scheduled — it should fire in about 5 seconds.",
+                text = alarmResultMessage(result),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                fontWeight = FontWeight.SemiBold,
+                color = when (result) {
+                    is AlarmScheduleResult.Scheduled -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.error
+                }
             )
         }
 
@@ -398,6 +481,48 @@ fun NotificationSettingsScreen(
             }
         }
 
+        // 4c. Optional critical Fajr channel, with the real Android limits spelled out.
+        SakinahCard(contentPadding = 14.dp) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Critical Fajr Channel",
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Posts Fajr on its own maximum-importance channel with sound and " +
+                            "vibration. Android still applies Do Not Disturb and silent mode unless " +
+                            "you grant notification policy access; app channels cannot override " +
+                            "the user's DND choice on their own.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = azaanSettings.criticalFajrChannel,
+                    enabled = azaanSettings.enabled,
+                    onCheckedChange = { enabled ->
+                        applySettings(azaanSettings.copy(criticalFajrChannel = enabled))
+                        runCatching { NotificationChannels.createChannels(context) }
+                        refreshSelfTest()
+                    }
+                )
+            }
+            if (azaanSettings.criticalFajrChannel) {
+                Text(
+                    text = if (NotificationChannels.hasDndPolicyAccess(context)) {
+                        "Notification policy access is granted — Fajr can bypass DND."
+                    } else {
+                        "DND override is not granted yet; use the self-test card to open the access screen."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+            }
+        }
+
         // 5. Muezzin / Azaan voice picker with a single shared preview player
         Text("Muezzin / Azaan Voice", style = MaterialTheme.typography.titleMedium)
         Text(
@@ -452,6 +577,86 @@ fun NotificationSettingsScreen(
         }
 
     }
+}
+
+/** One self-test line: status dot, title, honest detail and an optional fix button. */
+@Composable
+private fun SelfTestLine(row: SelfTestRow, onAction: (SelfTestAction) -> Unit) {
+    val dotColor = when (row.status) {
+        SelfTestStatus.OK -> MaterialTheme.colorScheme.primary
+        SelfTestStatus.WARNING -> MaterialTheme.colorScheme.tertiary
+        SelfTestStatus.PROBLEM -> MaterialTheme.colorScheme.error
+        SelfTestStatus.INFO -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = dotColor,
+            modifier = Modifier.size(8.dp)
+        ) {}
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = row.title,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = row.detail,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        val action = row.action
+        val label = row.actionLabel
+        if (action != null && label != null) {
+            OutlinedButton(onClick = { onAction(action) }) {
+                Text(label, fontSize = 11.sp)
+            }
+        }
+    }
+}
+
+/** Plain-language description of a real scheduling outcome. */
+private fun alarmResultMessage(result: AlarmScheduleResult): String = when (result) {
+    is AlarmScheduleResult.Scheduled ->
+        "Scheduled and armed with Android — it should fire in about 5 seconds."
+
+    AlarmScheduleResult.ExactAlarmDenied ->
+        "Armed, but without exact-alarm permission, so Android may delay it. Allow exact alarms for on-time reminders."
+
+    AlarmScheduleResult.PermissionMissing ->
+        "Not scheduled: notifications are blocked. Allow notifications, then try again."
+
+    is AlarmScheduleResult.Failed -> "Not scheduled: ${result.reason.lowercase()}."
+
+    AlarmScheduleResult.Unsupported -> "Not scheduled: this device exposes no alarm service."
+}
+
+/** Next armed prayer, or a clear statement that nothing is armed (never a blank line). */
+private fun describeNextAlarm(prefs: SakinahPreferences): String {
+    val nextAt = prefs.nextAlarmAtMillis
+    if (nextAt <= 0L) {
+        val code = prefs.lastAlarmScheduleResult
+        return when (code) {
+            AlarmScheduleResult.CODE_PERMISSION_MISSING -> "Next prayer: not armed — notifications are blocked."
+            AlarmScheduleResult.CODE_EXACT_DENIED -> "Next prayer: armed as an inexact alarm (may be late)."
+            AlarmScheduleResult.CODE_FAILED -> "Next prayer: not armed — the last scheduling attempt failed."
+            else -> "Next prayer: not armed yet. Prayer times remain visible on the Salah tab."
+        }
+    }
+    val zone = runCatching { AzaanScheduling.activeZoneId(prefs) }
+        .getOrDefault(ZoneId.systemDefault())
+    val formatted = runCatching {
+        Instant.ofEpochMilli(nextAt).atZone(zone)
+            .format(DateTimeFormatter.ofPattern("EEE d MMM · h:mm a", Locale.getDefault()))
+    }.getOrDefault("")
+    val prayer = prefs.nextAlarmPrayer.lowercase().replaceFirstChar { it.uppercase() }
+    return "Next prayer: $prayer at $formatted"
 }
 
 private fun notificationsPermissionGranted(context: Context): Boolean =

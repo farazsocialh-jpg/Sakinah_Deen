@@ -34,6 +34,12 @@ data class AzaanSettings(
     val enabled: Boolean = true,
     val muezzin: Muezzin = Muezzin.MAKKAH,
     val fajrSpecialAdhan: Boolean = true,
+    /**
+     * Optional dedicated Fajr channel. Android still applies Do Not Disturb to app channels
+     * unless the user grants notification-policy access, so this is honest best effort, not a
+     * guaranteed DND bypass.
+     */
+    val criticalFajrChannel: Boolean = false,
     val modes: Map<PrayerType, PrayerAlertMode> = DEFAULT_MODES,
     val offsetsMinutes: Map<PrayerType, Int> = DEFAULT_OFFSETS
 ) {

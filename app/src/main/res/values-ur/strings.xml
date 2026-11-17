@@ -30,6 +30,8 @@
     <string name="channel_prayer_vibrate_desc">بغیر آواز کے کمپن کرنے والے نمایاں نماز کے تنبہات</string>
     <string name="channel_prayer_silent_name">نماز کے تنبہات — خاموش</string>
     <string name="channel_prayer_silent_desc">ایسے خاموش تنبہات جو نہ بجتے ہیں نہ کمپن کرتے ہیں</string>
+    <string name="channel_prayer_critical_name">فجر کے تنبہات — سب سے زیادہ ترجیح</string>
+    <string name="channel_prayer_critical_desc">فجر کے لیے مخصوص چینل، زیادہ سے زیادہ اہمیت کے ساتھ۔ اینڈرائیڈ ڈو ناٹ ڈسٹرب لاگو کر سکتا ہے جب تک آپ نوٹیفکیشن پالیسی تک رسائی نہ دیں</string>
     <string name="channel_safar_name">سفر موڈ اور دعائے سفر</string>
     <string name="channel_safar_desc">کار بلوٹوتھ اور قصر کے موقع پر اطلاعات</string>
     <string name="channel_habit_name">روزانہ اذکار و سنن</string>

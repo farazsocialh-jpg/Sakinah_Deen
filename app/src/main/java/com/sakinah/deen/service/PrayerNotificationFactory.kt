@@ -43,7 +43,9 @@ object PrayerNotificationFactory {
         val startMillis: Long,
         val endMillis: Long,
         val alertMode: PrayerAlertMode,
-        val isTest: Boolean = false
+        val isTest: Boolean = false,
+        /** Routes Fajr to the optional highest-priority channel (see [NotificationChannels]). */
+        val criticalFajrChannel: Boolean = false
     )
 
     private const val MUTE_REQUEST_CODE = 4100
@@ -131,7 +133,13 @@ object PrayerNotificationFactory {
             contentIntent = contentIntent
         )
 
-        return NotificationCompat.Builder(context, NotificationChannels.channelFor(spec.alertMode))
+        val channelId = NotificationChannels.channelFor(
+            mode = spec.alertMode,
+            prayerType = spec.prayerType,
+            criticalFajrEnabled = spec.criticalFajrChannel
+        )
+
+        return NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_stat_app)
             .setContentTitle(collapsedTitle)
             .setContentText(windowText)

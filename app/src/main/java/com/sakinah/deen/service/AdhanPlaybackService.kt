@@ -13,6 +13,7 @@ import android.content.pm.ServiceInfo
 import android.util.Log
 import android.net.Uri
 import android.os.IBinder
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
@@ -85,11 +86,45 @@ class AdhanPlaybackService : Service() {
         private const val VOLUME_CHANGED_ACTION = "android.media.VOLUME_CHANGED_ACTION"
 
         /**
+         * How long a mute request stays valid while the service is still starting. A volume key
+         * pressed between the alarm firing and the service becoming active used to be lost.
+         */
+        private const val MUTE_REQUEST_GRACE_MS = 5_000L
+
+        /**
+         * Deadline of a mute request that arrived before playback was ready. Written from the
+         * receiver/Activity thread and read on the service's main thread.
+         */
+        @Volatile
+        private var pendingMuteDeadline: Long = 0L
+
+        /**
          * Mute from the card, swipe or volume keys: stop the sound, keep the reminder.
-         * Does nothing when no audio is playing, which avoids a background service start.
+         *
+         * When no instance is active yet (the alarm just fired, or the foreground service is
+         * still being created) the request is remembered briefly and honoured as soon as the
+         * playback action is handled, instead of being dropped.
          */
         fun mutePlaybackIfActive() {
-            activeInstance?.mutePlayback()
+            val instance = activeInstance
+            if (instance != null) {
+                instance.mutePlayback()
+            } else {
+                pendingMuteDeadline = SystemClock.elapsedRealtime() + MUTE_REQUEST_GRACE_MS
+            }
+        }
+
+        /** Consumes a mute request that arrived before the service was ready. */
+        private fun consumePendingMute(): Boolean {
+            val deadline = pendingMuteDeadline
+            if (deadline == 0L) return false
+            pendingMuteDeadline = 0L
+            return SystemClock.elapsedRealtime() <= deadline
+        }
+
+        /** Clears any mute that was requested but never consumed by a playback start. */
+        fun clearPendingMute() {
+            pendingMuteDeadline = 0L
         }
 
         /** Stop audio and drop the card (swipe-away, Mark as Prayed). */
@@ -105,6 +140,7 @@ class AdhanPlaybackService : Service() {
 
     @Volatile private var isPlayingAdhan: Boolean = false
     private var volumeReceiver: BroadcastReceiver? = null
+    private var volumeReceiverRegistered: Boolean = false
     private val foregroundGate by lazy { AdhanForegroundGate(this) }
 
     private var currentPrayerName: String = "Salah"
@@ -153,6 +189,13 @@ class AdhanPlaybackService : Service() {
                 currentMuezzin = preferences.azaanSettings.muezzin
                 isDuaSafar = false
 
+                // A volume key pressed while the service was still being created silences this
+                // Adhan too, instead of leaving it playing unexpectedly.
+                if (consumePendingMute()) {
+                    promoteToForegroundAndStop()
+                    return START_NOT_STICKY
+                }
+
                 if (!preferences.alarmsEnabled ||
                     currentMode == PrayerAlertMode.OFF ||
                     (currentMode != PrayerAlertMode.FULL_AZAAN && currentMode != PrayerAlertMode.SHORT_TONE)
@@ -180,6 +223,10 @@ class AdhanPlaybackService : Service() {
             ACTION_PLAY_DUA_SAFAR -> {
                 isDuaSafar = true
                 currentMode = PrayerAlertMode.FULL_AZAAN
+                if (consumePendingMute()) {
+                    promoteToForegroundAndStop()
+                    return START_NOT_STICKY
+                }
                 if (!startPlaybackForeground(buildDuaSafarNotification())) {
                     return START_NOT_STICKY
                 }
@@ -259,7 +306,10 @@ class AdhanPlaybackService : Service() {
                     prayerName = currentPrayerName,
                     startMillis = currentWindowStart,
                     endMillis = currentWindowEnd,
-                    alertMode = PrayerAlertMode.SHORT_TONE
+                    alertMode = PrayerAlertMode.SHORT_TONE,
+                    criticalFajrChannel = runCatching {
+                        preferences.azaanSettings.criticalFajrChannel
+                    }.getOrDefault(false)
                 )
             )
             androidx.core.app.NotificationManagerCompat.from(this)
@@ -273,13 +323,16 @@ class AdhanPlaybackService : Service() {
             finishTonePlayback()
             return
         }
-        exo.setMediaItem(MediaItem.fromUri(uri))
-        exo.volume = 1.0f
-        exo.prepare()
-        exo.play()
+        // Mark the session active and listen for volume keys *before* the first frame of audio:
+        // a key press during preparation must still mute.
         isPlayingAdhan = true
         isAdhanActive = true
         registerVolumeReceiver()
+
+        exo.setMediaItem(MediaItem.fromUri(uri))
+        exo.volume = 1.0f
+        runCatching { exo.prepare() }
+        exo.play()
 
         fadeJob?.cancel()
         fadeJob = null
@@ -447,7 +500,10 @@ class AdhanPlaybackService : Service() {
                 prayerName = currentPrayerName,
                 startMillis = currentWindowStart,
                 endMillis = currentWindowEnd,
-                alertMode = currentMode
+                alertMode = currentMode,
+                criticalFajrChannel = runCatching {
+                    preferences.azaanSettings.criticalFajrChannel
+                }.getOrDefault(false)
             )
         )
 
@@ -470,16 +526,16 @@ class AdhanPlaybackService : Service() {
      * Hardware volume keys: while Azaan audio plays, any volume change (up, down or mute)
      * silences it. Only registered during playback and removed as soon as it stops.
      */
+    @Synchronized
     private fun registerVolumeReceiver() {
-        if (volumeReceiver != null) return
-        val receiver = object : BroadcastReceiver() {
+        if (volumeReceiverRegistered) return
+        val receiver = volumeReceiver ?: object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 if (intent.action == VOLUME_CHANGED_ACTION && isPlayingAdhan) {
                     mutePlayback()
                 }
             }
-        }
-        volumeReceiver = receiver
+        }.also { volumeReceiver = it }
         try {
             ContextCompat.registerReceiver(
                 this,
@@ -487,17 +543,25 @@ class AdhanPlaybackService : Service() {
                 IntentFilter(VOLUME_CHANGED_ACTION),
                 ContextCompat.RECEIVER_NOT_EXPORTED
             )
+            volumeReceiverRegistered = true
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
-            // Ignore registration races.
+            // Registration can race a teardown; the flag stays false so a later start retries.
+            Log.w("AdhanPlaybackService", "Could not register the volume-key receiver", e)
+            volumeReceiver = null
+            volumeReceiverRegistered = false
         }
     }
 
+    @Synchronized
     private fun unregisterVolumeReceiver() {
-        volumeReceiver?.let {
-            try { unregisterReceiver(it) } catch (e: Exception) { /* ignore */ }
+        val receiver = volumeReceiver
+        if (receiver != null && volumeReceiverRegistered) {
+            runCatching { unregisterReceiver(receiver) }
+                .onFailure { Log.w("AdhanPlaybackService", "Volume receiver already gone", it) }
         }
         volumeReceiver = null
+        volumeReceiverRegistered = false
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -506,6 +570,7 @@ class AdhanPlaybackService : Service() {
         isPlayingAdhan = false
         isAdhanActive = false
         if (activeInstance === this) activeInstance = null
+        clearPendingMute()
         unregisterVolumeReceiver()
         fadeJob?.cancel()
         mediaSession?.release()
