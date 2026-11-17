@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class TravelUiState(
-    val homeAnchorCity: String = "London, UK",
+    val homeAnchorCity: String = "",
     val homeCoordinates: Pair<Double, Double> = Pair(51.5074, -0.1278),
     val currentLocationName: String = "M40 Motorway, Milepost 46",
     val currentCoordinates: Pair<Double, Double> = Pair(52.1245, -1.2435),

@@ -62,10 +62,21 @@ enum class SalahHomeLayout(val displayName: String, val subtitle: String) {
     CLASSIC_COMPACT("Classic Compact", "Single hero card with draining bar & prayer list"),
     BENTO_SPLIT("Bento Split", "Side-by-side current & next prayer cards"),
     CIRCULAR_RING("Circular Ring", "Circular draining ring beside current prayer"),
-    ALL_DAY_GRID("All-Day Grid", "Hero card with 2x3 prayer grid (no scrolling)"),
-    TIMELINE_STRIP("Timeline Strip", "5-prayer horizontal pill bar above hero card"),
     SEAMLESS_EDITORIAL("Seamless Hero", "Borderless gradient top flowing into prayer list"),
-    DAILY_STREAK_DOTS("Daily Status Dots", "Hero card with F-D-A-M-I completion dots")
+    DAILY_STREAK_DOTS("Daily Status Dots", "Hero card with F-D-A-M-I completion dots");
+
+    companion object {
+        private val LEGACY_NAMES = mapOf(
+            "ALL_DAY_GRID" to CLASSIC_COMPACT,
+            "TIMELINE_STRIP" to CLASSIC_COMPACT
+        )
+
+        fun fromStoredName(raw: String?): SalahHomeLayout? {
+            val name = raw?.trim().orEmpty()
+            if (name.isEmpty()) return null
+            return entries.firstOrNull { it.name == name } ?: LEGACY_NAMES[name]
+        }
+    }
 }
 
 /**
@@ -162,7 +173,9 @@ class AppearancePreferences internal constructor(
             focusModeHideDistractions = prefs.getBoolean(KEY_FOCUS_MODE, defaults.focusModeHideDistractions),
             autoHideBarsOnScroll = prefs.getBoolean(KEY_AUTO_HIDE_BARS, defaults.autoHideBarsOnScroll),
             prayerGuideGender = safeEnum(KEY_PRAYER_GUIDE_GENDER, defaults.prayerGuideGender),
-            salahHomeLayout = safeEnum(KEY_SALAH_HOME_LAYOUT, defaults.salahHomeLayout),
+            salahHomeLayout = SalahHomeLayout.fromStoredName(
+                prefs.getString(KEY_SALAH_HOME_LAYOUT, null)
+            ) ?: defaults.salahHomeLayout,
             quranReadingLayout = QuranReadingLayout.fromStoredName(
                 prefs.getString(KEY_QURAN_READING_LAYOUT, null)
             ) ?: defaults.quranReadingLayout,

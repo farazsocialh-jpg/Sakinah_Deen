@@ -5,6 +5,7 @@ import com.sakinah.deen.data.database.entity.PrayerTimetableEntity
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
 import com.sakinah.deen.data.model.PrayerAdjustments
+import com.sakinah.deen.settings.HighLatitudeRule
 import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.data.prayer.AlAdhanApiClient
 import com.sakinah.deen.data.prayer.PrayerMethodSettings
@@ -70,7 +71,8 @@ interface PrayerTimeRepository {
         madhhab: Madhhab,
         zoneId: ZoneId = ZoneId.systemDefault(),
         adjustments: PrayerAdjustments = PrayerAdjustments(),
-        countryCode: String? = null
+        countryCode: String? = null,
+        highLatitudeRule: HighLatitudeRule = HighLatitudeRule.MIDDLE_OF_NIGHT
     ): ResolvedPrayerTimes
 }
 
@@ -110,8 +112,16 @@ class PrayerTimeRepositoryImpl(
             month: LocalDate,
             coordinates: Pair<Double, Double>,
             methodId: Int,
-            schoolId: Int
-        ): String = PrayerTimeSnapshot.cacheKeyOf(month, coordinates, methodId, schoolId)
+            schoolId: Int,
+            latitudeRule: Int = 1
+        ): String = PrayerTimeSnapshot.cacheKeyOf(month, coordinates, methodId, schoolId, latitudeRule)
+
+        /** AlAdhan `latitudeAdjustmentMethod` for a rule: 1 middle, 2 seventh, 3 angle. */
+        fun latitudeAdjustmentMethod(rule: HighLatitudeRule): Int = when (rule) {
+            HighLatitudeRule.MIDDLE_OF_NIGHT -> 1
+            HighLatitudeRule.SEVENTH_OF_NIGHT -> 2
+            HighLatitudeRule.TWILIGHT_ANGLE -> 3
+        }
 
         internal fun formatTime(time: LocalTime): String = time.format(TIME_FORMAT)
 
@@ -139,13 +149,17 @@ class PrayerTimeRepositoryImpl(
         madhhab: Madhhab,
         zoneId: ZoneId,
         adjustments: PrayerAdjustments,
-        countryCode: String?
+        countryCode: String?,
+        highLatitudeRule: HighLatitudeRule
     ): ResolvedPrayerTimes = withContext(Dispatchers.IO) {
         if (countryCode != null) settings?.setCountryCode(countryCode)
 
         val authority = effectiveAuthority(countryCode)
         val schoolId = SunniMethodMapper.schoolId(madhhab)
-        val cacheKey = cacheKeyOf(date, coordinates, authority.methodId, schoolId)
+        val latitudeRule = latitudeAdjustmentMethod(highLatitudeRule)
+        // The rule is part of the cache identity: switching it must not serve rows that were
+        // computed under the previous rule.
+        val cacheKey = cacheKeyOf(date, coordinates, authority.methodId, schoolId, latitudeRule)
         val epochDay = date.toEpochDay()
         val deviceZone = zoneId.id
 
@@ -161,7 +175,7 @@ class PrayerTimeRepositoryImpl(
 
         // 2. Network: month missing, context changed, or rows older than the fresh window.
         // A timezone mismatch in the cache must not suppress a network refresh.
-        if (refreshMonth(date, coordinates, authority, schoolId, cacheKey, zoneId)) {
+        if (refreshMonth(date, coordinates, authority, schoolId, latitudeRule, cacheKey, zoneId)) {
             val fetched = dao?.getForDay(cacheKey, epochDay)
             if (fetched != null && fetched.isFreshOnline(clock())) {
                 return@withContext publish(fetched, PrayerTimeSource.ONLINE, authority, adjustments)
@@ -174,7 +188,7 @@ class PrayerTimeRepositoryImpl(
         }
 
         // Adjustments are applied exactly once in publish(), never here as well.
-        val local = localCalculation(date, coordinates, authority, madhhab, zoneId)
+        val local = localCalculation(date, coordinates, authority, madhhab, zoneId, highLatitudeRule)
         persistFallback(date, coordinates, authority, schoolId, cacheKey, local, deviceZone)
         publish(local, PrayerTimeSource.OFFLINE_FALLBACK, authority, clock())
     }
@@ -185,6 +199,7 @@ class PrayerTimeRepositoryImpl(
         coordinates: Pair<Double, Double>,
         authority: SunniAuthority,
         schoolId: Int,
+        latitudeRule: Int,
         cacheKey: String,
         targetZone: ZoneId
     ): Boolean {
@@ -206,7 +221,8 @@ class PrayerTimeRepositoryImpl(
             latitude = coordinates.first,
             longitude = coordinates.second,
             methodId = authority.methodId,
-            schoolId = schoolId
+            schoolId = schoolId,
+            latitudeAdjustmentMethod = latitudeRule
         ) ?: return false
 
         val rows = timetable.days.mapNotNull { day ->
@@ -267,7 +283,8 @@ class PrayerTimeRepositoryImpl(
         coordinates: Pair<Double, Double>,
         authority: SunniAuthority,
         madhhab: Madhhab,
-        zoneId: ZoneId
+        zoneId: ZoneId,
+        highLatitudeRule: HighLatitudeRule
     ): Map<PrayerType, LocalTime> {
         val zone = runCatching { KTimeZone.of(zoneId.id) }.getOrElse { KTimeZone.currentSystemDefault() }
         val kDate = KLocalDate(date.year, date.monthValue, date.dayOfMonth)
@@ -277,7 +294,8 @@ class PrayerTimeRepositoryImpl(
             method = SunniMethodMapper.localCalculationMethod(authority),
             madhhab = madhhab,
             timeZone = zone,
-            adjustments = PrayerAdjustments()
+            adjustments = PrayerAdjustments(),
+            highLatitudeRule = highLatitudeRule
         ).mapValues { it.value.toJavaLocalTime() }
     }
 

@@ -4,6 +4,7 @@ import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
 import com.sakinah.deen.data.model.PrayerAdjustments
 import com.sakinah.deen.data.model.PrayerType
+import com.sakinah.deen.settings.HighLatitudeRule
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
@@ -23,7 +24,12 @@ interface PrayerCalculationEngine {
         method: CalculationMethod,
         madhhab: Madhhab,
         timeZone: TimeZone = TimeZone.currentSystemDefault(),
-        adjustments: PrayerAdjustments = PrayerAdjustments()
+        adjustments: PrayerAdjustments = PrayerAdjustments(),
+        /**
+         * What to do when the sun never reaches the Fajr/Isha twilight angle (summer at high
+         * latitude) — the case that previously produced an arbitrary 108°/105° guess.
+         */
+        highLatitudeRule: HighLatitudeRule = HighLatitudeRule.MIDDLE_OF_NIGHT
     ): Map<PrayerType, LocalTime>
 
     fun getQiblaAzimuth(coordinates: Pair<Double, Double>): Double

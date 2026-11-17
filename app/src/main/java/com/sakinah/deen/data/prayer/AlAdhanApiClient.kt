@@ -90,7 +90,13 @@ class AlAdhanApiClient(
         latitude: Double,
         longitude: Double,
         methodId: Int,
-        schoolId: Int
+        schoolId: Int,
+        /**
+         * AlAdhan `latitudeAdjustmentMethod`: 1 = middle of the night, 2 = one seventh,
+         * 3 = angle based. Without it the API silently applies its own default, so a user
+         * who chose a rule would see online timings that ignore it.
+         */
+        latitudeAdjustmentMethod: Int = 1
     ): AlAdhanMonthlyTimetable? {
         val response = try {
             client.get("$baseUrl/v1/calendar/$year/$month") {
@@ -98,6 +104,7 @@ class AlAdhanApiClient(
                 parameter("longitude", longitude)
                 parameter("method", methodId)
                 parameter("school", schoolId)
+                parameter("latitudeAdjustmentMethod", latitudeAdjustmentMethod)
                 header(HttpHeaders.Accept, "application/json")
                 header(HttpHeaders.UserAgent, USER_AGENT)
             }

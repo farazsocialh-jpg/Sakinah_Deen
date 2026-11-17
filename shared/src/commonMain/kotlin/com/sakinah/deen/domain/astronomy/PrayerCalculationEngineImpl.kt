@@ -4,6 +4,7 @@ import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
 import com.sakinah.deen.data.model.PrayerAdjustments
 import com.sakinah.deen.data.model.PrayerType
+import com.sakinah.deen.settings.HighLatitudeRule
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -13,13 +14,6 @@ import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.acos
-import kotlin.math.asin
-import kotlin.math.atan
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.tan
 import kotlin.math.acos
 import kotlin.math.asin
 import kotlin.math.atan
@@ -56,7 +50,8 @@ class PrayerCalculationEngineImpl : PrayerCalculationEngine {
         method: CalculationMethod,
         madhhab: Madhhab,
         timeZone: TimeZone,
-        adjustments: PrayerAdjustments
+        adjustments: PrayerAdjustments,
+        highLatitudeRule: HighLatitudeRule
     ): Map<PrayerType, LocalTime> {
         val lat = coordinates.first
         val lon = coordinates.second
@@ -108,6 +103,20 @@ class PrayerCalculationEngineImpl : PrayerCalculationEngine {
         val sunriseHours = solarNoonLocalHours - halfDayHours
         val maghribHours = solarNoonLocalHours + halfDayHours
 
+        // 3b. High-latitude fallback. Above roughly 48° in summer the sun never dips to the
+        // Fajr/Isha angle, so an angle-based time does not exist for that day. The three
+        // classical rules split the night between sunset and sunrise instead:
+        //   middle of the night  -> half the night on either side of midnight
+        //   one seventh          -> 1/7 of the night (the stricter Hanafi-era practice)
+        //   angle based          -> the twilight angle expressed as a fraction of 60°
+        // Night length is taken from this day's own sunset/sunrise, so it follows the season.
+        val nightHours = (24.0 - 2.0 * halfDayHours).coerceIn(1.0, 23.0)
+        fun portionOfNightFor(angle: Double): Double = when (highLatitudeRule) {
+            HighLatitudeRule.MIDDLE_OF_NIGHT -> 0.5
+            HighLatitudeRule.SEVENTH_OF_NIGHT -> 1.0 / 7.0
+            HighLatitudeRule.TWILIGHT_ANGLE -> (angle / 60.0).coerceIn(1.0 / 12.0, 0.5)
+        }
+
         // 4. Fajr Angle by Juristic / Regional Authority
         val fajrAngle = when (method) {
             CalculationMethod.MUSLIM_WORLD_LEAGUE -> 18.0
@@ -132,8 +141,12 @@ class PrayerCalculationEngineImpl : PrayerCalculationEngine {
         }
         val fajrAltRad = -fajrAngle * PI / 180.0
         val cosHourAngleFajr = (sin(fajrAltRad) - sin(latRad) * sin(declRad)) / (cos(latRad) * cos(declRad))
-        val hourAngleFajrDeg = if (cosHourAngleFajr in -1.0..1.0) acos(cosHourAngleFajr) * 180.0 / PI else 108.0
-        val fajrHours = solarNoonLocalHours - (hourAngleFajrDeg / 15.0)
+        val fajrHours = if (cosHourAngleFajr in -1.0..1.0) {
+            solarNoonLocalHours - (acos(cosHourAngleFajr) * 180.0 / PI / 15.0)
+        } else {
+            // No astronomical Fajr today: fall back to the configured high-latitude rule.
+            sunriseHours - portionOfNightFor(fajrAngle) * nightHours
+        }
 
         // 5. Asr Juristic Shadow Calculation: Standard Shafi'i/Maliki/Hanbali (1:1) vs Hanafi (2:1)
         val shadowRatio = if (madhhab == Madhhab.HANAFI) 2.0 else 1.0
@@ -175,8 +188,12 @@ class PrayerCalculationEngineImpl : PrayerCalculationEngine {
                 }
                 val ishaAltRad = -ishaAngle * PI / 180.0
                 val cosHourAngleIsha = (sin(ishaAltRad) - sin(latRad) * sin(declRad)) / (cos(latRad) * cos(declRad))
-                val hourAngleIshaDeg = if (cosHourAngleIsha in -1.0..1.0) acos(cosHourAngleIsha) * 180.0 / PI else 105.0
-                solarNoonLocalHours + (hourAngleIshaDeg / 15.0)
+                if (cosHourAngleIsha in -1.0..1.0) {
+                    solarNoonLocalHours + (acos(cosHourAngleIsha) * 180.0 / PI / 15.0)
+                } else {
+                    // No astronomical Isha today: use the same rule as Fajr, applied after sunset.
+                    maghribHours + portionOfNightFor(ishaAngle) * nightHours
+                }
             }
         }
 

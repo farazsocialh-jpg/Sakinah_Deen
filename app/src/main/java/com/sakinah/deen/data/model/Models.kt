@@ -114,7 +114,7 @@ data class TravelConcessionModel(
     val distanceFromHomeKm: Int = 74,
     val thresholdKm: Int = 88,
     val isConcessionActive: Boolean = false,
-    val homeCity: String = "London, UK",
+    val homeCity: String = "",
     val currentLocationName: String = "M40 Motorway, Milepost 46",
     val vehicleHeadingDeg: Int = 42,
     val kaabaBearingDeg: Int = 118,

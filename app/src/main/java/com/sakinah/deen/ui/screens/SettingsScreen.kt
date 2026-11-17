@@ -453,6 +453,62 @@ fun SettingsScreen(
                                 }
                             }
                         }
+                        Text(
+                            text = when (settings.prayer.highLatitudeRule) {
+                                com.sakinah.deen.settings.HighLatitudeRule.MIDDLE_OF_NIGHT ->
+                                    "Middle of the night: when the sun never reaches the Fajr/Isha angle, the night is halved between sunset and sunrise (the most common rule)."
+                                com.sakinah.deen.settings.HighLatitudeRule.SEVENTH_OF_NIGHT ->
+                                    "One seventh of the night: the stricter split used where summer nights never darken; Fajr is later and Isha earlier."
+                                com.sakinah.deen.settings.HighLatitudeRule.TWILIGHT_ANGLE ->
+                                    "Twilight angle: the same angle is expressed as a fraction of 60°, so the split follows the season."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Text(
+                            text = "Manual prayer offsets (minutes)",
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Shift each time to match your local mosque. Offsets apply to online " +
+                                "and offline calculations and to the Azaan alarms.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        val adjust = appPrefs.prayerAdjustments
+                        listOf(
+                            "Fajr" to adjust.fajrMinutes,
+                            "Sunrise" to adjust.sunriseMinutes,
+                            "Dhuhr" to adjust.dhuhrMinutes,
+                            "Asr" to adjust.asrMinutes,
+                            "Maghrib" to adjust.maghribMinutes,
+                            "Isha" to adjust.ishaMinutes
+                        ).forEach { (label, value) ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(label, modifier = Modifier.width(80.dp), fontSize = 12.sp)
+                                Slider(
+                                    value = value.toFloat(),
+                                    onValueChange = { v ->
+                                        val current = appPrefs.prayerAdjustments
+                                        appPrefs.prayerAdjustments = when (label) {
+                                            "Fajr" -> current.copy(fajrMinutes = v.toInt())
+                                            "Sunrise" -> current.copy(sunriseMinutes = v.toInt())
+                                            "Dhuhr" -> current.copy(dhuhrMinutes = v.toInt())
+                                            "Asr" -> current.copy(asrMinutes = v.toInt())
+                                            "Maghrib" -> current.copy(maghribMinutes = v.toInt())
+                                            else -> current.copy(ishaMinutes = v.toInt())
+                                        }
+                                    },
+                                    valueRange = -30f..30f,
+                                    steps = 60,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text("${value}m", fontSize = 12.sp, modifier = Modifier.width(40.dp))
+                            }
+                        }
+
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Hijri offset: ${settings.prayer.hijriOffset}")
                             Slider(

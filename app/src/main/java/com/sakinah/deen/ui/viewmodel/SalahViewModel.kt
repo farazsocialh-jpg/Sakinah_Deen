@@ -15,6 +15,8 @@ import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.prayer.SunniMethodMapper
 import com.sakinah.deen.data.repository.PrayerTimeRepository
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
+import com.sakinah.deen.domain.astronomy.SalahRefreshPolicy
+import com.sakinah.deen.domain.astronomy.SalahRefreshReason
 import com.sakinah.deen.domain.astronomy.PrayerCountdownInfo
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
 import com.sakinah.deen.domain.travel.HomeAnchorStore
@@ -22,6 +24,7 @@ import com.sakinah.deen.domain.travel.SafarPolicy
 import com.sakinah.deen.domain.travel.TravelStatusManager
 import com.sakinah.deen.service.PrayerAlarmScheduler
 import com.sakinah.deen.settings.AsrMethod
+import com.sakinah.deen.settings.HighLatitudeRule
 import com.sakinah.deen.settings.CalculationMethod as SharedCalculationMethod
 import com.sakinah.deen.settings.SettingsRepository
 import com.sakinah.deen.util.TimeZoneResolver
@@ -70,6 +73,7 @@ data class SalahUiState(
     val calculationMethod: CalculationMethod = CalculationMethod.UMM_AL_QURA,
     val madhhab: Madhhab = Madhhab.SHAFI_HANBALI_MALIKI,
     val adjustments: PrayerAdjustments = PrayerAdjustments(),
+    val highLatitudeRule: HighLatitudeRule = HighLatitudeRule.MIDDLE_OF_NIGHT,
     val locationName: String = "Detecting Location...",
     val isLocationPermissionGranted: Boolean = false,
     val showLocationWarningBanner: Boolean = false,
@@ -123,6 +127,9 @@ sealed class SalahUiIntent {
     data class UpdatePrayerAdjustments(val adjustments: PrayerAdjustments) : SalahUiIntent()
     data class LocationPermissionResult(val isGranted: Boolean) : SalahUiIntent()
     data object RefreshLocation : SalahUiIntent()
+    data object RecalculateToday : SalahUiIntent()
+    data object SystemStateChanged : SalahUiIntent()
+    data class ChangeHighLatitudeRule(val rule: com.sakinah.deen.settings.HighLatitudeRule) : SalahUiIntent()
     data object UseGpsLocation : SalahUiIntent()
     data class SetManualLocation(
         val lat: Double,
@@ -163,6 +170,10 @@ class SalahViewModel(
     /** True once the saved location or a GPS/network fix gives real coordinates. */
     private var hasUsableCoordinates = preferences?.locationCoordinates != null
 
+    /** For [SalahRefreshPolicy]: permission/zone state captured when backgrounded. */
+    private var lastKnownPermission: Boolean = false
+    private var lastKnownSystemZone: String? = ZoneId.systemDefault().id
+
     private var salahObserverJob: Job? = null
     private var observedEpochDay: Long? = null
     private var completedRecordsByPrayer: Map<PrayerType, SalahRecordEntity> = emptyMap()
@@ -190,6 +201,9 @@ class SalahViewModel(
         _uiState.update {
             it.copy(
                 madhhab = initialMadhhab,
+                adjustments = preferences?.prayerAdjustments ?: PrayerAdjustments(),
+                highLatitudeRule = settingsRepository?.settings?.value?.prayer?.highLatitudeRule
+                    ?: preferences?.highLatitudeRule ?: HighLatitudeRule.MIDDLE_OF_NIGHT,
                 hasHomeLocation = travelManager.hasHomeAnchor,
                 isManualLocation = savedManual,
                 userCoordinates = savedCoords ?: it.userCoordinates,
@@ -200,6 +214,7 @@ class SalahViewModel(
             )
         }
 
+        lastKnownPermission = locationProvider?.hasLocationPermission() ?: (preferences?.locationCoordinates != null)
         syncAuthority()
         observeSharedSettings()
         if (savedManual) {
@@ -223,6 +238,13 @@ class SalahViewModel(
                 if (_uiState.value.madhhab != targetMadhhab) {
                     preferences?.madhhab = targetMadhhab
                     _uiState.update { it.copy(madhhab = targetMadhhab) }
+                    needsReload = true
+                }
+
+                val targetRule = settings.prayer.highLatitudeRule
+                if (_uiState.value.highLatitudeRule != targetRule) {
+                    preferences?.highLatitudeRule = targetRule
+                    _uiState.update { it.copy(highLatitudeRule = targetRule) }
                     needsReload = true
                 }
 
@@ -315,6 +337,7 @@ class SalahViewModel(
                 loadDailySchedule()
             }
             is SalahUiIntent.UpdatePrayerAdjustments -> {
+                preferences?.prayerAdjustments = intent.adjustments
                 _uiState.update { it.copy(adjustments = intent.adjustments) }
                 loadDailySchedule()
             }
@@ -345,6 +368,58 @@ class SalahViewModel(
                 } else {
                     checkAndRefreshLocation()
                 }
+            }
+            is SalahUiIntent.RecalculateToday -> {
+                _uiState.update { it.copy(isRefreshing = true) }
+                loadDailySchedule()
+            }
+            is SalahUiIntent.SystemStateChanged -> {
+                // Offsets are edited on the Settings tab, which writes straight to prefs: pick
+                // them up on resume so the two screens can never disagree.
+                val persistedAdjustments = preferences?.prayerAdjustments
+                if (persistedAdjustments != null && persistedAdjustments != _uiState.value.adjustments) {
+                    _uiState.update { it.copy(adjustments = persistedAdjustments) }
+                    loadDailySchedule()
+                    return
+                }
+                val hasPermission = locationProvider?.hasLocationPermission() ?: _uiState.value.isLocationPermissionGranted
+                val currentZone = ZoneId.systemDefault().id
+                val reason = SalahRefreshPolicy.decide(
+                    hadPermission = lastKnownPermission,
+                    hasPermission = hasPermission,
+                    previousSystemZone = lastKnownSystemZone,
+                    currentSystemZone = currentZone,
+                    isManualLocation = _uiState.value.isManualLocation
+                )
+                lastKnownPermission = hasPermission
+                lastKnownSystemZone = currentZone
+                when (reason) {
+                    SalahRefreshReason.PERMISSION_GRANTED -> {
+                        _uiState.update { it.copy(isLocationPermissionGranted = true, showLocationWarningBanner = false) }
+                        if (!_uiState.value.isManualLocation) checkAndRefreshLocation() else loadDailySchedule()
+                    }
+                    SalahRefreshReason.PERMISSION_REVOKED -> {
+                        _uiState.update { it.copy(isLocationPermissionGranted = false, showLocationWarningBanner = !_uiState.value.isManualLocation) }
+                        loadDailySchedule()
+                    }
+                    SalahRefreshReason.SYSTEM_ZONE_CHANGED -> {
+                        if (!_uiState.value.isManualLocation) {
+                            _uiState.update { it.copy(timeZoneId = currentZone, timeZoneAbbr = TimeZoneResolver.shortAbbreviation(currentZone)) }
+                        }
+                        loadDailySchedule()
+                    }
+                    SalahRefreshReason.NONE -> Unit
+                }
+            }
+            is SalahUiIntent.ChangeHighLatitudeRule -> {
+                preferences?.highLatitudeRule = intent.rule
+                _uiState.update { it.copy(highLatitudeRule = intent.rule) }
+                settingsRepository?.let { repo ->
+                    viewModelScope.launch {
+                        repo.updatePrayer(repo.settings.value.prayer.copy(highLatitudeRule = intent.rule))
+                    }
+                }
+                loadDailySchedule()
             }
             is SalahUiIntent.UseGpsLocation -> {
                 preferences?.isManualLocation = false
@@ -377,13 +452,19 @@ class SalahViewModel(
                     countryCode = resolvedCountry,
                     longitude = intent.lon
                 )
-                preferences?.saveManualLocation(
+                val stored = preferences?.saveManualLocation(
                     latitude = intent.lat,
                     longitude = intent.lon,
                     label = intent.name,
                     countryCode = resolvedCountry,
                     timeZoneId = resolvedZone
-                )
+                ) ?: true
+                if (!stored) {
+                    // Invalid city coordinates (e.g. a stalled picker) are not accepted.
+                    _uiState.update { it.copy(isRefreshing = false) }
+                    return
+                }
+                hasUsableCoordinates = true
                 _uiState.update {
                     it.copy(
                         userCoordinates = Pair(intent.lat, intent.lon),
@@ -391,6 +472,7 @@ class SalahViewModel(
                         timeZoneId = resolvedZone,
                         timeZoneAbbr = TimeZoneResolver.shortAbbreviation(resolvedZone),
                         isManualLocation = true,
+                        isLocationPending = false,
                         showLocationWarningBanner = false
                     )
                 }
@@ -447,13 +529,20 @@ class SalahViewModel(
                 countryCode = countryCode,
                 longitude = resolved.longitude
             )
-            preferences?.saveGpsLocation(
+            // A fix the validator rejects must not be persisted or rendered: better to keep
+            // asking for a location than to show a timetable for a made-up position.
+            val stored = preferences?.saveGpsLocation(
                 latitude = resolved.latitude,
                 longitude = resolved.longitude,
                 label = resolvedLabel,
                 countryCode = countryCode,
                 timeZoneId = resolvedZone
-            )
+            ) ?: true
+            if (!stored) {
+                _uiState.update { it.copy(isRefreshing = false) }
+                if (hasUsableCoordinates) loadDailySchedule()
+                return@launch
+            }
             hasUsableCoordinates = true
             _uiState.update {
                 it.copy(
@@ -553,7 +642,8 @@ class SalahViewModel(
                 method = state.calculationMethod,
                 madhhab = state.madhhab,
                 timeZone = kZone,
-                adjustments = state.adjustments
+                adjustments = state.adjustments,
+                highLatitudeRule = state.highLatitudeRule
             ),
             sourceLabel = "Offline Calculation"
         )
@@ -575,7 +665,8 @@ class SalahViewModel(
                     madhhab = state.madhhab,
                     zoneId = zoneId,
                     adjustments = state.adjustments,
-                    countryCode = countryCode
+                    countryCode = countryCode,
+                    highLatitudeRule = state.highLatitudeRule
                 )
             }.getOrNull()
             if (request != scheduleRequest) return@launch
@@ -682,7 +773,8 @@ class SalahViewModel(
                 method = state.calculationMethod,
                 madhhab = state.madhhab,
                 timeZone = locationKTimeZone(state.timeZoneId),
-                adjustments = state.adjustments
+                adjustments = state.adjustments,
+                highLatitudeRule = state.highLatitudeRule
             )[PrayerType.FAJR]
         }.getOrNull() ?: return null
         return astronomyEngine.lastThirdOfNight(maghrib, nextFajr) to nextFajr

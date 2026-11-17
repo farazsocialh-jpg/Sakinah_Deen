@@ -92,6 +92,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import kotlin.math.roundToInt
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
@@ -117,6 +119,7 @@ fun SalahScreen(
     onOpenPrayerGuide: ((String, Int) -> Unit)? = null,
     focusMode: Boolean = false,
     onOpenNotificationSettings: (() -> Unit)? = null,
+    onOpenPrayerSettings: (() -> Unit)? = null,
     viewModel: SalahViewModel? = null,
     modifier: Modifier = Modifier
 ) {
@@ -132,6 +135,12 @@ fun SalahScreen(
                 PrayerModel("isha", "Isha", "العشاء", "07:44 PM", 4, 4, 2, false, false, false, false, "Tahajjud & Witr")
             )
         )
+    }
+
+    // Coming back from system settings (permission just granted) or from a flight should not
+    // leave the table on the previous permission/zone until a manual pull-to-refresh.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel?.onIntent(SalahUiIntent.SystemStateChanged)
     }
 
     val appearancePrefs = rememberInject<AppearancePreferences>()
@@ -211,8 +220,9 @@ fun SalahScreen(
                             focusMode = focusMode,
                             onPickLocation = { showManualCityDialog = true },
                             onOpenNotifications = onOpenNotificationSettings,
-                            onOpenSettings = { showSettingsDialog = true },
-                            onOpenQadha = { showQadhaDialog = true }
+                            onOpenSettings = { onOpenPrayerSettings?.invoke() ?: run { showSettingsDialog = true } },
+                            onOpenQadha = { showQadhaDialog = true },
+                            onRecalculate = { viewModel?.onIntent(SalahUiIntent.RecalculateToday) }
                         )
 
                         if (!focusMode && state.showLocationWarningBanner) {
@@ -250,29 +260,44 @@ fun SalahScreen(
                             SakinahCard(contentPadding = 16.dp) {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text(
-                                        text = "Locating your position…",
+                                        text = "Set your location",
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                     Text(
-                                        text = "Prayer times need your location. Enable location " +
-                                            "or pick a city to get exact local timings.",
+                                        text = "No location has been chosen yet, so prayer times " +
+                                            "cannot be calculated. Allow location access or pick " +
+                                            "a city.",
                                         fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                    OutlinedButton(onClick = { showManualCityDialog = true }) {
-                                        Text("Choose city")
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedButton(onClick = {
+                                            if (ContextCompat.checkSelfPermission(
+                                                    context,
+                                                    Manifest.permission.ACCESS_FINE_LOCATION
+                                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                            ) {
+                                                viewModel?.onIntent(SalahUiIntent.UseGpsLocation)
+                                            } else {
+                                                gpsPermissionRequested = true
+                                                locationPermissionLauncher.launch(
+                                                    arrayOf(
+                                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                                        Manifest.permission.ACCESS_COARSE_LOCATION
+                                                    )
+                                                )
+                                            }
+                                        }) {
+                                            Text("Use my location")
+                                        }
+                                        OutlinedButton(onClick = { showManualCityDialog = true }) {
+                                            Text("Choose city")
+                                        }
                                     }
                                 }
                             }
                         } else {
-                            if (salahHomeLayout == SalahHomeLayout.TIMELINE_STRIP) {
-                                TimelineStrip(
-                                    prayers = state.prayersList,
-                                    currentPrayerName = state.currentPrayerName
-                                )
-                            }
-
                             SalahHomeHero(
                                 layout = salahHomeLayout,
                                 state = state,
@@ -293,24 +318,6 @@ fun SalahScreen(
 
             when (selectedSegment) {
                 0 -> {
-                    if (salahHomeLayout == SalahHomeLayout.ALL_DAY_GRID) {
-                        item {
-                            PrayerGrid(
-                                prayers = state.prayersList,
-                                currentPrayerName = state.currentPrayerName,
-                                onTogglePrayer = { prayer ->
-                                    // Sunrise is informational only; never fall back to another
-                                    // prayer's type or tapping it would toggle that prayer.
-                                    prayerTypeOf(prayer)?.let { prayerType ->
-                                        viewModel?.onIntent(
-                                            SalahUiIntent.ToggleSalahCompletion(prayerType, prayer.isJamaah)
-                                        )
-                                    }
-                                }
-                            )
-                        }
-                        item { TahajjudCard(state) }
-                    } else {
                     // Daily Prayer Matrix (5-prayer checklist in Focus Mode)
                     val visiblePrayers = if (focusMode) {
                         state.prayersList.filter { it.id != "sunrise" }
@@ -464,11 +471,10 @@ fun SalahScreen(
                                         Text("Open ${prayer.nameEnglish} Step Guide (${prayer.fardRakats} Rakats)", fontSize = 12.sp)
                                     }
                                 }
-                                                            }
                             }
                         }
-                        item { TahajjudCard(state) }
                     }
+                    item { TahajjudCard(state) }
                 }
 
                 1 -> {

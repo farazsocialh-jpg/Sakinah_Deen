@@ -26,9 +26,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -105,7 +107,8 @@ internal fun SalahTopHeader(
     onPickLocation: () -> Unit,
     onOpenNotifications: (() -> Unit)?,
     onOpenSettings: () -> Unit,
-    onOpenQadha: () -> Unit
+    onOpenQadha: () -> Unit,
+    onRecalculate: (() -> Unit)? = null
 ) {
     val shortDate = state.gregorianDate.substringAfter("·", state.gregorianDate).trim()
         .ifBlank { state.gregorianDate }
@@ -169,6 +172,30 @@ internal fun SalahTopHeader(
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
+                    }
+                }
+            }
+            if (onRecalculate != null) {
+                Surface(
+                    color = Color.Transparent,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clickable(enabled = !state.isRefreshing, onClick = onRecalculate)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (state.isRefreshing) {
+                            CircularProgressIndicator(
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        } else {
+                            androidx.compose.material3.Icon(
+                                imageVector = Icons.Outlined.Refresh,
+                                contentDescription = "Recalculate today's times",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -954,8 +981,6 @@ internal fun SalahHomeHero(
         SalahHomeLayout.CLASSIC_COMPACT -> ClassicHeroCard(state, onToggleCurrent)
         SalahHomeLayout.BENTO_SPLIT -> BentoHero(state, onToggleCurrent)
         SalahHomeLayout.CIRCULAR_RING -> CircularHero(state, onToggleCurrent)
-        SalahHomeLayout.ALL_DAY_GRID -> ClassicHeroCard(state, onToggleCurrent)
-        SalahHomeLayout.TIMELINE_STRIP -> ClassicHeroCard(state, onToggleCurrent)
         SalahHomeLayout.SEAMLESS_EDITORIAL -> SeamlessHero(state, onToggleCurrent)
         SalahHomeLayout.DAILY_STREAK_DOTS -> DailyDotsHero(state, onToggleCurrent)
     }

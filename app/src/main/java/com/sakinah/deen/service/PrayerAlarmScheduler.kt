@@ -18,6 +18,7 @@ import com.sakinah.deen.data.prayer.PrayerTimeSnapshot
 import com.sakinah.deen.data.prayer.SunniMethodMapper
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.PrayerTimeRepository
+import com.sakinah.deen.data.repository.PrayerTimeRepositoryImpl
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
 import java.time.Duration
 import java.time.LocalDate as JLocalDate
@@ -132,12 +133,13 @@ class PrayerAlarmScheduler(
         val today = JLocalDate.now(zone)
         val tomorrow = today.plusDays(1)
 
+        val rule = preferences.highLatitudeRule
         val todayTimes = runCatching {
-            repository.resolveDay(today, coords, school, zone).times
+            repository.resolveDay(today, coords, school, zone, highLatitudeRule = rule).times
         }.getOrDefault(emptyMap()).ifEmpty { engineTimes(today, coords, school) }
 
         val tomorrowTimes = runCatching {
-            repository.resolveDay(tomorrow, coords, school, zone).times
+            repository.resolveDay(tomorrow, coords, school, zone, highLatitudeRule = rule).times
         }.getOrDefault(emptyMap()).ifEmpty { engineTimes(tomorrow, coords, school) }
 
         return record(scheduleTable(todayTimes, tomorrowTimes))
@@ -254,7 +256,10 @@ class PrayerAlarmScheduler(
             date = date,
             coordinates = coordinates,
             methodId = authority.methodId,
-            schoolId = SunniMethodMapper.schoolId(school)
+            schoolId = SunniMethodMapper.schoolId(school),
+            // Must match the key the repository recorded, otherwise a chosen high-latitude
+            // rule would silently fall back to the local astronomical table.
+            latitudeRule = PrayerTimeRepositoryImpl.latitudeAdjustmentMethod(preferences.highLatitudeRule)
         )
     )
 
@@ -272,7 +277,9 @@ class PrayerAlarmScheduler(
             date = KLocalDate.parse(date.toString()),
             method = method,
             madhhab = school,
-            timeZone = KTimeZone.of(activeZone().id)
+            timeZone = KTimeZone.of(activeZone().id),
+            adjustments = preferences.prayerAdjustments,
+            highLatitudeRule = preferences.highLatitudeRule
         ).mapValues { (_, time) -> time.toJavaLocalTime() }
     }
 

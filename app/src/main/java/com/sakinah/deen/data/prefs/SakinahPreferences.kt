@@ -11,8 +11,11 @@ import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.data.model.QuranArabicScript
 import com.sakinah.deen.data.model.QuranTranslationResource
 import com.sakinah.deen.network.IslamicDataRepository
+import com.sakinah.deen.data.model.PrayerAdjustments
+import com.sakinah.deen.domain.astronomy.LocationValidator
 import com.sakinah.deen.domain.travel.HomeAnchorStore
 import com.sakinah.deen.domain.travel.SafarPolicy
+import com.sakinah.deen.settings.HighLatitudeRule
 
 /**
  * Single source of truth for values that background components (alarms, receivers,
@@ -33,9 +36,15 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
     }
 
     companion object {
-        const val DEFAULT_LATITUDE = 51.5074
-        const val DEFAULT_LONGITUDE = -0.1278
-        const val DEFAULT_LOCATION_LABEL = "London, UK"
+        /**
+         * Legacy pre-onboarding defaults. A new install has **no** location: the Salah
+         * screen asks for one (GPS or a city) instead of quietly running London times for
+         * everyone in the world. These values survive only so the one-time cleanup below can
+         * recognise and drop them.
+         */
+        private const val LEGACY_DEFAULT_LATITUDE = 51.5074
+        private const val LEGACY_DEFAULT_LONGITUDE = -0.1278
+        private const val LEGACY_DEFAULT_LOCATION_LABEL = "London, UK"
 
         private const val PREFS_NAME = "sakinah_preferences"
         private const val KEY_LATITUDE = "location_latitude"
@@ -85,6 +94,13 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         private const val KEY_NEXT_ALARM_PRAYER = "azaan_next_alarm_prayer"
         private const val KEY_LAST_ALARM_RESULT = "azaan_last_schedule_result"
         private const val KEY_ADHKAR_SEED_HASH = "adhkar_seed_hash"
+        private const val KEY_ADJUST_FAJR = "prayer_adjust_fajr"
+        private const val KEY_ADJUST_SUNRISE = "prayer_adjust_sunrise"
+        private const val KEY_ADJUST_DHUHR = "prayer_adjust_dhuhr"
+        private const val KEY_ADJUST_ASR = "prayer_adjust_asr"
+        private const val KEY_ADJUST_MAGHRIB = "prayer_adjust_maghrib"
+        private const val KEY_ADJUST_ISHA = "prayer_adjust_isha"
+        private const val KEY_HIGH_LATITUDE_RULE = "prayer_high_latitude_rule"
     }
 
     /** Double is stored as raw bits so stored coordinates do not lose precision. */
@@ -101,14 +117,20 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         }.apply()
 
     var locationLabel: String
-        get() = prefs.getString(KEY_LOCATION_LABEL, DEFAULT_LOCATION_LABEL) ?: DEFAULT_LOCATION_LABEL
+        get() = prefs.getString(KEY_LOCATION_LABEL, "") ?: ""
         set(value) = prefs.edit().putString(KEY_LOCATION_LABEL, value).apply()
 
+    /**
+     * The saved fix, or null when it cannot be trusted. Range-checking here (not only on
+     * write) means a coordinate persisted by an older build — `(0,0)`, a `NaN`, an
+     * out-of-range value restored from a backup — degrades to "no location yet" instead of
+     * producing a wrong timetable.
+     */
     val locationCoordinates: Pair<Double, Double>?
         get() {
             val lat = locationLatitude ?: return null
             val lon = locationLongitude ?: return null
-            return Pair(lat, lon)
+            return LocationValidator.sanitize(lat, lon)
         }
 
     /** ISO 3166-1 alpha-2 code of the last resolved location (e.g. "QA"). */
@@ -417,25 +439,35 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
             }
         }
 
-    fun saveLocation(latitude: Double, longitude: Double, label: String) {
-        locationLatitude = latitude
-        locationLongitude = longitude
+    /** Returns false (and writes nothing) when the coordinates are not a real location. */
+    fun saveLocation(latitude: Double, longitude: Double, label: String): Boolean {
+        val sane = LocationValidator.sanitize(latitude, longitude) ?: return false
+        locationLatitude = sane.first
+        locationLongitude = sane.second
         locationLabel = label
+        return true
     }
 
+    /**
+     * Saves a hand-picked city. Invalid coordinates are rejected outright; an invalid or
+     * missing zone id is dropped (the resolver derives one from the city/country/longitude)
+     * rather than being stored as a zone the platform cannot resolve.
+     */
     fun saveManualLocation(
         latitude: Double,
         longitude: Double,
         label: String,
         countryCode: String?,
         timeZoneId: String?,
-    ) {
-        locationLatitude = latitude
-        locationLongitude = longitude
+    ): Boolean {
+        val sane = LocationValidator.sanitize(latitude, longitude) ?: return false
+        locationLatitude = sane.first
+        locationLongitude = sane.second
         locationLabel = label
         locationCountryCode = countryCode
-        locationTimeZoneId = timeZoneId
+        locationTimeZoneId = timeZoneId?.takeIf(LocationValidator::isValidZoneId)
         isManualLocation = true
+        return true
     }
 
     fun saveGpsLocation(
@@ -444,13 +476,15 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         label: String,
         countryCode: String?,
         timeZoneId: String?,
-    ) {
-        locationLatitude = latitude
-        locationLongitude = longitude
+    ): Boolean {
+        val sane = LocationValidator.sanitize(latitude, longitude) ?: return false
+        locationLatitude = sane.first
+        locationLongitude = sane.second
         locationLabel = label
         locationCountryCode = countryCode
-        locationTimeZoneId = timeZoneId
+        locationTimeZoneId = timeZoneId?.takeIf(LocationValidator::isValidZoneId)
         isManualLocation = false
+        return true
     }
 
     /**
@@ -482,18 +516,54 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         HomeAnchorStore.publish(null)
     }
 
+    /**
+     * One-time cleanup for installs that inherited a fabricated London Home. Also drops a
+     * London Home that was never explicitly chosen, so nobody is told they are 5,225 km from
+     * a city they never picked.
+     */
     private fun migrateLondonHomeIfNeeded() {
         if (homeExplicitlySet) return
         val lat = homeLatitude ?: return
         val lon = homeLongitude ?: return
         val label = homeCityName
-        if (lat == DEFAULT_LATITUDE && lon == DEFAULT_LONGITUDE &&
-            (label == null || label == DEFAULT_LOCATION_LABEL || label == "London, UK")
+        if (lat == LEGACY_DEFAULT_LATITUDE && lon == LEGACY_DEFAULT_LONGITUDE &&
+            (label == null || label == LEGACY_DEFAULT_LOCATION_LABEL)
         ) {
-            // Drop the inherited London default so existing installs stop showing 5225 km.
             clearHomeAnchor()
         }
     }
+
+    /** Minute offsets applied to the computed/authoritative timings (neighbourhood mosque). */
+    var prayerAdjustments: PrayerAdjustments
+        get() = PrayerAdjustments(
+            fajrMinutes = prefs.getInt(KEY_ADJUST_FAJR, 0),
+            sunriseMinutes = prefs.getInt(KEY_ADJUST_SUNRISE, 0),
+            dhuhrMinutes = prefs.getInt(KEY_ADJUST_DHUHR, 0),
+            asrMinutes = prefs.getInt(KEY_ADJUST_ASR, 0),
+            maghribMinutes = prefs.getInt(KEY_ADJUST_MAGHRIB, 0),
+            ishaMinutes = prefs.getInt(KEY_ADJUST_ISHA, 0)
+        )
+        set(value) = prefs.edit().apply {
+            putInt(KEY_ADJUST_FAJR, value.fajrMinutes)
+            putInt(KEY_ADJUST_SUNRISE, value.sunriseMinutes)
+            putInt(KEY_ADJUST_DHUHR, value.dhuhrMinutes)
+            putInt(KEY_ADJUST_ASR, value.asrMinutes)
+            putInt(KEY_ADJUST_MAGHRIB, value.maghribMinutes)
+            putInt(KEY_ADJUST_ISHA, value.ishaMinutes)
+        }.apply()
+
+    /**
+     * Mirrors the high-latitude rule kept in the shared settings store so background
+     * scheduling (no repository, no Compose) recomputes the same Fajr/Isha.
+     */
+    var highLatitudeRule: HighLatitudeRule
+        get() = runCatching {
+            HighLatitudeRule.valueOf(
+                prefs.getString(KEY_HIGH_LATITUDE_RULE, null)
+                    ?: return@runCatching HighLatitudeRule.MIDDLE_OF_NIGHT
+            )
+        }.getOrDefault(HighLatitudeRule.MIDDLE_OF_NIGHT)
+        set(value) = prefs.edit().putString(KEY_HIGH_LATITUDE_RULE, value.name).apply()
 
     fun saveCarDevice(address: String, name: String?) {
         carBluetoothAddress = address

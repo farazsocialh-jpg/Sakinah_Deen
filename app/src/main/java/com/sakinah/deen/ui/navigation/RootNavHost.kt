@@ -471,6 +471,9 @@ fun RootNavHost(
                         onOpenNotificationSettings = {
                             navigateTo(SakinahScreen.NotificationSettings)
                         },
+                        onOpenPrayerSettings = {
+                            navigateTo(SakinahScreen.SettingsPrayer)
+                        },
                         viewModel = salahVm
                     )
                 }

@@ -37,13 +37,16 @@ object PrayerTimeSnapshot {
         month: LocalDate,
         coordinates: Pair<Double, Double>,
         methodId: Int,
-        schoolId: Int
-    ): String = "%.3f,%.3f|%d|%d|%d".format(
+        schoolId: Int,
+        /** AlAdhan `latitudeAdjustmentMethod` (1 = middle of night, 2 = one seventh, 3 = angle). */
+        latitudeRule: Int = 1
+    ): String = "%.3f,%.3f|%d|%d|%d|%d".format(
         coordinates.first,
         coordinates.second,
         methodId,
         schoolId,
-        month.year * 100 + month.monthValue
+        month.year * 100 + month.monthValue,
+        latitudeRule
     )
 
     /** Key of a single resolved day. */
@@ -51,6 +54,8 @@ object PrayerTimeSnapshot {
         date: LocalDate,
         coordinates: Pair<Double, Double>,
         methodId: Int,
-        schoolId: Int
-    ): String = "${cacheKeyOf(date, coordinates, methodId, schoolId)}#${date.toEpochDay()}"
+        schoolId: Int,
+        latitudeRule: Int = 1
+    ): String =
+        "${cacheKeyOf(date, coordinates, methodId, schoolId, latitudeRule)}#${date.toEpochDay()}"
 }
