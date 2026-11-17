@@ -127,9 +127,14 @@ class MainActivity : ComponentActivity() {
         if (stopRequested) sendStopAdhanIntent()
     }
 
-    private fun navigationTarget(intent: Intent?): String? =
-        intent?.getStringExtra(CarBluetoothReceiver.EXTRA_NAVIGATE_TO)
-            ?.takeIf { it.isNotBlank() }
+    /**
+     * Only the actions this app actually understands are honoured: an exported activity can
+     * receive an Intent from any app, and an unknown target must not steer navigation.
+     */
+    private fun navigationTarget(intent: Intent?): String? {
+        val requested = intent?.getStringExtra(CarBluetoothReceiver.EXTRA_NAVIGATE_TO) ?: return null
+        return requested.takeIf { it == CarBluetoothReceiver.ACTION_OPEN_TRAVEL }
+    }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         // Any hardware volume key mutes a playing Azaan. The key is consumed so pressing

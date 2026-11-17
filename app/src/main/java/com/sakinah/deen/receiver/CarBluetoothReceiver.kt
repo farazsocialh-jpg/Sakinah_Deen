@@ -47,13 +47,26 @@ class CarBluetoothReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        // The receiver is exported for the system's ACL broadcasts, so any app can send it an
+        // Intent. Only the two documented actions are acted on, and only with a real device.
         when (intent.action) {
             BluetoothDevice.ACTION_ACL_CONNECTED -> handleConnected(context, intent)
             BluetoothDevice.ACTION_ACL_DISCONNECTED -> handleDisconnected(context, intent)
+            else -> Unit
         }
     }
 
     private fun handleConnected(context: Context, intent: Intent) {
+        // API 31+ requires BLUETOOTH_CONNECT to read a device's name or address; without it
+        // every device looks identical, so a car could never be recognised reliably.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
         val device = extractDevice(intent) ?: return
         val preferences = SakinahPreferences(context)
 

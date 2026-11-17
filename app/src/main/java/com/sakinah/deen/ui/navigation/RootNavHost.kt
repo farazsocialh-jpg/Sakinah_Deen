@@ -90,32 +90,32 @@ import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.context.GlobalContext
 
-enum class SakinahScreen(@StringRes val titleRes: Int) {
-    Onboarding(R.string.app_name),
-    DailySalah(R.string.nav_salah),
-    VisualGuide(R.string.nav_guide),
-    Quran(R.string.nav_quran),
-    Hadith(R.string.nav_hadith),
-    Travel(R.string.nav_travel),
-    Wealth(R.string.nav_wealth),
-    AiScholar(R.string.nav_scholar),
-    ToolsHub(R.string.nav_tools),
-    Auth(R.string.app_name),
-    CompleteProfile(R.string.app_name),
-    Profile(R.string.app_name),
-    /** Prayer, location and calculation preferences. */
-    SettingsPrayer(R.string.app_name),
-    /** Theme, palette, typography and reader layouts. */
-    SettingsAppearance(R.string.app_name),
-    /** Quran translation edition, tafseer packs and cache. */
-    SettingsQuran(R.string.app_name),
-    /** Legacy alias kept so a restored back stack from an older build still resolves. */
-    Settings(R.string.app_name),
-    DataSources(R.string.app_name),
-    Help(R.string.app_name),
-    Privacy(R.string.app_name),
-    About(R.string.app_name),
-    NotificationSettings(R.string.app_name)
+enum class SakinahScreen(
+    @StringRes val titleRes: Int,
+    val showTopBar: Boolean = true,
+    val showBottomBar: Boolean = false
+) {
+    Onboarding(R.string.app_name, showTopBar = false, showBottomBar = false),
+    DailySalah(R.string.nav_salah, showTopBar = false, showBottomBar = true),
+    VisualGuide(R.string.nav_guide, showTopBar = false, showBottomBar = true),
+    Quran(R.string.nav_quran, showTopBar = false, showBottomBar = true),
+    Hadith(R.string.nav_hadith, showTopBar = false, showBottomBar = true),
+    Travel(R.string.nav_travel, showTopBar = true, showBottomBar = true),
+    Wealth(R.string.nav_wealth, showTopBar = true, showBottomBar = true),
+    AiScholar(R.string.nav_scholar, showTopBar = false, showBottomBar = true),
+    ToolsHub(R.string.nav_tools, showTopBar = true, showBottomBar = true),
+    Auth(R.string.app_name, showTopBar = false, showBottomBar = false),
+    CompleteProfile(R.string.app_name, showTopBar = false, showBottomBar = false),
+    Profile(R.string.app_name, showTopBar = true, showBottomBar = false),
+    SettingsPrayer(R.string.app_name, showTopBar = true, showBottomBar = false),
+    SettingsAppearance(R.string.app_name, showTopBar = true, showBottomBar = false),
+    SettingsQuran(R.string.app_name, showTopBar = true, showBottomBar = false),
+    Settings(R.string.app_name, showTopBar = true, showBottomBar = false),
+    DataSources(R.string.app_name, showTopBar = false, showBottomBar = false),
+    Help(R.string.app_name, showTopBar = false, showBottomBar = false),
+    Privacy(R.string.app_name, showTopBar = false, showBottomBar = false),
+    About(R.string.app_name, showTopBar = false, showBottomBar = false),
+    NotificationSettings(R.string.app_name, showTopBar = true, showBottomBar = false)
 }
 
 private fun startScreenForObjective(objective: UserObjective): SakinahScreen =
@@ -163,7 +163,9 @@ fun RootNavHost(
         save = { it.map { screen -> screen.name } },
         restore = { saved ->
             mutableStateListOf<SakinahScreen>().apply {
-                addAll(saved.map { name -> SakinahScreen.valueOf(name) })
+                // A stack saved by an older build can name a screen this build no longer has;
+                // dropping it keeps restoration alive instead of crashing on resume.
+                addAll(saved.mapNotNull { name -> SakinahScreen.entries.firstOrNull { it.name == name } })
             }
         }
     )
@@ -353,16 +355,7 @@ fun RootNavHost(
         SakinahScreen.Onboarding -> "Welcome to ImanCore"
     }
 
-    val showsRootTopBar = currentScreen != SakinahScreen.Onboarding &&
-        currentScreen != SakinahScreen.DailySalah &&
-        currentScreen != SakinahScreen.Quran &&
-        currentScreen != SakinahScreen.Hadith &&
-        currentScreen != SakinahScreen.AiScholar &&
-        currentScreen != SakinahScreen.VisualGuide &&
-        currentScreen != SakinahScreen.DataSources &&
-        currentScreen != SakinahScreen.Help &&
-        currentScreen != SakinahScreen.Privacy &&
-        currentScreen != SakinahScreen.About
+    val showsRootTopBar = currentScreen.showTopBar
 
     // enterAlwaysScrollBehavior belongs only to screens that actually render the root
     // TopAppBar. Attaching its connection to screens without one lets the app bar offset
@@ -404,7 +397,7 @@ fun RootNavHost(
         },
         bottomBar = {
             AnimatedVisibility(
-                visible = currentScreen in topLevelTabs && (!autoHideBars || !bottomBarHidden) && !imeVisible,
+                visible = currentScreen.showBottomBar && (!autoHideBars || !bottomBarHidden) && !imeVisible,
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
             ) {
