@@ -53,13 +53,20 @@ Salah channel, so the channel itself plays the Adhan even if the app process is 
 
 | Asset | Contents | Provenance |
 | --- | --- | --- |
-| `seed_quran_juz_amma.json` | Al-Fatihah + Juz Amma (surahs 78–114), 38 surahs / 571 ayahs, Uthmani text + Saheeh International | Quran.com API v4 (`quran/verses/uthmani`, `quran/translations/20`) |
+| `seed_quran_full.json` | The complete mushaf: 114 surahs / 6,236 ayahs, Uthmani text + Saheeh International. Version 1, 2,509,358 bytes, SHA-256 `cc26751224af1651f7878b26c40f9fb74fef3d765553428aef7043e12a8a8c8c` (pinned in `QuranOfflinePack`) | Quran.com API v4 (`quran/verses/uthmani`, `quran/translations/20`) |
+| `seed_quran_surahs.json` | 114 surah metadata records (names, meaning, revelation place, verse count) | Quran.com API v4 (`/chapters`) |
 | `seed_hadith_nawawi.json` | All 42 hadith of Al-Arba'in an-Nawawiyyah with Arabic, English, grading | fawazahmed0/hadith-api `eng-nawawi` + `ara-nawawi` |
 | `seed_hisn_muslim.json` | Ayat al-Kursi, Al-Ikhlas, Al-Falaq, An-Nas, and Dua al-Safar | Quran.com API v4; Sahih Muslim #3275 |
 
 These were generated from the live APIs rather than typed by hand. `DatabaseSeeder`
 parses them inside a `RoomDatabase.Callback.onCreate` and upserts into the encrypted
 database, so the reader and hadith screens are populated on the very first launch.
+
+The Quran pack is checksum- and structure-verified before it is written: `QuranOfflinePack`
+checks the pinned SHA-256, then validates 114 ordered surahs, per-surah ayah counts sum to
+6,236, sequential ayah numbering, Arabic letters, tashkeel presence and non-empty
+translations. `QuranOfflinePackTest` runs the same audit against the shipped asset, and
+`OfflineSeedingTest` proves the whole mushaf lands in Room from the asset alone.
 Everything is a REPLACE upsert, so re-running the seeder is safe.
 
 To regenerate after changing scope, re-run the generator script described in the commit

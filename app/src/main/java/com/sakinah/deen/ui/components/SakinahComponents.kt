@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -30,6 +32,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -37,6 +41,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sakinah.deen.data.quran.QuranOfflinePack
+import com.sakinah.deen.data.quran.QuranOfflineStatus
 import com.sakinah.deen.ui.theme.AmiriFontFamily
 import com.sakinah.deen.ui.theme.UthmanicFontFamily
 
@@ -195,13 +201,70 @@ fun ArabicVerseBlock(
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Text(
             text = arabicText,
-            modifier = modifier.fillMaxWidth(),
-            fontFamily = if (isQuran) UthmanicFontFamily else AmiriFontFamily,
-            fontSize = fontSizeSp.sp,
-            lineHeight = (fontSizeSp * 1.68f).sp,
-            color = color,
-            textAlign = TextAlign.Start
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            style = TextStyle(
+                fontFamily = if (isQuran) UthmanicFontFamily else AmiriFontFamily,
+                fontSize = fontSizeSp.sp,
+                // 1.9x line height plus explicit font padding keep the harakat above and
+                // below the baseline (fatha, kasra, shadda, sukun) from being clipped.
+                lineHeight = (fontSizeSp * 1.9f).sp,
+                platformStyle = PlatformTextStyle(includeFontPadding = true),
+                color = color,
+                textAlign = TextAlign.Start
+            )
         )
+    }
+}
+
+/**
+ * Truthful offline coverage line shared by the Quran reader and Settings: it reports the
+ * rows actually stored, so "Offline Ready" is never shown for a partial pack.
+ */
+@Composable
+fun QuranOfflineStatusBanner(
+    status: QuranOfflineStatus,
+    modifier: Modifier = Modifier,
+    showPackDetails: Boolean = false
+) {
+    val complete = status.isComplete
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = if (complete) MaterialTheme.colorScheme.secondaryContainer
+        else MaterialTheme.colorScheme.errorContainer,
+        contentColor = if (complete) MaterialTheme.colorScheme.onSecondaryContainer
+        else MaterialTheme.colorScheme.onErrorContainer
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = if (complete) Icons.Default.Verified else Icons.Default.Warning,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = status.headline,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Text(text = status.detail, fontSize = 10.sp)
+            if (showPackDetails) {
+                Text(
+                    text = "Pack v${QuranOfflinePack.VERSION} · ${QuranOfflinePack.SOURCE} · " +
+                        "sha256 ${QuranOfflinePack.SHA256.take(16)}…",
+                    fontSize = 9.sp
+                )
+            }
+        }
     }
 }
 

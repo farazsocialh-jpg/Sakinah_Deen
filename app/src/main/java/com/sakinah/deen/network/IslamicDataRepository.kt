@@ -10,6 +10,7 @@ import com.sakinah.deen.data.database.entity.QuranTranslationEntity
 import com.sakinah.deen.data.model.HadithBookCatalog
 import com.sakinah.deen.data.model.HadithEditionResource
 import com.sakinah.deen.data.model.QuranTranslationResource
+import com.sakinah.deen.data.quran.QuranOfflineStatus
 import com.sakinah.deen.data.database.entity.SurahMetadataEntity
 import com.sakinah.deen.data.database.entity.TafsirEntryEntity
 import com.sakinah.deen.network.model.ChapterAudioResponse
@@ -29,6 +30,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.isSuccess
 import com.sakinah.deen.util.ArabicNormalizer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -78,6 +80,9 @@ class IslamicDataRepository(
         const val HADITH_CDN_RAW_BASE = "https://raw.githubusercontent.com/fawazahmed0/hadith-api/1"
         const val ALQURAN_CLOUD_BASE = "https://api.alquran.cloud/v1"
         const val QURAN_API_CDN_BASE = "https://cdn.jsdelivr.net/gh/fawazahmed0/quran-api@1"
+
+        /** First retry waits 350 ms, then 700 ms (exponential). */
+        private const val RETRY_BASE_DELAY_MILLIS = 350L
         const val QURAN_API_RAW_BASE = "https://raw.githubusercontent.com/fawazahmed0/quran-api/1"
 
         /** Quran.com retired translation id 131; 20 = Saheeh International (verified live). */
@@ -93,10 +98,13 @@ class IslamicDataRepository(
 
         private const val USER_AGENT = "ImanCore-Android/1.0 (offline-first Islamic companion)"
         private val HTML_TAG = Regex("<[^>]+>")
+        /** Footnote markers (`<sup foot_note=..>1</sup>`) carry no meaning in a cached verse. */
+        private val SUP_TAG = Regex("<sup[^>]*>.*?</sup>", RegexOption.DOT_MATCHES_ALL)
         private val WHITESPACE = Regex("\\s+")
 
         private fun cleanText(raw: String): String =
-            raw.replace(HTML_TAG, " ")
+            raw.replace(SUP_TAG, "")
+                .replace(HTML_TAG, " ")
                 .replace("&quot;", "\"")
                 .replace("&amp;", "&")
                 .replace("&#39;", "'")
@@ -313,10 +321,14 @@ class IslamicDataRepository(
             translationSource == QuranTranslationResource.SOURCE_QURAN_COM ||
                 translationEditionKey.isBlank()
         val primaryVerses = runCatching {
-            fetchQuranComVerses(
-                surahNumber = surahNumber,
-                translationId = if (usesQuranComTranslation) translationId else null
-            )
+            // A dropped connection mid-surah used to leave the reader on a stale copy;
+            // retry with backoff before giving up on the network.
+            fetchWithRetry {
+                fetchQuranComVerses(
+                    surahNumber = surahNumber,
+                    translationId = if (usesQuranComTranslation) translationId else null
+                )
+            }
         }.getOrDefault(emptyList()).ifEmpty {
             fetchAlQuranAyahs(surahNumber, "quran-uthmani").map { (ayah, text) ->
                 com.sakinah.deen.network.model.VerseByChapterDto(
@@ -394,6 +406,16 @@ class IslamicDataRepository(
                 ayahNumber = ayah.ayahNumber,
                 translationId = translationId,
                 translation = text
+            )
+        }
+
+        // Version/completeness check: a truncated response must never replace the
+        // verified offline copy with a short surah.
+        val expectedAyahs = chapter?.versesCount ?: 0
+        if (expectedAyahs > 0 && ayahs.size != expectedAyahs) {
+            error(
+                "Downloaded ${ayahs.size} of $expectedAyahs ayahs for surah $surahNumber; " +
+                    "keeping the existing offline copy"
             )
         }
 
@@ -491,6 +513,16 @@ class IslamicDataRepository(
 
     suspend fun isSurahAvailable(surahNumber: Int): Boolean =
         quranDao.countAyahs(surahNumber) > 0
+
+    /** Cached ayah count for one surah, used to validate downloads and tafsir chapters. */
+    suspend fun ayahCountForSurah(surahNumber: Int): Int = quranDao.countAyahs(surahNumber)
+
+    /**
+     * Live offline coverage of the bundled pack, derived from the cached rows rather than
+     * from a download flag, so the banner can never claim text the reader does not hold.
+     */
+    fun observeOfflineStatus(): Flow<QuranOfflineStatus> =
+        afterSeeding(quranDao.observeAllAyahs()).map { rows -> QuranOfflineStatus.from(rows) }
 
     // ------------------------------------------------------------------ Translation catalog
 
@@ -1033,7 +1065,7 @@ class IslamicDataRepository(
     ): Result<Int> = runCatching {
         require(surahNumber in 1..114) { "Surah number must be between 1 and 114" }
         val response = json.decodeFromString<TafsirChapterResponse>(
-            fetch("$QURAN_API_BASE/tafsirs/$tafsirId/by_chapter/$surahNumber")
+            fetchWithRetry { fetch("$QURAN_API_BASE/tafsirs/$tafsirId/by_chapter/$surahNumber") }
         )
         val sourceName = response.tafsirs.firstOrNull { it.resourceName.isNotBlank() }
             ?.resourceName
@@ -1078,6 +1110,30 @@ class IslamicDataRepository(
         json.decodeFromString<ChaptersResponse>(
             fetch("$QURAN_API_BASE/chapters?language=en")
         ).chapters
+
+    /**
+     * Runs [block] up to [attempts] times with exponential backoff (350ms, 700ms, …).
+     * Cancellation is never retried.
+     */
+    private suspend fun <T> fetchWithRetry(
+        attempts: Int = 3,
+        block: suspend () -> T
+    ): T {
+        var lastError: Throwable? = null
+        repeat(attempts) { attempt ->
+            try {
+                return block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                lastError = e
+                if (attempt < attempts - 1) {
+                    delay(RETRY_BASE_DELAY_MILLIS * (1L shl attempt))
+                }
+            }
+        }
+        throw lastError ?: IllegalStateException("Request failed")
+    }
 
     private suspend fun fetch(url: String): String {
         val response = client.get(url) {
@@ -1195,7 +1251,8 @@ class IslamicDataRepository(
     }
 
     private fun cleanText(raw: String): String =
-        raw.replace(HTML_TAG, " ")
+        raw.replace(SUP_TAG, "")
+            .replace(HTML_TAG, " ")
             .replace("&quot;", "\"")
             .replace("&amp;", "&")
             .replace("&#39;", "'")

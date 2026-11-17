@@ -18,6 +18,7 @@ import com.sakinah.deen.data.database.entity.AdhkarEntity
 import com.sakinah.deen.data.database.entity.HadithEntryEntity
 import com.sakinah.deen.data.database.entity.QuranAyahEntity
 import com.sakinah.deen.data.database.entity.SurahMetadataEntity
+import com.sakinah.deen.data.quran.QuranOfflinePack
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,7 +42,8 @@ object DatabaseSeeder {
 
     private const val TAG = "SakinahSeeder"
 
-    const val QURAN_ASSET = "seed_quran_juz_amma.json"
+    /** The verified 114-surah / 6,236-ayah pack; see [QuranOfflinePack]. */
+    const val QURAN_ASSET = QuranOfflinePack.ASSET
     const val SURAH_METADATA_ASSET = "seed_quran_surahs.json"
     const val HADITH_ASSET = "seed_hadith_nawawi.json"
     const val HISN_ASSET = "seed_hisn_muslim.json"
@@ -62,13 +64,17 @@ object DatabaseSeeder {
         val ayahs: Int = 0,
         val hadiths: Int = 0,
         val adhkar: Int = 0,
-        val skipped: Boolean = false
+        val skipped: Boolean = false,
+        /** Checksum + structure verdict for the bundled Quran pack, when one was read. */
+        val quranPackVerified: Boolean = false,
+        val quranPackSummary: String? = null
     ) {
         val rowsWritten: Int get() = ayahs + hadiths + adhkar
         override fun toString(): String = if (skipped) {
             "already seeded"
         } else {
-            "$surahs surahs / $ayahs ayahs, $hadiths hadith, $adhkar adhkar"
+            "$surahs surahs / $ayahs ayahs, $hadiths hadith, $adhkar adhkar" +
+                (quranPackSummary?.let { ", Quran pack $it" } ?: "")
         }
     }
 
@@ -95,8 +101,10 @@ object DatabaseSeeder {
         // that escape into the Room open callback or the startup coroutine.
         val target = runCatching { content() }.getOrNull() ?: return@withLock SeedSummary()
         try {
-            val needsQuran = target.quranDao.countAyahs(1) <= 0
-            val needsSurahMetadata = target.quranDao.countSurahs() < 114
+            // Compare against the whole mushaf, not just Al-Fatihah, so an install that
+            // only holds the old 38-surah Juz Amma seed is topped up with the full pack.
+            val needsQuran = target.quranDao.countAllAyahs() < QuranOfflinePack.TOTAL_AYAHS
+            val needsSurahMetadata = target.quranDao.countSurahs() < QuranOfflinePack.TOTAL_SURAHS
             val needsHadith = target.hadithDao.countForBook(NAWAWI_BOOK_KEY) <= 0
             val needsAdhkar = target.adhkarDao.count() <= 0
 
@@ -106,11 +114,20 @@ object DatabaseSeeder {
 
             var surahs = 0
             var ayahs = 0
+            var packVerified = false
+            var packSummary: String? = null
             if (needsQuran) {
                 readAsset(QURAN_ASSET)?.let { text ->
-                    applyQuranSeed(text, target.quranDao).let { (surahCount, ayahCount) ->
-                        surahs = surahCount
-                        ayahs = ayahCount
+                    // Checksum first, then structure: unverified text never reaches Room.
+                    val audit = QuranOfflinePack.audit(text)
+                    packSummary = audit.summary
+                    packVerified = audit.isPristine
+                    val document = audit.document
+                    if (document != null && audit.isPristine) {
+                        insertQuranDocument(document, target.quranDao).let { (surahCount, ayahCount) ->
+                            surahs = surahCount
+                            ayahs = ayahCount
+                        }
                     }
                 }
             }
@@ -134,7 +151,14 @@ object DatabaseSeeder {
                 0
             }
 
-            SeedSummary(surahs = surahs, ayahs = ayahs, hadiths = hadiths, adhkar = adhkar)
+            SeedSummary(
+                surahs = surahs,
+                ayahs = ayahs,
+                hadiths = hadiths,
+                adhkar = adhkar,
+                quranPackVerified = packVerified,
+                quranPackSummary = packSummary
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -156,7 +180,14 @@ object DatabaseSeeder {
                 Log.w(TAG, "Unreadable Quran seed: ${it.message}")
                 return 0 to 0
             }
+        return insertQuranDocument(document, quranDao)
+    }
 
+    /** Writes an already-verified pack document; returns (surahs, ayahs) written. */
+    suspend fun insertQuranDocument(
+        document: SeedQuranDocument,
+        quranDao: QuranDao
+    ): Pair<Int, Int> {
         val ayahs = document.surahs.flatMap { surah -> surah.toAyahEntities() }
         if (ayahs.isNotEmpty()) {
             quranDao.upsertAyahs(ayahs)

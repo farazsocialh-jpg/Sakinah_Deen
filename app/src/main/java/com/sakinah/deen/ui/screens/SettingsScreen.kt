@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -112,6 +113,8 @@ import com.sakinah.deen.settings.ThemeMode
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
 import com.sakinah.deen.ui.components.SakinahCard
 import com.sakinah.deen.ui.components.SegmentedPillBar
+import com.sakinah.deen.data.quran.QuranOfflineStatus
+import com.sakinah.deen.ui.components.QuranOfflineStatusBanner
 import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.FontScalePreset
 import com.sakinah.deen.ui.theme.SakinahPalette
@@ -870,6 +873,13 @@ fun SettingsScreen(
                     }
 
                     SettingsSection.QURAN_OFFLINE -> {
+                        val quranOfflineStatus by remember(islamicRepository) {
+                            islamicRepository.observeOfflineStatus()
+                        }.collectAsStateWithLifecycle<QuranOfflineStatus?>(initialValue = null)
+                        quranOfflineStatus?.let { status ->
+                            QuranOfflineStatusBanner(status = status, showPackDetails = true)
+                        }
+
                         Text("Quran Translation", style = MaterialTheme.typography.titleMedium)
                         val currentTranslationLabel = translationCatalog
                             .firstOrNull { it.id == appPrefs.quranTranslationId }
@@ -955,12 +965,7 @@ fun SettingsScreen(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(pack.author, fontSize = 12.sp)
                                     Text(
-                                        text = buildString {
-                                            append(pack.languageCode.uppercase())
-                                            append(" · Quran.com v4 · ")
-                                            append("${pack.downloadedChapters}/${TafseerPackage.TOTAL_CHAPTERS} surahs")
-                                            if (pack.isDownloaded) append(" · Downloaded")
-                                        },
+                                        text = "${pack.languageCode.uppercase()} · Quran.com v4 · ${pack.statusLabel}",
                                         fontSize = 10.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -1306,10 +1311,11 @@ private fun SalahLayoutPreview(layout: SalahHomeLayout) {
 
 @Composable
 private fun QuranLayoutPreview(layout: QuranReadingLayout) {
-    val style = when {
-        layout.name.contains("MUSHAF") -> 1
-        layout.name.contains("COMPACT") || layout.name.contains("CARD") -> 2
-        else -> 0
+    val style = when (layout) {
+        QuranReadingLayout.DIVIDER_HAIRLINE -> 0
+        QuranReadingLayout.CONTINUOUS_MUSHAF -> 1
+        QuranReadingLayout.SPLIT_COLUMN -> 2
+        QuranReadingLayout.THUMB_BOTTOM_DOCK -> 3
     }
     val primary = MaterialTheme.colorScheme.primary
     val onSurface = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1340,15 +1346,27 @@ private fun QuranLayoutPreview(layout: QuranReadingLayout) {
                     }
                 }
             }
-            else -> {
+            2 -> {
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     repeat(3) {
-                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(onSurface.copy(alpha = 0.12f)).padding(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Box(Modifier.fillMaxWidth(0.7f).height(5.dp).clip(RoundedCornerShape(2.dp)).background(primary.copy(alpha = 0.6f)))
-                            Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.25f)))
-                            Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.25f)))
+                        Row(Modifier.fillMaxWidth().height(18.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Box(Modifier.weight(0.48f).fillMaxHeight().clip(RoundedCornerShape(3.dp)).background(onSurface.copy(alpha = 0.18f)))
+                            Box(Modifier.weight(0.52f).fillMaxHeight().clip(RoundedCornerShape(3.dp)).background(primary.copy(alpha = 0.28f)))
                         }
                     }
+                }
+            }
+            else -> {
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    repeat(4) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Box(Modifier.fillMaxWidth(0.75f).height(5.dp).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.4f)))
+                            Spacer(Modifier.height(2.dp))
+                            Box(Modifier.fillMaxWidth(0.95f).height(3.dp).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.25f)))
+                        }
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Box(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(50)).background(primary.copy(alpha = 0.35f)))
                 }
             }
         }

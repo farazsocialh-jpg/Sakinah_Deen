@@ -14,10 +14,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -61,7 +63,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -78,6 +82,7 @@ import com.sakinah.deen.data.model.QuranArabicScript
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.QuranReadingLayout
 import com.sakinah.deen.ui.components.ArabicVerseBlock
+import com.sakinah.deen.ui.components.QuranOfflineStatusBanner
 import com.sakinah.deen.ui.components.SakinahCard
 import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.components.StatusBadge
@@ -114,6 +119,14 @@ fun QuranScreen(
                     ayah.copy(arabicText = ayah.arabicFor(state.arabicScript))
                 }
             )
+        }
+    }
+
+    // The flowing mus-haf page is chunked so only visible paragraphs compose: building one
+    // AnnotatedString for all of Al-Baqarah froze the reader on every recomposition.
+    val mushafParagraphs = remember(displaySurah.ayahs) {
+        displaySurah.ayahs.chunked(MUSHAF_PARAGRAPH_AYAHS).map { chunk ->
+            MushafParagraph(firstAyah = chunk.first().numberInSurah, ayahs = chunk)
         }
     }
 
@@ -217,9 +230,6 @@ fun QuranScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
-                    QuranReadingLayout.IMMERSIVE_ZEN -> {
-                        Spacer(Modifier.height(44.dp))
-                    }
                     else -> {
                         QuranUtilityBar(
                             surah = surah,
@@ -235,6 +245,11 @@ fun QuranScreen(
                             onStudioClick = { studioSheetTab = 0 }
                         )
                     }
+                }
+
+                if (!focusMode) {
+                    // Null until Room reports coverage: no "missing pack" flash on launch.
+                    state.offlineStatus?.let { QuranOfflineStatusBanner(status = it) }
                 }
 
                 if (searchExpanded || state.searchQuery.isNotBlank()) {
@@ -341,139 +356,91 @@ fun QuranScreen(
                         )
                     }
                 } else {
-                    Column(
+                    // The mus-haf page used to build one AnnotatedString for the whole
+                    // surah and compose a chip per ayah, which janked on long surahs.
+                    // Paragraph chunks are lazily composed with stable keys instead.
+                    LazyColumn(
+                        state = listState,
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState()),
+                            .fillMaxWidth(),
+                        contentPadding = PaddingValues(bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        SakinahCard(contentPadding = 18.dp) {
-                            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                                Text(
-                                    text = "سورة ${surah.nameArabic} · ${surah.nameEnglish}",
-                                    fontFamily = UthmanicFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 18.sp,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                if (surah.number != 1 && surah.number != 9) {
+                        item(key = "mushaf-surah-card", contentType = "header") {
+                            SakinahCard(contentPadding = 18.dp) {
+                                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                                     Text(
-                                        text = "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
+                                        text = "سورة ${surah.nameArabic} · ${surah.nameEnglish}",
                                         fontFamily = UthmanicFontFamily,
-                                        fontSize = 22.sp,
-                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp,
+                                        color = MaterialTheme.colorScheme.primary,
                                         textAlign = TextAlign.Center,
                                         modifier = Modifier.fillMaxWidth()
                                     )
-                                }
-
-                                val accent = MaterialTheme.colorScheme.primary
-                                val mushafText = remember(displaySurah.ayahs, selectedAyahNumber, accent) {
-                                    buildAnnotatedString {
-                                        displaySurah.ayahs.forEachIndexed { index, ayah ->
-                                            if (index > 0) append(" ")
-                                            val isHighlighted = ayah.numberInSurah == selectedAyahNumber
-                                            if (isHighlighted) {
-                                                withStyle(
-                                                    SpanStyle(
-                                                        color = accent,
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                ) {
-                                                    append(cleanQuranArabic(ayah.arabicText))
-                                                }
-                                            } else {
-                                                append(cleanQuranArabic(ayah.arabicText))
-                                            }
-                                            val digits = ArabicNormalizer.toArabicIndicNumerals(ayah.numberInSurah)
-                                            withStyle(
-                                                SpanStyle(
-                                                    color = accent,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            ) {
-                                                append(" ﴿$digits﴾")
-                                            }
-                                        }
+                                    if (surah.number != 1 && surah.number != 9) {
+                                        Text(
+                                            text = "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
+                                            fontFamily = UthmanicFontFamily,
+                                            fontSize = 22.sp,
+                                            lineHeight = 40.sp,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
                                     }
-                                }
-
-                                CompositionLocalProvider(
-                                    LocalLayoutDirection provides LayoutDirection.Rtl
-                                ) {
-                                    Text(
-                                        text = mushafText,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        fontFamily = UthmanicFontFamily,
-                                        fontSize = state.arabicFontSize.sp,
-                                        lineHeight = (state.arabicFontSize * 1.7f).sp,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        textAlign = TextAlign.Justify
-                                    )
                                 }
                             }
                         }
 
+                        items(
+                            items = mushafParagraphs,
+                            key = { paragraph -> "mushaf-${paragraph.firstAyah}" },
+                            contentType = { "paragraph" }
+                        ) { paragraph ->
+                            MushafParagraphText(
+                                paragraph = paragraph,
+                                selectedAyahNumber = selectedAyahNumber,
+                                fontSizeSp = state.arabicFontSize
+                            )
+                        }
+
                         if (!focusMode) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                displaySurah.ayahs.forEach { ayah ->
-                                    val active = ayah.numberInSurah == selectedAyahNumber
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = if (active) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.surfaceVariant,
-                                        modifier = Modifier.clickable {
-                                            selectedAyahNumber = ayah.numberInSurah
-                                            vm.onIntent(
-                                                QuranUiIntent.SelectAyahForTafseer(ayah.numberInSurah)
+                            item(key = "mushaf-ayah-chips", contentType = "chips") {
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    items(displaySurah.ayahs, key = { it.numberInSurah }) { ayah ->
+                                        val active = ayah.numberInSurah == selectedAyahNumber
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = if (active) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.surfaceVariant,
+                                            modifier = Modifier.clickable {
+                                                selectedAyahNumber = ayah.numberInSurah
+                                                vm.onIntent(
+                                                    QuranUiIntent.SelectAyahForTafseer(ayah.numberInSurah)
+                                                )
+                                                studioSheetTab = 2
+                                            }
+                                        ) {
+                                            Text(
+                                                text = "Ayah ${ayah.numberInSurah}",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (active) MaterialTheme.colorScheme.onPrimary
+                                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(
+                                                    horizontal = 10.dp,
+                                                    vertical = 6.dp
+                                                )
                                             )
-                                            studioSheetTab = 2
                                         }
-                                    ) {
-                                        Text(
-                                            text = "Ayah ${ayah.numberInSurah}",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = if (active) MaterialTheme.colorScheme.onPrimary
-                                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(
-                                                horizontal = 10.dp,
-                                                vertical = 6.dp
-                                            )
-                                        )
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
-
-            if (readingLayout == QuranReadingLayout.IMMERSIVE_ZEN) {
-                QuranZenPill(
-                    surah = surah,
-                    selectedAyahNumber = selectedAyahNumber,
-                    translationIsoCode = state.selectedTranslationIsoCode,
-                    isStudyMode = state.isStudyMode,
-                    hifzOverlayActive = hifzOverlayActive,
-                    onSurahClick = { studioSheetTab = 0 },
-                    onToggleStudyMode = toggleStudyMode,
-                    onSearchClick = { searchExpanded = !searchExpanded },
-                    onLanguageClick = { studioSheetTab = 1 },
-                    onHifzClick = { hifzOverlayActive = !hifzOverlayActive },
-                    onStudioClick = { studioSheetTab = 0 },
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 6.dp)
-                )
             }
 
             if (readingLayout == QuranReadingLayout.THUMB_BOTTOM_DOCK) {
@@ -983,58 +950,6 @@ private fun QuranUtilityIcon(
 }
 
 @Composable
-private fun QuranZenPill(
-    surah: com.sakinah.deen.data.model.SurahModel,
-    selectedAyahNumber: Int,
-    translationIsoCode: String,
-    isStudyMode: Boolean,
-    hifzOverlayActive: Boolean,
-    onSurahClick: () -> Unit,
-    onToggleStudyMode: () -> Unit,
-    onSearchClick: () -> Unit,
-    onLanguageClick: () -> Unit,
-    onHifzClick: () -> Unit,
-    onStudioClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(50),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)),
-        shadowElevation = 6.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "${surah.number}. ${surah.nameEnglish} · $selectedAyahNumber/${surah.ayahCount} ▾",
-                modifier = Modifier.clickable(onClick = onSurahClick),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1
-            )
-            QuranUtilityIcon(Icons.Default.Search, "Search Quran", onSearchClick)
-            QuranLanguageBadge(translationIsoCode, onLanguageClick)
-            QuranUtilityIcon(
-                icon = if (hifzOverlayActive) Icons.Default.VisibilityOff
-                else Icons.Default.Visibility,
-                description = "Toggle Hifz mode",
-                active = hifzOverlayActive,
-                onClick = onHifzClick
-            )
-            QuranStudyPill(isStudyMode = isStudyMode, onClick = onToggleStudyMode)
-            QuranUtilityIcon(Icons.Default.Book, "Quran Study Studio", onStudioClick)
-        }
-    }
-}
-
-@Composable
 private fun QuranThumbDock(
     surah: com.sakinah.deen.data.model.SurahModel,
     translationIsoCode: String,
@@ -1128,7 +1043,11 @@ private fun SearchResults(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(results) { result ->
+        items(
+            items = results,
+            key = { "${'$'}{it.surahNumber}:${'$'}{it.ayahNumber}" },
+            contentType = { "search-hit" }
+        ) { result ->
             SakinahCard(
                 onClick = { onResultClick(result) },
                 contentPadding = 14.dp
@@ -1286,3 +1205,59 @@ private fun AyahCard(
 
 private fun isRtlLanguage(isoCode: String): Boolean =
     isoCode.lowercase() in setOf("ar", "ur", "fa", "ps", "sd", "ug")
+
+private const val MUSHAF_PARAGRAPH_AYAHS = 12
+
+/** A lazily composed slice of the flowing mushaf page. */
+private data class MushafParagraph(
+    val firstAyah: Int,
+    val ayahs: List<AyahModel>
+)
+
+/**
+ * One paragraph of the mushaf. Harakat need room to breathe, hence the 1.9x line height,
+ * explicit font padding and vertical inset — the previous 1.7x/trimmed layout clipped the
+ * ascenders and descenders of diacritics at small sizes.
+ */
+@Composable
+private fun MushafParagraphText(
+    paragraph: MushafParagraph,
+    selectedAyahNumber: Int,
+    fontSizeSp: Int
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    val text = remember(paragraph, selectedAyahNumber, accent) {
+        buildAnnotatedString {
+            paragraph.ayahs.forEachIndexed { index, ayah ->
+                if (index > 0) append(" ")
+                if (ayah.numberInSurah == selectedAyahNumber) {
+                    withStyle(SpanStyle(color = accent, fontWeight = FontWeight.Bold)) {
+                        append(cleanQuranArabic(ayah.arabicText))
+                    }
+                } else {
+                    append(cleanQuranArabic(ayah.arabicText))
+                }
+                val digits = ArabicNormalizer.toArabicIndicNumerals(ayah.numberInSurah)
+                withStyle(SpanStyle(color = accent, fontWeight = FontWeight.Bold)) {
+                    append(" \uFD3F$digits\uFD3E")
+                }
+            }
+        }
+    }
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        Text(
+            text = text,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            style = TextStyle(
+                fontFamily = UthmanicFontFamily,
+                fontSize = fontSizeSp.sp,
+                lineHeight = (fontSizeSp * 1.9f).sp,
+                platformStyle = PlatformTextStyle(includeFontPadding = true),
+                color = MaterialTheme.colorScheme.onSurface
+            ),
+            textAlign = TextAlign.Justify
+        )
+    }
+}

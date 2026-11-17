@@ -73,6 +73,11 @@ class FakeQuranDao : QuranDao {
     override suspend fun countAyahs(surahNumber: Int): Int =
         ayahs.values.count { it.surahNumber == surahNumber }
 
+    override suspend fun countAllAyahs(): Int = ayahs.size
+
+    override suspend fun countSurahsWithAyahs(): Int =
+        ayahs.values.map { it.surahNumber }.distinct().size
+
     override suspend fun countSurahs(): Int = surahs.size
 
     override fun observeSurahs(): Flow<List<SurahMetadataEntity>> =
@@ -248,5 +253,9 @@ class FakeTafsirDao : TafsirDao {
 
     override suspend fun deleteBySource(sourceKey: String) {
         entries.removeAll { it.sourceKey == sourceKey }
+    }
+
+    override suspend fun deleteForSurah(sourceKey: String, surahNumber: Int) {
+        entries.removeAll { it.sourceKey == sourceKey && it.surahNumber == surahNumber }
     }
 }

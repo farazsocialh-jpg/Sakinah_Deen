@@ -45,17 +45,31 @@ class OfflineSeedingTest {
     private val json = Json { ignoreUnknownKeys = true }
 
     @Test
-    fun bundledQuranAsset_seedsAlFatihahAndJuzAmma() = runTest {
+    fun bundledQuranAsset_seedsTheWholeMushafOffline() = runTest {
         val dao = FakeQuranDao()
 
         val (surahCount, ayahCount) =
             DatabaseSeeder.applyQuranSeed(bundledAsset(DatabaseSeeder.QURAN_ASSET), dao)
 
-        assertEquals(38, surahCount)
-        assertTrue("expected ayahs in the bundled seed, got $ayahCount", ayahCount > 0)
+        assertEquals(114, surahCount)
+        assertEquals(6236, ayahCount)
+        assertEquals(114, dao.countSurahsWithAyahs())
+        assertEquals(6236, dao.countAllAyahs())
         assertEquals(7, dao.countAyahs(1))
+        assertEquals(286, dao.countAyahs(2))
         assertEquals("Al-Fatihah", dao.getAyah(1, 1)?.surahNameEnglish)
         assertTrue(dao.observeSurahs().first().any { it.surahNumber == 78 })
+        assertTrue(dao.observeSurahs().first().any { it.surahNumber == 114 })
+    }
+
+    @Test
+    fun bundledQuranAsset_passesChecksumAndStructureAudit() {
+        val audit = com.sakinah.deen.data.quran.QuranOfflinePack.audit(
+            bundledAsset(DatabaseSeeder.QURAN_ASSET)
+        )
+
+        assertTrue(audit.summary, audit.isPristine)
+        assertEquals(6236, audit.ayahCount)
     }
 
     @Test

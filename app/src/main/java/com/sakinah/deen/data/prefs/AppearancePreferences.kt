@@ -13,17 +13,36 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
+/**
+ * The four supported Quran reader presets. Ten near-duplicate layouts previously existed;
+ * they multiplied QA and accessibility work without adding a distinct reading mode.
+ * Legacy preference values are mapped by [fromStoredName], so an upgrade never silently
+ * resets a reader's chosen layout.
+ */
 enum class QuranReadingLayout(val displayName: String, val subtitle: String) {
-    DIVIDER_HAIRLINE("Divider Hairline", "Zero boxes, thin horizontal dividers, 6+ ayahs"),
+    DIVIDER_HAIRLINE("Divider Hairline", "Zero boxes, thin dividers, Arabic + translation"),
     CONTINUOUS_MUSHAF("Continuous Mushaf", "Book-like flowing page with inline verse markers"),
-    ALTERNATING_ROWS("Alternating Rows", "Edge-to-edge subtle alternating row tints"),
-    COMPACT_CARDS("Compact Cards", "Tight-padded cards with inline Tafseer chip"),
     SPLIT_COLUMN("Split-Column Study", "Translation left, Arabic right side-by-side"),
-    IMMERSIVE_ZEN("Immersive Zen", "Single floating top pill, 90%+ reading area"),
-    FOCUS_SPOTLIGHT("Focus Spotlight", "Active ayah highlighted; others compact"),
-    THUMB_BOTTOM_DOCK("Thumb-Zone Dock", "Floating bottom utility pill for one-handed use"),
-    ARABIC_TAP_EXPAND("Arabic + Tap Expand", "Arabic-only flow; tap verse for English & Tafseer"),
-    LEFT_ACCENT_RIBBON("Surah Ribbon", "Surah info ribbon + 2dp left accent bar per verse")
+    THUMB_BOTTOM_DOCK("Thumb-Zone Dock", "Floating bottom utility pill for one-handed use");
+
+    companion object {
+        /** Presets retired in the layout consolidation, mapped to their closest successor. */
+        private val LEGACY_NAMES = mapOf(
+            "ALTERNATING_ROWS" to DIVIDER_HAIRLINE,
+            "COMPACT_CARDS" to DIVIDER_HAIRLINE,
+            "LEFT_ACCENT_RIBBON" to DIVIDER_HAIRLINE,
+            "FOCUS_SPOTLIGHT" to DIVIDER_HAIRLINE,
+            "IMMERSIVE_ZEN" to CONTINUOUS_MUSHAF,
+            "ARABIC_TAP_EXPAND" to THUMB_BOTTOM_DOCK
+        )
+
+        /** Resolves a stored enum name (current or legacy); null when it is unknown. */
+        fun fromStoredName(raw: String?): QuranReadingLayout? {
+            val name = raw?.trim().orEmpty()
+            if (name.isEmpty()) return null
+            return entries.firstOrNull { it.name == name } ?: LEGACY_NAMES[name]
+        }
+    }
 }
 
 enum class HadithReadingLayout(val displayName: String, val subtitle: String) {
@@ -144,7 +163,9 @@ class AppearancePreferences internal constructor(
             autoHideBarsOnScroll = prefs.getBoolean(KEY_AUTO_HIDE_BARS, defaults.autoHideBarsOnScroll),
             prayerGuideGender = safeEnum(KEY_PRAYER_GUIDE_GENDER, defaults.prayerGuideGender),
             salahHomeLayout = safeEnum(KEY_SALAH_HOME_LAYOUT, defaults.salahHomeLayout),
-            quranReadingLayout = safeEnum(KEY_QURAN_READING_LAYOUT, defaults.quranReadingLayout),
+            quranReadingLayout = QuranReadingLayout.fromStoredName(
+                prefs.getString(KEY_QURAN_READING_LAYOUT, null)
+            ) ?: defaults.quranReadingLayout,
             hadithReadingLayout = safeEnum(KEY_HADITH_READING_LAYOUT, defaults.hadithReadingLayout),
             onboardingCompleted = prefs.getBoolean(KEY_ONBOARDING_COMPLETED, defaults.onboardingCompleted)
         )

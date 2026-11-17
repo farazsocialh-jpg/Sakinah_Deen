@@ -39,6 +39,17 @@ data class TafseerPackage(
     val isPartiallyDownloaded: Boolean
         get() = downloadedChapters in 1 until TOTAL_CHAPTERS
 
+    val missingChapters: Int get() = (TOTAL_CHAPTERS - downloadedChapters).coerceAtLeast(0)
+
+    /** Explicit cache state shown in Settings and the reader instead of a spinner. */
+    val statusLabel: String
+        get() = when {
+            isDownloaded -> "Offline Ready ($TOTAL_CHAPTERS/$TOTAL_CHAPTERS surahs)"
+            downloadedChapters > 0 ->
+                "Partial Offline ($downloadedChapters/$TOTAL_CHAPTERS surahs — resume download)"
+            else -> "Not downloaded"
+        }
+
     companion object {
         const val TOTAL_CHAPTERS = 114
     }
@@ -50,6 +61,9 @@ class TafseerDownloadRepository(
     private val islamicRepository: IslamicDataRepository? = null
 ) {
     companion object {
+        /** Retry backoff for one chapter before it is reported as failed. */
+        private const val RETRY_BASE_DELAY_MILLIS = 400L
+
         private val TAFSIR_ID_BY_PACK = mapOf(
             "ibn_kathir_en" to 169,
             "al_tabari_ar" to 15,
@@ -114,6 +128,36 @@ class TafseerDownloadRepository(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val packageMutexes = mutableMapOf<String, Mutex>()
 
+    /** Retries a single chapter fetch with exponential backoff before reporting failure. */
+    private suspend fun downloadChapter(
+        repo: IslamicDataRepository,
+        pkg: TafseerPackage,
+        surahNumber: Int,
+        sourceKey: String,
+        attempts: Int = 3
+    ): Result<Int> {
+        var lastError: Throwable? = null
+        repeat(attempts) { attempt ->
+            val result = repo.syncTafsirForChapter(
+                tafsirId = pkg.tafsirId,
+                surahNumber = surahNumber,
+                languageCode = pkg.languageCode
+            )
+            val error = result.exceptionOrNull()
+            if (error == null) return result
+            if (error is kotlinx.coroutines.CancellationException) return result
+            lastError = error
+            // Drop whatever half of the chapter landed so the retry writes a clean copy.
+            runCatching { tafsirDao?.deleteForSurah(sourceKey, surahNumber) }
+            if (attempt < attempts - 1) {
+                delay(RETRY_BASE_DELAY_MILLIS * (1L shl attempt))
+            }
+        }
+        return Result.failure(
+            lastError ?: IOException("Quran.com did not return Surah $surahNumber")
+        )
+    }
+
     private fun mutexFor(packageId: String): Mutex = synchronized(packageMutexes) {
         packageMutexes.getOrPut(packageId) { Mutex() }
     }
@@ -165,19 +209,26 @@ class TafseerDownloadRepository(
             try {
                 for (surahNumber in 1..TafseerPackage.TOTAL_CHAPTERS) {
                     ensureActive()
-                    val alreadyCached = runCatching {
-                        (tafsirDao?.countForSurah(sourceKey, surahNumber) ?: 0) > 0
-                    }.getOrDefault(false)
-                    if (alreadyCached) {
+                    // A chapter only counts as cached when it holds a commentary row for
+                    // every ayah the offline Quran text has, so an interrupted download
+                    // resumes instead of silently serving a half chapter.
+                    val expectedAyahs = runCatching {
+                        repo.ayahCountForSurah(surahNumber)
+                    }.getOrDefault(0)
+                    val cachedRows = runCatching {
+                        tafsirDao?.countForSurah(sourceKey, surahNumber) ?: 0
+                    }.getOrDefault(0)
+                    val alreadyComplete = cachedRows > 0 &&
+                        (expectedAyahs <= 0 || cachedRows >= expectedAyahs)
+                    if (alreadyComplete) {
                         savedChapters++
                         onProgress(surahNumber.toFloat() / TafseerPackage.TOTAL_CHAPTERS)
                         continue
                     }
-                    val result = repo.syncTafsirForChapter(
-                        tafsirId = pkg.tafsirId,
-                        surahNumber = surahNumber,
-                        languageCode = pkg.languageCode
-                    )
+                    if (cachedRows > 0) {
+                        runCatching { tafsirDao?.deleteForSurah(sourceKey, surahNumber) }
+                    }
+                    val result = downloadChapter(repo, pkg, surahNumber, sourceKey)
                     if (result.isSuccess) {
                         savedChapters++
                     } else {

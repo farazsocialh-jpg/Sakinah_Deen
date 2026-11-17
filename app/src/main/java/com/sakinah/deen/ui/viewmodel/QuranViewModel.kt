@@ -12,6 +12,7 @@ import com.sakinah.deen.data.model.QuranArabicScript
 import com.sakinah.deen.data.model.QuranTranslationResource
 import com.sakinah.deen.data.model.SurahModel
 import com.sakinah.deen.data.prefs.SakinahPreferences
+import com.sakinah.deen.data.quran.QuranOfflineStatus
 import com.sakinah.deen.data.repository.TafseerDownloadRepository
 import com.sakinah.deen.data.repository.TafseerPackage
 import com.sakinah.deen.network.IslamicDataRepository
@@ -68,7 +69,9 @@ data class QuranUiState(
     val arabicScript: QuranArabicScript = QuranArabicScript.UTHMANI,
     val arabicFontSize: Int = 24,
     val availableTranslations: List<QuranTranslationResource> = emptyList(),
-    val isLoadingTranslation: Boolean = false
+    val isLoadingTranslation: Boolean = false,
+    /** Live coverage of the bundled 114-surah pack; null until Room reports once. */
+    val offlineStatus: QuranOfflineStatus? = null
 )
 
 sealed class QuranUiIntent {
@@ -161,6 +164,7 @@ class QuranViewModel(
             )
         }
         restoreHifzAnnotations()
+        observeOfflineStatus()
         observeSharedSettings()
         observeTafseerPackages()
         viewModelScope.launch { tafseerRepository?.refreshDownloadStatus() }
@@ -657,6 +661,15 @@ class QuranViewModel(
                         errorMessage = "Search failed: ${e.message ?: "database error"}"
                     )
                 }
+            }
+        }
+    }
+
+    private fun observeOfflineStatus() {
+        val repo = islamicRepository ?: return
+        viewModelScope.launch {
+            repo.observeOfflineStatus().collect { status ->
+                _uiState.update { it.copy(offlineStatus = status) }
             }
         }
     }

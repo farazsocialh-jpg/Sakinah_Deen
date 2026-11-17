@@ -179,6 +179,14 @@ interface QuranDao {
     @Query("SELECT COUNT(*) FROM quran_ayahs WHERE surahNumber = :surahNumber")
     suspend fun countAyahs(surahNumber: Int): Int
 
+    /** Total cached ayahs; the offline-coverage banner compares this with 6,236. */
+    @Query("SELECT COUNT(*) FROM quran_ayahs")
+    suspend fun countAllAyahs(): Int
+
+    /** Surahs with at least one cached ayah; the banner compares this with 114. */
+    @Query("SELECT COUNT(DISTINCT surahNumber) FROM quran_ayahs")
+    suspend fun countSurahsWithAyahs(): Int
+
     @Query("SELECT * FROM quran_translations WHERE surahNumber = :surahNumber AND translationId = :translationId ORDER BY ayahNumber ASC")
     fun observeTranslations(surahNumber: Int, translationId: Int): kotlinx.coroutines.flow.Flow<List<QuranTranslationEntity>>
 
@@ -403,6 +411,13 @@ interface TafsirDao {
 
     @Query("DELETE FROM tafsir_entries WHERE sourceKey = :sourceKey")
     suspend fun deleteBySource(sourceKey: String)
+
+    /**
+     * Drops one chapter so a partial or corrupt cache is replaced, never merged with
+     * the retry that follows it.
+     */
+    @Query("DELETE FROM tafsir_entries WHERE sourceKey = :sourceKey AND surahNumber = :surahNumber")
+    suspend fun deleteForSurah(sourceKey: String, surahNumber: Int)
 }
 
 data class HadithCatalogSummary(
