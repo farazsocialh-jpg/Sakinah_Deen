@@ -1,47 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Expanded prayer reminder (Option 2 - progress + rotating Ayah/Hadith).
+  Expanded prayer reminder.
   The progress bar is pulsed at fire time with the remaining share of the prayer
-  window; the reminder text rotates daily per prayer.
+  window; the reminder text rotates daily per prayer. Root stays transparent so
+  the system notification surface shows edge-to-edge.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/notif_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
+    android:background="@android:color/transparent"
     android:paddingStart="4dp"
     android:paddingEnd="4dp"
     android:paddingTop="4dp"
     android:paddingBottom="4dp">
 
-    <LinearLayout
+    <TextView
+        android:id="@+id/notif_expanded_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
-
-        <TextView
-            android:id="@+id/notif_expanded_title"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:maxLines="1"
-            android:ellipsize="end"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="#FF111111"
-            android:text="@string/notif_prayer_fallback_title" />
-
-        <Chronometer
-            android:id="@+id/notif_countdown"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:countDown="true"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="#FF111111" />
-    </LinearLayout>
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="#FF111111"
+        android:text="@string/notif_prayer_fallback_title" />
 
     <TextView
         android:id="@+id/notif_expanded_window"
@@ -92,40 +76,4 @@
         android:textStyle="italic"
         android:textSize="10sp"
         android:textColor="#FF6B7571" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:orientation="horizontal"
-        android:gravity="end|center_vertical">
-
-        <TextView
-            android:id="@+id/notif_action_mute"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:maxLines="1"
-            android:textSize="13sp"
-            android:textStyle="bold"
-            android:textColor="#FF14624A"
-            android:text="@string/adhan_action_mute" />
-
-        <TextView
-            android:id="@+id/notif_action_prayed"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingStart="12dp"
-            android:paddingEnd="2dp"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:maxLines="1"
-            android:textSize="13sp"
-            android:textStyle="bold"
-            android:textColor="#FF14624A"
-            android:text="@string/notif_action_mark_prayed" />
-    </LinearLayout>
 </LinearLayout>

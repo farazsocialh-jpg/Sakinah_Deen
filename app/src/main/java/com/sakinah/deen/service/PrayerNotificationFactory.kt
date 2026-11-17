@@ -119,9 +119,6 @@ object PrayerNotificationFactory {
             theme = theme,
             title = collapsedTitle,
             subtitle = context.getString(R.string.adhan_body),
-            chronometerBase = chronometerBase(endMillis, now),
-            muteIntent = muteIntent,
-            markPrayedIntent = markPrayedIntent,
             contentIntent = contentIntent
         )
         val expanded = expandedViews(
@@ -131,15 +128,11 @@ object PrayerNotificationFactory {
             window = windowText,
             percentRemaining = percentRemaining,
             reminder = reminder,
-            chronometerBase = chronometerBase(endMillis, now),
-            contentIntent = contentIntent,
-            muteIntent = muteIntent,
-            markPrayedIntent = markPrayedIntent
+            contentIntent = contentIntent
         )
 
         return NotificationCompat.Builder(context, NotificationChannels.channelFor(spec.alertMode))
             .setSmallIcon(R.drawable.ic_stat_app)
-            .setLargeIcon(appIconBitmap(context))
             .setContentTitle(collapsedTitle)
             .setContentText(windowText)
             .setContentIntent(contentIntent)
@@ -166,8 +159,8 @@ object PrayerNotificationFactory {
             .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setCustomContentView(collapsed)
             .setCustomBigContentView(expanded)
-            // Mute and Mark as Prayed live inside both RemoteViews layouts, so no builder
-            // actions are added here: that would render a duplicate button row underneath.
+            .addAction(R.drawable.ic_stat_app, context.getString(R.string.adhan_action_mute), muteIntent)
+            .addAction(R.drawable.ic_stat_app, context.getString(R.string.notif_action_mark_prayed), markPrayedIntent)
             .build()
     }
 
@@ -176,22 +169,12 @@ object PrayerNotificationFactory {
         theme: PrayerNotificationTheme,
         title: String,
         subtitle: String,
-        chronometerBase: Long,
-        muteIntent: PendingIntent,
-        markPrayedIntent: PendingIntent,
         contentIntent: PendingIntent
     ): RemoteViews = RemoteViews(context.packageName, R.layout.notification_prayer_collapsed).apply {
-        setInt(R.id.notif_root, "setBackgroundColor", theme.surface)
         setTextViewText(R.id.notif_collapsed_title, title)
         setTextViewText(R.id.notif_collapsed_window, subtitle)
         setTextColor(R.id.notif_collapsed_title, theme.onSurface)
         setTextColor(R.id.notif_collapsed_window, theme.secondaryText)
-        setTextColor(R.id.notif_countdown, theme.accent)
-        setTextColor(R.id.notif_action_mute, theme.accent)
-        setTextColor(R.id.notif_action_prayed, theme.accent)
-        setChronometer(R.id.notif_countdown, chronometerBase, null, true)
-        setOnClickPendingIntent(R.id.notif_action_mute, muteIntent)
-        setOnClickPendingIntent(R.id.notif_action_prayed, markPrayedIntent)
         setOnClickPendingIntent(R.id.notif_root, contentIntent)
     }
 
@@ -202,12 +185,8 @@ object PrayerNotificationFactory {
         window: String,
         percentRemaining: Int,
         reminder: PrayerReminderContent.Reminder,
-        chronometerBase: Long,
-        contentIntent: PendingIntent,
-        muteIntent: PendingIntent,
-        markPrayedIntent: PendingIntent
+        contentIntent: PendingIntent
     ): RemoteViews = RemoteViews(context.packageName, R.layout.notification_prayer_expanded).apply {
-        setInt(R.id.notif_root, "setBackgroundColor", theme.surface)
         setTextViewText(R.id.notif_expanded_title, title)
         setTextViewText(R.id.notif_expanded_window, window)
         setTextViewText(R.id.notif_reminder_arabic, reminder.arabic)
@@ -218,14 +197,8 @@ object PrayerNotificationFactory {
         setTextColor(R.id.notif_reminder_arabic, theme.onSurface)
         setTextColor(R.id.notif_reminder_text, theme.secondaryText)
         setTextColor(R.id.notif_reminder_source, theme.secondaryText)
-        setTextColor(R.id.notif_countdown, theme.accent)
-        setTextColor(R.id.notif_action_mute, theme.accent)
-        setTextColor(R.id.notif_action_prayed, theme.accent)
-        setChronometer(R.id.notif_countdown, chronometerBase, null, true)
         setProgressBar(R.id.notif_progress, 100, percentRemaining, false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // Runtime attribute changes only exist from Android 12; older versions keep the
-            // drawable's default tint, with the accent still carried by the pill and actions.
             setColorStateList(
                 R.id.notif_progress,
                 "setProgressTintList",
@@ -237,8 +210,6 @@ object PrayerNotificationFactory {
                 ColorStateList.valueOf(theme.track)
             )
         }
-        setOnClickPendingIntent(R.id.notif_action_mute, muteIntent)
-        setOnClickPendingIntent(R.id.notif_action_prayed, markPrayedIntent)
         setOnClickPendingIntent(R.id.notif_root, contentIntent)
     }
 
