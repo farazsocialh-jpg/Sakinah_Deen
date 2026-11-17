@@ -60,8 +60,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.ui.components.SakinahCard
 import com.sakinah.deen.ui.components.SegmentedPillBar
-import com.sakinah.deen.ui.theme.EmeraldDeep
-import com.sakinah.deen.ui.theme.MintGreen
+
 import com.sakinah.deen.ui.viewmodel.WealthUiIntent
 import com.sakinah.deen.ui.viewmodel.WealthViewModel
 import com.sakinah.deen.util.ZakatPdfExporter
@@ -231,13 +230,13 @@ fun WealthScreen(
                     Surface(
                         shape = RoundedCornerShape(14.dp),
                         color = if (state.isEligible) {
-                            MintGreen.copy(alpha = 0.16f)
+                            MaterialTheme.colorScheme.secondary.copy(alpha = 0.16f)
                         } else {
                             MaterialTheme.colorScheme.surfaceVariant
                         },
                         border = BorderStroke(
                             1.dp,
-                            if (state.isEligible) MintGreen else MaterialTheme.colorScheme.outline
+                            if (state.isEligible) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline
                         )
                     ) {
                         Row(
@@ -334,12 +333,12 @@ fun WealthScreen(
             // 3. Zakat Summary Breakdown Card (Explicit Deep Emerald Surface)
             Card(
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = EmeraldDeep)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
             ) {
                 Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "Payable Zakat Summary (2.5%)",
-                        color = MintGreen,
+                        color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
                     )
@@ -348,11 +347,11 @@ fun WealthScreen(
                         fontFamily = FontFamily.Serif,
                         fontSize = 32.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                     Text(
                         text = "Net Zakat-Eligible Wealth: $${String.format(Locale.US, "%.0f", state.netEligible)} USD",
-                        color = Color.White.copy(alpha = 0.85f),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
                         fontSize = 12.sp
                     )
 
@@ -374,10 +373,10 @@ fun WealthScreen(
                                 }
                             },
                             shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MintGreen),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Export PDF", color = EmeraldDeep, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Export PDF", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                         Button(
                             onClick = {
@@ -390,10 +389,10 @@ fun WealthScreen(
                                 viewModel.onIntent(WealthUiIntent.ResetBalances)
                             },
                             shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.2f)),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Reset", color = Color.White, fontSize = 12.sp)
+                            Text("Reset", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                         }
                     }
                 }
@@ -430,6 +429,7 @@ fun WealthScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
+                        val jarFillColor = MaterialTheme.colorScheme.primary
                         Canvas(modifier = Modifier.size(width = 60.dp, height = 80.dp)) {
                             val stroke = 4f
                             val w = size.width
@@ -440,7 +440,7 @@ fun WealthScreen(
                             val fillH = (h - 10f) * fillPct
 
                             drawRoundRect(
-                                color = Color(0xFF10B981),
+                                color = jarFillColor,
                                 topLeft = Offset(4f, h - 4f - fillH),
                                 size = Size(w - 8f, fillH),
                                 cornerRadius = CornerRadius(8f, 8f)
@@ -481,12 +481,12 @@ fun WealthScreen(
                             Button(
                                 onClick = { viewModel.onIntent(WealthUiIntent.AddMicroSadaqah(amount)) },
                                 shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MintGreen),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = null, tint = EmeraldDeep, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(3.dp))
-                                Text(label, color = EmeraldDeep, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                Text(label, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                             }
                         }
                     }

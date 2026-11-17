@@ -29,7 +29,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
@@ -69,6 +73,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -571,153 +576,155 @@ fun SettingsScreen(
                     }
 
                     SettingsSection.APPEARANCE_READING -> {
-                        SakinahCard(contentPadding = 14.dp) {
-                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Text(
-                                    text = "Theme Mode",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                SegmentedPillBar(
-                                    options = UiThemeMode.entries,
-                                    selected = appearanceConfig.themeMode,
-                                    labelProvider = { it.label },
-                                    onSelect = { mode ->
-                                        appearancePrefs.update { it.copy(themeMode = mode) }
-                                        val sharedMode = when (mode) {
-                                            UiThemeMode.LIGHT -> ThemeMode.LIGHT
-                                            UiThemeMode.DARK -> ThemeMode.DARK
-                                            UiThemeMode.SYSTEM -> ThemeMode.SYSTEM
-                                        }
-                                        scope.launch {
-                                            repo.updateAppearance(
-                                                settings.appearance.copy(theme = sharedMode)
+                        var themeExpanded by remember { mutableStateOf(true) }
+                        var salahExpanded by remember { mutableStateOf(false) }
+                        var quranExpanded by remember { mutableStateOf(false) }
+                        var hadithExpanded by remember { mutableStateOf(false) }
+
+                        AppearanceAccordion(
+                            title = "Theme & Palette",
+                            summary = "${appearanceConfig.themeMode.label} · ${appearanceConfig.palette.label}",
+                            expanded = themeExpanded,
+                            onToggle = { themeExpanded = !themeExpanded }
+                        ) {
+                            SegmentedPillBar(
+                                options = UiThemeMode.entries,
+                                selected = appearanceConfig.themeMode,
+                                labelProvider = { it.label },
+                                onSelect = { mode ->
+                                    appearancePrefs.update { it.copy(themeMode = mode) }
+                                    val sharedMode = when (mode) {
+                                        UiThemeMode.LIGHT -> ThemeMode.LIGHT
+                                        UiThemeMode.DARK -> ThemeMode.DARK
+                                        UiThemeMode.SYSTEM -> ThemeMode.SYSTEM
+                                    }
+                                    scope.launch {
+                                        repo.updateAppearance(
+                                            settings.appearance.copy(theme = sharedMode)
+                                        )
+                                    }
+                                }
+                            )
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                SakinahPalette.entries.forEach { palette ->
+                                    val selected = appearanceConfig.palette == palette
+                                    FilterChip(
+                                        selected = selected,
+                                        onClick = {
+                                            appearancePrefs.update { it.copy(palette = palette) }
+                                        },
+                                        label = { Text(palette.label, fontSize = 12.sp) },
+                                        leadingIcon = {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(14.dp)
+                                                    .clip(CircleShape)
+                                                    .background(palette.lightPreviewPrimary)
                                             )
                                         }
-                                    }
-                                )
+                                    )
+                                }
+                            }
+                        }
 
-                                Text(
-                                    text = stringResource(R.string.salah_home_layout_title),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    text = stringResource(R.string.salah_home_layout_caption),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                val salahLayoutState = rememberLazyListState()
-                                LaunchedEffect(Unit) {
-                                    val index = SalahHomeLayout.entries.indexOf(appearanceConfig.salahHomeLayout)
-                                    if (index >= 0) salahLayoutState.animateScrollToItem(index)
+                        AppearanceAccordion(
+                            title = "Salah Home Layout",
+                            summary = appearanceConfig.salahHomeLayout.displayName,
+                            expanded = salahExpanded,
+                            onToggle = { salahExpanded = !salahExpanded }
+                        ) {
+                            Text(
+                                text = stringResource(R.string.salah_home_layout_caption),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            val salahLayoutState = rememberLazyListState()
+                            LaunchedEffect(Unit) {
+                                val index = SalahHomeLayout.entries.indexOf(appearanceConfig.salahHomeLayout)
+                                if (index >= 0) salahLayoutState.animateScrollToItem(index)
+                            }
+                            LazyRow(
+                                state = salahLayoutState,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(SalahHomeLayout.entries) { layout ->
+                                    LayoutChoiceCard(
+                                        title = layout.displayName,
+                                        subtitle = layout.subtitle,
+                                        selected = appearanceConfig.salahHomeLayout == layout,
+                                        onClick = { appearancePrefs.updateSalahHomeLayout(layout) }
+                                    )
                                 }
-                                LazyRow(
-                                    state = salahLayoutState,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    items(SalahHomeLayout.entries) { layout ->
-                                        LayoutChoiceCard(
-                                            title = layout.displayName,
-                                            subtitle = layout.subtitle,
-                                            selected = appearanceConfig.salahHomeLayout == layout,
-                                            onClick = { appearancePrefs.updateSalahHomeLayout(layout) }
-                                        )
-                                    }
-                                }
+                            }
+                        }
 
-                                Text(
-                                    text = stringResource(R.string.quran_reading_layout_title),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    text = stringResource(R.string.quran_reading_layout_caption),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                val quranLayoutState = rememberLazyListState()
-                                LaunchedEffect(Unit) {
-                                    val index = QuranReadingLayout.entries.indexOf(appearanceConfig.quranReadingLayout)
-                                    if (index >= 0) quranLayoutState.animateScrollToItem(index)
+                        AppearanceAccordion(
+                            title = "Quran Reading Layout",
+                            summary = appearanceConfig.quranReadingLayout.displayName,
+                            expanded = quranExpanded,
+                            onToggle = { quranExpanded = !quranExpanded }
+                        ) {
+                            Text(
+                                text = stringResource(R.string.quran_reading_layout_caption),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            val quranLayoutState = rememberLazyListState()
+                            LaunchedEffect(Unit) {
+                                val index = QuranReadingLayout.entries.indexOf(appearanceConfig.quranReadingLayout)
+                                if (index >= 0) quranLayoutState.animateScrollToItem(index)
+                            }
+                            LazyRow(
+                                state = quranLayoutState,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(QuranReadingLayout.entries) { layout ->
+                                    LayoutChoiceCard(
+                                        title = layout.displayName,
+                                        subtitle = layout.subtitle,
+                                        selected = appearanceConfig.quranReadingLayout == layout,
+                                        onClick = { appearancePrefs.updateQuranReadingLayout(layout) }
+                                    )
                                 }
-                                LazyRow(
-                                    state = quranLayoutState,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    items(QuranReadingLayout.entries) { layout ->
-                                        LayoutChoiceCard(
-                                            title = layout.displayName,
-                                            subtitle = layout.subtitle,
-                                            selected = appearanceConfig.quranReadingLayout == layout,
-                                            onClick = { appearancePrefs.updateQuranReadingLayout(layout) }
-                                        )
-                                    }
-                                }
+                            }
+                        }
 
-                                Text(
-                                    text = stringResource(R.string.hadith_reading_layout_title),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    text = stringResource(R.string.hadith_reading_layout_caption),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                val hadithLayoutState = rememberLazyListState()
-                                LaunchedEffect(Unit) {
-                                    val index = HadithReadingLayout.entries.indexOf(appearanceConfig.hadithReadingLayout)
-                                    if (index >= 0) hadithLayoutState.animateScrollToItem(index)
+                        AppearanceAccordion(
+                            title = "Hadith Reading Layout",
+                            summary = appearanceConfig.hadithReadingLayout.displayName,
+                            expanded = hadithExpanded,
+                            onToggle = { hadithExpanded = !hadithExpanded }
+                        ) {
+                            Text(
+                                text = stringResource(R.string.hadith_reading_layout_caption),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            val hadithLayoutState = rememberLazyListState()
+                            LaunchedEffect(Unit) {
+                                val index = HadithReadingLayout.entries.indexOf(appearanceConfig.hadithReadingLayout)
+                                if (index >= 0) hadithLayoutState.animateScrollToItem(index)
+                            }
+                            LazyRow(
+                                state = hadithLayoutState,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(HadithReadingLayout.entries) { layout ->
+                                    LayoutChoiceCard(
+                                        title = layout.displayName,
+                                        subtitle = layout.subtitle,
+                                        selected = appearanceConfig.hadithReadingLayout == layout,
+                                        onClick = { appearancePrefs.updateHadithReadingLayout(layout) }
+                                    )
                                 }
-                                LazyRow(
-                                    state = hadithLayoutState,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    items(HadithReadingLayout.entries) { layout ->
-                                        LayoutChoiceCard(
-                                            title = layout.displayName,
-                                            subtitle = layout.subtitle,
-                                            selected = appearanceConfig.hadithReadingLayout == layout,
-                                            onClick = { appearancePrefs.updateHadithReadingLayout(layout) }
-                                        )
-                                    }
-                                }
+                            }
+                        }
 
-                                Text(
-                                    text = "Color Palette",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    SakinahPalette.entries.forEach { palette ->
-                                        val selected = appearanceConfig.palette == palette
-                                        FilterChip(
-                                            selected = selected,
-                                            onClick = {
-                                                appearancePrefs.update { it.copy(palette = palette) }
-                                            },
-                                            label = { Text(palette.label, fontSize = 12.sp) },
-                                            leadingIcon = {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(14.dp)
-                                                        .clip(CircleShape)
-                                                        .background(palette.lightPreviewPrimary)
-                                                )
-                                            }
-                                        )
-                                    }
-                                }
-
+                        SakinahCard(contentPadding = 14.dp) {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Text(
                                     text = "App & Typography Scale",
                                     style = MaterialTheme.typography.labelLarge,
@@ -1118,6 +1125,53 @@ fun SettingsScreen(
 }
 
 /** Selectable preview card used by the Salah / Quran / Hadith layout rows. */
+@Composable
+private fun AppearanceAccordion(
+    title: String,
+    summary: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    val rotation by animateFloatAsState(targetValue = if (expanded) 180f else 0f, label = "accordion_chevron")
+    SakinahCard(contentPadding = 12.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggle),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = summary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                androidx.compose.material3.Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    modifier = Modifier.rotate(rotation)
+                )
+            }
+            AnimatedVisibility(visible = expanded) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    content()
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun LayoutChoiceCard(
     title: String,

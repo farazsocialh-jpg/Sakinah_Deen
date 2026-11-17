@@ -82,7 +82,7 @@ import com.sakinah.deen.ui.components.SakinahCard
 import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.components.StatusBadge
 import com.sakinah.deen.ui.rememberInject
-import com.sakinah.deen.ui.theme.MintGreen
+
 import com.sakinah.deen.ui.theme.UthmanicFontFamily
 import com.sakinah.deen.ui.viewmodel.AyahSearchResult
 import com.sakinah.deen.ui.viewmodel.QuranUiIntent
@@ -687,7 +687,7 @@ fun QuranScreen(
                                             )
                                         }
                                         if (state.selectedTranslationId == item.id) {
-                                            Icon(Icons.Default.Translate, contentDescription = null, tint = MintGreen)
+                                            Icon(Icons.Default.Translate, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                         }
                                     }
                                 }
@@ -1189,7 +1189,7 @@ private fun AyahCard(
             color = if (isTargetHighlighted) {
                 MaterialTheme.colorScheme.primary
             } else if (isSelected) {
-                MintGreen
+                MaterialTheme.colorScheme.primary
             } else {
                 MaterialTheme.colorScheme.outline.copy(alpha = 0.65f)
             }

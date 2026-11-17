@@ -55,8 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sakinah.deen.domain.sensor.QiblaCompassData
-import com.sakinah.deen.ui.theme.EmeraldDeep
-import com.sakinah.deen.ui.theme.MintGreen
+
 import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -150,7 +149,7 @@ internal fun QiblaCompassCard(data: QiblaCompassData) {
                     Column {
                         Text(
                             text = "QIBLA COMPASS",
-                            color = MintGreen.copy(alpha = 0.85f),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 2.sp
@@ -175,13 +174,13 @@ internal fun QiblaCompassCard(data: QiblaCompassData) {
                             Icon(
                                 imageVector = Icons.Outlined.Explore,
                                 contentDescription = null,
-                                tint = MintGreen,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(Modifier.width(5.dp))
                             Text(
                                 text = "LIVE",
-                                color = MintGreen,
+                                color = MaterialTheme.colorScheme.primary,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 1.sp
@@ -190,6 +189,7 @@ internal fun QiblaCompassCard(data: QiblaCompassData) {
                     }
                 }
 
+                val compassPrimary = MaterialTheme.colorScheme.primary
                 Canvas(
                     modifier = Modifier
                         .size(272.dp)
@@ -216,12 +216,12 @@ internal fun QiblaCompassCard(data: QiblaCompassData) {
 
                     if (glow > 0f) {
                         drawCircle(
-                            color = MintGreen.copy(alpha = 0.16f * glow),
+                            color = compassPrimary.copy(alpha = 0.16f * glow),
                             radius = dialRadius + 7.dp.toPx(),
                             center = center
                         )
                         drawCircle(
-                            color = MintGreen.copy(alpha = 0.70f * glow),
+                            color = compassPrimary.copy(alpha = 0.70f * glow),
                             radius = dialRadius,
                             center = center,
                             style = Stroke(width = 3.dp.toPx())
@@ -371,26 +371,26 @@ internal fun QiblaCompassCard(data: QiblaCompassData) {
                     }
                     drawPath(lubber, Color.White.copy(alpha = 0.9f))
 
-                    drawCircle(EmeraldDeep, radius = 17.dp.toPx(), center = center)
+                    drawCircle(compassPrimary, radius = 17.dp.toPx(), center = center)
                     drawCircle(
                         color = CompassGold.copy(alpha = 0.85f),
                         radius = 17.dp.toPx(),
                         center = center,
                         style = Stroke(width = 2.dp.toPx())
                     )
-                    drawCircle(MintGreen, radius = 4.5.dp.toPx(), center = center)
+                    drawCircle(compassPrimary, radius = 4.5.dp.toPx(), center = center)
                 }
 
                 Surface(
                     shape = RoundedCornerShape(50),
                     color = if (aligned) {
-                        MintGreen.copy(alpha = 0.16f)
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
                     } else {
                         Color.White.copy(alpha = 0.07f)
                     },
                     border = BorderStroke(
                         1.dp,
-                        if (aligned) MintGreen.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.12f)
+                        if (aligned) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.12f)
                     )
                 ) {
                     Row(
@@ -404,13 +404,13 @@ internal fun QiblaCompassCard(data: QiblaCompassData) {
                                 Icons.Rounded.ScreenRotation
                             },
                             contentDescription = null,
-                            tint = if (aligned) MintGreen else Color.White.copy(alpha = 0.75f),
+                            tint = if (aligned) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.75f),
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(Modifier.width(7.dp))
                         Text(
                             text = instruction,
-                            color = if (aligned) MintGreen else Color.White.copy(alpha = 0.9f),
+                            color = if (aligned) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.9f),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
                         )

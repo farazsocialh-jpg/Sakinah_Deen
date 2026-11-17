@@ -74,8 +74,7 @@ import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
 import com.sakinah.deen.ui.components.SakinahCard
 import com.sakinah.deen.ui.components.StatusBadge
 import com.sakinah.deen.ui.rememberInject
-import com.sakinah.deen.ui.theme.EmeraldDeep
-import com.sakinah.deen.ui.theme.MintGreen
+
 import kotlinx.coroutines.launch
 
 @Composable
@@ -214,7 +213,7 @@ fun TravelScreen(
 
                     StatusBadge(
                         text = if (isSafar) "Safar Active" else "Resident Mode",
-                        accentColor = if (isSafar) MintGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                        accentColor = if (isSafar) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
@@ -229,7 +228,7 @@ fun TravelScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(8.dp),
-                    color = if (isSafar) MintGreen else MaterialTheme.colorScheme.primary
+                    color = if (isSafar) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
                 )
 
                 Button(
@@ -290,7 +289,7 @@ fun TravelScreen(
                         val activeQasr = isSafar && title != "Fajr" && title != "Maghrib"
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = if (activeQasr) MintGreen.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceVariant,
+                            color = if (activeQasr) MaterialTheme.colorScheme.secondary.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceVariant,
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
                             modifier = Modifier.weight(1f)
                         ) {
@@ -350,7 +349,7 @@ fun TravelScreen(
         // Bluetooth Dua card (Explicit Deep Emerald Surface)
         Card(
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = EmeraldDeep)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
         ) {
             Column(
                 modifier = Modifier.padding(18.dp),
@@ -362,11 +361,11 @@ fun TravelScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Bluetooth, contentDescription = null, tint = MintGreen)
+                        Icon(Icons.Default.Bluetooth, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("Vehicle Audio Ready", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
-                    Text("Dua al-Safar", color = MintGreen, fontSize = 10.sp)
+                    Text("Dua al-Safar", color = MaterialTheme.colorScheme.secondary, fontSize = 10.sp)
                 }
 
                 ArabicVerseBlock(
@@ -378,7 +377,7 @@ fun TravelScreen(
 
                 Text(
                     text = "\"Subḥānal-ladhī sakh-khara lanā hādhā wa mā kunnā lahū muqrinīn...\"",
-                    color = MintGreen,
+                    color = MaterialTheme.colorScheme.secondary,
                     style = MaterialTheme.typography.bodySmall
                 )
 
@@ -406,18 +405,18 @@ fun TravelScreen(
                         }
                     },
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MintGreen),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(
                         imageVector = if (isDuaPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
                         contentDescription = null,
-                        tint = EmeraldDeep
+                        tint = MaterialTheme.colorScheme.onSecondary
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = if (isDuaPlaying) "Stop Dua al-Safar" else "Play Dua al-Safar via Audio",
-                        color = EmeraldDeep,
+                        color = MaterialTheme.colorScheme.onSecondary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
                     )
