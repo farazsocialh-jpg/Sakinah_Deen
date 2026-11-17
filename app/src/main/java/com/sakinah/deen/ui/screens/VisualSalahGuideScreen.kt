@@ -2,15 +2,12 @@ package com.sakinah.deen.ui.screens
 
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
-import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -63,9 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -93,7 +88,6 @@ private enum class GuideTab(@param:StringRes val labelRes: Int) {
 
 private data class PostureVariation(
     val label: String,
-    @param:DrawableRes val imageRes: Int,
     val physicalInstruction: String,
     val hadithSource: String
 )
@@ -113,8 +107,6 @@ private data class GuideStep(
     val hadithReference: String = "",
     val hasTasbihCounter: Boolean = false
 )
-
-private val PostureCanvasColor = Color(0xFF0E1726)
 
 @Composable
 fun VisualSalahGuideScreen(
@@ -343,12 +335,10 @@ fun VisualSalahGuideScreen(
         ) {
             itemsIndexed(steps) { index, item ->
                 val isActive = index == safeStepIndex
-                val thumbRes = item.variations.getOrNull(item.defaultVariationIndex)?.imageRes
-                    ?: item.variations.firstOrNull()?.imageRes
 
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = if (thumbRes != null) PostureCanvasColor else if (isActive) {
+                    color = if (isActive) {
                         MaterialTheme.colorScheme.primaryContainer
                     } else {
                         MaterialTheme.colorScheme.surfaceVariant
@@ -371,35 +361,26 @@ fun VisualSalahGuideScreen(
                         }
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
-                        if (thumbRes != null) {
-                            Image(
-                                painter = painterResource(thumbRes),
-                                contentDescription = item.shortLabel,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(start = 4.dp, end = 4.dp, top = 20.dp, bottom = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = item.shortLabel,
+                                fontSize = 10.sp,
+                                lineHeight = 12.sp,
+                                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isActive) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                textAlign = TextAlign.Center,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(start = 4.dp, end = 4.dp, top = 20.dp, bottom = 4.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = item.shortLabel,
-                                    fontSize = 10.sp,
-                                    lineHeight = 12.sp,
-                                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isActive) {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                    textAlign = TextAlign.Center,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
                         }
 
                         Surface(
@@ -433,12 +414,11 @@ fun VisualSalahGuideScreen(
         }
 
         // 4. Scrollable Focused Step Card (Portrait & Landscape Safe)
-        BoxWithConstraints(
+        Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
         ) {
-            val landscape = maxWidth > maxHeight
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -450,7 +430,6 @@ fun VisualSalahGuideScreen(
                     activeVariation = activeVariation,
                     selectedVariationIndex = selectedVariationIndex,
                     onSelectVariation = { selectedVariationIndex = it },
-                    imageHeightDp = if (landscape) 180 else 250,
                     isSpeaking = isSpeaking,
                     arabicTtsSupported = arabicTtsSupported,
                     onPronounce = { speakArabic(step.arabicDhikr) }
@@ -563,7 +542,6 @@ private fun FocusedGuideStepCard(
     activeVariation: PostureVariation?,
     selectedVariationIndex: Int,
     onSelectVariation: (Int) -> Unit,
-    imageHeightDp: Int,
     isSpeaking: Boolean,
     arabicTtsSupported: Boolean,
     onPronounce: () -> Unit
@@ -593,57 +571,28 @@ private fun FocusedGuideStepCard(
                 }
             }
 
-            if (activeVariation != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(imageHeightDp.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(PostureCanvasColor)
+            if (activeVariation != null && step.variations.size > 1) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Image(
-                        painter = painterResource(activeVariation.imageRes),
-                        contentDescription = "${step.title} — ${activeVariation.label}",
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(8.dp)
-                    )
-
-                    if (step.arabicDhikr.isNotBlank()) {
-                        TtsSpeakerButton(
-                            isSpeaking = isSpeaking,
-                            enabled = arabicTtsSupported,
-                            onClick = onPronounce,
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(10.dp)
+                    step.variations.forEachIndexed { idx, variation ->
+                        FilterChip(
+                            selected = idx == selectedVariationIndex,
+                            onClick = { onSelectVariation(idx) },
+                            label = {
+                                Text(
+                                    text = variation.label,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         )
                     }
                 }
-
-                if (step.variations.size > 1) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        step.variations.forEachIndexed { idx, variation ->
-                            FilterChip(
-                                selected = idx == selectedVariationIndex,
-                                onClick = { onSelectVariation(idx) },
-                                label = {
-                                    Text(
-                                        text = variation.label,
-                                        fontSize = 12.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            )
-                        }
-                    }
-                }
             }
+
 
             // Physical instruction block
             val effectivePhysical = buildString {
@@ -729,19 +678,17 @@ private fun FocusedGuideStepCard(
                                         start = 14.dp,
                                         end = 14.dp,
                                         top = 14.dp,
-                                        bottom = if (activeVariation == null) 52.dp else 14.dp
+                                        bottom = 14.dp
                                     )
                             )
-                            if (activeVariation == null) {
-                                TtsSpeakerButton(
-                                    isSpeaking = isSpeaking,
-                                    enabled = arabicTtsSupported,
-                                    onClick = onPronounce,
-                                    modifier = Modifier
-                                        .align(Alignment.BottomEnd)
-                                        .padding(8.dp)
-                                )
-                            }
+                            TtsSpeakerButton(
+                                isSpeaking = isSpeaking,
+                                enabled = arabicTtsSupported,
+                                onClick = onPronounce,
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(8.dp)
+                            )
                         }
                     }
 
@@ -962,7 +909,6 @@ private fun buildSalahSteps(rakat: Int, totalRakats: Int): List<GuideStep> {
             variations = listOf(
                 PostureVariation(
                     label = "Qiyam",
-                    imageRes = R.drawable.posture_takbir,
                     physicalInstruction = "Face the Qiblah, feet naturally shoulder-width apart with toes pointing forward, eyes open looking at the Sujud spot. Make Niyyah silently in the heart (no verbal Niyyah).",
                     hadithSource = "Sahih al-Bukhari 1 (intentions), 741"
                 )
@@ -978,7 +924,6 @@ private fun buildSalahSteps(rakat: Int, totalRakats: Int): List<GuideStep> {
             variations = listOf(
                 PostureVariation(
                     label = "Raise Hands",
-                    imageRes = R.drawable.posture_takbir,
                     physicalInstruction = "Raise both hands with palms open facing Qiblah—palms level with shoulders and fingertips level with earlobes (do NOT touch earlobes with thumbs).",
                     hadithSource = "Sahih al-Bukhari 735; Sahih Muslim 390, 391, 401"
                 )
@@ -990,12 +935,29 @@ private fun buildSalahSteps(rakat: Int, totalRakats: Int): List<GuideStep> {
             quranReference = "Quran 74:3, 29:45",
             hadithReference = "Sahih al-Bukhari 735; Sahih Muslim 390, 391, 401"
         )
+
+        steps += GuideStep(
+            title = "Opening Supplication (Dua al-Istiftah) & Ta'awwudh",
+            shortLabel = "Istiftah",
+            arabicTitle = "دعاء الاستفتاح والتعوذ",
+            variations = listOf(
+                PostureVariation(
+                    label = "Fold Hands",
+                    physicalInstruction = "Fold hands on chest; recite the opening supplication, then seek refuge and begin recitation.",
+                    hadithSource = "Sahih Muslim 399, 200?"
+                )
+            ),
+            arabicDhikr = "سُبْحَانَكَ اللَّهُمَّ وَبِحَمْدِكَ، وَتَبَارَكَ اسْمُكَ، وَتَعَالَى جَدُّكَ، وَلَا إِلَٰهَ غَيْرُكَ.\nأَعُوذُ بِاللَّهِ مِنَ الشَّيْطَانِ الرَّجِيمِ",
+            transliteration = "SubhanakAllahumma wa bihamdika, wa tabarakasmuka, wa ta'ala jadduka, wa la ilaha ghayruk. A'udhu billahi minash-shaytanir-rajim.",
+            englishMeaning = "Glory and praise be to You, O Allah; blessed is Your name, exalted is Your majesty, and there is no deity besides You. I seek refuge in Allah from the accursed Satan.",
+            recitationCountOrNote = "1× opening",
+            quranReference = "Quran 16:98",
+            hadithReference = "Sahih Muslim 399; Sahih al-Bukhari 744"
+        )
     }
 
     val qiyamDhikr = when (rakat) {
-        1 -> "سُبْحَانَكَ اللَّهُمَّ وَبِحَمْدِكَ وَتَبَارَكَ اسْمُكَ وَتَعَالَى جَدُّكَ وَلَا إِلَهَ غَيْرُكَ.\n" +
-            "أَعُوذُ بِاللَّهِ مِنَ الشَّيْطَانِ الرَّجِيمِ.\n" +
-            "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ ۝ الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ ۝ الرَّحْمَٰنِ الرَّحِيمِ ۝ مَالِكِ يَوْمِ الدِّينِ ۝ إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ ۝ اهْدِنَا الصِّرَاطَ الْمُسْتَقِيمَ ۝ صِرَاطَ الَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ الْمَغْضُوبِ عَلَيْهِمْ وَلَا الضَّالِّينَ ۝ آمِينَ.\n" +
+        1 -> "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ ۝ الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ ۝ الرَّحْمَٰنِ الرَّحِيمِ ۝ مَالِكِ يَوْمِ الدِّينِ ۝ إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ ۝ اهْدِنَا الصِّرَاطَ الْمُسْتَقِيمَ ۝ صِرَاطَ الَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ الْمَغْضُوبِ عَلَيْهِمْ وَلَا الضَّالِّينَ ۝ آمِينَ.\n" +
             "قُلْ هُوَ اللَّهُ أَحَدٌ ۝ اللَّهُ الصَّمَدُ ۝ لَمْ يَلِدْ وَلَمْ يُولَدْ ۝ وَلَمْ يَكُنْ لَهُ كُفُوًا أَحَدٌ"
         2 -> "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ ۝ الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ ۝ الرَّحْمَٰنِ الرَّحِيمِ ۝ مَالِكِ يَوْمِ الدِّينِ ۝ إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ ۝ اهْدِنَا الصِّرَاطَ الْمُسْتَقِيمَ ۝ صِرَاطَ الَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ الْمَغْضُوبِ عَلَيْهِمْ وَلَا الضَّالِّينَ ۝ آمِينَ.\n" +
             "قُلْ أَعُوذُ بِرَبِّ النَّاسِ ۝ مَلِكِ النَّاسِ ۝ إِلَٰهِ النَّاسِ..."
@@ -1009,33 +971,30 @@ private fun buildSalahSteps(rakat: Int, totalRakats: Int): List<GuideStep> {
         variations = listOf(
             PostureVariation(
                 label = "Hand on Forearm",
-                imageRes = R.drawable.posture_qiyam_forearm,
                 physicalInstruction = "Place right palm over the back of left hand, wrist, and forearm on center of chest.",
                 hadithSource = "Sahih al-Bukhari 740"
             ),
             PostureVariation(
                 label = "Hand on Wrist (Wada')",
-                imageRes = R.drawable.posture_qiyam_wada,
                 physicalInstruction = "Rest right palm directly over left hand/wrist on chest.",
                 hadithSource = "Sahih Muslim 401"
             ),
             PostureVariation(
                 label = "Grasp Wrist (Qabz)",
-                imageRes = R.drawable.posture_qiyam_qabz,
                 physicalInstruction = "Clasp left wrist with right hand on chest.",
                 hadithSource = "Sunan Abi Dawud 759"
             )
         ),
         arabicDhikr = qiyamDhikr,
         transliteration = if (rakat == 1) {
-            "SubhanakAllahumma wa bihamdika, wa tabarakasmuka, wa ta'ala jadduka, wa la ilaha ghayruk. A'udhu billahi minash-shaytanir-rajim. Al-Fatihah + Ameen + short Surah."
+            "Al-Fatihah + Ameen + short Surah."
         } else if (rakat <= 2) {
             "Surah Al-Fatihah + Ameen + short Surah or Ayat."
         } else {
             "Surah Al-Fatihah + Ameen."
         },
         englishMeaning = if (rakat == 1) {
-            "Glory and praise be to You, O Allah; blessed is Your name, exalted is Your majesty, and there is no deity besides You. Followed by Surah Al-Fatihah and a short Surah."
+            "Recite Surah Al-Fatihah (a pillar of every rakat), say Ameen, then recite another Surah."
         } else if (rakat <= 2) {
             "Recite Surah Al-Fatihah (a pillar of every rakat), say Ameen, then recite another Surah."
         } else {
@@ -1057,7 +1016,6 @@ private fun buildSalahSteps(rakat: Int, totalRakats: Int): List<GuideStep> {
         variations = listOf(
             PostureVariation(
                 label = "90° Bow",
-                imageRes = R.drawable.posture_ruku,
                 physicalInstruction = "Raise hands (Raf' al-Yadayn) saying \"Allahu Akbar\" while bowing. Keep back completely flat and horizontal (90°), head level with spine, arms straight, palms gripping knees with fingers spread apart.",
                 hadithSource = "Sahih al-Bukhari 735, 828; Sahih Muslim 498, 772; Sunan Abi Dawud 870"
             )
@@ -1077,7 +1035,6 @@ private fun buildSalahSteps(rakat: Int, totalRakats: Int): List<GuideStep> {
         variations = listOf(
             PostureVariation(
                 label = "Stand Upright",
-                imageRes = R.drawable.posture_qiyam_forearm,
                 physicalInstruction = "Raise hands (Raf' al-Yadayn) while rising upright until every bone settles (tuma'ninah); place hands back on chest or at sides.",
                 hadithSource = "Sahih al-Bukhari 735, 792, 799; Sahih Muslim 476"
             )
@@ -1097,13 +1054,11 @@ private fun buildSalahSteps(rakat: Int, totalRakats: Int): List<GuideStep> {
         variations = listOf(
             PostureVariation(
                 label = "Hands First",
-                imageRes = R.drawable.posture_sujud,
                 physicalInstruction = "Place hands on ground before knees while descending.",
                 hadithSource = "Sunan Abi Dawud 840"
             ),
             PostureVariation(
                 label = "Knees First",
-                imageRes = R.drawable.posture_sujud,
                 physicalInstruction = "Place knees on ground before hands while descending.",
                 hadithSource = "Sunan Abi Dawud 838"
             )
@@ -1124,13 +1079,11 @@ private fun buildSalahSteps(rakat: Int, totalRakats: Int): List<GuideStep> {
         variations = listOf(
             PostureVariation(
                 label = "Iftirash",
-                imageRes = R.drawable.posture_iftirash,
                 physicalInstruction = "Sit on flattened left foot, right foot propped upright with toes toward Qiblah. Hands flat on thighs/knees, spine upright, calm stillness.",
                 hadithSource = "Sahih al-Bukhari 828"
             ),
             PostureVariation(
                 label = "Iq'a (On Heels)",
-                imageRes = R.drawable.posture_iftirash,
                 physicalInstruction = "Sit back evenly on both upright heels briefly. Hands flat on thighs/knees, spine upright, calm stillness.",
                 hadithSource = "Sahih Muslim 536"
             )
@@ -1150,7 +1103,6 @@ private fun buildSalahSteps(rakat: Int, totalRakats: Int): List<GuideStep> {
         variations = listOf(
             PostureVariation(
                 label = "2nd Prostration",
-                imageRes = R.drawable.posture_sujud,
                 physicalInstruction = if (hasTashahhud) {
                     "Repeat Sujud on the 7 bones with calm stillness, then sit for Tashahhud."
                 } else {
@@ -1183,30 +1135,26 @@ private fun buildSalahSteps(rakat: Int, totalRakats: Int): List<GuideStep> {
             variations = listOf(
                 PostureVariation(
                     label = "1st Sit (Iftirash)",
-                    imageRes = R.drawable.posture_iftirash,
                     physicalInstruction = "Sit on flattened left foot with right foot propped upright toward Qiblah.",
                     hadithSource = "Sahih al-Bukhari 828"
                 ),
                 PostureVariation(
                     label = "Final Sit (Tawarruk)",
-                    imageRes = R.drawable.posture_tawarruk,
                     physicalInstruction = "Left hip on mat, left foot tucked under right shin, right foot upright.",
                     hadithSource = "Sahih al-Bukhari 828"
                 ),
                 PostureVariation(
                     label = "Finger Grip: Circle (53)",
-                    imageRes = R.drawable.posture_tashahhud_grips,
                     physicalInstruction = "Thumb & middle finger form a ring, pinky & ring folded, index points & moves.",
                     hadithSource = "Sahih Muslim 580"
                 ),
                 PostureVariation(
                     label = "Finger Grip: Fist",
-                    imageRes = R.drawable.posture_tashahhud_grips,
                     physicalInstruction = "All other fingers closed in fist, index points toward Qiblah.",
                     hadithSource = "Sahih Muslim 579"
                 )
             ),
-            defaultVariationIndex = if (isFinalRakah) 1 else 0,
+            defaultVariationIndex = if (isFinalRakah && totalRakats >= 3) 1 else 0,
             arabicDhikr = tashahhudDhikr,
             transliteration = if (isFinalRakah) {
                 "At-tahiyyatu lillahi was-salawatu wat-tayyibat... Allahumma salli 'ala Muhammad... Allahumma inni a'udhu bika min 'adhabi jahannam..."
@@ -1236,7 +1184,6 @@ private fun buildSalahSteps(rakat: Int, totalRakats: Int): List<GuideStep> {
             variations = listOf(
                 PostureVariation(
                     label = "Right & Left",
-                    imageRes = R.drawable.posture_tawarruk,
                     physicalInstruction = "Turn head to the right so cheek is visible from behind, then turn head to the left; keep hands still on thighs.",
                     hadithSource = "Sahih Muslim 582; Sunan Abi Dawud 996"
                 )
