@@ -8,6 +8,7 @@ import com.sakinah.deen.data.prayer.PrayerMethodSettings
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.PreferencesPrayerMethodSettings
 import com.sakinah.deen.data.prefs.SakinahPreferences
+import com.sakinah.deen.data.prefs.SalahGuideProgressStore
 import com.sakinah.deen.data.repository.NisabRateRepository
 import com.sakinah.deen.data.repository.NisabRateRepositoryImpl
 import com.sakinah.deen.data.repository.PrayerTimeRepository
@@ -47,6 +48,8 @@ import org.koin.dsl.module
 val preferencesModule = module {
     single { SakinahPreferences(androidContext()) }
     single { AppearancePreferences(androidContext()) }
+    // Read by the Visual Salah Guide and by SalahGuideReminderWorker, so it is a singleton.
+    single { SalahGuideProgressStore(androidContext()) }
 }
 
 val databaseModule = module {
@@ -69,7 +72,12 @@ val databaseModule = module {
             content = {
                 runCatching { get<SakinahEncryptedDatabase>() }
                     .getOrNull()
-                    ?.let(DatabaseSeeder::seedContentOf)
+                    ?.let { database ->
+                        DatabaseSeeder.seedContentOf(
+                            database,
+                            DatabaseSeeder.PreferencesSeedStateStore(get())
+                        )
+                    }
             }
         )
     }

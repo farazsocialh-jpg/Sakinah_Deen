@@ -340,11 +340,30 @@ interface AdhkarDao {
     @Query("SELECT * FROM adhkar_entries WHERE categoryKey = :categoryKey ORDER BY orderIndex ASC")
     fun observeCategory(categoryKey: String): Flow<List<AdhkarEntity>>
 
+    @Query("SELECT * FROM adhkar_entries ORDER BY categoryKey ASC, orderIndex ASC")
+    fun observeAll(): Flow<List<AdhkarEntity>>
+
     @Query("SELECT COUNT(*) FROM adhkar_entries")
     suspend fun count(): Int
 
+    @Query("SELECT COUNT(*) FROM adhkar_entries WHERE categoryKey = :categoryKey")
+    suspend fun countForCategory(categoryKey: String): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(entries: List<AdhkarEntity>)
+
+    @Query("DELETE FROM adhkar_entries")
+    suspend fun clearAll()
+
+    /**
+     * Replaces the whole bundled set atomically. An upsert alone would leave entries that a
+     * newer seed edition dropped, so a version bump always clears first.
+     */
+    @Transaction
+    suspend fun replaceAll(entries: List<AdhkarEntity>) {
+        clearAll()
+        upsertAll(entries)
+    }
 }
 
 /**

@@ -14,6 +14,7 @@ import com.sakinah.deen.service.NotificationChannels
 import com.sakinah.deen.service.PrayerAlarmScheduler
 import com.sakinah.deen.work.DailyHabitResetWorker
 import com.sakinah.deen.work.KoinWorkerFactory
+import com.sakinah.deen.work.SalahGuideReminderWorker
 import java.time.Duration
 import java.time.ZonedDateTime
 import java.util.concurrent.TimeUnit
@@ -80,6 +81,7 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
         // SharedPreferences/AlarmManager/WorkManager all touch the filesystem.
         applicationScope.launch(Dispatchers.IO) {
             scheduleDailyHabitReset()
+            scheduleSalahGuideReminder()
 
             // Restore exact alarms on cold start only for a location the user actually saved.
             // Never arm reminders for a bootstrap/default city before onboarding.
@@ -96,6 +98,30 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
                 }
                 runCatching { scheduler.scheduleAllDailyAlarmsRefreshed(coordinates = coordinates) }
             }
+        }
+    }
+
+    /**
+     * Optional daily nudge for the Visual Salah Guide. It is always scheduled and the worker
+     * exits immediately unless the user turned practice reminders on, so enabling the toggle
+     * needs no new scheduling work.
+     */
+    private fun scheduleSalahGuideReminder() {
+        runCatching {
+            val now = ZonedDateTime.now()
+            var next = now.toLocalDate().atTime(9, 0).atZone(now.zone)
+            if (!next.isAfter(now)) next = next.plusDays(1)
+            val initialDelayMillis = Duration.between(now, next)
+                .toMillis()
+                .coerceAtLeast(60_000L)
+            val request = PeriodicWorkRequestBuilder<SalahGuideReminderWorker>(1, TimeUnit.DAYS)
+                .setInitialDelay(initialDelayMillis, TimeUnit.MILLISECONDS)
+                .build()
+            WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                SalahGuideReminderWorker.UNIQUE_WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                request
+            )
         }
     }
 

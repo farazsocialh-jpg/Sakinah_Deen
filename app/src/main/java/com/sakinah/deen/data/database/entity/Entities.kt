@@ -157,7 +157,14 @@ data class AdhkarEntity(
     val title: String,
     val arabic: String,
     val translation: String,
+    /** Book + number, e.g. "Sahih Muslim 597". Readable on the card, not buried in a tooltip. */
     val reference: String,
+    /** Sahih / Hasan / graded by a named scholar. */
+    val grading: String = "",
+    /** Repetitions prescribed by the narration; never below 1. */
+    val repeatCount: Int = 1,
+    val transliteration: String = "",
+    val variantNote: String = "",
     val orderIndex: Int = 0
 )
 

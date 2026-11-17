@@ -31,8 +31,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
@@ -45,6 +48,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -69,7 +73,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.R
+import com.sakinah.deen.data.database.dao.AdhkarDao
+import com.sakinah.deen.data.database.entity.AdhkarEntity
 import com.sakinah.deen.data.prefs.AppearancePreferences
+import com.sakinah.deen.data.prefs.SalahGuideProgress
+import com.sakinah.deen.data.prefs.SalahGuideProgressStore
 import com.sakinah.deen.profile.UserProfileRepository
 import com.sakinah.deen.ui.components.ArabicVerseBlock
 import com.sakinah.deen.ui.components.SakinahCard
@@ -83,7 +91,8 @@ import java.util.Locale
 private enum class GuideTab(@param:StringRes val labelRes: Int) {
     WUDU(R.string.guide_tab_wudu),
     SALAH(R.string.guide_tab_salah),
-    AFTER_SALAH(R.string.guide_tab_after_salah)
+    AFTER_SALAH(R.string.guide_tab_after_salah),
+    ADHKAR(R.string.guide_tab_adhkar)
 }
 
 private data class PostureVariation(
@@ -105,8 +114,25 @@ private data class GuideStep(
     val recitationCountOrNote: String = "",
     val quranReference: String = "",
     val hadithReference: String = "",
+    /** Sahih / Hasan grading of the cited narration, shown beside the reference. */
+    val grading: String = "",
+    /** Prescribed repetitions; 1 when the step is performed once. */
+    val repeatCount: Int = 1,
     val hasTasbihCounter: Boolean = false
-)
+) {
+    /**
+     * Stable identity for learned/favorite state: the posture name without its step number,
+     * so the same Qiyam ticked in rakat 1 is still ticked in rakat 3.
+     */
+    val stepKey: String get() = title.substringAfter(". ").trim()
+}
+
+private fun stepsForTab(tab: GuideTab, rakat: Int, totalRakats: Int): List<GuideStep> = when (tab) {
+    GuideTab.WUDU -> wuduSteps
+    GuideTab.SALAH -> buildSalahSteps(rakat, totalRakats)
+    GuideTab.AFTER_SALAH -> afterSalahSteps
+    GuideTab.ADHKAR -> emptyList()
+}
 
 @Composable
 fun VisualSalahGuideScreen(
@@ -119,7 +145,13 @@ fun VisualSalahGuideScreen(
 
     val appearancePrefs = rememberInject<AppearancePreferences>()
     val profileRepo = rememberInject<UserProfileRepository>()
+    val progressStore = rememberInject<SalahGuideProgressStore>()
+    val adhkarDao = rememberInject<AdhkarDao>()
     val appearanceConfig by appearancePrefs.config.collectAsStateWithLifecycle()
+    val guideProgress by progressStore.progress.collectAsStateWithLifecycle()
+    // The bundled Hisn al-Muslim library, seeded on first launch; small enough to read whole.
+    val adhkarEntries by remember { adhkarDao.observeAll() }
+        .collectAsStateWithLifecycle(emptyList<AdhkarEntity>())
     val scope = rememberCoroutineScope()
 
     var tabIndex by rememberSaveable { mutableIntStateOf(GuideTab.SALAH.ordinal) }
@@ -129,14 +161,22 @@ fun VisualSalahGuideScreen(
     var tasbihCount by rememberSaveable { mutableIntStateOf(0) }
 
     val steps = remember(tab, currentRakat, safeTotalRakats) {
-        when (tab) {
-            GuideTab.WUDU -> wuduSteps
-            GuideTab.SALAH -> buildSalahSteps(currentRakat, safeTotalRakats)
-            GuideTab.AFTER_SALAH -> afterSalahSteps
-        }
+        stepsForTab(tab, currentRakat, safeTotalRakats)
     }
-    val safeStepIndex = currentStepIndex.coerceIn(0, steps.lastIndex)
-    val step = steps[safeStepIndex]
+    val safeStepIndex = if (steps.isEmpty()) 0 else currentStepIndex.coerceIn(0, steps.lastIndex)
+    // The Adhkar tab has no posture steps; the card below is not rendered there.
+    val step = steps.getOrNull(safeStepIndex) ?: afterSalahSteps.first()
+    val allStepKeys = remember(safeTotalRakats) {
+        GuideTab.entries
+            .filter { it != GuideTab.ADHKAR }
+            .associateWith { guideTab ->
+                stepsForTab(guideTab, 1, safeTotalRakats).map { it.stepKey }.distinct()
+            }
+    }
+    val stepKey = "${tab.name}:${step.stepKey}"
+    val learnedSteps = allStepKeys.values.sumOf { guideProgress.learnedCount(it) }
+    val totalSteps = allStepKeys.values.sumOf { it.size }
+    val favoriteCount = guideProgress.favoriteStepKeys.size + guideProgress.favoriteAdhkarIds.size
     var selectedVariationIndex by remember(tab, currentRakat, safeStepIndex) {
         mutableIntStateOf(step.defaultVariationIndex.coerceIn(0, (step.variations.size - 1).coerceAtLeast(0)))
     }
@@ -157,7 +197,9 @@ fun VisualSalahGuideScreen(
 
     LaunchedEffect(tab, currentRakat, safeStepIndex) {
         scrollState.scrollTo(0)
-        filmstripState.animateScrollToItem(safeStepIndex)
+        // The filmstrip is not composed on the Adhkar tab; scrolling it would be a no-op at
+        // best and an index error at worst.
+        if (tab != GuideTab.ADHKAR) filmstripState.animateScrollToItem(safeStepIndex)
     }
 
     val context = LocalContext.current
@@ -216,11 +258,19 @@ fun VisualSalahGuideScreen(
         }
     }
 
-    val tabLabels = listOf(
-        stringResource(GuideTab.WUDU.labelRes),
-        stringResource(GuideTab.SALAH.labelRes),
-        stringResource(GuideTab.AFTER_SALAH.labelRes)
-    )
+    val tabLabels = GuideTab.entries.map { guideTab ->
+        val label = stringResource(guideTab.labelRes)
+        val keys = allStepKeys[guideTab]
+        if (keys.isNullOrEmpty()) {
+            label
+        } else {
+            stringResource(
+                R.string.guide_progress_tab,
+                label,
+                guideProgress.percentLearned(keys)
+            )
+        }
+    }
     val activeTabLabel = stringResource(tab.labelRes)
 
     Column(
@@ -256,7 +306,13 @@ fun VisualSalahGuideScreen(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = if (tab == GuideTab.SALAH) {
+                    text = if (tab == GuideTab.ADHKAR) {
+                        stringResource(
+                            R.string.guide_adhkar_subtitle,
+                            adhkarEntries.size,
+                            guideProgress.favoriteAdhkarIds.size
+                        )
+                    } else if (tab == GuideTab.SALAH) {
                         stringResource(
                             R.string.guide_subtitle_salah,
                             prayerTitle,
@@ -326,8 +382,41 @@ fun VisualSalahGuideScreen(
             }
         )
 
+        // 2b. Persistent learning progress + optional practice reminder (#83, #86).
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(
+                        R.string.guide_progress_summary,
+                        learnedSteps,
+                        totalSteps
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = stringResource(R.string.guide_favorites_summary, favoriteCount),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                text = stringResource(R.string.guide_practice_reminder),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Switch(
+                checked = guideProgress.practiceReminderEnabled,
+                onCheckedChange = { progressStore.setPracticeReminder(it) }
+            )
+        }
+
         // 3. Layout 2: Horizontal Posture Filmstrip (60.dp thumbnails)
-        LazyRow(
+        if (tab != GuideTab.ADHKAR) LazyRow(
             state = filmstripState,
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -425,17 +514,37 @@ fun VisualSalahGuideScreen(
                     .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                FocusedGuideStepCard(
-                    step = step,
-                    activeVariation = activeVariation,
-                    selectedVariationIndex = selectedVariationIndex,
-                    onSelectVariation = { selectedVariationIndex = it },
-                    isSpeaking = isSpeaking,
-                    arabicTtsSupported = arabicTtsSupported,
-                    onPronounce = { speakArabic(step.arabicDhikr) }
-                )
+                if (tab == GuideTab.ADHKAR) {
+                    AdhkarLibrarySection(
+                        entries = adhkarEntries,
+                        progress = guideProgress,
+                        onToggleFavorite = progressStore::toggleFavoriteAdhkar
+                    )
+                } else {
+                    FocusedGuideStepCard(
+                        step = step,
+                        activeVariation = activeVariation,
+                        selectedVariationIndex = selectedVariationIndex,
+                        onSelectVariation = { selectedVariationIndex = it },
+                        isSpeaking = isSpeaking,
+                        arabicTtsSupported = arabicTtsSupported,
+                        onPronounce = { speakArabic(step.arabicDhikr) },
+                        isLearned = guideProgress.isLearned(stepKey),
+                        onToggleLearned = { progressStore.toggleLearned(stepKey) },
+                        isFavorite = guideProgress.isFavoriteStep(stepKey),
+                        onToggleFavorite = { progressStore.toggleFavoriteStep(stepKey) }
+                    )
+                }
 
-                if (step.hasTasbihCounter) {
+                if (tab != GuideTab.ADHKAR) {
+                    Text(
+                        text = stringResource(R.string.guide_review_note),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (tab != GuideTab.ADHKAR && step.hasTasbihCounter) {
                     TasbihCounter(
                         count = tasbihCount,
                         onIncrement = { tasbihCount = (tasbihCount + 1).coerceAtMost(100) },
@@ -443,7 +552,7 @@ fun VisualSalahGuideScreen(
                     )
                 }
 
-                if (tab == GuideTab.WUDU && safeStepIndex == steps.lastIndex) {
+                if (tab == GuideTab.WUDU && steps.isNotEmpty() && safeStepIndex == steps.lastIndex) {
                     Text(
                         text = stringResource(R.string.guide_wudu_next_hint),
                         style = MaterialTheme.typography.bodySmall,
@@ -453,14 +562,15 @@ fun VisualSalahGuideScreen(
             }
         }
 
-        // 5. Pinned Bottom Controls
-        Row(
+        // 5. Pinned Bottom Controls (the Adhkar library is browsed, not stepped through)
+        if (tab != GuideTab.ADHKAR) Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             val canGoBack = when (tab) {
                 GuideTab.SALAH -> currentRakat > 1 || safeStepIndex > 0
                 GuideTab.WUDU, GuideTab.AFTER_SALAH -> safeStepIndex > 0
+                GuideTab.ADHKAR -> false
             }
 
             OutlinedButton(
@@ -514,6 +624,9 @@ fun VisualSalahGuideScreen(
                                 onBack()
                             }
                         }
+
+                        // The Adhkar tab has no step navigation (the bar is not shown there).
+                        GuideTab.ADHKAR -> Unit
                     }
                 },
                 modifier = Modifier.weight(1f),
@@ -544,7 +657,11 @@ private fun FocusedGuideStepCard(
     onSelectVariation: (Int) -> Unit,
     isSpeaking: Boolean,
     arabicTtsSupported: Boolean,
-    onPronounce: () -> Unit
+    onPronounce: () -> Unit,
+    isLearned: Boolean,
+    onToggleLearned: () -> Unit,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit
 ) {
     SakinahCard(contentPadding = 14.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -569,9 +686,75 @@ private fun FocusedGuideStepCard(
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
+                IconButton(onClick = onToggleFavorite) {
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = stringResource(
+                            if (isFavorite) R.string.guide_unfavorite_cd else R.string.guide_favorite_cd
+                        ),
+                        tint = if (isFavorite) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            // Persisted practice state: tick a posture once it is learned, and keep favourites
+            // so a returning learner can jump straight back to the parts they struggle with.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilterChip(
+                    selected = isLearned,
+                    onClick = onToggleLearned,
+                    leadingIcon = if (isLearned) {
+                        {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                    label = {
+                        Text(
+                            text = stringResource(
+                                if (isLearned) R.string.guide_learned else R.string.guide_mark_learned
+                            ),
+                            fontSize = 11.sp
+                        )
+                    }
+                )
+                if (step.grading.isNotBlank()) {
+                    ReferencePill(
+                        text = stringResource(R.string.guide_adhkar_grading, step.grading),
+                        containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.14f),
+                        contentColor = MaterialTheme.colorScheme.primary
+                    )
+                }
+                if (step.repeatCount > 1) {
+                    ReferencePill(
+                        text = stringResource(R.string.guide_adhkar_repeat, step.repeatCount),
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
 
             if (activeVariation != null && step.variations.size > 1) {
+                Text(
+                    text = stringResource(R.string.guide_variation_label),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -699,6 +882,13 @@ private fun FocusedGuideStepCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    // A device voice helps with pronunciation, nothing more: Tajweed needs a
+                    // teacher, and no TTS output is a recitation to imitate blindly.
+                    Text(
+                        text = stringResource(R.string.guide_tts_aid_note),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
                     if (step.transliteration.isNotBlank()) {
                         Text(
@@ -741,6 +931,170 @@ private fun FocusedGuideStepCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * The bundled Hisn al-Muslim library (#80, #81, #84, #85).
+ *
+ * Every card carries its own provenance: the Arabic wording, a transliteration for readers
+ * who do not know the script, the translation, the book and number of the narration, its
+ * grading, the prescribed number of repetitions, and any difference between narrations.
+ * Favourites persist through [SalahGuideProgressStore].
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AdhkarLibrarySection(
+    entries: List<AdhkarEntity>,
+    progress: SalahGuideProgress,
+    onToggleFavorite: (String) -> Unit
+) {
+    var selectedCategory by rememberSaveable { mutableStateOf<String?>(null) }
+    val categories = remember(entries) {
+        entries.map { it.categoryKey to it.categoryTitle }.distinct()
+    }
+    val visible = entries.filter { selectedCategory == null || it.categoryKey == selectedCategory }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (entries.isEmpty()) {
+            SakinahCard(contentPadding = 14.dp) {
+                Text(
+                    text = stringResource(R.string.guide_adhkar_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            return@Column
+        }
+
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            item(key = "all") {
+                FilterChip(
+                    selected = selectedCategory == null,
+                    onClick = { selectedCategory = null },
+                    label = {
+                        Text(stringResource(R.string.guide_adhkar_all), fontSize = 11.sp)
+                    }
+                )
+            }
+            items(categories.size) { index ->
+                val (key, title) = categories[index]
+                FilterChip(
+                    selected = selectedCategory == key,
+                    onClick = { selectedCategory = key },
+                    label = {
+                        Text(title, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                )
+            }
+        }
+
+        visible.forEach { entry ->
+            val isFavorite = progress.isFavoriteAdhkar(entry.id)
+            SakinahCard(contentPadding = 14.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = entry.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        ReferencePill(
+                            text = stringResource(R.string.guide_adhkar_repeat, entry.repeatCount),
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        IconButton(onClick = { onToggleFavorite(entry.id) }) {
+                            Icon(
+                                imageVector = if (isFavorite) {
+                                    Icons.Default.Favorite
+                                } else {
+                                    Icons.Default.FavoriteBorder
+                                },
+                                contentDescription = stringResource(
+                                    if (isFavorite) {
+                                        R.string.guide_unfavorite_cd
+                                    } else {
+                                        R.string.guide_favorite_cd
+                                    }
+                                ),
+                                tint = if (isFavorite) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = entry.arabic,
+                        fontFamily = AmiriFontFamily,
+                        fontSize = 20.sp,
+                        lineHeight = 34.sp,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (entry.transliteration.isNotBlank()) {
+                        Text(
+                            text = entry.transliteration,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    if (entry.translation.isNotBlank()) {
+                        Text(
+                            text = entry.translation,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        ReferencePill(
+                            text = stringResource(
+                                R.string.guide_adhkar_source_prefix,
+                                entry.reference
+                            ),
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (entry.grading.isNotBlank()) {
+                            ReferencePill(
+                                text = stringResource(R.string.guide_adhkar_grading, entry.grading),
+                                containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.14f),
+                                contentColor = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    if (entry.variantNote.isNotBlank()) {
+                        Text(
+                            text = stringResource(R.string.guide_adhkar_variant, entry.variantNote),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        Text(
+            text = stringResource(R.string.guide_review_note),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -891,7 +1245,9 @@ private val wuduSteps = listOf(
         transliteration = "Ash-hadu alla ilaha illallahu wahdahu la sharika lah, wa ash-hadu anna Muhammadan 'abduhu wa rasuluh.",
         englishMeaning = "I bear witness that there is no deity worthy of worship except Allah alone without partner, and Muhammad is His servant and Messenger.",
         recitationCountOrNote = "1× after wudu",
-        hadithReference = "Sahih Muslim 234"
+        hadithReference = "Sahih Muslim 234",
+        grading = "Sahih",
+        repeatCount = 1
     )
 )
 
@@ -1212,7 +1568,9 @@ private val afterSalahSteps = listOf(
         englishMeaning = "I seek Allah's forgiveness (3×). O Allah, You are Peace and from You comes peace. Blessed are You, O Possessor of Majesty and Honor.",
         recitationCountOrNote = "3× Istighfar + 1× Dua",
         quranReference = "Quran 4:106",
-        hadithReference = "Sahih Muslim 591"
+        hadithReference = "Sahih Muslim 591",
+        grading = "Sahih",
+        repeatCount = 3
     ),
     GuideStep(
         title = "2. Ayat al-Kursi",
@@ -1224,7 +1582,9 @@ private val afterSalahSteps = listOf(
         englishMeaning = "Allah — there is no deity except Him, the Ever-Living, the Sustainer of all existence...",
         recitationCountOrNote = "1× after each prayer",
         quranReference = "Quran 2:255",
-        hadithReference = "Sunan al-Kubra lil-Nasa'i 9928"
+        hadithReference = "Sunan al-Kubra lil-Nasa'i 9928",
+        grading = "Sahih (al-Albani)",
+        repeatCount = 1
     ),
     GuideStep(
         title = "3. Tasbih Fatimah",
@@ -1237,6 +1597,8 @@ private val afterSalahSteps = listOf(
         recitationCountOrNote = "33× + 33× + 34×",
         quranReference = "Quran 33:41–42",
         hadithReference = "Sahih Muslim 597",
+        grading = "Sahih",
+        repeatCount = 33,
         hasTasbihCounter = true
     )
 )

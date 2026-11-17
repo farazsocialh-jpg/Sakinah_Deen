@@ -18,6 +18,7 @@ import com.sakinah.deen.data.database.entity.AdhkarEntity
 import com.sakinah.deen.data.database.entity.HadithEntryEntity
 import com.sakinah.deen.data.database.entity.QuranAyahEntity
 import com.sakinah.deen.data.database.entity.SurahMetadataEntity
+import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.quran.QuranOfflinePack
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -55,8 +56,36 @@ object DatabaseSeeder {
     data class SeedContent(
         val quranDao: QuranDao,
         val hadithDao: HadithDao,
-        val adhkarDao: AdhkarDao
+        val adhkarDao: AdhkarDao,
+        val seedState: SeedStateStore = InMemorySeedStateStore()
     )
+
+    /**
+     * Remembers which adhkar asset edition was last written, so expanding the bundled Hisn
+     * set reaches existing installs instead of being skipped because "some adhkar exist".
+     */
+    interface SeedStateStore {
+        fun adhkarSeedHash(): String?
+        fun recordAdhkarSeedHash(hash: String)
+    }
+
+    class InMemorySeedStateStore : SeedStateStore {
+        private var hash: String? = null
+        override fun adhkarSeedHash(): String? = hash
+        override fun recordAdhkarSeedHash(hash: String) {
+            this.hash = hash
+        }
+    }
+
+    /** Survives restarts so a new APK edition re-seeds an already-populated install. */
+    class PreferencesSeedStateStore(
+        private val preferences: SakinahPreferences
+    ) : SeedStateStore {
+        override fun adhkarSeedHash(): String? = preferences.adhkarSeedHash
+        override fun recordAdhkarSeedHash(hash: String) {
+            preferences.adhkarSeedHash = hash
+        }
+    }
 
     /** What a seeding pass actually did. `skipped` is true when content was already present. */
     data class SeedSummary(
@@ -106,7 +135,12 @@ object DatabaseSeeder {
             val needsQuran = target.quranDao.countAllAyahs() < QuranOfflinePack.TOTAL_AYAHS
             val needsSurahMetadata = target.quranDao.countSurahs() < QuranOfflinePack.TOTAL_SURAHS
             val needsHadith = target.hadithDao.countForBook(NAWAWI_BOOK_KEY) <= 0
-            val needsAdhkar = target.adhkarDao.count() <= 0
+            // The Hisn asset is small, so it is read once up front: its content hash decides
+            // whether an existing install needs the newer (larger) edition.
+            val hisnText = readAsset(HISN_ASSET)
+            val hisnHash = hisnText?.let(::adhkarSeedHash)
+            val needsAdhkar = hisnHash != null &&
+                (target.adhkarDao.count() <= 0 || target.seedState.adhkarSeedHash() != hisnHash)
 
             if (!needsQuran && !needsSurahMetadata && !needsHadith && !needsAdhkar) {
                 return SeedSummary(skipped = true)
@@ -145,10 +179,13 @@ object DatabaseSeeder {
                 0
             }
 
-            val adhkar = if (needsAdhkar) {
-                readAsset(HISN_ASSET)?.let { applyAdhkarSeed(it, target.adhkarDao) } ?: 0
-            } else {
-                0
+            var adhkar = 0
+            if (needsAdhkar && hisnText != null) {
+                adhkar = applyAdhkarSeed(hisnText, target.adhkarDao)
+                // Only record the edition once its rows committed, so a failed write retries.
+                if (adhkar > 0 && hisnHash != null) {
+                    target.seedState.recordAdhkarSeedHash(hisnHash)
+                }
             }
 
             SeedSummary(
@@ -223,9 +260,23 @@ object DatabaseSeeder {
 
         val entries = document.categories.flatMap { category -> category.toEntities() }
         if (entries.isNotEmpty()) {
-            adhkarDao.upsertAll(entries)
+            // Replace, not upsert: an entry dropped from a newer edition must not linger.
+            adhkarDao.replaceAll(entries)
         }
         return entries.size
+    }
+
+    /**
+     * FNV-1a 64-bit over the asset text. Cheap, dependency-free, and enough to notice any
+     * edit to the bundled edition (which is what triggers a re-seed).
+     */
+    fun adhkarSeedHash(jsonText: String): String {
+        var hash = 0xcbf29ce484222325UL
+        for (byte in jsonText.toByteArray(Charsets.UTF_8)) {
+            hash = hash xor byte.toUByte().toULong()
+            hash *= 0x100000001b3UL
+        }
+        return hash.toString(16).padStart(16, '0')
     }
 
     /**
@@ -261,8 +312,11 @@ object DatabaseSeeder {
     }
 
     /** The DAOs seeding writes through. */
-    fun seedContentOf(database: SakinahEncryptedDatabase): SeedContent =
-        SeedContent(database.quranDao(), database.hadithDao(), database.adhkarDao())
+    fun seedContentOf(
+        database: SakinahEncryptedDatabase,
+        seedState: SeedStateStore = InMemorySeedStateStore()
+    ): SeedContent =
+        SeedContent(database.quranDao(), database.hadithDao(), database.adhkarDao(), seedState)
 
     /** Reads a bundled asset by name, or null when it is missing/unreadable. */
     fun assetReader(context: Context): (String) -> String? {
@@ -317,6 +371,11 @@ object DatabaseSeeder {
             arabic = item.arabic,
             translation = item.translation,
             reference = item.reference,
+            grading = item.grading,
+            // A zero/negative count would render "0x" on the card; clamp to one recitation.
+            repeatCount = item.repeatCount.coerceAtLeast(1),
+            transliteration = item.transliteration,
+            variantNote = item.variantNote,
             orderIndex = index
         )
     }

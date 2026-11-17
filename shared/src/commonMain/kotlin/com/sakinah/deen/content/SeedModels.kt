@@ -40,7 +40,15 @@ data class SeedHadith(
 )
 
 @Serializable
-data class SeedHisnDocument(val categories: List<SeedCategory> = emptyList())
+data class SeedHisnDocument(
+    val version: Int = 1,
+    /** How the text was obtained and cross-checked; shown in the Adhkar library footer. */
+    val source: String = "",
+    val note: String = "",
+    /** e.g. "pending_scholarly_review" — surfaced so the UI never implies a fatwa. */
+    val reviewStatus: String = "",
+    val categories: List<SeedCategory> = emptyList()
+)
 
 @Serializable
 data class SeedCategory(
@@ -54,6 +62,15 @@ data class SeedAdhkar(
     val id: String = "",
     val title: String = "",
     val arabic: String = "",
+    /** Latin transliteration, so a non-Arabic reader can attempt the wording. */
+    val transliteration: String = "",
     val translation: String = "",
-    val reference: String = ""
+    /** Book + number, e.g. "Sahih Muslim 597". Never left blank in the bundled set. */
+    val reference: String = "",
+    /** Sahih / Hasan / Sahih (al-Albani) as published in Hisn al-Muslim. */
+    val grading: String = "",
+    /** How many times the wording is repeated; at least 1. */
+    val repeatCount: Int = 1,
+    /** Differences between narrations, e.g. an added phrase on return from travel. */
+    val variantNote: String = ""
 )

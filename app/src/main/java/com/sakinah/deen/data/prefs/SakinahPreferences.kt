@@ -84,6 +84,7 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         private const val KEY_NEXT_ALARM_AT = "azaan_next_alarm_at"
         private const val KEY_NEXT_ALARM_PRAYER = "azaan_next_alarm_prayer"
         private const val KEY_LAST_ALARM_RESULT = "azaan_last_schedule_result"
+        private const val KEY_ADHKAR_SEED_HASH = "adhkar_seed_hash"
     }
 
     /** Double is stored as raw bits so stored coordinates do not lose precision. */
@@ -330,6 +331,16 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
     var lastAlarmScheduleResult: String
         get() = prefs.getString(KEY_LAST_ALARM_RESULT, "") ?: ""
         set(value) = prefs.edit().putString(KEY_LAST_ALARM_RESULT, value).apply()
+
+    /**
+     * FNV-1a hash of the bundled Hisn al-Muslim asset edition that was last written to
+     * Room. A mismatch means the APK ships a newer/larger set and seeding should refresh it.
+     */
+    var adhkarSeedHash: String?
+        get() = prefs.getString(KEY_ADHKAR_SEED_HASH, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().apply {
+            if (value.isNullOrBlank()) remove(KEY_ADHKAR_SEED_HASH) else putString(KEY_ADHKAR_SEED_HASH, value)
+        }.apply()
 
     var hadithLanguageCode: String
         get() = prefs.getString(KEY_HADITH_LANGUAGE, "eng") ?: "eng"

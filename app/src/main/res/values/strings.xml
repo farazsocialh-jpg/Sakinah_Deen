@@ -124,4 +124,26 @@
     <string name="guide_tasbih_subhanallah">SubhanAllah (33×)</string>
     <string name="guide_tasbih_alhamdulillah">Alhamdulillah (33×)</string>
     <string name="guide_tasbih_allahuakbar">Allahu Akbar (34×)</string>
+    <string name="guide_tts_aid_note">Audio aid for pronunciation only. Learn Tajweed from a qualified teacher; a device voice is not a substitute for recitation study.</string>
+    <string name="guide_review_note">Wording and posture guidance follow the cited narrations and await sign-off by a qualified reviewer. Madhhab differences are labelled, not resolved.</string>
+    <string name="guide_mark_learned">Mark as learned</string>
+    <string name="guide_learned">Learned</string>
+    <string name="guide_favorite_cd">Save to favorites</string>
+    <string name="guide_unfavorite_cd">Remove from favorites</string>
+    <string name="guide_progress_tab">%1$s %2$d%%</string>
+    <string name="guide_progress_summary">Practice progress: %1$d of %2$d steps learned</string>
+    <string name="guide_favorites_summary">%1$d saved</string>
+    <string name="guide_practice_reminder">Daily practice reminder</string>
+    <string name="guide_reminder_title">Continue your Salah guide</string>
+    <string name="guide_reminder_body">Take a few minutes to review the prayer steps and adhkar.</string>
+    <string name="guide_reminder_body_progress">You have marked %1$d steps as learned. Continue where you left off.</string>
+    <string name="guide_tab_adhkar">Adhkar</string>
+    <string name="guide_adhkar_repeat">%1$d×</string>
+    <string name="guide_adhkar_variant">Variant: %1$s</string>
+    <string name="guide_adhkar_empty">Adhkar are still loading from the bundled library.</string>
+    <string name="guide_adhkar_grading">Grading: %1$s</string>
+    <string name="guide_adhkar_source_prefix">Source: %1$s</string>
+    <string name="guide_variation_label">Madhhab / posture variant</string>
+    <string name="guide_adhkar_subtitle">%1$d adhkar · %2$d saved</string>
+    <string name="guide_adhkar_all">All</string>
 </resources>

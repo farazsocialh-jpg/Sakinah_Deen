@@ -212,11 +212,22 @@ class FakeAdhkarDao : AdhkarDao {
         )
     }
 
+    override fun observeAll(): Flow<List<AdhkarEntity>> = flow {
+        emit(entries.values.sortedWith(compareBy({ it.categoryKey }, { it.orderIndex })))
+    }
+
     override suspend fun count(): Int = entries.size
+
+    override suspend fun countForCategory(categoryKey: String): Int =
+        entries.values.count { it.categoryKey == categoryKey }
 
     override suspend fun upsertAll(entries: List<AdhkarEntity>) {
         this.entries += entries.associateBy { it.id }
         writes += entries.size
+    }
+
+    override suspend fun clearAll() {
+        entries.clear()
     }
 }
 

@@ -44,7 +44,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         AdhkarEntity::class,
         PrayerTimetableEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = true
 )
 @TypeConverters(SakinahTypeConverters::class)
@@ -103,6 +103,20 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
                 db.execSQL(
                     "ALTER TABLE `quran_ayahs` ADD COLUMN `textImlaei` TEXT NOT NULL DEFAULT ''"
                 )
+            }
+        }
+
+        /**
+         * v10 -> v11 gives adhkar rows their provenance: transliteration, grading, repeat
+         * count and variant note, so the Adhkar cards can show a source chain instead of
+         * bare text. Existing rows keep blank provenance and are replaced by the seed.
+         */
+        internal val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `adhkar_entries` ADD COLUMN `grading` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `adhkar_entries` ADD COLUMN `repeatCount` INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE `adhkar_entries` ADD COLUMN `transliteration` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `adhkar_entries` ADD COLUMN `variantNote` TEXT NOT NULL DEFAULT ''")
             }
         }
 
@@ -193,7 +207,8 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
                     MIGRATION_6_7,
                     MIGRATION_7_8,
                     MIGRATION_8_9,
-                    MIGRATION_9_10
+                    MIGRATION_9_10,
+                    MIGRATION_10_11
                 )
                 // Pre-production builds 1..3 predate the migration chain; their schema
                 // cannot be upgraded safely, so recreate only those legacy versions.
