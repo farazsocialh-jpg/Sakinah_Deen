@@ -17,9 +17,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -34,7 +39,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -74,6 +81,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -585,7 +595,16 @@ fun SettingsScreen(
                             title = "Theme & Palette",
                             summary = "${appearanceConfig.themeMode.label} · ${appearanceConfig.palette.label}",
                             expanded = themeExpanded,
-                            onToggle = { themeExpanded = !themeExpanded }
+                            onToggle = { themeExpanded = !themeExpanded },
+                            leading = {
+                                Box(
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .clip(CircleShape)
+                                        .background(appearanceConfig.palette.lightPreviewPrimary)
+                                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                                )
+                            }
                         ) {
                             SegmentedPillBar(
                                 options = UiThemeMode.entries,
@@ -605,27 +624,55 @@ fun SettingsScreen(
                                     }
                                 }
                             )
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 SakinahPalette.entries.forEach { palette ->
                                     val selected = appearanceConfig.palette == palette
-                                    FilterChip(
-                                        selected = selected,
-                                        onClick = {
-                                            appearancePrefs.update { it.copy(palette = palette) }
-                                        },
-                                        label = { Text(palette.label, fontSize = 12.sp) },
-                                        leadingIcon = {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape)
+                                            .border(
+                                                width = if (selected) 2.dp else 1.dp,
+                                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                                shape = CircleShape
+                                            )
+                                            .clickable { appearancePrefs.update { it.copy(palette = palette) } },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(30.dp)
+                                                .clip(CircleShape)
+                                                .background(palette.lightPreviewPrimary)
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomEnd)
+                                                .offset(x = (-2).dp, y = (-2).dp)
+                                                .size(12.dp)
+                                                .clip(CircleShape)
+                                                .background(palette.lightPreviewAccent)
+                                        )
+                                        if (selected) {
                                             Box(
                                                 modifier = Modifier
-                                                    .size(14.dp)
+                                                    .size(16.dp)
                                                     .clip(CircleShape)
-                                                    .background(palette.lightPreviewPrimary)
-                                            )
+                                                    .background(MaterialTheme.colorScheme.primary),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Check,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                                    modifier = Modifier.size(10.dp)
+                                                )
+                                            }
                                         }
-                                    )
+                                    }
                                 }
                             }
                         }
@@ -651,12 +698,13 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 items(SalahHomeLayout.entries) { layout ->
-                                    LayoutChoiceCard(
-                                        title = layout.displayName,
-                                        subtitle = layout.subtitle,
+                                    PortraitTemplateCard(
+                                        label = layout.displayName,
                                         selected = appearanceConfig.salahHomeLayout == layout,
                                         onClick = { appearancePrefs.updateSalahHomeLayout(layout) }
-                                    )
+                                    ) {
+                                        SalahLayoutPreview(layout)
+                                    }
                                 }
                             }
                         }
@@ -682,12 +730,13 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 items(QuranReadingLayout.entries) { layout ->
-                                    LayoutChoiceCard(
-                                        title = layout.displayName,
-                                        subtitle = layout.subtitle,
+                                    PortraitTemplateCard(
+                                        label = layout.displayName,
                                         selected = appearanceConfig.quranReadingLayout == layout,
                                         onClick = { appearancePrefs.updateQuranReadingLayout(layout) }
-                                    )
+                                    ) {
+                                        QuranLayoutPreview(layout)
+                                    }
                                 }
                             }
                         }
@@ -713,12 +762,13 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 items(HadithReadingLayout.entries) { layout ->
-                                    LayoutChoiceCard(
-                                        title = layout.displayName,
-                                        subtitle = layout.subtitle,
+                                    PortraitTemplateCard(
+                                        label = layout.displayName,
                                         selected = appearanceConfig.hadithReadingLayout == layout,
                                         onClick = { appearancePrefs.updateHadithReadingLayout(layout) }
-                                    )
+                                    ) {
+                                        HadithLayoutPreview(layout)
+                                    }
                                 }
                             }
                         }
@@ -1124,6 +1174,243 @@ fun SettingsScreen(
     }
 }
 
+@Composable
+private fun PortraitTemplateCard(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    preview: @Composable () -> Unit
+) {
+    val shape = RoundedCornerShape(12.dp)
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.width(96.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .height(170.dp)
+                .aspectRatio(0.55f)
+                .shadow(
+                    elevation = if (selected) 8.dp else 0.dp,
+                    shape = shape,
+                    spotColor = MaterialTheme.colorScheme.primary,
+                    ambientColor = MaterialTheme.colorScheme.primary
+                )
+                .clip(shape)
+                .background(
+                    if (selected) MaterialTheme.colorScheme.surface
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                )
+                .border(
+                    width = if (selected) 2.dp else 1.dp,
+                    color = if (selected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.outlineVariant,
+                    shape = shape
+                )
+                .clickable(onClick = onClick)
+        ) {
+            preview()
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(4.dp)
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+            }
+        }
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun SalahLayoutPreview(layout: SalahHomeLayout) {
+    val style = when {
+        layout.name.contains("BENTO") -> 1
+        layout.name.contains("MINIMAL") || layout.name.contains("LIST") || layout.name.contains("COMPACT") -> 2
+        else -> 0
+    }
+    val primary = MaterialTheme.colorScheme.primary
+    val onSurface = MaterialTheme.colorScheme.onSurfaceVariant
+    Box(Modifier.fillMaxSize().padding(6.dp)) {
+        when (style) {
+            0 -> {
+                Canvas(Modifier.fillMaxWidth().height(34.dp)) {
+                    val r = size.minDimension / 2f - 2f
+                    drawArc(color = onSurface.copy(alpha = 0.2f), startAngle = 0f, sweepAngle = 360f, useCenter = false, style = Stroke(width = 3f))
+                    drawArc(color = primary, startAngle = -90f, sweepAngle = 220f, useCenter = false, style = Stroke(width = 3f))
+                }
+                Column(Modifier.fillMaxWidth().padding(top = 36.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    repeat(4) {
+                        Box(Modifier.fillMaxWidth(0.9f).height(4.dp).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.3f)))
+                    }
+                    repeat(5) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(4.dp).clip(CircleShape).background(primary))
+                            Box(Modifier.weight(0.5f).height(4.dp).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.35f)))
+                            Box(Modifier.weight(0.3f).height(4.dp).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.2f)))
+                        }
+                    }
+                }
+            }
+            1 -> {
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(onSurface.copy(alpha = 0.4f)))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Box(Modifier.weight(1f).height(36.dp).clip(RoundedCornerShape(6.dp)).background(primary.copy(alpha = 0.25f)))
+                        Box(Modifier.weight(1f).height(36.dp).clip(RoundedCornerShape(6.dp)).background(primary.copy(alpha = 0.25f)))
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Box(Modifier.weight(1f).height(28.dp).clip(RoundedCornerShape(6.dp)).background(onSurface.copy(alpha = 0.2f)))
+                        Box(Modifier.weight(1f).height(28.dp).clip(RoundedCornerShape(6.dp)).background(onSurface.copy(alpha = 0.2f)))
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Box(Modifier.weight(1f).height(28.dp).clip(RoundedCornerShape(6.dp)).background(onSurface.copy(alpha = 0.2f)))
+                        Box(Modifier.weight(1f).height(28.dp).clip(RoundedCornerShape(6.dp)).background(onSurface.copy(alpha = 0.2f)))
+                    }
+                }
+            }
+            else -> {
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(onSurface.copy(alpha = 0.45f)))
+                    repeat(6) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(8.dp).clip(RoundedCornerShape(2.dp)).border(1.dp, onSurface.copy(alpha = 0.4f), RoundedCornerShape(2.dp)))
+                            Box(Modifier.weight(1f).height(4.dp).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.25f)))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuranLayoutPreview(layout: QuranReadingLayout) {
+    val style = when {
+        layout.name.contains("MUSHAF") -> 1
+        layout.name.contains("COMPACT") || layout.name.contains("CARD") -> 2
+        else -> 0
+    }
+    val primary = MaterialTheme.colorScheme.primary
+    val onSurface = MaterialTheme.colorScheme.onSurfaceVariant
+    val gold = MaterialTheme.colorScheme.tertiary
+    Box(Modifier.fillMaxSize().padding(6.dp)) {
+        when (style) {
+            0 -> {
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    repeat(5) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Box(Modifier.fillMaxWidth(0.6f).height(5.dp).align(Alignment.End).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.45f)))
+                            Spacer(Modifier.height(2.dp))
+                            Box(Modifier.fillMaxWidth(0.9f).height(3.dp).align(Alignment.Start).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.25f)))
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
+                    }
+                }
+            }
+            1 -> {
+                Box(Modifier.fillMaxSize().border(1.dp, onSurface.copy(alpha = 0.3f), RoundedCornerShape(4.dp)).padding(4.dp)) {
+                    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        repeat(7) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.weight(1f).height(3.dp).clip(RoundedCornerShape(1.dp)).background(onSurface.copy(alpha = 0.35f)))
+                                if (it % 2 == 0) Box(Modifier.size(5.dp).clip(CircleShape).background(gold))
+                            }
+                        }
+                    }
+                }
+            }
+            else -> {
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    repeat(3) {
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(onSurface.copy(alpha = 0.12f)).padding(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Box(Modifier.fillMaxWidth(0.7f).height(5.dp).clip(RoundedCornerShape(2.dp)).background(primary.copy(alpha = 0.6f)))
+                            Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.25f)))
+                            Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.25f)))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HadithLayoutPreview(layout: HadithReadingLayout) {
+    val style = when {
+        layout.name.contains("ENGLISH") -> 1
+        layout.name.contains("BILINGUAL") || layout.name.contains("CARD") || layout.name.contains("SANAD") -> 2
+        else -> 0
+    }
+    val primary = MaterialTheme.colorScheme.primary
+    val onSurface = MaterialTheme.colorScheme.onSurfaceVariant
+    Box(Modifier.fillMaxSize().padding(6.dp)) {
+        when (style) {
+            0 -> {
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Box(Modifier.fillMaxWidth(0.5f).height(8.dp).clip(RoundedCornerShape(4.dp)).background(primary.copy(alpha = 0.3f)))
+                    repeat(4) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(6.dp).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.4f)))
+                                Box(Modifier.weight(1f).height(3.dp).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.3f)))
+                            }
+                            Box(Modifier.fillMaxWidth(0.8f).height(3.dp).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.2f)))
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
+                    }
+                }
+            }
+            1 -> {
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    repeat(3) {
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(onSurface.copy(alpha = 0.12f)).padding(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.5f)))
+                            Box(Modifier.fillMaxWidth(0.85f).height(3.dp).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.25f)))
+                            Box(Modifier.align(Alignment.End).width(24.dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(primary.copy(alpha = 0.35f)))
+                        }
+                    }
+                }
+            }
+            else -> {
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    repeat(2) {
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(onSurface.copy(alpha = 0.12f)).padding(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Box(Modifier.fillMaxWidth(0.7f).height(4.dp).align(Alignment.End).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.45f)))
+                            Box(Modifier.fillMaxWidth(0.5f).height(4.dp).align(Alignment.End).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.3f)))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
+                            Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.25f)))
+                            Box(Modifier.fillMaxWidth(0.9f).height(3.dp).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.25f)))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
 /** Selectable preview card used by the Salah / Quran / Hadith layout rows. */
 @Composable
 private fun AppearanceAccordion(
@@ -1131,6 +1418,7 @@ private fun AppearanceAccordion(
     summary: String,
     expanded: Boolean,
     onToggle: () -> Unit,
+    leading: @Composable (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     val rotation by animateFloatAsState(targetValue = if (expanded) 180f else 0f, label = "accordion_chevron")
@@ -1143,19 +1431,22 @@ private fun AppearanceAccordion(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = title,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = summary,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+                    leading?.invoke()
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = title,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = summary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
                 androidx.compose.material3.Icon(
                     imageVector = Icons.Default.KeyboardArrowDown,
