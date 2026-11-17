@@ -204,6 +204,12 @@ class PrayerCalculationEngineImpl : PrayerCalculationEngine {
     ): PrayerCountdownInfo {
         val fajr = prayerTimes[PrayerType.FAJR] ?: LocalTime(5, 15)
         val sunrise = prayerTimes[PrayerType.SUNRISE] ?: LocalTime(6, 40)
+        val sunrisePlus15Secs = (sunrise.toSecondOfDay() + 15 * 60) % SECONDS_PER_DAY
+        val sunrisePlus15 = LocalTime(
+            sunrisePlus15Secs / 3600,
+            (sunrisePlus15Secs % 3600) / 60,
+            sunrisePlus15Secs % 60
+        )
         val dhuhr = prayerTimes[PrayerType.DHUHR] ?: LocalTime(12, 45)
         val asr = prayerTimes[PrayerType.ASR] ?: LocalTime(15, 50)
         val maghrib = prayerTimes[PrayerType.MAGHRIB] ?: LocalTime(18, 20)
@@ -216,8 +222,13 @@ class PrayerCalculationEngineImpl : PrayerCalculationEngine {
             currentTime < sunrise -> {
                 Quadruple(PrayerType.FAJR, PrayerType.SUNRISE, fajr, sunrise)
             }
+            currentTime < sunrisePlus15 -> {
+                // Prohibited sunrise window: sunrise .. sunrise+15m.
+                Quadruple(PrayerType.SUNRISE, PrayerType.DHUHR, sunrise, sunrisePlus15)
+            }
             currentTime < dhuhr -> {
-                Quadruple(PrayerType.SUNRISE, PrayerType.DHUHR, sunrise, dhuhr)
+                // Duha/Ishraq window: sunrise no longer active; target Dhuhr.
+                Quadruple(PrayerType.SUNRISE, PrayerType.DHUHR, sunrisePlus15, dhuhr)
             }
             currentTime < asr -> {
                 Quadruple(PrayerType.DHUHR, PrayerType.ASR, dhuhr, asr)

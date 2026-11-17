@@ -501,8 +501,12 @@ class SalahViewModel(
                             nextPrayer = countdown.nextPrayer,
                             countdownText = formatCountdown(countdown),
                             elapsedWindowRatio = countdown.elapsedRatio,
-                            currentPrayerName = prayerDisplayName(countdown.currentPrayer),
-                            currentPrayerArabic = prayerArabicName(countdown.currentPrayer),
+                            currentPrayerName = if (countdown.currentPrayer == PrayerType.SUNRISE &&
+                                now.time.toSecondOfDay() >= (times[PrayerType.SUNRISE]?.toSecondOfDay() ?: 0) + 15 * 60
+                            ) "" else prayerDisplayName(countdown.currentPrayer),
+                            currentPrayerArabic = if (countdown.currentPrayer == PrayerType.SUNRISE &&
+                                now.time.toSecondOfDay() >= (times[PrayerType.SUNRISE]?.toSecondOfDay() ?: 0) + 15 * 60
+                            ) "" else prayerArabicName(countdown.currentPrayer),
                             isCurrentPrayerCompleted = completedRecordsByPrayer[countdown.currentPrayer]?.isCompleted == true,
                             dailyCompletionByPrayer = dailyCompletionMap(),
                             nextPrayerName = prayerDisplayName(countdown.nextPrayer),
@@ -611,8 +615,12 @@ class SalahViewModel(
                 nextPrayer = countdown.nextPrayer,
                 countdownText = formatCountdown(countdown),
                 elapsedWindowRatio = countdown.elapsedRatio,
-                currentPrayerName = prayerDisplayName(countdown.currentPrayer),
-                currentPrayerArabic = prayerArabicName(countdown.currentPrayer),
+                currentPrayerName = if (countdown.currentPrayer == PrayerType.SUNRISE &&
+                    nowTime.toSecondOfDay() >= (times[PrayerType.SUNRISE]?.toSecondOfDay() ?: 0) + 15 * 60
+                ) "" else prayerDisplayName(countdown.currentPrayer),
+                currentPrayerArabic = if (countdown.currentPrayer == PrayerType.SUNRISE &&
+                    nowTime.toSecondOfDay() >= (times[PrayerType.SUNRISE]?.toSecondOfDay() ?: 0) + 15 * 60
+                ) "" else prayerArabicName(countdown.currentPrayer),
                 isCurrentPrayerCompleted = completedRecordsByPrayer[countdown.currentPrayer]?.isCompleted == true,
                 dailyCompletionByPrayer = dailyCompletionMap(),
                 nextPrayerName = prayerDisplayName(countdown.nextPrayer),
@@ -678,7 +686,16 @@ class SalahViewModel(
         // Fajr ends at Sunrise, Dhuhr at Asr, Asr at Maghrib, Maghrib at Isha, Isha at
         // Islamic midnight (Maghrib + 1/2 of the night). Isha's end needs the next day's Fajr.
         val endTimes = mutableMapOf<PrayerType, KLocalTime>()
-        times[PrayerType.SUNRISE]?.let { endTimes[PrayerType.FAJR] = it }
+        times[PrayerType.SUNRISE]?.let { sunrise ->
+            endTimes[PrayerType.FAJR] = sunrise
+            // Sunrise is a prohibited prayer window: sunrise .. sunrise + 15m.
+            val plus15Secs = (sunrise.toSecondOfDay() + 15 * 60) % 86400
+            endTimes[PrayerType.SUNRISE] = KLocalTime(
+                plus15Secs / 3600,
+                (plus15Secs % 3600) / 60,
+                plus15Secs % 60
+            )
+        }
         times[PrayerType.ASR]?.let { endTimes[PrayerType.DHUHR] = it }
         times[PrayerType.MAGHRIB]?.let { endTimes[PrayerType.ASR] = it }
         times[PrayerType.ISHA]?.let { endTimes[PrayerType.MAGHRIB] = it }

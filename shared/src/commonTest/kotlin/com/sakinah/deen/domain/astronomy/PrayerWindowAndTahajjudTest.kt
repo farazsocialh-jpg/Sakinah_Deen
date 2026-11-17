@@ -114,6 +114,26 @@ class PrayerWindowAndTahajjudTest {
     }
 
     @Test
+    fun sunrise_windowEndsAtSunrisePlus15Minutes() {
+        // Sunrise 06:40 -> prohibited window ends 06:55.
+        val times = mapOf(
+            PrayerType.FAJR to LocalTime(5, 15),
+            PrayerType.SUNRISE to LocalTime(6, 40),
+            PrayerType.DHUHR to LocalTime(12, 45),
+            PrayerType.ASR to LocalTime(15, 50),
+            PrayerType.MAGHRIB to LocalTime(18, 20),
+            PrayerType.ISHA to LocalTime(19, 45)
+        )
+        // During prohibited window, next prayer is Dhuhr.
+        val info = engine.calculateCountdown(times, LocalTime(6, 45))
+        assertEquals(PrayerType.SUNRISE, info.currentPrayer)
+        assertEquals(PrayerType.DHUHR, info.nextPrayer)
+        // After sunrise + 15m, next prayer still targets Dhuhr.
+        val after = engine.calculateCountdown(times, LocalTime(7, 0))
+        assertEquals(PrayerType.DHUHR, after.nextPrayer)
+    }
+
+    @Test
     fun worldwideMethods_produceOrderedPrayerTimes() {
         CalculationMethod.entries.forEach { method ->
             val table = engine.getPrayerTimes(

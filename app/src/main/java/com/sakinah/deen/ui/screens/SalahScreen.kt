@@ -404,6 +404,13 @@ fun SalahScreen(
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
+                                        if (prayer.id == "sunrise") {
+                                            Text(
+                                                text = "Prohibited prayer window · Fajr ends",
+                                                fontSize = 9.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                         if (prayer.id == "asr") {
                                             Text(
                                                 text = "Preferred before ~15m pre-sunset",
