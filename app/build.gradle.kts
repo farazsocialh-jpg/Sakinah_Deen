@@ -157,6 +157,9 @@ dependencies {
     implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.googleid)
 
+    // WebView: serves bundled Leaflet map assets from a real app origin (no CORS/opaque origin)
+    implementation(libs.androidx.webkit)
+
     // WorkManager
     implementation(libs.androidx.work.runtime.ktx)
 

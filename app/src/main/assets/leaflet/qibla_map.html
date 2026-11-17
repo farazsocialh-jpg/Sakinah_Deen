@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<link rel="stylesheet" href="leaflet.css"/>
+<script src="leaflet.js"></script>
+<style>
+  html, body { height: 100%; margin: 0; padding: 0; background: #0B3B2C; }
+  #map { position: absolute; inset: 0; background: #0B3B2C; }
+  .leaflet-container { background: #0B3B2C; font: inherit; }
+  .qibla-arrow {
+    display: block; width: 0; height: 0;
+    border-left: 9px solid transparent;
+    border-right: 9px solid transparent;
+    border-bottom: 18px solid #10B981;
+    filter: drop-shadow(0 0 3px rgba(0,0,0,0.55));
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+(function () {
+  "use strict";
+
+  var bridge = window.QiblaBridge;
+
+  function call(name, payload) {
+    try {
+      if (bridge && typeof bridge[name] === "function") {
+        bridge[name](payload === undefined ? "" : String(payload));
+      }
+    } catch (e) {
+      /* the host bridge is optional */
+    }
+  }
+
+  function debug(message) {
+    try { console.log(message); } catch (e) { /* ignore */ }
+    call("onDebug", message);
+  }
+
+  function fail(reason) {
+    debug("map failure: " + reason);
+    call("onMapError", reason);
+  }
+
+  var params = new URLSearchParams(window.location.search);
+  var lat = parseFloat(params.get("lat"));
+  var lon = parseFloat(params.get("lon"));
+  var qibla = parseFloat(params.get("qibla"));
+
+  if (typeof L === "undefined") {
+    fail("leaflet_missing");
+    return;
+  }
+  if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    fail("bad_coordinates");
+    return;
+  }
+  if (!isFinite(qibla)) {
+    qibla = 0;
+  }
+
+  // Tile providers, best first. Each level replaces the previous one on repeated failure so
+  // a blocked CDN degrades instead of leaving the user with a blank square.
+  var SOURCES = [
+    {
+      url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+      options: { subdomains: "abcd", maxZoom: 19, attribution: "&copy; OpenStreetMap &copy; CARTO" }
+    },
+    {
+      url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      options: { maxZoom: 19, attribution: "&copy; OpenStreetMap" }
+    },
+    {
+      url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+      options: { maxZoom: 19, attribution: "&copy; Esri" }
+    }
+  ];
+
+  var map = L.map("map", { zoomControl: true, attributionControl: true, preferCanvas: true })
+    .setView([lat, lon], 17);
+  var sourceIndex = 0;
+  var tileErrors = 0;
+  var tileLayer = null;
+
+  function markReady() {
+    call("onTileLoaded", "");
+  }
+
+  function installTiles(index) {
+    var source = SOURCES[index];
+    tileLayer = L.tileLayer(source.url, source.options).addTo(map);
+    tileLayer.on("tileload", markReady);
+    tileLayer.on("tileerror", function () {
+      tileErrors++;
+      if (tileErrors < 2) {
+        return;
+      }
+      tileErrors = 0;
+      map.removeLayer(tileLayer);
+      if (index + 1 < SOURCES.length) {
+        installTiles(index + 1);
+      } else {
+        fail("tiles_unavailable");
+      }
+    });
+  }
+
+  installTiles(sourceIndex);
+
+  // User position.
+  L.circleMarker([lat, lon], {
+    radius: 7,
+    color: "#0B3B2C",
+    weight: 2,
+    fillColor: "#10B981",
+    fillOpacity: 1
+  }).addTo(map).bindTooltip("You are here", { direction: "top", offset: [0, -8] });
+
+  // Qibla bearing ray: a short geodesic segment keeps the direction readable at street zoom.
+  function destination(latDeg, lonDeg, bearingDeg, distanceKm) {
+    var radius = 6371.0;
+    var d = distanceKm / radius;
+    var bearing = (bearingDeg * Math.PI) / 180;
+    var lat1 = (latDeg * Math.PI) / 180;
+    var lon1 = (lonDeg * Math.PI) / 180;
+    var lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(bearing));
+    var lon2 = lon1 + Math.atan2(
+      Math.sin(bearing) * Math.sin(d) * Math.cos(lat1),
+      Math.cos(d) - Math.sin(lat1) * Math.sin(lat2)
+    );
+    return [(lat2 * 180) / Math.PI, (lon2 * 180) / Math.PI];
+  }
+
+  var tip = destination(lat, lon, qibla, 0.4);
+  L.polyline([[lat, lon], tip], {
+    color: "#10B981",
+    weight: 4,
+    opacity: 0.95,
+    dashArray: "8, 6"
+  }).addTo(map);
+
+  L.marker(tip, {
+    interactive: false,
+    icon: L.divIcon({
+      className: "",
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+      html: '<span class="qibla-arrow" style="transform: rotate(' + qibla + 'deg)"></span>'
+    })
+  }).addTo(map);
+
+  map.whenReady(function () {
+    call("onMapReady", "");
+  });
+
+  window.addEventListener("error", function (event) {
+    fail("js_error:" + (event && event.message ? event.message : "unknown"));
+  });
+})();
+</script>
+</body>
+</html>

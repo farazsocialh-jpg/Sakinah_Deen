@@ -3,7 +3,6 @@ package com.sakinah.deen.ui.screens
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
-import android.location.Location
 import android.net.Uri
 import android.provider.Settings
 import androidx.core.app.ActivityCompat
@@ -73,9 +72,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -87,8 +84,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -97,8 +92,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import kotlin.math.roundToInt
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
@@ -106,7 +99,6 @@ import com.sakinah.deen.data.model.PrayerModel
 import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.SalahHomeLayout
-import com.sakinah.deen.domain.sensor.QiblaSensorManager
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
 import com.sakinah.deen.ui.components.QiblaModesCard
 import com.sakinah.deen.ui.components.SakinahCard
@@ -171,39 +163,8 @@ fun SalahScreen(
     var expandedId by remember { mutableStateOf<String?>(null) }
     // Refresh state lives in the view model: a failed or empty refresh still clears it.
 
-    val qiblaManager = rememberInject<QiblaSensorManager>()
-    val compassData by qiblaManager.compassFlow.collectAsState()
-    val haptic = LocalHapticFeedback.current
-
-    // Start magnetometer/rotation sensors only while Qibla tab is active to save battery.
-    DisposableEffect(selectedSegment) {
-        if (selectedSegment == 1) {
-            qiblaManager.startListening()
-        }
-        onDispose {
-            qiblaManager.stopListening()
-        }
-    }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        if (selectedSegment == 1) qiblaManager.startListening()
-    }
-    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
-        qiblaManager.stopListening()
-    }
-    LaunchedEffect(selectedSegment, state.userCoordinates) {
-        if (selectedSegment == 1) {
-            val loc = Location("").apply {
-                latitude = state.userCoordinates.first
-                longitude = state.userCoordinates.second
-            }
-            qiblaManager.updateLocation(loc)
-        }
-    }
-    LaunchedEffect(selectedSegment, compassData.isAligned, compassData.isFlat) {
-        if (selectedSegment == 1 && compassData.isAligned && compassData.isFlat) {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-        }
-    }
+    // Compass sensors now live inside QiblaModesCard: they start only while its Compass mode
+    // is on screen and stop on pause, so the Salah tab itself registers no listeners.
 
     fun launchPrayerGuide(prayerTitle: String, rakats: Int) {
         if (onOpenPrayerGuide != null) {
@@ -511,35 +472,15 @@ fun SalahScreen(
                 }
 
                 1 -> {
+                    // One shared Qibla card (Compass · Map · Sun). Interference, calibration
+                    // and permission guidance are owned by the card itself.
                     item {
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            QiblaModesCard(
-                                latitude = state.userCoordinates.first,
-                                longitude = state.userCoordinates.second,
-                                cityName = state.locationName
-                            )
-                            if (compassData.isMagneticInterference) {
-                                Surface(
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = SalahAmber,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(14.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFF4A3200))
-                                        Spacer(Modifier.width(10.dp))
-                                        Text(
-                                            text = "Magnetic interference detected — move away from metal, speakers, or magnetic cases",
-                                            color = Color(0xFF4A3200),
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                        QiblaModesCard(
+                            latitude = state.userCoordinates.first,
+                            longitude = state.userCoordinates.second,
+                            cityName = state.locationName,
+                            locationAvailable = !state.isLocationPending
+                        )
                     }
                 }
 

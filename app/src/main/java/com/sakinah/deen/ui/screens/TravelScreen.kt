@@ -1,7 +1,6 @@
 package com.sakinah.deen.ui.screens
 
 import android.Manifest
-import android.location.Location
 import android.media.MediaPlayer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,7 +25,6 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -44,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,25 +51,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
 import com.sakinah.deen.settings.SettingsRepository
-import com.sakinah.deen.domain.sensor.QiblaSensorManager
 import com.sakinah.deen.domain.travel.SafarPolicy
 import com.sakinah.deen.domain.travel.TravelStatusManager
 import com.sakinah.deen.ui.components.ArabicVerseBlock
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
+import com.sakinah.deen.ui.components.QiblaModesCard
 import com.sakinah.deen.ui.components.SakinahCard
 import com.sakinah.deen.ui.components.StatusBadge
 import com.sakinah.deen.ui.rememberInject
@@ -85,17 +80,8 @@ fun TravelScreen(
     val appPrefs = rememberInject<SakinahPreferences>()
     val locationProvider = rememberInject<UserLocationProvider>()
     val travelManager = rememberInject<TravelStatusManager>()
-    val qiblaManager = rememberInject<QiblaSensorManager>()
     val settingsRepo = rememberInject<SettingsRepository>()
     val settings by settingsRepo.settings.collectAsStateWithLifecycle()
-
-    val compassData by qiblaManager.compassFlow.collectAsStateWithLifecycle()
-    val haptic = LocalHapticFeedback.current
-    LaunchedEffect(compassData.isAligned, compassData.isFlat) {
-        if (compassData.isAligned && compassData.isFlat) {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-        }
-    }
 
     var distanceKm by remember { mutableFloatStateOf(0f) }
     val thresholdKm = SafarPolicy.THRESHOLD_KM.toFloat()
@@ -105,6 +91,12 @@ fun TravelScreen(
     var showHomeOptions by remember { mutableStateOf(false) }
     var showHomeCityPicker by remember { mutableStateOf(false) }
     var gpsHomeRequested by remember { mutableStateOf(false) }
+
+    // The shared Qibla card owns its own sensors; Travel only supplies the current position.
+    var qiblaLatitude by remember { mutableDoubleStateOf(homeCoordinates?.first ?: 21.4225) }
+    var qiblaLongitude by remember { mutableDoubleStateOf(homeCoordinates?.second ?: 39.8262) }
+    var qiblaCity by remember { mutableStateOf(homeCity ?: "Current location") }
+    var qiblaLocationAvailable by remember { mutableStateOf(false) }
 
     var duaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
     var isDuaPlaying by remember { mutableStateOf(false) }
@@ -136,27 +128,21 @@ fun TravelScreen(
         gpsHomeRequested = false
     }
 
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        qiblaManager.startListening()
-    }
-    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
-        qiblaManager.stopListening()
-    }
-
     LaunchedEffect(Unit) {
         val resolved = locationProvider.getFreshOrCachedLocation()
-        val loc = Location("").apply {
-            latitude = resolved.latitude
-            longitude = resolved.longitude
-        }
-        qiblaManager.updateLocation(loc)
+        qiblaLatitude = resolved.latitude
+        qiblaLongitude = resolved.longitude
+        qiblaCity = listOf(resolved.cityName, resolved.countryName)
+            .filter { it.isNotBlank() }
+            .joinToString(", ")
+            .ifBlank { "Current location" }
+        qiblaLocationAvailable = true
         val travelState = travelManager.evaluateTravelState(Pair(resolved.latitude, resolved.longitude))
         distanceKm = travelState.distanceKm.toFloat()
         isSafar = travelState.isTraveler
     }
     DisposableEffect(Unit) {
         onDispose {
-            qiblaManager.stopListening()
             runCatching {
                 duaPlayer?.stop()
                 duaPlayer?.release()
@@ -322,29 +308,14 @@ fun TravelScreen(
             }
         }
 
-        // Qibla Compass
-        QiblaCompassCard(compassData)
-
-        if (compassData.isMagneticInterference) {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFC107))
-            ) {
-                Row(
-                    modifier = Modifier.padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFF4A3200))
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = "Magnetic interference detected — move away from metal, speakers, or magnetic cases",
-                        color = Color(0xFF4A3200),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-        }
+        // One shared Qibla card for both screens: Compass · Map · Sun, with its own
+        // permission, calibration and magnetic-interference guidance.
+        QiblaModesCard(
+            latitude = qiblaLatitude,
+            longitude = qiblaLongitude,
+            cityName = qiblaCity,
+            locationAvailable = qiblaLocationAvailable
+        )
 
         // Bluetooth Dua card (Explicit Deep Emerald Surface)
         Card(

@@ -130,8 +130,17 @@ object QiblaMath {
 data class CompassSensorState(
     val trueNorthAzimuth: Float,
     val needsCalibration: Boolean,
-    val hasSensor: Boolean = true
+    val hasSensor: Boolean = true,
+    val accuracy: QiblaSensorAccuracy = QiblaSensorAccuracy.HIGH,
+    /** Device pitch/roll away from flat, in degrees. */
+    val tiltDeg: Float = 0f,
+    /** Raw geomagnetic field is outside the 15..80 uT Earth range, so the heading is suspect. */
+    val isMagneticInterference: Boolean = false
 )
+
+/** Geomagnetic field magnitude range a phone can read outdoors without local interference. */
+private const val EARTH_FIELD_MIN_UT = 15f
+private const val EARTH_FIELD_MAX_UT = 80f
 
 @Composable
 fun rememberTrueNorthCompassState(
@@ -144,6 +153,8 @@ fun rememberTrueNorthCompassState(
     var smoothedAzimuth by remember { mutableFloatStateOf(0f) }
     var accuracy by remember { mutableIntStateOf(SensorManager.SENSOR_STATUS_ACCURACY_HIGH) }
     var hasSensor by remember { mutableStateOf(false) }
+    var tiltDeg by remember { mutableFloatStateOf(0f) }
+    var magneticInterference by remember { mutableStateOf(false) }
 
     val declination = remember(latitude, longitude) {
         GeomagneticField(
@@ -187,6 +198,13 @@ fun rememberTrueNorthCompassState(
                     Sensor.TYPE_MAGNETIC_FIELD -> {
                         System.arraycopy(event.values, 0, magReading, 0, 3)
                         hasMag = true
+                        val magnitude = sqrt(
+                            event.values[0] * event.values[0] +
+                                event.values[1] * event.values[1] +
+                                event.values[2] * event.values[2]
+                        )
+                        magneticInterference =
+                            magnitude < EARTH_FIELD_MIN_UT || magnitude > EARTH_FIELD_MAX_UT
                         if (rotationSensor == null) publishFallback()
                     }
                 }
@@ -208,6 +226,9 @@ fun rememberTrueNorthCompassState(
             private fun publishAzimuth() {
                 val magneticAzimuth = ((Math.toDegrees(orientation[0].toDouble()).toFloat() + 360f) % 360f)
                 val trueAzimuth = (magneticAzimuth + declination + 360f) % 360f
+                val pitch = Math.toDegrees(orientation[1].toDouble()).toFloat()
+                val roll = Math.toDegrees(orientation[2].toDouble()).toFloat()
+                tiltDeg = sqrt(pitch * pitch + roll * roll).coerceIn(0f, 90f)
 
                 if (!hasInitial) {
                     smoothedAzimuth = trueAzimuth
@@ -229,16 +250,15 @@ fun rememberTrueNorthCompassState(
             if (!enabled) return
             if (rotationSensor != null) {
                 sensorManager.registerListener(listener, rotationSensor, SensorManager.SENSOR_DELAY_UI)
-                magnetometer?.let {
-                    sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_UI)
-                }
             } else {
                 accelerometer?.let {
                     sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_UI)
                 }
-                magnetometer?.let {
-                    sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_UI)
-                }
+            }
+            // The magnetometer always stays registered (even with a rotation vector) so
+            // magnetic interference can be reported instead of silently skewing the heading.
+            magnetometer?.let {
+                sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_UI)
             }
         }
 
@@ -258,12 +278,22 @@ fun rememberTrueNorthCompassState(
         }
     }
 
+    val mappedAccuracy = when (accuracy) {
+        SensorManager.SENSOR_STATUS_ACCURACY_HIGH -> QiblaSensorAccuracy.HIGH
+        SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> QiblaSensorAccuracy.MEDIUM
+        SensorManager.SENSOR_STATUS_ACCURACY_LOW -> QiblaSensorAccuracy.LOW
+        else -> QiblaSensorAccuracy.UNRELIABLE
+    }
+
     return CompassSensorState(
         trueNorthAzimuth = smoothedAzimuth,
         needsCalibration = !hasSensor ||
-            accuracy == SensorManager.SENSOR_STATUS_ACCURACY_LOW ||
-            accuracy == SensorManager.SENSOR_STATUS_UNRELIABLE,
-        hasSensor = hasSensor
+            mappedAccuracy == QiblaSensorAccuracy.LOW ||
+            mappedAccuracy == QiblaSensorAccuracy.UNRELIABLE,
+        hasSensor = hasSensor,
+        accuracy = mappedAccuracy,
+        tiltDeg = tiltDeg,
+        isMagneticInterference = magneticInterference
     )
 }
 
