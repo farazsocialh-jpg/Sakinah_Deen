@@ -165,9 +165,18 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
         }
 
         /**
-         * A regenerated keystore passphrase cannot open the previous SQLCipher file. In that
-         * case the old database is unreadable anyway, so remove it once and recreate a clean
-         * encrypted database instead of crash-looping at startup.
+         * Describes a database that could not be opened with the current keystore passphrase.
+         * The original file is kept (moved aside) so a support engineer — or a future build
+         * that can recover the key — still has the user's prayer logs, Qadha and Hifz data.
+         */
+        @Volatile
+        var lastRecovery: DatabaseRecovery? = null
+            private set
+
+        /**
+         * A regenerated keystore passphrase, a restored backup, or a stale schema cannot be
+         * opened with the current key. Deleting the file silently would destroy the user's
+         * records, so it is renamed aside first and the fresh database starts empty.
          */
         private fun buildWithRecovery(
             context: Context,
@@ -175,11 +184,46 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
         ): SakinahEncryptedDatabase = try {
             build(context, passphraseBytes).also(::openNow)
         } catch (first: Exception) {
-            runCatching { context.deleteDatabase(DB_NAME) }
+            val preserved = preserveUnreadableDatabase(context, first)
+            lastRecovery = preserved
             runCatching { build(context, passphraseBytes).also(::openNow) }.getOrElse { rebuildError ->
                 first.addSuppressed(rebuildError)
                 throw first
             }
+        }
+
+        /**
+         * Moves the unreadable database (and its WAL/journal sidecars) to a timestamped file
+         * in the app's files directory. Returns null when nothing could be preserved.
+         */
+        internal fun preserveUnreadableDatabase(
+            context: Context,
+            cause: Throwable
+        ): DatabaseRecovery? {
+            val source = context.getDatabasePath(DB_NAME)
+            if (!source.exists()) return null
+            val stamp = System.currentTimeMillis()
+            val target = java.io.File(
+                context.filesDir,
+                "recovery/sakinah_$stamp.db"
+            )
+            target.parentFile?.mkdirs()
+            val moved = runCatching {
+                source.inputStream().use { input ->
+                    target.outputStream().use { output -> input.copyTo(output) }
+                }
+            }.isSuccess
+            if (!moved) return null
+            // Only drop the originals once a readable copy exists.
+            runCatching { context.deleteDatabase(DB_NAME) }
+            listOf("$DB_NAME-wal", "$DB_NAME-shm", "$DB_NAME-journal").forEach { sidecar ->
+                runCatching { context.getDatabasePath(sidecar).delete() }
+            }
+            return DatabaseRecovery(
+                backupPath = target.absolutePath,
+                occurredAtEpochMillis = stamp,
+                reason = cause.message ?: cause::class.java.simpleName
+            )
         }
 
         /**
@@ -210,11 +254,23 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
                     MIGRATION_9_10,
                     MIGRATION_10_11
                 )
-                // Pre-production builds 1..3 predate the migration chain; their schema
-                // cannot be upgraded safely, so recreate only those legacy versions.
-                .fallbackToDestructiveMigrationFrom(1, 2, 3)
+                // No destructive fallback for the released schema: an unreadable or older
+                // database is preserved by buildWithRecovery() instead of being wiped, so a
+                // failed migration can never silently erase prayer logs or Qadha records.
                 .addCallback(DatabaseSeeder.createCallback(context) { INSTANCE })
                 .build()
         }
     }
 }
+
+/**
+ * Record of an encrypted database that could not be opened with the current keystore key.
+ *
+ * [backupPath] points at the preserved copy inside the app's files directory; the fresh
+ * database starts empty, so this is the only handle on the user's previous records.
+ */
+data class DatabaseRecovery(
+    val backupPath: String,
+    val occurredAtEpochMillis: Long,
+    val reason: String
+)

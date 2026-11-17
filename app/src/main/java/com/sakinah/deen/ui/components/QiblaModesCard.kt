@@ -690,7 +690,11 @@ private fun QiblaMapView(
                                         }
                                     },
                                     onDebugCallback = { message ->
-                                        android.util.Log.d("QiblaMapBT", message)
+                                        // Bridge diagnostics are only useful while developing; a
+                                        // release build must not write WebView URLs to logcat.
+                                        if (com.sakinah.deen.BuildConfig.DEBUG) {
+                                            android.util.Log.d("QiblaMapBT", message)
+                                        }
                                     }
                                 ),
                                 "QiblaBridge"

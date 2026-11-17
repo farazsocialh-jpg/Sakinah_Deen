@@ -142,6 +142,18 @@ fun PrivacyScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             Text("Notifications: scheduled locally for prayer reminders; no data is shared.")
             Text("Bluetooth: used only to detect vehicle connection for travel mode; no data is transmitted.")
             Text("AI Scholar queries: sent to the AI proxy only when you ask a question; not stored beyond the session.")
+            Text(
+                "On-device storage: prayer logs, Qadha, Hifz, bookmarks and Zakat are kept in an " +
+                    "encrypted database on this device only."
+            )
+            // Honesty about a failed decryption: the old file was kept, not deleted.
+            com.sakinah.deen.data.database.SakinahEncryptedDatabase.lastRecovery?.let { recovery ->
+                Text(
+                    text = "A previous database could not be opened on this device and was kept " +
+                        "as a recovery copy: ${recovery.backupPath}. Export it before starting fresh " +
+                        "if you need the old records."
+                )
+            }
             TextButton(onClick = {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://imancore.app/privacy"))
                 try {
