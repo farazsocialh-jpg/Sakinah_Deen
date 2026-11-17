@@ -1,5 +1,6 @@
 package com.sakinah.deen.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,6 +46,7 @@ import com.sakinah.deen.profile.UserProfile
 import com.sakinah.deen.profile.UserProfileRepository
 import com.sakinah.deen.ui.components.DateOfBirthField
 import com.sakinah.deen.ui.components.GenderSelector
+import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
 import com.sakinah.deen.ui.components.ProfileAvatar
 import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.PrayerGuideGender
@@ -84,6 +86,7 @@ fun CompleteProfileScreen(
     var isSaving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var geocodeStatus by remember { mutableStateOf<String?>(null) }
+    var showCityPicker by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
 
@@ -214,22 +217,45 @@ fun CompleteProfileScreen(
 
             DateOfBirthField(dateOfBirth = dateOfBirth, onDateChange = { dateOfBirth = it })
 
-            OutlinedTextField(
-                value = city,
-                onValueChange = { city = it; error = null },
-                label = { Text("City") },
-                singleLine = true,
-                supportingText = geocodeStatus?.let { { Text(it) } },
+            // Same searchable picker as Salah and Settings, so the profile stores the same
+            // country code and IANA zone the rest of the app relies on.
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                 modifier = Modifier.fillMaxWidth()
-            )
-
-            OutlinedTextField(
-                value = country,
-                onValueChange = { country = it; error = null },
-                label = { Text("Country") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showCityPicker = true }
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "City",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = listOf(city, country).filter { it.isNotBlank() }.joinToString(", "),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Text(
+                        text = "Change",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            geocodeStatus?.let { status ->
+                Text(
+                    text = status,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             Button(
                 onClick = {
@@ -311,5 +337,21 @@ fun CompleteProfileScreen(
                 Text("Skip for now")
             }
         }
+    }
+
+    if (showCityPicker) {
+        HomeLocationCityPickerDialog(
+            title = "Choose your city",
+            subtitle = "Prayer times and reminders follow this city until you change it.",
+            onDismiss = { showCityPicker = false },
+            onCitySelected = { picked ->
+                city = picked.name.substringBefore(',').trim()
+                country = picked.name.substringAfter(',', picked.countryCode).trim()
+                    .ifBlank { picked.countryCode }
+                error = null
+                geocodeStatus = null
+                showCityPicker = false
+            }
+        )
     }
 }

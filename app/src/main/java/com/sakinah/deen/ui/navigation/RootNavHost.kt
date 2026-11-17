@@ -68,7 +68,6 @@ import com.sakinah.deen.ui.screens.DataSourcesScreen
 import com.sakinah.deen.ui.screens.HadithScreen
 import com.sakinah.deen.ui.screens.HelpScreen
 import com.sakinah.deen.ui.screens.NotificationSettingsScreen
-import com.sakinah.deen.ui.screens.OnboardingScreen
 import com.sakinah.deen.ui.screens.PersonalizedOnboardingScreen
 import com.sakinah.deen.ui.screens.PrivacyScreen
 import com.sakinah.deen.ui.screens.ProfileScreen
