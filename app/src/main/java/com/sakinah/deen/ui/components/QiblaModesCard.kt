@@ -3,6 +3,7 @@ package com.sakinah.deen.ui.components
 import android.annotation.SuppressLint
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.animation.core.animateFloatAsState
@@ -151,21 +152,45 @@ private fun QiblaMapView(latitude: Double, longitude: Double, qiblaBearing: Floa
         <html>
         <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <link rel="stylesheet" href="file:///android_asset/leaflet/leaflet.css" onerror="var l=document.createElement('link');l.rel='stylesheet';l.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);"/>
+        <script src="file:///android_asset/leaflet/leaflet.js" onerror="var s=document.createElement('script');s.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);"></script>
         <style>html,body,#map{height:100%;margin:0;padding:0;background:transparent;}</style>
         </head>
         <body>
         <div id="map"></div>
         <script>
         window.__sakinahTiles = 0;
-        var user = [$latitude, $longitude];
-        var kaaba = [${QiblaMath.KAABA_LAT}, ${QiblaMath.KAABA_LON}];
-        var map = L.map('map', { zoomControl: true }).setView(user, 18);
-        var tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20 }).addTo(map);
-        tiles.on('tileload', function () { window.__sakinahTiles = (window.__sakinahTiles || 0) + 1; });
-        L.circleMarker(user, { radius: 7, color: '#0B3B2C', fillColor: '#10B981', fillOpacity: 1 }).addTo(map);
-        L.polyline([user, kaaba], { color: '#10B981', weight: 4, dashArray: '8, 6' }).addTo(map);
+        window.__sakinahMapReady = false;
+        function initMap() {
+          if (typeof L === 'undefined') { return; }
+          var user = [$latitude, $longitude];
+          var kaaba = [${QiblaMath.KAABA_LAT}, ${QiblaMath.KAABA_LON}];
+          var map = L.map('map', { zoomControl: true }).setView(user, 18);
+          var primary = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 19, attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
+          var fallbacks = [
+            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}'
+          ];
+          var tileErrors = 0;
+          primary.on('tileload', function () { window.__sakinahTiles = (window.__sakinahTiles || 0) + 1; });
+          primary.on('tileerror', function () {
+            tileErrors++;
+            if (tileErrors >= 3) {
+              map.removeLayer(primary);
+              var fb = L.tileLayer(fallbacks[0], { maxZoom: 19 }).addTo(map);
+              fb.on('tileload', function () { window.__sakinahTiles = (window.__sakinahTiles || 0) + 1; });
+              fb.on('tileerror', function () {
+                map.removeLayer(fb);
+                var fb2 = L.tileLayer(fallbacks[1], { maxZoom: 19 }).addTo(map);
+                fb2.on('tileload', function () { window.__sakinahTiles = (window.__sakinahTiles || 0) + 1; });
+              });
+            }
+          });
+          L.circleMarker(user, { radius: 7, color: '#0B3B2C', fillColor: '#10B981', fillOpacity: 1 }).addTo(map);
+          L.polyline([user, kaaba], { color: '#10B981', weight: 4, dashArray: '8, 6' }).addTo(map);
+          window.__sakinahMapReady = true;
+        }
+        if (typeof L !== 'undefined') { initMap(); } else { window.addEventListener('load', initMap); }
         </script>
         </body>
         </html>
@@ -176,13 +201,13 @@ private fun QiblaMapView(latitude: Double, longitude: Double, qiblaBearing: Floa
     LaunchedEffect(latitude, longitude, reloadToken) {
         mapFailed = false
         mapLoading = true
-        delay(8_000)
+        delay(12_000)
         val view = webViewRef.value
         if (view == null) {
             mapFailed = true
             return@LaunchedEffect
         }
-        view.evaluateJavascript("(function(){ return window.__sakinahTiles || 0; })();") { value ->
+        view.evaluateJavascript("(function(){ if(!window.__sakinahMapReady) return 0; return window.__sakinahTiles || 0; })();") { value ->
             val loaded = value?.trim()?.trim('"')?.toIntOrNull() ?: 0
             mapLoading = false
             if (loaded <= 0) mapFailed = true
@@ -275,10 +300,10 @@ private fun QiblaMapView(latitude: Double, longitude: Double, qiblaBearing: Floa
                         WebView(ctx).apply {
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
-                            // OpenStreetMap tile servers reject requests without a real UA.
-                            settings.userAgentString = System.getProperty("http.agent")
-                                ?.takeIf { it.isNotBlank() }
-                                ?: "Mozilla/5.0 (Linux; Android ${android.os.Build.VERSION.RELEASE}) ImanCoreQibla/1.0"
+                            settings.allowFileAccess = true
+                            settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                            settings.userAgentString =
+                                "Mozilla/5.0 (Linux; Android ${android.os.Build.VERSION.RELEASE}; ${android.os.Build.MODEL}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 ImanCore/1.0"
                             setBackgroundColor(android.graphics.Color.TRANSPARENT)
                             webViewClient = object : WebViewClient() {
                                 override fun onReceivedError(
@@ -286,21 +311,29 @@ private fun QiblaMapView(latitude: Double, longitude: Double, qiblaBearing: Floa
                                     request: WebResourceRequest?,
                                     error: WebResourceError?
                                 ) {
+                                    android.util.Log.e("QiblaMap", "onReceivedError: ${error?.description} for ${request?.url}")
                                     if (request?.isForMainFrame == true) {
                                         mapFailed = true
                                         mapLoading = false
                                     }
                                 }
+                                override fun onReceivedHttpError(
+                                    view: WebView?,
+                                    request: WebResourceRequest?,
+                                    errorResponse: WebResourceResponse?
+                                ) {
+                                    android.util.Log.e("QiblaMap", "onReceivedHttpError: ${errorResponse?.statusCode} for ${request?.url}")
+                                }
                             }
                             webViewRef.value = this
                             tag = html
-                            loadDataWithBaseURL("https://openstreetmap.org", html, "text/html", "UTF-8", null)
+                            loadDataWithBaseURL("https://app.imancore.local", html, "text/html", "UTF-8", null)
                         }
                     },
                     update = { webView ->
                         if (webView.tag != html) {
                             webView.tag = html
-                            webView.loadDataWithBaseURL("https://openstreetmap.org", html, "text/html", "UTF-8", null)
+                            webView.loadDataWithBaseURL("https://app.imancore.local", html, "text/html", "UTF-8", null)
                         }
                     }
                 )
