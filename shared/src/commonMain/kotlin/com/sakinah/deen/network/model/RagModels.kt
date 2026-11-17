@@ -30,5 +30,12 @@ sealed class RagStreamChunk {
     data class SourceCitation(val source: ProofSourceDto) : RagStreamChunk()
     data class MadhhabBreakdown(val school: String, val summary: String) : RagStreamChunk()
     data class GuardrailDisclaimer(val notice: String) : RagStreamChunk()
+
+    /**
+     * Emitted when no citation could be retrieved or verified for the answer. The UI must
+     * show this instead of implying the ruling is sourced.
+     */
+    data class SourcesUnverified(val reason: String) : RagStreamChunk()
+
     data object Complete : RagStreamChunk()
 }

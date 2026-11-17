@@ -99,7 +99,14 @@ class SunniAiScholarRepositoryImpl(
             }
 
             if (!connected) {
-                // Offline-first grounded fallback generator
+                // Retrieval is unavailable, so the answer below is a curated offline
+                // reference summary. Say that plainly instead of implying live sourcing.
+                emit(
+                    RagStreamChunk.SourcesUnverified(
+                        "Live source retrieval failed. This is an offline reference summary; " +
+                            "verify the references before acting on it."
+                    )
+                )
                 emitResilientSunniKnowledge(request.query)
 
                 // Only the offline/fallback path appends these synthesized proofs.

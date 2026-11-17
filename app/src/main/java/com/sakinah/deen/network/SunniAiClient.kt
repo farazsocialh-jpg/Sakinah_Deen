@@ -4,6 +4,7 @@ import com.sakinah.deen.BuildConfig
 import com.sakinah.deen.network.model.ProofSourceDto
 import com.sakinah.deen.network.model.RagQueryRequest
 import com.sakinah.deen.network.model.RagStreamChunk
+import com.sakinah.deen.util.CitationParser
 import io.ktor.client.HttpClient
 import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
@@ -53,6 +54,9 @@ class SunniAiClient(
             4. If there is Madhhab divergence, neutrally summarize the 4 positions without sectarian bias.
             5. Explicitly instruct users to consult a local qualified Mufti for personal binding fatwas (e.g., divorce, complex finance).
             6. Never issue a personal fatwa. Never speculate. If a matter is genuinely disputed, say so.
+            7. NEVER invent, guess or "reconstruct" a reference. Only cite a verse or hadith you are certain exists; if you cannot verify a source, say plainly that the source could not be verified instead of producing a number.
+            8. If the retrieved sources are empty, incomplete or contradict each other, say so explicitly rather than resolving the conflict by yourself.
+            9. This app is an educational aid, not a fatwa service; keep that framing in the answer when a ruling is involved.
 
             After the answer, when the question concerns a legal ruling with known divergence,
             append a short section using exactly these four labels at line starts:
@@ -63,35 +67,32 @@ class SunniAiClient(
         """.trimIndent()
 
         private val BRACKET_CITATION = Regex("\\[([^\\[\\]\\n]{2,90})]")
-        private val QURAN_REFERENCE = Regex("(\\d{1,3})\\s*:\\s*(\\d{1,3})")
-        private val HADITH_NUMBER = Regex("(?:#|No\\.?|Hadith)\\s*(\\d{1,5})", RegexOption.IGNORE_CASE)
         private val MADHHAB_LINE = Regex(
             "(?im)^\\s*(?:[-*•]\\s*)?\\**\\s*(Hanafi|Maliki|Shafi'?i|Hanbali)\\s*\\**\\s*[:\\-–—]\\s*(.+?)\\s*$"
         )
 
-        private val HADITH_BOOK_KEYS = mapOf(
-            "bukhari" to "bukhari",
-            "muslim" to "muslim",
-            "abu dawud" to "abudawud",
-            "abudawud" to "abudawud",
-            "tirmidhi" to "tirmidhi",
-            "nasa'i" to "nasai",
-            "nasai" to "nasai",
-            "ibn majah" to "ibnmajah",
-            "ibnmajah" to "ibnmajah",
-            "malik" to "malik",
-            "nawawi" to "nawawi",
-            "ahmad" to "ahmad",
-            "darimi" to "darimi"
-        )
-
+        private const val MIN_MADHHAB_SUMMARY = 8
         private const val MAX_CITATIONS = 8
         private const val MAX_HISTORY_MESSAGES = 8
 
         /** Shown instead of an HTTP/connection error when the proxy URL was never set. */
         const val NOT_CONFIGURED_MESSAGE =
             "AI Scholar is not configured yet. Please check back soon."
+
+        const val SAFETY_REFUSAL_NOTICE =
+            "This question could not be answered within the app's religious safety guidelines. " +
+                "Please rephrase it or consult a local qualified scholar."
+
+        const val NO_CITATION_NOTICE =
+            "No verifiable Quran or hadith reference was found in this answer. Treat it as a " +
+                "study summary and confirm the ruling with a qualified scholar."
     }
+
+    /** HTTP failure carrying the status code so callers can decide whether to retry. */
+    class ScholarHttpException(
+        val status: Int,
+        message: String
+    ) : java.io.IOException(message)
 
     /** A blank (or placeholder) proxy URL means the build has no Scholar backend. */
     val isConfigured: Boolean
@@ -119,10 +120,13 @@ class SunniAiClient(
             setBody(buildRequestBody(request).toString())
         }.execute { httpResponse ->
             if (!httpResponse.status.isSuccess()) {
+                // Structured status only: the proxy's error envelope is never echoed into a
+                // user-visible message, it is summarised by the ViewModel's error taxonomy.
                 val detail = runCatching { httpResponse.bodyAsText() }.getOrDefault("")
-                error(
-                    "Gemini request failed (HTTP ${httpResponse.status.value})" +
-                        detail.take(300).let { if (it.isBlank()) "" else ": $it" }
+                throw ScholarHttpException(
+                    status = httpResponse.status.value,
+                    message = "Scholar proxy rejected the request (HTTP ${httpResponse.status.value})" +
+                        detail.take(200).let { if (it.isBlank()) "" else ": $it" }
                 )
             }
 
@@ -146,12 +150,8 @@ class SunniAiClient(
                 val blockReason = ((event["promptFeedback"] as? JsonObject)
                     ?.get("blockReason") as? JsonPrimitive)?.contentOrNull
                 if (blockReason != null) {
-                    emit(
-                        RagStreamChunk.TextDelta(
-                            "This question could not be answered within the app's religious safety guidelines. " +
-                                "Please rephrase it or consult a local qualified scholar."
-                        )
-                    )
+                    emit(RagStreamChunk.SourcesUnverified("The answer was blocked by a safety filter."))
+                    emit(RagStreamChunk.TextDelta(SAFETY_REFUSAL_NOTICE))
                     emittedAnyText = true
                     continue
                 }
@@ -175,11 +175,16 @@ class SunniAiClient(
             }
 
             // Extract citations once on completion instead of on every token delta.
-            for (citation in extractCitations(answerBuffer.toString())) {
+            val citations = extractCitations(answerBuffer.toString())
+            for (citation in citations) {
                 if (emittedCitations.size >= MAX_CITATIONS) break
                 if (emittedCitations.add(citation.title)) {
                     emit(RagStreamChunk.SourceCitation(citation))
                 }
+            }
+            // Never let an uncited answer look sourced.
+            if (citations.isEmpty() && emittedAnyText) {
+                emit(RagStreamChunk.SourcesUnverified(NO_CITATION_NOTICE))
             }
 
             for (breakdown in extractMadhhabBreakdown(answerBuffer.toString())) {
@@ -263,40 +268,28 @@ class SunniAiClient(
     }
 
     /**
-     * The model is instructed to bracket every proof. Bracketed spans that contain a
-     * Quran verse reference or a hadith number become tappable source citations.
+     * The model is instructed to bracket every proof. Each bracketed span is parsed with
+     * the same pure [CitationParser] the UI links with, so ranges (`2:255-257`), collection
+     * aliases and number markers behave identically in citations and in prose.
      */
     private fun extractCitations(text: String): List<ProofSourceDto> =
         BRACKET_CITATION.findAll(text).mapNotNull { match ->
             val inner = match.groupValues[1].trim()
-            val lower = inner.lowercase()
-
-            val quranMatch = QURAN_REFERENCE.find(inner)
-            if (quranMatch != null) {
-                val surah = quranMatch.groupValues[1].toIntOrNull() ?: return@mapNotNull null
-                val ayah = quranMatch.groupValues[2].toIntOrNull() ?: return@mapNotNull null
-                if (surah !in 1..114 || ayah < 1) return@mapNotNull null
-
+            val hit = CitationParser.find(inner).firstOrNull() ?: return@mapNotNull null
+            hit.quran?.let { quran ->
                 return@mapNotNull ProofSourceDto(
                     title = inner,
                     referenceType = "QURAN",
                     translation = "",
-                    navigationDeepLink = "quran/$surah/$ayah"
+                    navigationDeepLink = quran.deepLink
                 )
             }
-
-            val bookKey = HADITH_BOOK_KEYS.entries
-                .firstOrNull { lower.contains(it.key) }
-                ?.value
-                ?: return@mapNotNull null
-            val number = HADITH_NUMBER.find(inner)?.groupValues?.get(1)?.toIntOrNull()
-                ?: return@mapNotNull null
-
+            val hadith = hit.hadith ?: return@mapNotNull null
             ProofSourceDto(
                 title = inner,
                 referenceType = "HADITH",
                 translation = "",
-                navigationDeepLink = "hadith/$bookKey/$number"
+                navigationDeepLink = hadith.deepLink
             )
         }.toList()
 
@@ -314,7 +307,7 @@ class SunniAiClient(
                 else -> return@mapNotNull null
             }
             val summary = match.groupValues[2].trim()
-            if (summary.length < 15) return@mapNotNull null
+            if (summary.length < MIN_MADHHAB_SUMMARY) return@mapNotNull null
             if (!seen.add(school)) return@mapNotNull null
             MadhhabPosition(school, summary)
         }.take(4).toList()

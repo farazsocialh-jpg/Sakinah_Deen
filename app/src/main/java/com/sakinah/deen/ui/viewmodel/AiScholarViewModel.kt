@@ -15,12 +15,16 @@ import com.sakinah.deen.network.model.RagQueryRequest
 import com.sakinah.deen.network.model.RagStreamChunk
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -28,6 +32,29 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import kotlin.random.Random
+
+/**
+ * The live answer being streamed. It is deliberately *not* part of the message list:
+ * concatenating one string per delta is O(n²) allocations and, worse, copies the whole
+ * conversation on every token so every bubble recomposes.
+ */
+data class StreamingDraft(
+    val sessionId: String,
+    val messageId: String,
+    val text: String = ""
+)
+
+/** Distinct failure classes so the UI can offer the right recovery for each. */
+enum class ScholarErrorKind {
+    OFFLINE,
+    RATE_LIMIT,
+    TIMEOUT,
+    SERVER,
+    SAFETY,
+    CONFIG,
+    UNKNOWN
+}
 
 data class AiScholarUiState(
     val messages: List<ChatMessageModel> = emptyList(),
@@ -36,9 +63,19 @@ data class AiScholarUiState(
     val guardrailNotice: String = "Educational Reference Notice: Sourced from authentic Islamic texts (Quran, Hadith, 4 Madhhabs). For binding personal fatwas, consult a local Mufti.",
     val activeMadhhabTab: String = "hanafi",
     val error: String? = null,
+    /** Machine-readable counterpart of [error], used for the retry affordance. */
+    val errorKind: ScholarErrorKind? = null,
     /** True once the pre-chat research disclaimer is accepted for the active session. */
-    val disclaimerAcceptedForCurrentChat: Boolean = false
-)
+    val disclaimerAcceptedForCurrentChat: Boolean = false,
+    /** Set after 15s of waiting so the reader knows work is still ongoing. */
+    val stillVerifying: Boolean = false,
+    /** Id of the assistant message whose text comes from the streaming draft. */
+    val streamingMessageId: String? = null,
+    val chatSearchQuery: String = ""
+) {
+    val canRetry: Boolean
+        get() = errorKind != ScholarErrorKind.CONFIG && errorKind != ScholarErrorKind.SAFETY
+}
 
 sealed class AiScholarUiIntent {
     data class InputTextChanged(val text: String) : AiScholarUiIntent()
@@ -47,10 +84,13 @@ sealed class AiScholarUiIntent {
     data class ClickCitation(val sourceTitle: String, val deepLink: String? = null) : AiScholarUiIntent()
     data object AcceptDisclaimer : AiScholarUiIntent()
     data object RetryLastQuery : AiScholarUiIntent()
+    data object StopStreaming : AiScholarUiIntent()
     data object ClearConversation : AiScholarUiIntent()
     data object NewChat : AiScholarUiIntent()
     data class SwitchChat(val sessionId: String) : AiScholarUiIntent()
     data class DeleteChat(val sessionId: String) : AiScholarUiIntent()
+    data class TogglePinChat(val sessionId: String) : AiScholarUiIntent()
+    data class ChatSearchChanged(val query: String) : AiScholarUiIntent()
     data object ClearAllChats : AiScholarUiIntent()
 }
 
@@ -76,6 +116,14 @@ class AiScholarViewModel(
 
     companion object {
         private const val STREAM_TIMEOUT_MS = 45_000L
+
+        /** After this much waiting the UI switches to "Still verifying sources…". */
+        const val SLOW_STREAM_NOTICE_MS = 15_000L
+
+        private const val MAX_RETRIES = 2
+        private const val RETRY_BASE_DELAY_MS = 600L
+        private const val RETRY_JITTER_MS = 250L
+
         private val HTTP_5XX = Regex("HTTP 5\\d{2}")
         private val HTTP_429 = Regex("HTTP 429")
         private val SURAH_AYAH_REGEX = Regex("(\\d{1,3})\\s*:\\s*(\\d{1,3})")
@@ -83,35 +131,77 @@ class AiScholarViewModel(
         private const val NEW_CHAT_TITLE = "New chat"
         private val LEGACY_SEED_MESSAGE_IDS = setOf("init-1", "sample-1", "sample-2")
 
-        internal fun describeScholarFailure(error: Throwable): String {
+        internal fun classifyScholarFailure(error: Throwable): ScholarErrorKind {
             val message = error.localizedMessage.orEmpty()
             val lower = message.lowercase()
             return when {
-                error is TimeoutCancellationException || lower.contains("timeout") || lower.contains("timed out") ->
-                    "The AI Scholar request timed out. Check your connection and tap Retry."
+                error is TimeoutCancellationException ||
+                    lower.contains("timeout") ||
+                    lower.contains("timed out") -> ScholarErrorKind.TIMEOUT
+
+                lower.contains("safety") ||
+                    lower.contains("blocked") ||
+                    lower.contains("guidelines") -> ScholarErrorKind.SAFETY
 
                 HTTP_429.containsMatchIn(message) ||
                     lower.contains("rate limit") ||
-                    lower.contains("quota") ->
-                    "The AI Scholar is receiving too many requests (rate limited). " +
-                        "Please try again in a minute."
+                    lower.contains("too many requests") ||
+                    lower.contains("quota") -> ScholarErrorKind.RATE_LIMIT
 
                 HTTP_5XX.containsMatchIn(message) ||
                     lower.contains("service unavailable") ||
-                    lower.contains("bad gateway") ->
-                    "The AI Scholar proxy is temporarily unavailable (server error). " +
-                        "Please retry shortly; your cached Quran and hadith are unaffected."
+                    lower.contains("bad gateway") -> ScholarErrorKind.SERVER
+
+                lower.contains("not configured") ||
+                    lower.contains("missing gemini_api_key") -> ScholarErrorKind.CONFIG
 
                 error is java.io.IOException ||
                     lower.contains("unable to resolve host") ||
                     lower.contains("connect") ||
-                    lower.contains("offline") ->
+                    lower.contains("offline") -> ScholarErrorKind.OFFLINE
+
+                else -> ScholarErrorKind.UNKNOWN
+            }
+        }
+
+        internal fun describeScholarFailure(error: Throwable): String =
+            describeFailure(classifyScholarFailure(error), error)
+
+        internal fun describeFailure(kind: ScholarErrorKind, error: Throwable): String =
+            when (kind) {
+                ScholarErrorKind.TIMEOUT ->
+                    "The AI Scholar took too long to answer (45s timeout). Your question was not " +
+                        "lost — tap Retry to try again."
+
+                ScholarErrorKind.SAFETY ->
+                    "This question falls outside the app's religious safety guidelines. Rephrase it, " +
+                        "or ask a local qualified scholar."
+
+                ScholarErrorKind.RATE_LIMIT ->
+                    "The AI Scholar is receiving too many requests (rate limited). " +
+                        "Please try again in a minute."
+
+                ScholarErrorKind.SERVER ->
+                    "The AI Scholar proxy is temporarily unavailable (server error). " +
+                        "Please retry shortly; your cached Quran and hadith are unaffected."
+
+                ScholarErrorKind.CONFIG ->
+                    "AI Scholar is not configured on this build yet. Quran, hadith and the " +
+                        "offline library keep working."
+
+                ScholarErrorKind.OFFLINE ->
                     "No connection to the AI Scholar. Check your network — the Quran, " +
                         "hadith and nisab caches keep working offline."
 
-                else -> message.ifBlank { "Failed to connect to the Islamic Scholar service." }
+                ScholarErrorKind.UNKNOWN ->
+                    error.localizedMessage?.takeIf { it.isNotBlank() }
+                        ?: "Failed to connect to the Islamic Scholar service."
             }
-        }
+
+        private fun isRetryable(kind: ScholarErrorKind): Boolean =
+            kind == ScholarErrorKind.RATE_LIMIT ||
+                kind == ScholarErrorKind.SERVER ||
+                kind == ScholarErrorKind.TIMEOUT
     }
 
     private val historyStore = appContext?.let { ScholarHistoryStore(it) }
@@ -130,11 +220,24 @@ class AiScholarViewModel(
     )
     val uiState: StateFlow<AiScholarUiState> = _uiState.asStateFlow()
 
+    private val _streamingDraft = MutableStateFlow<StreamingDraft?>(null)
+    val streamingDraft: StateFlow<StreamingDraft?> = _streamingDraft.asStateFlow()
+
     private val _navigationEvents = MutableSharedFlow<AiScholarNavigationEvent>()
     val navigationEvents: SharedFlow<AiScholarNavigationEvent> = _navigationEvents.asSharedFlow()
 
     private var streamJob: Job? = null
+    private var slowNoticeJob: Job? = null
     private var lastSubmittedQuery: String? = null
+
+    /**
+     * Emissions for one message id only, so a chat bubble that is not being streamed never
+     * recomposes while tokens arrive.
+     */
+    fun draftTextFor(messageId: String): Flow<StreamingDraft?> =
+        _streamingDraft
+            .map { draft -> draft?.takeIf { it.messageId == messageId } }
+            .distinctUntilChanged()
 
     fun onIntent(intent: AiScholarUiIntent) {
         when (intent) {
@@ -154,20 +257,23 @@ class AiScholarViewModel(
                 _uiState.update { it.copy(disclaimerAcceptedForCurrentChat = true) }
             }
             is AiScholarUiIntent.RetryLastQuery -> {
-                val last = lastSubmittedQuery ?: _uiState.value.messages.lastOrNull { it.role == "user" }?.content
+                val last = lastSubmittedQuery
+                    ?: _uiState.value.messages.lastOrNull { it.role == "user" }?.content
                 if (!last.isNullOrBlank()) {
                     sendQuery(last)
                 }
             }
+            is AiScholarUiIntent.StopStreaming -> stopStreaming()
             is AiScholarUiIntent.ClearConversation -> {
-                streamJob?.cancel()
-                streamJob = null
+                abandonStream()
                 lastSubmittedQuery = null
                 _uiState.update {
                     it.copy(
                         messages = emptyList(),
                         isStreaming = false,
                         error = null,
+                        errorKind = null,
+                        stillVerifying = false,
                         disclaimerAcceptedForCurrentChat = false
                     )
                 }
@@ -176,13 +282,16 @@ class AiScholarViewModel(
             is AiScholarUiIntent.NewChat -> startNewChat()
             is AiScholarUiIntent.SwitchChat -> switchChat(intent.sessionId)
             is AiScholarUiIntent.DeleteChat -> deleteChat(intent.sessionId)
+            is AiScholarUiIntent.TogglePinChat -> togglePin(intent.sessionId)
+            is AiScholarUiIntent.ChatSearchChanged -> {
+                _uiState.update { it.copy(chatSearchQuery = intent.query) }
+            }
             is AiScholarUiIntent.ClearAllChats -> clearAllChats()
         }
     }
 
     private fun startNewChat() {
-        streamJob?.cancel()
-        streamJob = null
+        abandonStream()
         lastSubmittedQuery = null
         val session = ScholarChatSession(
             id = UUID.randomUUID().toString(),
@@ -198,6 +307,9 @@ class AiScholarViewModel(
                 inputText = "",
                 isStreaming = false,
                 error = null,
+                errorKind = null,
+                stillVerifying = false,
+                streamingMessageId = null,
                 disclaimerAcceptedForCurrentChat = false
             )
         }
@@ -205,9 +317,11 @@ class AiScholarViewModel(
     }
 
     private fun switchChat(sessionId: String) {
+        if (_activeSessionId.value == sessionId) return
+        // Anything already streamed is written back to the chat it belongs to, never to the
+        // chat the reader is moving to.
+        abandonStream()
         val session = _sessions.value.firstOrNull { it.id == sessionId } ?: return
-        streamJob?.cancel()
-        streamJob = null
         lastSubmittedQuery = session.messages.lastOrNull { it.role == "user" }?.text
         _activeSessionId.value = session.id
         _uiState.update {
@@ -216,14 +330,22 @@ class AiScholarViewModel(
                 inputText = "",
                 isStreaming = false,
                 error = null,
+                errorKind = null,
+                stillVerifying = false,
+                streamingMessageId = null,
                 disclaimerAcceptedForCurrentChat = session.messages.isNotEmpty()
             )
         }
     }
 
     private fun deleteChat(sessionId: String) {
-        streamJob?.cancel()
-        streamJob = null
+        if (_streamingDraft.value?.sessionId == sessionId) {
+            streamJob?.cancel()
+            streamJob = null
+            slowNoticeJob?.cancel()
+            slowNoticeJob = null
+            _streamingDraft.value = null
+        }
         val remaining = _sessions.value.filterNot { it.id == sessionId }
         if (remaining.isEmpty()) {
             startNewChat()
@@ -239,6 +361,9 @@ class AiScholarViewModel(
                     inputText = "",
                     isStreaming = false,
                     error = null,
+                    errorKind = null,
+                    stillVerifying = false,
+                    streamingMessageId = null,
                     disclaimerAcceptedForCurrentChat = next.messages.isNotEmpty()
                 )
             }
@@ -247,9 +372,27 @@ class AiScholarViewModel(
         persistSessions()
     }
 
+    private fun togglePin(sessionId: String) {
+        _sessions.update { sessions ->
+            val now = System.currentTimeMillis()
+            sessions
+                .map { session ->
+                    if (session.id == sessionId) {
+                        session.copy(pinned = !session.pinned, updatedAtMs = now)
+                    } else {
+                        session
+                    }
+                }
+                .sortedWith(
+                    compareByDescending<ScholarChatSession> { it.pinned }
+                        .thenByDescending { it.updatedAtMs }
+                )
+        }
+        persistSessions()
+    }
+
     private fun clearAllChats() {
-        streamJob?.cancel()
-        streamJob = null
+        abandonStream()
         lastSubmittedQuery = null
         val session = ScholarChatSession(
             id = UUID.randomUUID().toString(),
@@ -265,6 +408,9 @@ class AiScholarViewModel(
                 inputText = "",
                 isStreaming = false,
                 error = null,
+                errorKind = null,
+                stillVerifying = false,
+                streamingMessageId = null,
                 disclaimerAcceptedForCurrentChat = false
             )
         }
@@ -272,13 +418,14 @@ class AiScholarViewModel(
     }
 
     private fun sendQuery(queryText: String) {
-        streamJob?.cancel()
-        streamJob = null
-
         val trimmed = queryText.trim()
         if (trimmed.isBlank()) return
+        // A new question supersedes the previous stream, but its partial answer is kept in
+        // the chat it was typed into.
+        abandonStream()
         lastSubmittedQuery = trimmed
 
+        val sessionId = _activeSessionId.value
         val userMessageId = UUID.randomUUID().toString()
         val assistantMessageId = UUID.randomUUID().toString()
 
@@ -304,10 +451,13 @@ class AiScholarViewModel(
                 messages = updatedMessages,
                 inputText = "",
                 isStreaming = true,
-                error = null
+                error = null,
+                errorKind = null,
+                stillVerifying = false,
+                streamingMessageId = assistantMessageId
             )
         }
-        syncActiveSession(updatedMessages)
+        syncSession(sessionId, updatedMessages)
 
         // Build history from the prior turns only, so the current user message is not
         // duplicated when the proxy re-appends it as the active turn.
@@ -322,116 +472,303 @@ class AiScholarViewModel(
             schoolOfThoughtContext = preferences?.madhhab?.name ?: "ALL"
         )
 
+        streamAnswer(
+            request = request,
+            sessionId = sessionId,
+            assistantMessageId = assistantMessageId,
+            attempt = 0
+        )
+    }
+
+    private fun streamAnswer(
+        request: RagQueryRequest,
+        sessionId: String,
+        assistantMessageId: String,
+        attempt: Int
+    ) {
+        _streamingDraft.value = StreamingDraft(sessionId, assistantMessageId)
+        startSlowNotice()
+
         streamJob = viewModelScope.launch {
             try {
                 withTimeout(STREAM_TIMEOUT_MS) {
                     scholarRepository.streamAskScholar(request).collect { chunk ->
+                        // Isolation: a delta is only ever applied to the chat that started
+                        // the stream. A stale emitter cannot leak into the reader's chat.
+                        if (_activeSessionId.value != sessionId) return@collect
                         when (chunk) {
-                            is RagStreamChunk.TextDelta -> {
-                                appendStreamingDelta(assistantMessageId, chunk.delta)
-                            }
-                            is RagStreamChunk.SourceCitation -> {
-                                attachCitation(
-                                    assistantMessageId,
-                                    chunk.source.title,
-                                    chunk.source.navigationDeepLink
-                                )
-                            }
-                            is RagStreamChunk.MadhhabBreakdown -> {
-                                attachMadhhabPosition(assistantMessageId, chunk.school, chunk.summary)
-                            }
+                            is RagStreamChunk.TextDelta -> appendDraft(delta = chunk.delta)
+                            is RagStreamChunk.SourceCitation -> attachCitation(
+                                assistantMessageId,
+                                chunk.source.title,
+                                chunk.source.navigationDeepLink
+                            )
+                            is RagStreamChunk.MadhhabBreakdown -> attachMadhhabPosition(
+                                assistantMessageId,
+                                chunk.school,
+                                chunk.summary
+                            )
                             is RagStreamChunk.GuardrailDisclaimer -> {
                                 _uiState.update { it.copy(guardrailNotice = chunk.notice) }
                             }
-                            is RagStreamChunk.Complete -> {
-                                val messages = _uiState.value.messages.map { msg ->
-                                    if (msg.role == "assistant") {
-                                        msg.copy(content = stripHtmlForDisplay(msg.content))
-                                    } else msg
-                                }
-                                _uiState.update { it.copy(messages = messages) }
-                                val unanswered = messages.lastOrNull()
-                                    ?.let { it.role == "assistant" && it.content.isBlank() } == true
-                                _uiState.update {
-                                    it.copy(
-                                        isStreaming = false,
-                                        error = if (unanswered) {
-                                            "The Scholar returned an empty answer. Tap Retry to ask again."
-                                        } else {
-                                            it.error
-                                        }
-                                    )
-                                }
-                                syncActiveSession(_uiState.value.messages)
-                            }
+                            is RagStreamChunk.SourcesUnverified -> attachUnverifiedSources(
+                                assistantMessageId,
+                                chunk.reason
+                            )
+                            is RagStreamChunk.Complete -> completeStream(sessionId, assistantMessageId)
                         }
                     }
                 }
                 if (streamJob == coroutineContext[Job]) {
-                    _uiState.update { it.copy(isStreaming = false) }
-                    syncActiveSession(_uiState.value.messages)
+                    completeStream(sessionId, assistantMessageId)
                 }
             } catch (e: TimeoutCancellationException) {
-                _uiState.update {
-                    it.copy(
-                        isStreaming = false,
-                        error = describeScholarFailure(e)
-                    )
-                }
+                onStreamFailure(e, request, sessionId, assistantMessageId, attempt)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        isStreaming = false,
-                        error = describeScholarFailure(e)
-                    )
-                }
-                syncActiveSession(_uiState.value.messages)
+                onStreamFailure(e, request, sessionId, assistantMessageId, attempt)
             } finally {
-                if (streamJob == coroutineContext[Job]) streamJob = null
+                slowNoticeJob?.cancel()
+                slowNoticeJob = null
+                if (streamJob == coroutineContext[Job]) {
+                    streamJob = null
+                    _uiState.update { it.copy(stillVerifying = false) }
+                }
             }
         }
     }
 
-    private fun appendStreamingDelta(messageId: String, delta: String) {
-        val updated = _uiState.value.messages.map { msg ->
-            if (msg.id == messageId) {
-                msg.copy(content = msg.content + delta)
-            } else msg
+    private suspend fun onStreamFailure(
+        error: Throwable,
+        request: RagQueryRequest,
+        sessionId: String,
+        assistantMessageId: String,
+        attempt: Int
+    ) {
+        val kind = classifyScholarFailure(error)
+        val streamedSoFar = _streamingDraft.value?.text.orEmpty()
+        // Only retry when nothing has been shown yet: re-streaming over visible text would
+        // duplicate the answer.
+        if (attempt < MAX_RETRIES && streamedSoFar.isBlank() && isRetryable(kind)) {
+            val backoff = RETRY_BASE_DELAY_MS * (1L shl attempt) +
+                Random.nextLong(0, RETRY_JITTER_MS)
+            delay(backoff)
+            if (_activeSessionId.value == sessionId) {
+                streamAnswer(request, sessionId, assistantMessageId, attempt + 1)
+            }
+            return
         }
-        _uiState.update { it.copy(messages = updated) }
+        finishStreamWithError(kind, error)
+    }
+
+    private fun finishStreamWithError(kind: ScholarErrorKind, error: Throwable) {
+        finalizeDraft()
+        _uiState.update {
+            it.copy(
+                isStreaming = false,
+                stillVerifying = false,
+                streamingMessageId = null,
+                error = describeFailure(kind, error),
+                errorKind = kind
+            )
+        }
+        syncActiveSession(_uiState.value.messages)
+    }
+
+    private fun completeStream(sessionId: String, assistantMessageId: String) {
+        finalizeDraft()
+        val messages = _uiState.value.messages
+        val unanswered = messages.lastOrNull()
+            ?.let { it.id == assistantMessageId && it.content.isBlank() } == true
+        _uiState.update {
+            it.copy(
+                isStreaming = false,
+                stillVerifying = false,
+                streamingMessageId = null,
+                error = if (unanswered) {
+                    "The Scholar returned an empty answer. Tap Retry to ask again."
+                } else {
+                    it.error
+                }
+            )
+        }
+        syncSession(sessionId, _uiState.value.messages)
+    }
+
+    private fun stopStreaming() {
+        val draft = _streamingDraft.value
+        val text = draft?.text.orEmpty()
+        streamJob?.cancel()
+        streamJob = null
+        slowNoticeJob?.cancel()
+        slowNoticeJob = null
+        _streamingDraft.value = null
+        _uiState.update { state ->
+            val messages = when {
+                draft == null -> state.messages
+                text.isBlank() -> state.messages.filterNot { it.id == draft.messageId }
+                else -> state.messages.map { msg ->
+                    if (msg.id == draft.messageId) {
+                        msg.copy(content = stripHtmlForDisplay(text))
+                    } else {
+                        msg
+                    }
+                }
+            }
+            state.copy(
+                messages = messages,
+                isStreaming = false,
+                stillVerifying = false,
+                streamingMessageId = null,
+                error = null,
+                errorKind = null
+            )
+        }
+        draft?.let { persistDraftResult(it, text) }
+    }
+
+    /** Cancels the live stream and keeps whatever was produced in its own chat. */
+    private fun abandonStream() {
+        val draft = _streamingDraft.value
+        streamJob?.cancel()
+        streamJob = null
+        slowNoticeJob?.cancel()
+        slowNoticeJob = null
+        _streamingDraft.value = null
+        _uiState.update { state ->
+            // Drop an answer that never produced a token instead of leaving an empty bubble.
+            val messages = if (draft != null && draft.text.isBlank()) {
+                state.messages.filterNot { it.id == draft.messageId }
+            } else {
+                state.messages
+            }
+            state.copy(
+                messages = messages,
+                isStreaming = false,
+                stillVerifying = false,
+                streamingMessageId = null
+            )
+        }
+        draft?.let { persistDraftResult(it, it.text) }
+    }
+
+    private fun persistDraftResult(draft: StreamingDraft, text: String) {
+        val clean = stripHtmlForDisplay(text)
+        if (clean.isBlank()) return
+        // Apply the draft to its own message first: the UI list may still hold the blank
+        // placeholder when the reader switches chats mid-answer.
+        val withDraft = _uiState.value.messages.map { msg ->
+            if (msg.id == draft.messageId) msg.copy(content = clean) else msg
+        }
+        if (draft.sessionId == _activeSessionId.value) {
+            syncSession(draft.sessionId, withDraft)
+            return
+        }
+        val now = System.currentTimeMillis()
+        _sessions.update { sessions ->
+            sessions.map { session ->
+                if (session.id != draft.sessionId) {
+                    session
+                } else {
+                    val withoutPlaceholder = session.messages.filterNot { it.id == draft.messageId }
+                    session.copy(
+                        messages = withoutPlaceholder + ScholarChatMessage(
+                            id = draft.messageId,
+                            role = "assistant",
+                            text = clean,
+                            timestampMs = now
+                        ),
+                        updatedAtMs = now
+                    )
+                }
+            }
+        }
+        persistSessions()
+    }
+
+    private fun startSlowNotice() {
+        slowNoticeJob?.cancel()
+        slowNoticeJob = viewModelScope.launch {
+            delay(SLOW_STREAM_NOTICE_MS)
+            if (_uiState.value.isStreaming) {
+                _uiState.update { it.copy(stillVerifying = true) }
+            }
+        }
+    }
+
+    /** Appends to the draft only: the message list is untouched per token. */
+    private fun appendDraft(delta: String) {
+        if (delta.isEmpty()) return
+        _streamingDraft.update { draft ->
+            draft?.copy(text = draft.text + delta)
+        }
+    }
+
+    /** Moves the accumulated draft into the message, once. */
+    private fun finalizeDraft() {
+        val draft = _streamingDraft.value ?: return
+        _streamingDraft.value = null
+        val clean = stripHtmlForDisplay(draft.text)
+        _uiState.update { state ->
+            state.copy(
+                messages = state.messages.map { msg ->
+                    if (msg.id == draft.messageId) msg.copy(content = clean) else msg
+                },
+                streamingMessageId = null
+            )
+        }
     }
 
     private fun attachCitation(messageId: String, citationTitle: String, deepLink: String?) {
-        val updated = _uiState.value.messages.map { msg ->
-            if (msg.id == messageId) {
-                val citation = Citation(title = citationTitle, deepLink = deepLink)
-                // Avoid duplicate citations with the same title.
-                val existing = msg.citations.filterNot { it.title == citationTitle }
-                msg.copy(
-                    sourceTitle = citationTitle,
-                    sourceDeepLink = deepLink,
-                    citations = existing + citation
-                )
-            } else msg
+        _uiState.update { state ->
+            state.copy(
+                messages = state.messages.map { msg ->
+                    if (msg.id != messageId) {
+                        msg
+                    } else {
+                        val citation = Citation(title = citationTitle, deepLink = deepLink)
+                        // Avoid duplicate citations with the same title.
+                        val existing = msg.citations.filterNot { it.title == citationTitle }
+                        msg.copy(
+                            sourceTitle = citationTitle,
+                            sourceDeepLink = deepLink,
+                            citations = existing + citation
+                        )
+                    }
+                }
+            )
         }
-        _uiState.update { it.copy(messages = updated) }
     }
 
     private fun attachMadhhabPosition(messageId: String, school: String, summary: String) {
-        val updated = _uiState.value.messages.map { msg ->
-            if (msg.id == messageId) {
-                when (school.lowercase()) {
-                    "hanafi" -> msg.copy(hanafiStance = summary)
-                    "maliki" -> msg.copy(malikiStance = summary)
-                    "shafi'i", "shafii" -> msg.copy(shafiiStance = summary)
-                    "hanbali" -> msg.copy(hanbaliStance = summary)
-                    else -> msg
+        _uiState.update { state ->
+            state.copy(
+                messages = state.messages.map { msg ->
+                    if (msg.id != messageId) {
+                        msg
+                    } else {
+                        when (school.lowercase()) {
+                            "hanafi" -> msg.copy(hanafiStance = summary)
+                            "maliki" -> msg.copy(malikiStance = summary)
+                            "shafi'i", "shafii" -> msg.copy(shafiiStance = summary)
+                            "hanbali" -> msg.copy(hanbaliStance = summary)
+                            else -> msg
+                        }
+                    }
                 }
-            } else msg
+            )
         }
-        _uiState.update { it.copy(messages = updated) }
+    }
+
+    private fun attachUnverifiedSources(messageId: String, reason: String) {
+        _uiState.update { state ->
+            state.copy(
+                messages = state.messages.map { msg ->
+                    if (msg.id == messageId) msg.copy(sourcesUnverified = reason) else msg
+                }
+            )
+        }
     }
 
     private fun handleCitationClick(sourceTitle: String, deepLink: String?) {
@@ -523,7 +860,10 @@ class AiScholarViewModel(
                     messages = cleaned
                 )
             }
-            .sortedByDescending { it.updatedAtMs }
+            .sortedWith(
+                compareByDescending<ScholarChatSession> { it.pinned }
+                    .thenByDescending { it.updatedAtMs }
+            )
         return stored.ifEmpty { listOf(emptySession()) }
     }
 
@@ -535,8 +875,15 @@ class AiScholarViewModel(
     )
 
     private fun syncActiveSession(messages: List<ChatMessageModel>, resetTitle: Boolean = false) {
-        val activeId = _activeSessionId.value
-        val existing = _sessions.value.firstOrNull { it.id == activeId }
+        syncSession(_activeSessionId.value, messages, resetTitle)
+    }
+
+    private fun syncSession(
+        sessionId: String,
+        messages: List<ChatMessageModel>,
+        resetTitle: Boolean = false
+    ) {
+        val existing = _sessions.value.firstOrNull { it.id == sessionId }
         val firstQuestion = messages.firstOrNull { it.role == "user" }?.content?.trim()
         val title = when {
             resetTitle -> NEW_CHAT_TITLE
@@ -544,6 +891,7 @@ class AiScholarViewModel(
             !firstQuestion.isNullOrBlank() -> firstQuestion.take(40)
             else -> NEW_CHAT_TITLE
         }
+        val now = System.currentTimeMillis()
         val storedMessages = messages
             .filter { it.content.isNotBlank() }
             .map { msg ->
@@ -551,23 +899,25 @@ class AiScholarViewModel(
                     id = msg.id,
                     role = msg.role,
                     text = msg.content,
-                    timestampMs = System.currentTimeMillis(),
+                    timestampMs = now,
                     citations = msg.citations,
                     hanafiStance = msg.hanafiStance,
                     malikiStance = msg.malikiStance,
                     shafiiStance = msg.shafiiStance,
-                    hanbaliStance = msg.hanbaliStance
+                    hanbaliStance = msg.hanbaliStance,
+                    sourcesUnverified = msg.sourcesUnverified
                 )
             }
         val updated = ScholarChatSession(
-            id = activeId,
+            id = sessionId,
             title = title.ifBlank { NEW_CHAT_TITLE },
-            updatedAtMs = System.currentTimeMillis(),
-            messages = storedMessages
+            updatedAtMs = now,
+            messages = storedMessages,
+            pinned = existing?.pinned ?: false
         )
         _sessions.update { current ->
-            val withoutActive = current.filterNot { it.id == activeId }
-            withoutActive + updated
+            val withoutTarget = current.filterNot { it.id == sessionId }
+            withoutTarget + updated
         }
         persistSessions()
     }
@@ -585,7 +935,8 @@ class AiScholarViewModel(
         hanafiStance = hanafiStance,
         malikiStance = malikiStance,
         shafiiStance = shafiiStance,
-        hanbaliStance = hanbaliStance
+        hanbaliStance = hanbaliStance,
+        sourcesUnverified = sourcesUnverified
     )
 
     private fun formatTimestamp(timestampMs: Long): String {

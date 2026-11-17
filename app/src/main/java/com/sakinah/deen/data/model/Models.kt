@@ -154,5 +154,7 @@ data class ChatMessageModel(
     val shafiiStance: String? = null,
     val hanbaliStance: String? = null,
     val sourceDeepLink: String? = null,
-    val citations: List<Citation> = emptyList()
+    val citations: List<Citation> = emptyList(),
+    /** Set when the answer could not be tied to a verifiable source. */
+    val sourcesUnverified: String? = null
 )
