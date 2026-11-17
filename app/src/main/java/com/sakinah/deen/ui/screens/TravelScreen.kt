@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sakinah.deen.BuildConfig
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
 import com.sakinah.deen.settings.SettingsRepository
@@ -217,25 +218,30 @@ fun TravelScreen(
                     color = if (isSafar) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
                 )
 
-                Button(
-                    onClick = {
-                        distanceKm = if (distanceKm >= thresholdKm) thresholdKm / 2 else thresholdKm + 15f
-                        isSafar = distanceKm >= thresholdKm
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                ) {
-                    Text(
-                        text = if (isSafar) {
-                            "Simulate Local Return (<${thresholdKm.toInt()}km)"
-                        } else {
-                            "Simulate Travel Departure (>${thresholdKm.toInt()}km)"
+                // Debug-only: previewing Qasr must never reach a release build, and the
+                // simulated distance lives in this screen's state only, so it cannot write
+                // prayer logs, Qadha counters or Azaan scheduling.
+                if (BuildConfig.DEBUG) {
+                    Button(
+                        onClick = {
+                            distanceKm = if (distanceKm >= thresholdKm) thresholdKm / 2 else thresholdKm + 15f
+                            isSafar = distanceKm >= thresholdKm
                         },
-                        fontSize = 11.sp
-                    )
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    ) {
+                        Text(
+                            text = if (isSafar) {
+                                "Simulate Local Return (<${thresholdKm.toInt()}km) — debug only"
+                            } else {
+                                "Simulate Travel Departure (>${thresholdKm.toInt()}km) — debug only"
+                            },
+                            fontSize = 11.sp
+                        )
+                    }
                 }
             }
         }
@@ -302,6 +308,13 @@ fun TravelScreen(
 
                 Text(
                     text = "Permissible Combining (Jam‘): Dhuhr & Asr can be prayed together during either Dhuhr (Taqdim) or Asr (Ta'khir) time. Maghrib & Isha may likewise be combined.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "The ~${thresholdKm.toInt()} km (≈48 mi) distance, the journey duration " +
+                        "required before Qasr applies, and which prayers may be combined differ " +
+                        "between the madhhabs. Ask a qualified scholar for your school.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

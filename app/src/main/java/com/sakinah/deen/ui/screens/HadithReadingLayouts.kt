@@ -102,21 +102,33 @@ private fun HadithBookBadge(hadith: HadithModel, modifier: Modifier = Modifier) 
             modifier = Modifier.weight(1f, fill = false)
         )
         GradePill(hadith)
-        if (hadith.isLanguageFallback) {
+        // Every layout renders this one badge, so provenance never varies by reader style:
+        // book, number, grading scholar/edition, and which language edition is on screen.
+        val edition = hadith.languageName.ifBlank { hadith.languageCode.uppercase() }
+        if (edition.isNotBlank()) {
             Surface(
                 shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.secondaryContainer
+                color = MaterialTheme.colorScheme.surfaceVariant
             ) {
                 Text(
-                    text = "${hadith.languageCode.uppercase()} fallback",
+                    text = if (hadith.isLanguageFallback) "$edition fallback" else edition,
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                     fontSize = 8.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1
                 )
             }
         }
+    }
+    if (hadith.gradingScholar.isNotBlank()) {
+        Text(
+            text = hadith.gradingScholar,
+            fontSize = 8.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
