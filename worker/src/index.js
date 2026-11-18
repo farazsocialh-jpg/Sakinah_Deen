@@ -18,6 +18,8 @@
  * Deploy:
  *   cd worker
  *   npx wrangler secret put GEMINI_API_KEY     # never commit the value
+ *   npx wrangler secret put ADMIN_NOTIFY_TOKEN  # protects /notify
+ *   npx wrangler secret put FCM_SERVICE_ACCOUNT_JSON  # Firebase service account JSON
  *   npx wrangler deploy
  *
  * Then point the app at the Worker URL with AI_PROXY_URL (see .env.example).
@@ -37,7 +39,10 @@ const rateBuckets = new Map();
 const ERROR_STATUS = {
   METHOD_NOT_ALLOWED: 405,
   UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
   NOT_CONFIGURED: 503,
+  ADMIN_NOT_CONFIGURED: 500,
+  FCM_NOT_CONFIGURED: 500,
   BODY_TOO_LARGE: 413,
   INVALID_JSON: 400,
   INVALID_REQUEST: 400,
@@ -46,6 +51,7 @@ const ERROR_STATUS = {
   UPSTREAM_RATE_LIMITED: 429,
   UPSTREAM_UNAVAILABLE: 502,
   UPSTREAM_ERROR: 502,
+  FCM_ERROR: 502,
 };
 
 function corsHeaders(env) {
@@ -53,7 +59,7 @@ function corsHeaders(env) {
   return {
     "access-control-allow-origin": allowed,
     "access-control-allow-methods": "POST, OPTIONS",
-    "access-control-allow-headers": "content-type, x-sakinah-client",
+    "access-control-allow-headers": "content-type, x-sakinah-client, x-admin-token",
     "access-control-max-age": "86400",
     vary: "origin",
   };
@@ -167,6 +173,123 @@ function clampGenerationConfig(payload) {
   };
 }
 
+/* ------------------------------------------------------------------ */
+/* FCM HTTP v1 helpers (Web Crypto only, no external dependencies)      */
+/* ------------------------------------------------------------------ */
+
+function base64UrlEncode(input) {
+  const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function pemToArrayBuffer(pem) {
+  const base64 = String(pem)
+    .replace(/-----BEGIN [A-Z ]+-----/g, "")
+    .replace(/-----END [A-Z ]+-----/g, "")
+    .replace(/\s+/g, "");
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+async function createFcmJwt(serviceAccount) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: "RS256", typ: "JWT" };
+  const payload = {
+    iss: serviceAccount.client_email,
+    scope: "https://www.googleapis.com/auth/firebase.messaging",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600,
+  };
+  const encoder = new TextEncoder();
+  const signingInput = `${base64UrlEncode(encoder.encode(JSON.stringify(header)))}.${base64UrlEncode(
+    encoder.encode(JSON.stringify(payload))
+  )}`;
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    pemToArrayBuffer(serviceAccount.private_key),
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    encoder.encode(signingInput)
+  );
+  return `${signingInput}.${base64UrlEncode(signature)}`;
+}
+
+async function getFcmAccessToken(serviceAccount) {
+  const jwt = await createFcmJwt(serviceAccount);
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: jwt,
+    }).toString(),
+  });
+  if (!response.ok) {
+    throw new Error("oauth token exchange failed");
+  }
+  const data = await response.json();
+  if (!data || typeof data.access_token !== "string") {
+    throw new Error("oauth token missing");
+  }
+  return data.access_token;
+}
+
+async function sendFcmNotification(env, { title, body, topic, data }) {
+  let serviceAccount;
+  try {
+    serviceAccount = JSON.parse(env.FCM_SERVICE_ACCOUNT_JSON);
+  } catch {
+    throw new Error("invalid service account json");
+  }
+  if (
+    !serviceAccount ||
+    typeof serviceAccount.client_email !== "string" ||
+    typeof serviceAccount.private_key !== "string" ||
+    typeof serviceAccount.project_id !== "string"
+  ) {
+    throw new Error("invalid service account");
+  }
+
+  const accessToken = await getFcmAccessToken(serviceAccount);
+  const response = await fetch(
+    `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(serviceAccount.project_id)}/messages:send`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        message: {
+          topic,
+          notification: { title, body },
+          data: data && typeof data === "object" && !Array.isArray(data) ? data : {},
+        },
+      }),
+    }
+  );
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error("fcm send failed");
+  }
+  const messageId = result && typeof result.name === "string" ? result.name : undefined;
+  return { ok: true, messageId };
+}
+
 export default {
   async fetch(request, env) {
     const now = Date.now();
@@ -178,9 +301,87 @@ export default {
     if (request.method !== "POST") {
       return errorResponse("METHOD_NOT_ALLOWED", "Only POST is supported.", env);
     }
+
+    // Protected push-notification endpoint.
+    if (url.pathname === "/notify") {
+      if (!env.ADMIN_NOTIFY_TOKEN) {
+        return errorResponse(
+          "ADMIN_NOT_CONFIGURED",
+          "The notify endpoint is not configured (missing ADMIN_NOTIFY_TOKEN).",
+          env
+        );
+      }
+      const providedToken = request.headers.get("x-admin-token");
+      if (!providedToken) {
+        return errorResponse("UNAUTHORIZED", "An admin token is required.", env);
+      }
+      if (!tokensMatch(providedToken, env.ADMIN_NOTIFY_TOKEN)) {
+        return errorResponse("FORBIDDEN", "Invalid admin token.", env);
+      }
+      if (!env.FCM_SERVICE_ACCOUNT_JSON) {
+        return errorResponse(
+          "FCM_NOT_CONFIGURED",
+          "The notify endpoint is not configured (missing FCM_SERVICE_ACCOUNT_JSON).",
+          env
+        );
+      }
+
+      let bodyText;
+      try {
+        bodyText = await request.text();
+      } catch {
+        return errorResponse("INVALID_JSON", "Request body must be JSON.", env);
+      }
+      let payload;
+      try {
+        payload = JSON.parse(bodyText);
+      } catch {
+        return errorResponse("INVALID_JSON", "Request body must be JSON.", env);
+      }
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        return errorResponse("INVALID_REQUEST", "Request body must be a JSON object.", env);
+      }
+      if (typeof payload.title !== "string" || payload.title.trim() === "") {
+        return errorResponse("INVALID_REQUEST", "title must be a non-empty string.", env);
+      }
+      if (typeof payload.body !== "string" || payload.body.trim() === "") {
+        return errorResponse("INVALID_REQUEST", "body must be a non-empty string.", env);
+      }
+      const topic =
+        typeof payload.topic === "string" && payload.topic.trim() !== ""
+          ? payload.topic.trim()
+          : "daily_reminders";
+      const data =
+        payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)
+          ? payload.data
+          : {};
+
+      try {
+        const result = await sendFcmNotification(env, {
+          title: payload.title,
+          body: payload.body,
+          topic,
+          data,
+        });
+        return withHeaders(
+          new Response(JSON.stringify(result), {
+            status: 200,
+            headers: {
+              "content-type": "application/json; charset=utf-8",
+              "cache-control": "no-store",
+            },
+          }),
+          env
+        );
+      } catch {
+        return errorResponse("FCM_ERROR", "Failed to send notification.", env);
+      }
+    }
+
     if (url.pathname !== "/" && url.pathname !== "") {
       return errorResponse("INVALID_REQUEST", "Unknown endpoint.", env);
     }
+
     if (env.CLIENT_TOKEN && !tokensMatch(request.headers.get("x-sakinah-client"), env.CLIENT_TOKEN)) {
       return errorResponse("UNAUTHORIZED", "A valid client token is required.", env);
     }

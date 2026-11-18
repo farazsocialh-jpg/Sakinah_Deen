@@ -6,6 +6,8 @@ compatibility_date = "2026-11-01"
 # Set them once per environment with:
 #   npx wrangler secret put GEMINI_API_KEY
 #   npx wrangler secret put CLIENT_TOKEN   # optional, only if you gate the proxy
+#   npx wrangler secret put ADMIN_NOTIFY_TOKEN   # protects /notify
+#   npx wrangler secret put FCM_SERVICE_ACCOUNT_JSON   # Firebase service account JSON
 
 [[routes]]
 pattern = "ai.insightsltd.com"
@@ -13,3 +15,7 @@ custom_domain = true
 
 [vars]
 GEMINI_MODEL = "gemini-2.0-flash"
+
+# Example: future scheduled daily pushes (uncomment to enable).
+# [triggers]
+# crons = ["0 8 * * *"]
