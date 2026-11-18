@@ -223,7 +223,7 @@ fun ToolsHubScreen(
                 HubDivider()
                 HubRow(
                     icon = Icons.Outlined.Notifications,
-                    title = "Azaan & Notifications",
+                    title = "Prayer Notifications",
                     subtitle = "Per-prayer alerts, Fajr Azaan, muezzin voice & test alert",
                     onClick = { onNavigate(SakinahScreen.NotificationSettings) }
                 )

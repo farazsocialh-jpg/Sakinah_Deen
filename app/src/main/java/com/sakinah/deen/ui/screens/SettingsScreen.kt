@@ -1487,7 +1487,7 @@ private fun HadithLayoutPreview(layout: HadithReadingLayout) {
 
 /** Selectable preview card used by the Salah / Quran / Hadith layout rows. */
 @Composable
-private fun AppearanceAccordion(
+fun AppearanceAccordion(
     title: String,
     summary: String,
     expanded: Boolean,

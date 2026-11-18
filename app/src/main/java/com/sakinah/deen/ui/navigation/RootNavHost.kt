@@ -350,7 +350,7 @@ fun RootNavHost(
         SakinahScreen.Help -> "Help & Feedback"
         SakinahScreen.Privacy -> "Privacy & Terms"
         SakinahScreen.About -> "About ImanCore"
-        SakinahScreen.NotificationSettings -> "Azaan & Notifications"
+        SakinahScreen.NotificationSettings -> "Prayer Notifications"
         SakinahScreen.Onboarding -> "Welcome to ImanCore"
     }
 

@@ -172,7 +172,7 @@ internal fun SalahTopHeader(
                     Box(contentAlignment = Alignment.Center) {
                         androidx.compose.material3.Icon(
                             imageVector = Icons.Outlined.Notifications,
-                            contentDescription = "Azaan & Notifications",
+                            contentDescription = "Prayer Notifications",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
