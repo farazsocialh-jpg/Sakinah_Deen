@@ -129,9 +129,38 @@ Outputs:
 - AAB (Play Store): `app/build/outputs/bundle/release/app-release.aab`
 - APK (Direct install): `app/build/outputs/apk/release/app-release.apk`
 
-If no keystore is configured, `bundleRelease`/`assembleRelease` still build but the
-output is **unsigned** (`app-release-unsigned.apk`), which Play will reject. This is
-deliberate: the build never silently signs with a default password.
+`keystore.properties` is git-ignored. Environment variables win over the file when both
+are set, so CI can keep secrets in the environment while developers keep them in the file.
+
+If no keystore is configured, `assembleRelease` and `bundleRelease` fail immediately with:
+
+```text
+Release signing config is missing: provide keystore.properties or
+KEYSTORE_PATH/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD.
+```
+
+This is deliberate: the build never silently falls back to a debug key or emits an
+unsigned artifact that Play would reject.
+
+### CI: materialise `keystore.properties` from secrets
+
+The release workflows export the four variables directly, which already satisfies the
+build. A job that prefers the properties file — for example to reuse the same command
+locally — can write it next to the Gradle root before building:
+
+```bash
+cat > keystore.properties <<EOF
+storeFile=$RUNNER_TEMP/sakinah_release.jks
+storePassword=$KEYSTORE_PASSWORD
+keyAlias=$KEY_ALIAS
+keyPassword=$KEY_PASSWORD
+EOF
+./gradlew :app:assembleRelease
+```
+
+`storeFile` is resolved relative to the repository root, so either a repository-relative
+path (`keystore/sakinah_deen_aqmirza.jks`) or an absolute runner path works. The file must
+stay untracked; `.gitignore` already excludes `keystore.properties`, `*.jks` and `keystore/`.
 
 ## 5. Upload to Play
 
