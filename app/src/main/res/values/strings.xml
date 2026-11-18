@@ -453,4 +453,43 @@
     <string name="settings_rerun_onboarding">Re-run Personalized Onboarding</string>
     <string name="settings_clear_cache">Clear cache</string>
     <string name="settings_search_language">Search language, translator or name</string>
+    <!-- Theme palette registry -->
+    <string name="theme_palette_selected">Selected</string>
+    <string name="theme_palette_emerald_sanctuary_name">Emerald Sanctuary</string>
+    <string name="theme_palette_emerald_sanctuary_subtitle">Warm cream &amp; deep botanical green</string>
+    <string name="theme_palette_madinah_sand_name">Madinah Sand</string>
+    <string name="theme_palette_madinah_sand_subtitle">Warm sand &amp; muted gold</string>
+    <string name="theme_palette_andalusian_sapphire_name">Andalusian Sapphire</string>
+    <string name="theme_palette_andalusian_sapphire_subtitle">Deep sapphire &amp; silver starlight</string>
+    <string name="theme_palette_pure_monochrome_name">Black &amp; White</string>
+    <string name="theme_palette_pure_monochrome_subtitle">Pure monochrome, with an OLED-friendly dark mode</string>
+    <string name="theme_palette_madinah_emerald_name">Madinah Emerald</string>
+    <string name="theme_palette_madinah_emerald_subtitle">Cool emerald green with warm brass</string>
+    <string name="theme_palette_midnight_fajr_name">Midnight Fajr</string>
+    <string name="theme_palette_midnight_fajr_subtitle">Deep night blue with soft dawn light</string>
+    <string name="theme_palette_desert_amber_name">Desert Amber</string>
+    <string name="theme_palette_desert_amber_subtitle">Sunlit ochre with warm amber</string>
+    <string name="theme_palette_andalusian_teal_name">Andalusian Teal</string>
+    <string name="theme_palette_andalusian_teal_subtitle">Mosaic teal with antique gold</string>
+    <string name="theme_palette_olive_grove_name">Olive Grove</string>
+    <string name="theme_palette_olive_grove_subtitle">Muted olive with dry-grass gold</string>
+    <string name="theme_palette_ottoman_turquoise_name">Ottoman Turquoise</string>
+    <string name="theme_palette_ottoman_turquoise_subtitle">Iznik turquoise with clay coral</string>
+    <string name="theme_palette_damascus_rose_name">Damascus Rose</string>
+    <string name="theme_palette_damascus_rose_subtitle">Damask rose with warm peach</string>
+    <string name="theme_palette_atlas_indigo_name">Atlas Indigo</string>
+    <string name="theme_palette_atlas_indigo_subtitle">Mountain indigo with periwinkle</string>
+    <string name="theme_palette_suhoor_plum_name">Suhoor Plum</string>
+    <string name="theme_palette_suhoor_plum_subtitle">Pre-dawn plum with soft mauve</string>
+    <string name="theme_palette_kaaba_gold_name">Kaaba Gold</string>
+    <string name="theme_palette_kaaba_gold_subtitle">Deep kiswah gold on charcoal</string>
+    <string name="theme_palette_cedar_wood_name">Cedar Wood</string>
+    <string name="theme_palette_cedar_wood_subtitle">Warm cedar with sanded oak</string>
+    <string name="theme_palette_zamzam_aqua_name">Zamzam Aqua</string>
+    <string name="theme_palette_zamzam_aqua_subtitle">Clear aqua with pale seafoam</string>
+    <string name="theme_palette_slate_stone_name">Slate Stone</string>
+    <string name="theme_palette_slate_stone_subtitle">Neutral slate with cool grey</string>
+    <string name="theme_palette_crimson_terracotta_name">Crimson Terracotta</string>
+    <string name="theme_palette_crimson_terracotta_subtitle">Burnt crimson with sun-baked clay</string>
+
 </resources>

@@ -430,4 +430,43 @@
     <string name="settings_rerun_onboarding">Re-run Personalized Onboarding</string>
     <string name="settings_clear_cache">Clear cache</string>
     <string name="settings_search_language">Search language, translator or name</string>
+    <!-- Theme palette registry -->
+    <string name="theme_palette_selected">محدد</string>
+    <string name="theme_palette_emerald_sanctuary_name">المحمية الزمردية</string>
+    <string name="theme_palette_emerald_sanctuary_subtitle">كريمي دافئ وأخضر نباتي عميق</string>
+    <string name="theme_palette_madinah_sand_name">رمل المدينة</string>
+    <string name="theme_palette_madinah_sand_subtitle">رمل دافئ وذهب هادئ</string>
+    <string name="theme_palette_andalusian_sapphire_name">الياقوت الأندلسي</string>
+    <string name="theme_palette_andalusian_sapphire_subtitle">ياقوت أزرق عميق وضوء فضي</string>
+    <string name="theme_palette_pure_monochrome_name">أبيض وأسود</string>
+    <string name="theme_palette_pure_monochrome_subtitle">أحادي اللون خالص مع وضع داكن ملائم لشاشات OLED</string>
+    <string name="theme_palette_madinah_emerald_name">الزمرد المدني</string>
+    <string name="theme_palette_madinah_emerald_subtitle">أخضر زمردي بارد مع نحاس دافئ</string>
+    <string name="theme_palette_midnight_fajr_name">فجر منتصف الليل</string>
+    <string name="theme_palette_midnight_fajr_subtitle">أزرق ليلي عميق مع ضوء فجر هادئ</string>
+    <string name="theme_palette_desert_amber_name">عنبر الصحراء</string>
+    <string name="theme_palette_desert_amber_subtitle">مغرة مشمسة مع عنبر دافئ</string>
+    <string name="theme_palette_andalusian_teal_name">فيروزي أندلسي</string>
+    <string name="theme_palette_andalusian_teal_subtitle">فيروزي فسيفسائي مع ذهب عتيق</string>
+    <string name="theme_palette_olive_grove_name">بستان الزيتون</string>
+    <string name="theme_palette_olive_grove_subtitle">زيتوني هادئ مع ذهب العشب الجاف</string>
+    <string name="theme_palette_ottoman_turquoise_name">فيروز عثماني</string>
+    <string name="theme_palette_ottoman_turquoise_subtitle">فيروز إزنيق مع مرجان طيني</string>
+    <string name="theme_palette_damascus_rose_name">وردة دمشقية</string>
+    <string name="theme_palette_damascus_rose_subtitle">وردة دمشقية مع خوخ دافئ</string>
+    <string name="theme_palette_atlas_indigo_name">نيلي أطلسي</string>
+    <string name="theme_palette_atlas_indigo_subtitle">نيلي جبلي مع بنفسجي فاتح</string>
+    <string name="theme_palette_suhoor_plum_name">برقوق السحور</string>
+    <string name="theme_palette_suhoor_plum_subtitle">برقوق ما قبل الفجر مع بنفسجي ناعم</string>
+    <string name="theme_palette_kaaba_gold_name">ذهب الكعبة</string>
+    <string name="theme_palette_kaaba_gold_subtitle">ذهب الكسوة الغامق على فحمي</string>
+    <string name="theme_palette_cedar_wood_name">خشب الأرز</string>
+    <string name="theme_palette_cedar_wood_subtitle">أرز دافئ مع بلوط مصقول</string>
+    <string name="theme_palette_zamzam_aqua_name">ماء زمزم</string>
+    <string name="theme_palette_zamzam_aqua_subtitle">ماء صاف مع زبد بحري باهت</string>
+    <string name="theme_palette_slate_stone_name">حجر أردوازي</string>
+    <string name="theme_palette_slate_stone_subtitle">أردوازي محايد مع رمادي بارد</string>
+    <string name="theme_palette_crimson_terracotta_name">طين قرمزي</string>
+    <string name="theme_palette_crimson_terracotta_subtitle">قرمزي محروق مع طين مشمس</string>
+
 </resources>

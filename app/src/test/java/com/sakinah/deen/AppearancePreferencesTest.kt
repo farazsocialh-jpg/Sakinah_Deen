@@ -11,6 +11,7 @@ import com.sakinah.deen.ui.theme.ThemeMode
 import com.sakinah.deen.ui.theme.UserAppearanceConfig
 import com.sakinah.deen.ui.theme.UserObjective
 import com.sakinah.deen.ui.theme.buildSakinahColorScheme
+import androidx.compose.ui.graphics.Color
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -205,5 +206,94 @@ class AppearancePreferencesTest {
         }
         assertTrue(FontScalePreset.LARGE.multiplier > FontScalePreset.STANDARD.multiplier)
         assertTrue(FontScalePreset.COMPACT.multiplier < FontScalePreset.STANDARD.multiplier)
+    }
+
+    @Test
+    fun everyRegisteredPaletteHasLocalizedResourcesAndPreviewColours() {
+        assertEquals(18, SakinahPalette.entries.size)
+        assertEquals(
+            listOf(
+                "EMERALD_SANCTUARY",
+                "MADINAH_SAND",
+                "ANDALUSIAN_SAPPHIRE",
+                "PURE_MONOCHROME"
+            ),
+            SakinahPalette.entries.take(4).map { it.name }
+        )
+        SakinahPalette.entries.forEach { palette ->
+            assertTrue("${palette.name} needs a title", palette.titleRes != 0)
+            assertTrue("${palette.name} needs a subtitle", palette.subtitleRes != 0)
+            assertNotEquals(palette.lightPreviewPrimary, palette.lightPreviewAccent)
+            assertNotEquals(palette.darkPreviewPrimary, palette.darkPreviewBg)
+        }
+    }
+
+    @Test
+    fun everyNewPaletteMeetsWcagAaForTextPairs() {
+        // The four original palettes ship byte-identical so a saved selection keeps its exact
+        // look; their historical contrast tokens are therefore not re-asserted here.
+        SakinahPalette.entries.drop(LEGACY_PALETTE_COUNT).forEach { palette ->
+            listOf(false, true).forEach { isDark ->
+                val scheme = buildSakinahColorScheme(palette, isDark)
+                val mode = if (isDark) "dark" else "light"
+                assertAa("$mode onPrimary/primary ${palette.name}", scheme.onPrimary, scheme.primary)
+                assertAa(
+                    "$mode onPrimaryContainer/primaryContainer ${palette.name}",
+                    scheme.onPrimaryContainer,
+                    scheme.primaryContainer
+                )
+                assertAa("$mode onBackground/background ${palette.name}", scheme.onBackground, scheme.background)
+                assertAa("$mode onSurface/surface ${palette.name}", scheme.onSurface, scheme.surface)
+                assertAa(
+                    "$mode onSurfaceVariant/surfaceVariant ${palette.name}",
+                    scheme.onSurfaceVariant,
+                    scheme.surfaceVariant
+                )
+            }
+        }
+    }
+
+    @Test
+    fun everyPalettePersistsAndRestoresThroughPreferences() {
+        SakinahPalette.entries.forEach { palette ->
+            val fake = FakeSharedPreferences()
+            AppearancePreferences(fake).update { it.copy(palette = palette) }
+            assertEquals(palette, AppearancePreferences(fake).config.value.palette)
+        }
+    }
+
+    @Test
+    fun everyPaletteHasDistinctLightAndDarkSwatches() {
+        // Several palettes intentionally share a primary (Cedar Wood reuses Madinah Sand's
+        // brown); the primary + accent pair is what identifies a theme in the picker.
+        val lightPairs = SakinahPalette.entries.map { it.lightPreviewPrimary to it.lightPreviewAccent }
+        val darkPairs = SakinahPalette.entries.map { it.darkPreviewPrimary to it.darkPreviewBg }
+        assertEquals(lightPairs.size, lightPairs.distinct().size)
+        assertEquals(darkPairs.size, darkPairs.distinct().size)
+    }
+
+    private companion object {
+        const val LEGACY_PALETTE_COUNT = 4
+    }
+
+    private fun assertAa(message: String, foreground: Color, background: Color) {
+        assertTrue("$message has contrast ${contrastRatio(foreground, background)}", contrastRatio(foreground, background) >= 4.5)
+    }
+
+    /** WCAG 2.1 relative-luminance contrast ratio. */
+    private fun contrastRatio(a: Color, b: Color): Double {
+        val la = relativeLuminance(a)
+        val lb = relativeLuminance(b)
+        val lighter = maxOf(la, lb)
+        val darker = minOf(la, lb)
+        return (lighter + 0.05) / (darker + 0.05)
+    }
+
+    private fun relativeLuminance(color: Color): Double {
+        fun channel(value: Float): Double {
+            val c = value.toDouble()
+            return if (c <= 0.03928) c / 12.92 else Math.pow((c + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(color.red) + 0.7152 * channel(color.green) + 0.0722 * channel(color.blue)
     }
 }

@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
@@ -112,12 +111,12 @@ import com.sakinah.deen.settings.SettingsRepository
 import com.sakinah.deen.settings.ThemeMode
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
 import com.sakinah.deen.ui.components.SakinahCard
+import com.sakinah.deen.ui.components.ThemePalettePicker
 import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.data.quran.QuranOfflineStatus
 import com.sakinah.deen.ui.components.QuranOfflineStatusBanner
 import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.FontScalePreset
-import com.sakinah.deen.ui.theme.SakinahPalette
 import com.sakinah.deen.ui.theme.ThemeMode as UiThemeMode
 import kotlinx.coroutines.launch
 import org.koin.core.context.GlobalContext
@@ -661,7 +660,7 @@ fun SettingsScreen(
 
                         AppearanceAccordion(
                             title = "Theme & Palette",
-                            summary = "${appearanceConfig.themeMode.label} · ${appearanceConfig.palette.label}",
+                            summary = "${appearanceConfig.themeMode.label} · ${stringResource(appearanceConfig.palette.titleRes)}",
                             expanded = themeExpanded,
                             onToggle = { themeExpanded = !themeExpanded },
                             leading = {
@@ -692,57 +691,12 @@ fun SettingsScreen(
                                     }
                                 }
                             )
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                SakinahPalette.entries.forEach { palette ->
-                                    val selected = appearanceConfig.palette == palette
-                                    Box(
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .clip(CircleShape)
-                                            .border(
-                                                width = if (selected) 2.dp else 1.dp,
-                                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                                                shape = CircleShape
-                                            )
-                                            .clickable { appearancePrefs.update { it.copy(palette = palette) } },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(30.dp)
-                                                .clip(CircleShape)
-                                                .background(palette.lightPreviewPrimary)
-                                        )
-                                        Box(
-                                            modifier = Modifier
-                                                .align(Alignment.BottomEnd)
-                                                .offset(x = (-2).dp, y = (-2).dp)
-                                                .size(12.dp)
-                                                .clip(CircleShape)
-                                                .background(palette.lightPreviewAccent)
-                                        )
-                                        if (selected) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(16.dp)
-                                                    .clip(CircleShape)
-                                                    .background(MaterialTheme.colorScheme.primary),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Check,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                                    modifier = Modifier.size(10.dp)
-                                                )
-                                            }
-                                        }
-                                    }
+                            ThemePalettePicker(
+                                selected = appearanceConfig.palette,
+                                onSelect = { palette ->
+                                    appearancePrefs.update { it.copy(palette = palette) }
                                 }
-                            }
+                            )
                         }
 
                         AppearanceAccordion(

@@ -430,4 +430,43 @@
     <string name="settings_rerun_onboarding">Re-run Personalized Onboarding</string>
     <string name="settings_clear_cache">Clear cache</string>
     <string name="settings_search_language">Search language, translator or name</string>
+    <!-- Theme palette registry -->
+    <string name="theme_palette_selected">منتخب</string>
+    <string name="theme_palette_emerald_sanctuary_name">زمرد پناہ</string>
+    <string name="theme_palette_emerald_sanctuary_subtitle">گرم کریمی اور گہرا نباتاتی سبز</string>
+    <string name="theme_palette_madinah_sand_name">مدینہ کی ریت</string>
+    <string name="theme_palette_madinah_sand_subtitle">گرم ریت اور ہلکا سونا</string>
+    <string name="theme_palette_andalusian_sapphire_name">اندلسی نیلم</string>
+    <string name="theme_palette_andalusian_sapphire_subtitle">گہرا نیلم اور چاندی جیسی روشنی</string>
+    <string name="theme_palette_pure_monochrome_name">سیاہ و سفید</string>
+    <string name="theme_palette_pure_monochrome_subtitle">خالص سیاہ و سفید، OLED کے لیے موزوں ڈارک موڈ</string>
+    <string name="theme_palette_madinah_emerald_name">مدینہ زمرد</string>
+    <string name="theme_palette_madinah_emerald_subtitle">ٹھنڈا زمردی سبز اور گرم پیتل</string>
+    <string name="theme_palette_midnight_fajr_name">نصف شب فجر</string>
+    <string name="theme_palette_midnight_fajr_subtitle">گہرا رات کا نیلا اور نرم فجر کی روشنی</string>
+    <string name="theme_palette_desert_amber_name">صحرائی عنبر</string>
+    <string name="theme_palette_desert_amber_subtitle">دھوپ میں سنہری گیروا اور گرم عنبر</string>
+    <string name="theme_palette_andalusian_teal_name">اندلسی فیروزی</string>
+    <string name="theme_palette_andalusian_teal_subtitle">موزیک فیروزی اور پرانا سونا</string>
+    <string name="theme_palette_olive_grove_name">زیتون کا باغ</string>
+    <string name="theme_palette_olive_grove_subtitle">ہلکا زیتونی اور خشک گھاس کی سنہری</string>
+    <string name="theme_palette_ottoman_turquoise_name">عثمانی فیروزہ</string>
+    <string name="theme_palette_ottoman_turquoise_subtitle">ازنیک فیروزی اور مٹی نما مرجان</string>
+    <string name="theme_palette_damascus_rose_name">دمشقی گلاب</string>
+    <string name="theme_palette_damascus_rose_subtitle">دمشقی گلاب اور گرم آڑو</string>
+    <string name="theme_palette_atlas_indigo_name">اٹلس نیلا</string>
+    <string name="theme_palette_atlas_indigo_subtitle">پہاڑی نیل اور ہلکا بنفشی</string>
+    <string name="theme_palette_suhoor_plum_name">سحری آلو بخارا</string>
+    <string name="theme_palette_suhoor_plum_subtitle">سحری کا آلو بخارا اور نرم مووی</string>
+    <string name="theme_palette_kaaba_gold_name">کعبہ سونا</string>
+    <string name="theme_palette_kaaba_gold_subtitle">گہرا کسوہ سنہری، چارکول پر</string>
+    <string name="theme_palette_cedar_wood_name">دیودار لکڑی</string>
+    <string name="theme_palette_cedar_wood_subtitle">گرم دیودار اور رگڑا ہوا بلوط</string>
+    <string name="theme_palette_zamzam_aqua_name">زمزم کا پانی</string>
+    <string name="theme_palette_zamzam_aqua_subtitle">شفاف آبی اور ہلکا سمندری جھاگ</string>
+    <string name="theme_palette_slate_stone_name">سلیٹ پتھر</string>
+    <string name="theme_palette_slate_stone_subtitle">غیر جانبدار سلیٹ اور ٹھنڈا سرمئی</string>
+    <string name="theme_palette_crimson_terracotta_name">سرخ ٹیراکوٹا</string>
+    <string name="theme_palette_crimson_terracotta_subtitle">جھلسا ہوا سرخ اور دھوپ میں تپا مٹی</string>
+
 </resources>

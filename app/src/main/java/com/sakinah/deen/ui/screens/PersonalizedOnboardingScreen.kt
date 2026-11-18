@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sakinah.deen.ui.components.SakinahCard
 import com.sakinah.deen.ui.components.SegmentedPillBar
+import com.sakinah.deen.ui.components.ThemePalettePicker
 import com.sakinah.deen.ui.theme.FontScalePreset
 import com.sakinah.deen.ui.theme.PrayerGuideGender
 import com.sakinah.deen.ui.theme.SakinahPalette
@@ -515,74 +516,10 @@ fun PersonalizedOnboardingScreen(
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary
                             )
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                SakinahPalette.entries.forEach { palette ->
-                                    val selected = config.palette == palette
-                                    Surface(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(14.dp))
-                                            .clickable { updateConfig(config.copy(palette = palette)) },
-                                        shape = RoundedCornerShape(14.dp),
-                                        color = if (selected) {
-                                            MaterialTheme.colorScheme.primaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.surface
-                                        },
-                                        border = BorderStroke(
-                                            width = if (selected) 1.5.dp else 1.dp,
-                                            color = if (selected) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.outline
-                                            }
-                                        )
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                        ) {
-                                            Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(22.dp)
-                                                        .clip(CircleShape)
-                                                        .background(palette.lightPreviewPrimary)
-                                                )
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(22.dp)
-                                                        .clip(CircleShape)
-                                                        .background(palette.lightPreviewAccent)
-                                                )
-                                            }
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = palette.label,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    fontSize = 14.sp,
-                                                    color = MaterialTheme.colorScheme.onBackground
-                                                )
-                                                Text(
-                                                    text = palette.subtitle,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                            if (selected) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Check,
-                                                    contentDescription = "Selected",
-                                                    tint = MaterialTheme.colorScheme.primary
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            ThemePalettePicker(
+                                selected = config.palette,
+                                onSelect = { updateConfig(config.copy(palette = it)) }
+                            )
 
                             Text(
                                 text = "Text & Arabic Font Size",
