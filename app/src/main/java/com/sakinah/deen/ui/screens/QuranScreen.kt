@@ -48,6 +48,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -84,6 +85,7 @@ import com.sakinah.deen.data.prefs.QuranReadingLayout
 import com.sakinah.deen.ui.components.ArabicVerseBlock
 import com.sakinah.deen.ui.components.QuranOfflineStatusBanner
 import com.sakinah.deen.ui.components.SakinahCard
+import com.sakinah.deen.ui.components.UnifiedReaderPill
 import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.components.StatusBadge
 import com.sakinah.deen.ui.rememberInject
@@ -136,6 +138,7 @@ fun QuranScreen(
     var highlightedAyahNumber by remember { mutableIntStateOf(0) }
     var hifzOverlayActive by remember { mutableStateOf(false) }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
+    var showQuranOptions by remember { mutableStateOf(false) }
 
     val appearancePrefs = rememberInject<AppearancePreferences>()
     val appearanceConfig by appearancePrefs.effectiveConfig.collectAsStateWithLifecycle()
@@ -219,32 +222,15 @@ fun QuranScreen(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                when (readingLayout) {
-                    QuranReadingLayout.THUMB_BOTTOM_DOCK -> {
-                        Text(
-                            text = "${surah.number}. ${surah.nameEnglish} · ${surah.revelationType} · ${surah.ayahCount} Ayahs",
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    else -> {
-                        QuranUtilityBar(
-                            surah = surah,
-                            translationIsoCode = state.selectedTranslationIsoCode,
-                            isStudyMode = state.isStudyMode,
-                            hifzOverlayActive = hifzOverlayActive,
-                            searchExpanded = searchExpanded,
-                            onSurahClick = { studioSheetTab = 0 },
-                            onToggleStudyMode = toggleStudyMode,
-                            onSearchClick = { searchExpanded = !searchExpanded },
-                            onLanguageClick = { studioSheetTab = 1 },
-                            onHifzClick = { hifzOverlayActive = !hifzOverlayActive },
-                            onStudioClick = { studioSheetTab = 0 }
-                        )
-                    }
+                if (readingLayout == QuranReadingLayout.THUMB_BOTTOM_DOCK) {
+                    Text(
+                        text = "${surah.number}. ${surah.nameEnglish} · ${surah.revelationType} · ${surah.ayahCount} Ayahs",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
 
                 if (!focusMode) {
@@ -295,23 +281,6 @@ fun QuranScreen(
                             OutlinedButton(onClick = { vm.onIntent(QuranUiIntent.RetrySync) }) {
                                 Text("Retry", fontSize = 11.sp)
                             }
-                        }
-                    }
-                }
-
-                if (!focusMode) {
-                    state.contentNotice?.let { notice ->
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = notice,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
                         }
                     }
                 }
@@ -443,23 +412,12 @@ fun QuranScreen(
                 }
             }
 
-            if (readingLayout == QuranReadingLayout.THUMB_BOTTOM_DOCK) {
-                QuranThumbDock(
-                    surah = surah,
-                    translationIsoCode = state.selectedTranslationIsoCode,
-                    isStudyMode = state.isStudyMode,
-                    hifzOverlayActive = hifzOverlayActive,
-                    onSurahClick = { studioSheetTab = 0 },
-                    onToggleStudyMode = toggleStudyMode,
-                    onSearchClick = { searchExpanded = !searchExpanded },
-                    onLanguageClick = { studioSheetTab = 1 },
-                    onHifzClick = { hifzOverlayActive = !hifzOverlayActive },
-                    onStudioClick = { studioSheetTab = 0 },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(horizontal = 10.dp, vertical = 8.dp)
-                )
-            }
+            UnifiedReaderPill(
+                title = "${surah.number}. ${surah.nameEnglish} ▾",
+                onTitleClick = { studioSheetTab = 0 },
+                onMenuClick = { showQuranOptions = true },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
         }
 
     // 5. Consolidated Tabbed Reader Studio Sheet (Surah | Translation | Tafsir)
@@ -789,6 +747,68 @@ fun QuranScreen(
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    if (showQuranOptions) {
+        ModalBottomSheet(onDismissRequest = { showQuranOptions = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Reading Options",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                // a) Search Quran
+                TextButton(onClick = { searchExpanded = true; showQuranOptions = false }) {
+                    Icon(Icons.Default.Search, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Search Quran")
+                }
+                // b) Reading Mode switch
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Reading Mode", fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilledTonalButton(onClick = {
+                            if (state.isStudyMode) vm.onIntent(QuranUiIntent.ToggleLayoutMode)
+                            showQuranOptions = false
+                        }) { Text(if (state.isStudyMode) "Mus-haf" else "Study") }
+                    }
+                }
+                // c) Translation & Arabic Script
+                TextButton(onClick = { studioSheetTab = 1; showQuranOptions = false }) {
+                    Icon(Icons.Default.Translate, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Translation & Arabic Script")
+                }
+                // d) Tafsir
+                TextButton(onClick = { studioSheetTab = 2; showQuranOptions = false }) {
+                    Icon(Icons.Default.Book, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Tafsir")
+                }
+                // e) Hifz Mistake Tagger switch
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Hifz Mistake Tagger", fontWeight = FontWeight.SemiBold)
+                    Switch(
+                        checked = hifzOverlayActive,
+                        onCheckedChange = { hifzOverlayActive = it }
+                    )
                 }
             }
         }

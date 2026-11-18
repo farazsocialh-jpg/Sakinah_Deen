@@ -178,7 +178,7 @@ private fun DividerHairlineLayout(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp)
     ) {
         itemsIndexed(
             items = ayahs,
@@ -244,7 +244,7 @@ private fun ContinuousMushafLayout(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
+            contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item(key = "mushaf-header", contentType = "header") {
@@ -317,7 +317,7 @@ private fun SplitColumnLayout(
     listState: LazyListState
 ) {
     val ayahs = surah.ayahs
-    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
         itemsIndexed(
             items = ayahs,
             key = { _, ayah -> ayahKey(surah, ayah) },

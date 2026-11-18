@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,6 +27,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.DropdownMenu
@@ -38,6 +41,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -61,6 +65,7 @@ import com.sakinah.deen.data.model.HadithModel
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.HadithReadingLayout
 import com.sakinah.deen.ui.components.SakinahCard
+import com.sakinah.deen.ui.components.UnifiedReaderPill
 import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.viewmodel.HadithUiIntent
 import com.sakinah.deen.ui.viewmodel.HadithViewModel
@@ -86,6 +91,7 @@ fun HadithScreen(
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var savedOnly by rememberSaveable { mutableStateOf(false) }
     var showBookPicker by remember { mutableStateOf(false) }
+    var showHadithOptions by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
     var languageQuery by remember { mutableStateOf("") }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -160,53 +166,20 @@ fun HadithScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        when (readingLayout) {
-            HadithReadingLayout.THUMB_BOTTOM_DOCK -> {
-                Text(
-                    text = listOf(selectedBookTitle, selectedSectionTitle)
-                        .filter { it.isNotBlank() && it != "All Books" }
-                        .joinToString(" · ")
-                        .ifBlank { "All Books" },
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            HadithReadingLayout.MINIMALIST_ZEN -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    contentAlignment = Alignment.TopCenter
-                ) {
-                    HadithZenPill(
-                        state = state,
-                        savedOnly = savedOnly,
-                        onBookClick = { showBookPicker = true },
-                        onLanguageClick = { showLanguagePicker = true },
-                        onGradeSelected = { vm.onIntent(HadithUiIntent.FilterGradeChanged(it)) },
-                        onSearchClick = { searchExpanded = !searchExpanded },
-                        onSavedClick = { savedOnly = !savedOnly }
-                    )
-                }
-            }
-            else -> {
-                HadithFilterBar(
-                    state = state,
-                    libraryBackMode = readingLayout == HadithReadingLayout.BOOK_LIBRARY_GRID,
-                    savedOnly = savedOnly,
-                    onBookClick = { showBookPicker = true },
-                    onAllBooks = { vm.onIntent(HadithUiIntent.SelectBook("all")) },
-                    onLanguageClick = { showLanguagePicker = true },
-                    onGradeSelected = { vm.onIntent(HadithUiIntent.FilterGradeChanged(it)) },
-                    onSearchClick = { searchExpanded = !searchExpanded },
-                    onSavedClick = { savedOnly = !savedOnly }
-                )
-            }
+        if (readingLayout == HadithReadingLayout.THUMB_BOTTOM_DOCK) {
+            Text(
+                text = listOf(selectedBookTitle, selectedSectionTitle)
+                    .filter { it.isNotBlank() && it != "All Books" }
+                    .joinToString(" · ")
+                    .ifBlank { "All Books" },
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
 
         if (searchExpanded || state.searchQuery.isNotBlank()) {
@@ -342,28 +315,71 @@ fun HadithScreen(
                 onShare = ::shareHadith
             )
 
-            if (readingLayout == HadithReadingLayout.THUMB_BOTTOM_DOCK) {
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
-                    shadowElevation = 8.dp
+            UnifiedReaderPill(
+                title = if (state.selectedBookKey == "all") "All Books ▾" else "${selectedBookTitle ?: "Book"} ▾",
+                onTitleClick = { showBookPicker = true },
+                onMenuClick = { showHadithOptions = true },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
+    }
+
+    if (showHadithOptions) {
+        ModalBottomSheet(onDismissRequest = { showHadithOptions = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Hadith Options",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                // a) Search Hadith
+                TextButton(onClick = { searchExpanded = true; showHadithOptions = false }) {
+                    Icon(Icons.Default.Search, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Search Hadith")
+                }
+                // b) Language Picker
+                TextButton(onClick = { showLanguagePicker = true; showHadithOptions = false }) {
+                    Icon(Icons.Default.Translate, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Language Picker")
+                }
+                // c) Grade Filter chips
+                Text("Grade Filter", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("all" to "All", "sahih" to "Sahih", "hasan" to "Hasan").forEach { (key, label) ->
+                        val selected = state.filterGrade.equals(key, true)
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.clickable {
+                                vm.onIntent(HadithUiIntent.FilterGradeChanged(key))
+                            }
+                        ) {
+                            Text(
+                                text = label,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+                // d) Saved / Bookmarks Only toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    HadithFilterBar(
-                        state = state,
-                        libraryBackMode = false,
-                        savedOnly = savedOnly,
-                        onBookClick = { showBookPicker = true },
-                        onAllBooks = { vm.onIntent(HadithUiIntent.SelectBook("all")) },
-                        onLanguageClick = { showLanguagePicker = true },
-                        onGradeSelected = { vm.onIntent(HadithUiIntent.FilterGradeChanged(it)) },
-                        onSearchClick = { searchExpanded = !searchExpanded },
-                        onSavedClick = { savedOnly = !savedOnly }
-                    )
+                    Text("Saved / Bookmarks Only", fontWeight = FontWeight.SemiBold)
+                    Switch(checked = savedOnly, onCheckedChange = { savedOnly = it })
                 }
             }
         }
