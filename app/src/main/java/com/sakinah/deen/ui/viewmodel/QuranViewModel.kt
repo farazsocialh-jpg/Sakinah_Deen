@@ -11,6 +11,9 @@ import com.sakinah.deen.data.model.AyahModel
 import com.sakinah.deen.data.model.QuranArabicScript
 import com.sakinah.deen.data.model.QuranTranslationResource
 import com.sakinah.deen.data.model.SurahModel
+import com.sakinah.deen.data.prefs.AyahBookmark
+import com.sakinah.deen.data.prefs.QuranReaderPreferences
+import com.sakinah.deen.data.prefs.QuranReadingMode
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.quran.QuranOfflineStatus
 import com.sakinah.deen.data.repository.TafseerDownloadRepository
@@ -42,7 +45,14 @@ data class QuranUiState(
     val surahs: List<SurahModel> = emptyList(),
     val activeHighlightedAyah: Int = 1,
     val scrollTargetAyah: Int? = null,
-    val isStudyMode: Boolean = true,
+    /** Verse-by-verse study pages versus the flowing mushaf page; persisted by the reader. */
+    val readingMode: QuranReadingMode = QuranReadingMode.STUDY,
+    /** Reader list index restored from the last session; applied once, then cleared. */
+    val restoreScrollIndex: Int? = null,
+    /** Chapter the restored index belongs to, so a placeholder page never consumes it. */
+    val restoreSurahNumber: Int? = null,
+    /** Ayahs saved by the reader, newest first. */
+    val bookmarks: List<AyahBookmark> = emptyList(),
     val downloadedTafseers: List<TafseerPackage> = emptyList(),
     val availableTafseers: List<TafseerPackage> = emptyList(),
     val selectedTafseerContent: String = "",
@@ -72,7 +82,17 @@ data class QuranUiState(
     val isLoadingTranslation: Boolean = false,
     /** Live coverage of the bundled 114-surah pack; null until Room reports once. */
     val offlineStatus: QuranOfflineStatus? = null
-)
+) {
+    /** Convenience for the reader branches that render one presentation or the other. */
+    val isStudyMode: Boolean get() = readingMode == QuranReadingMode.STUDY
+
+    /** Ayah numbers of the current surah that are bookmarked. */
+    val bookmarkedAyahNumbers: Set<Int>
+        get() = bookmarks.asSequence()
+            .filter { it.surahNumber == currentSurah.number }
+            .map { it.ayahNumber }
+            .toSet()
+}
 
 sealed class QuranUiIntent {
     data class SelectSurah(val surahNumber: Int) : QuranUiIntent()
@@ -86,7 +106,15 @@ sealed class QuranUiIntent {
     data class SearchAyahs(val query: String) : QuranUiIntent()
     data object ClearSearch : QuranUiIntent()
     data object RetrySync : QuranUiIntent()
-    data object ToggleLayoutMode : QuranUiIntent()
+    data object ToggleReadingMode : QuranUiIntent()
+    data class SetReadingMode(val mode: QuranReadingMode) : QuranUiIntent()
+    data class ToggleBookmark(val surahNumber: Int, val ayahNumber: Int) : QuranUiIntent()
+    data class SaveReadingPosition(
+        val surahNumber: Int,
+        val ayahNumber: Int,
+        val scrollIndex: Int
+    ) : QuranUiIntent()
+    data object ClearRestoreScrollIndex : QuranUiIntent()
     data class SelectTranslation(
         val translationId: Int,
         val languageName: String = "",
@@ -103,7 +131,8 @@ class QuranViewModel(
     private val islamicRepository: IslamicDataRepository? = null,
     private val quranDao: QuranDao? = null,
     private val sakinahPreferences: SakinahPreferences? = null,
-    private val settingsRepository: SettingsRepository? = null
+    private val settingsRepository: SettingsRepository? = null,
+    private val quranReaderPreferences: QuranReaderPreferences? = null
 ) : ViewModel() {
 
     /** Only used before the encrypted database has been seeded/reached. */
@@ -142,7 +171,9 @@ class QuranViewModel(
         QuranUiState(
             currentSurah = sampleSurah,
             surahs = listOf(sampleSurah.copy(ayahs = emptyList())),
-            selectedTafseerContent = sampleSurah.ayahs[0].tafseerIbnKathir
+            selectedTafseerContent = sampleSurah.ayahs[0].tafseerIbnKathir,
+            readingMode = quranReaderPreferences?.readingMode ?: QuranReadingMode.STUDY,
+            bookmarks = quranReaderPreferences?.bookmarks.orEmpty()
         )
     )
     val uiState: StateFlow<QuranUiState> = _uiState.asStateFlow()
@@ -164,6 +195,7 @@ class QuranViewModel(
             )
         }
         restoreHifzAnnotations()
+        restoreLastReadPosition()
         observeOfflineStatus()
         observeSharedSettings()
         observeTafseerPackages()
@@ -194,7 +226,23 @@ class QuranViewModel(
                 _uiState.update { it.copy(searchQuery = "", searchResults = emptyList(), isSearching = false) }
             }
             is QuranUiIntent.RetrySync -> retrySync()
-            is QuranUiIntent.ToggleLayoutMode -> _uiState.update { it.copy(isStudyMode = !it.isStudyMode) }
+            is QuranUiIntent.ToggleReadingMode -> setReadingMode(
+                if (_uiState.value.readingMode == QuranReadingMode.STUDY) {
+                    QuranReadingMode.MUSHAF
+                } else {
+                    QuranReadingMode.STUDY
+                }
+            )
+            is QuranUiIntent.SetReadingMode -> setReadingMode(intent.mode)
+            is QuranUiIntent.ToggleBookmark -> toggleBookmark(intent.surahNumber, intent.ayahNumber)
+            is QuranUiIntent.SaveReadingPosition -> quranReaderPreferences?.saveReadingPosition(
+                intent.surahNumber,
+                intent.ayahNumber,
+                intent.scrollIndex
+            )
+            is QuranUiIntent.ClearRestoreScrollIndex -> _uiState.update {
+                it.copy(restoreScrollIndex = null, restoreSurahNumber = null)
+            }
             is QuranUiIntent.SelectTranslation -> selectTranslation(
                 intent.translationId,
                 intent.languageName,
@@ -337,6 +385,12 @@ class QuranViewModel(
         pendingTargetAyah = targetAyah
         val listing = state.surahs.find { it.number == surahNumber }
         selectedSurahNumber.value = surahNumber
+        // Switching chapters is a reading position too; the reader refines the index as
+        // soon as the new page is composed and scrolled. Re-picking the open chapter must
+        // not reset the position stored for it.
+        if (state.currentSurah.number != surahNumber) {
+            quranReaderPreferences?.saveReadingPosition(surahNumber, targetAyah ?: 1, 0)
+        }
 
         if (listing == null) {
             val fallback = if (hasDatabaseSurahs) {
@@ -704,6 +758,49 @@ class QuranViewModel(
         }.toMap()
         if (restored.isEmpty()) return
         _uiState.update { it.copy(hifzMistakes = it.hifzMistakes + restored) }
+    }
+
+    /**
+     * Reopens the chapter, verse and list index of the previous session. Only a first-ever
+     * launch (nothing stored) keeps the default of Surah 1, Ayah 1.
+     */
+    private fun restoreLastReadPosition() {
+        val position = quranReaderPreferences?.lastReadPosition ?: return
+        pendingTargetAyah = null
+        selectedSurahNumber.value = position.surahNumber
+        _uiState.update {
+            it.copy(
+                activeHighlightedAyah = position.ayahNumber,
+                restoreScrollIndex = position.scrollIndex,
+                restoreSurahNumber = position.surahNumber
+            )
+        }
+    }
+
+    private fun setReadingMode(mode: QuranReadingMode) {
+        if (_uiState.value.readingMode == mode) return
+        _uiState.update { it.copy(readingMode = mode) }
+        quranReaderPreferences?.readingMode = mode
+    }
+
+    private fun toggleBookmark(surahNumber: Int, ayahNumber: Int) {
+        if (surahNumber < QuranReaderPreferences.MIN_SURAH ||
+            surahNumber > QuranReaderPreferences.MAX_SURAH ||
+            ayahNumber < 1
+        ) {
+            return
+        }
+        val current = _uiState.value.bookmarks
+        val alreadySaved = current.any {
+            it.surahNumber == surahNumber && it.ayahNumber == ayahNumber
+        }
+        val updated = if (alreadySaved) {
+            current.filterNot { it.surahNumber == surahNumber && it.ayahNumber == ayahNumber }
+        } else {
+            current + AyahBookmark(surahNumber, ayahNumber, System.currentTimeMillis())
+        }
+        _uiState.update { it.copy(bookmarks = updated) }
+        quranReaderPreferences?.bookmarks = updated
     }
 
     private fun persistHifzAnnotations(updated: Map<Pair<Int, Int>, String>) {

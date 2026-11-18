@@ -7,6 +7,7 @@ import com.sakinah.deen.data.prayer.AlAdhanApiClient
 import com.sakinah.deen.data.prayer.PrayerMethodSettings
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.PreferencesPrayerMethodSettings
+import com.sakinah.deen.data.prefs.QuranReaderPreferences
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.prefs.SalahGuideProgressStore
 import com.sakinah.deen.data.repository.NisabRateRepository
@@ -48,6 +49,8 @@ import org.koin.dsl.module
 val preferencesModule = module {
     single { SakinahPreferences(androidContext()) }
     single { AppearancePreferences(androidContext()) }
+    // Reading mode, last-read position and ayah bookmarks of the Quran reader.
+    single { QuranReaderPreferences(androidContext()) }
     // Read by the Visual Salah Guide and by SalahGuideReminderWorker, so it is a singleton.
     single { SalahGuideProgressStore(androidContext()) }
 }
@@ -355,7 +358,12 @@ val accountModule = module {
 
 val viewModelModule = module {
     viewModel { SalahViewModel(get(), get(), get(), get(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull()) }
-    viewModel { QuranViewModel(getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull()) }
+    viewModel {
+        QuranViewModel(
+            getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull(),
+            getOrNull()
+        )
+    }
     viewModel { HadithViewModel(getOrNull(), getOrNull(), getOrNull()) }
     viewModel { TravelViewModel(get(), get(), getOrNull()) }
     viewModel { WealthViewModel(get(), getOrNull(), getOrNull(), observeMonthRollover = true) }

@@ -1,5 +1,6 @@
 package com.sakinah.deen.ui.screens
 
+import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -27,17 +28,27 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.ViewAgenda
+import androidx.compose.material.icons.filled.ViewColumn
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -61,9 +72,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -78,10 +94,12 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sakinah.deen.R
 import com.sakinah.deen.data.model.AyahModel
 import com.sakinah.deen.data.model.QuranArabicScript
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.QuranReadingLayout
+import com.sakinah.deen.data.prefs.QuranReadingMode
 import com.sakinah.deen.ui.components.ArabicVerseBlock
 import com.sakinah.deen.ui.components.QuranOfflineStatusBanner
 import com.sakinah.deen.ui.components.SakinahCard
@@ -96,6 +114,8 @@ import com.sakinah.deen.ui.viewmodel.QuranUiIntent
 import com.sakinah.deen.ui.viewmodel.QuranViewModel
 import com.sakinah.deen.util.ArabicNormalizer
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -139,17 +159,27 @@ fun QuranScreen(
     var hifzOverlayActive by remember { mutableStateOf(false) }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var showQuranOptions by remember { mutableStateOf(false) }
+    var showBookmarks by remember { mutableStateOf(false) }
+    // 0 means no ayah action bar; any other value is the ayah it acts on.
+    var actionBarAyah by remember { mutableIntStateOf(0) }
 
     val appearancePrefs = rememberInject<AppearancePreferences>()
     val appearanceConfig by appearancePrefs.effectiveConfig.collectAsStateWithLifecycle()
     val readingLayout = appearanceConfig.quranReadingLayout
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
 
     val listState = rememberLazyListState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+    // Both presentations prepend a header item in the continuous page; the verse layouts do not.
+    val usesHeaderItem = !state.isStudyMode || readingLayout == QuranReadingLayout.CONTINUOUS_MUSHAF
+
     LaunchedEffect(focusMode) {
-        if (focusMode && state.isStudyMode) {
-            vm.onIntent(QuranUiIntent.ToggleLayoutMode)
+        // Focus mode reads the flowing page; the reader branch follows the same state value,
+        // so the request has to go through the view model rather than a local flag.
+        if (focusMode && state.readingMode != QuranReadingMode.MUSHAF) {
+            vm.onIntent(QuranUiIntent.SetReadingMode(QuranReadingMode.MUSHAF))
         }
         if (focusMode) {
             hifzOverlayActive = false
@@ -158,28 +188,69 @@ fun QuranScreen(
 
     LaunchedEffect(initialSurahNumber, initialAyahNumber, deepLinkNonce) {
         if (deepLinkNonce > 0 || initialSurahNumber != 1 || initialAyahNumber != 1) {
+            // A deep link always resolves to a visible verse row.
+            if (state.readingMode != QuranReadingMode.STUDY) {
+                vm.onIntent(QuranUiIntent.SetReadingMode(QuranReadingMode.STUDY))
+            }
+            // An explicit jump wins over the position left by the previous session.
+            vm.onIntent(QuranUiIntent.ClearRestoreScrollIndex)
             vm.onIntent(QuranUiIntent.SelectSurahAtAyah(initialSurahNumber, initialAyahNumber))
             selectedAyahNumber = initialAyahNumber
         }
     }
 
-    LaunchedEffect(state.scrollTargetAyah, surah.number, surah.ayahs.size, state.isStudyMode) {
+    LaunchedEffect(
+        state.scrollTargetAyah,
+        surah.number,
+        surah.ayahs.size,
+        state.readingMode,
+        readingLayout
+    ) {
         val target = state.scrollTargetAyah ?: return@LaunchedEffect
-        if (!state.isStudyMode) {
-            vm.onIntent(QuranUiIntent.ToggleLayoutMode)
-            return@LaunchedEffect
-        }
         val idx = surah.ayahs.indexOfFirst { it.numberInSurah == target }
         if (idx >= 0) {
             selectedAyahNumber = target
-            // Continuous Mushaf has a header item before the first ayah.
-            val itemIndex = if (readingLayout == QuranReadingLayout.CONTINUOUS_MUSHAF) idx + 1 else idx
+            actionBarAyah = target
+            val itemIndex = if (usesHeaderItem) idx + 1 else idx
             listState.animateScrollToItem(itemIndex)
             highlightedAyahNumber = target
             vm.onIntent(QuranUiIntent.ClearScrollTarget)
             delay(2000)
             if (highlightedAyahNumber == target) highlightedAyahNumber = 0
         }
+    }
+
+    // Reopen exactly where the last session stopped; applied once, then cleared. The stored
+    // index is only used for the chapter it belongs to, so a placeholder page cannot eat it.
+    LaunchedEffect(
+        state.restoreScrollIndex,
+        state.restoreSurahNumber,
+        surah.number,
+        surah.ayahs.size,
+        usesHeaderItem
+    ) {
+        val target = state.restoreScrollIndex ?: return@LaunchedEffect
+        if (state.restoreSurahNumber != surah.number || surah.ayahs.isEmpty()) {
+            return@LaunchedEffect
+        }
+        val maxIndex = surah.ayahs.size + if (usesHeaderItem) 1 else 0
+        listState.scrollToItem(target.coerceIn(0, maxIndex))
+        vm.onIntent(QuranUiIntent.ClearRestoreScrollIndex)
+    }
+
+    // Persist the position when a scroll settles. The first emission is the idle state at
+    // composition, so it is dropped to avoid overwriting the restored index with 0.
+    LaunchedEffect(listState, surah.number, surah.ayahs.size, state.readingMode, readingLayout) {
+        if (surah.ayahs.isEmpty()) return@LaunchedEffect
+        val headerItems = if (usesHeaderItem) 1 else 0
+        snapshotFlow { listState.isScrollInProgress }
+            .drop(1)
+            .filter { !it }
+            .collect {
+                val index = listState.firstVisibleItemIndex
+                val ayahNumber = (index - headerItems + 1).coerceIn(1, surah.ayahs.size)
+                vm.onIntent(QuranUiIntent.SaveReadingPosition(surah.number, ayahNumber, index))
+            }
     }
 
     val translationIsRtl = isRtlLanguage(state.selectedTranslationIsoCode)
@@ -190,10 +261,19 @@ fun QuranScreen(
         hifzMistakes = state.hifzMistakes,
         translationIsRtl = translationIsRtl,
         arabicFontSizeSp = state.arabicFontSize,
-        focusMode = focusMode
+        focusMode = focusMode,
+        bookmarkedAyahNumbers = state.bookmarkedAyahNumbers
     )
     val onAyahClick: (AyahModel) -> Unit = { ayah ->
         selectedAyahNumber = ayah.numberInSurah
+        actionBarAyah = ayah.numberInSurah
+        vm.onIntent(
+            QuranUiIntent.SaveReadingPosition(
+                surah.number,
+                ayah.numberInSurah,
+                listState.firstVisibleItemIndex
+            )
+        )
     }
     val onTafseerClick: (AyahModel) -> Unit = { ayah ->
         selectedAyahNumber = ayah.numberInSurah
@@ -210,8 +290,34 @@ fun QuranScreen(
             )
         )
     }
+    val onToggleBookmark: (AyahModel) -> Unit = { ayah ->
+        vm.onIntent(QuranUiIntent.ToggleBookmark(surah.number, ayah.numberInSurah))
+    }
+    val actionAyah = surah.ayahs.firstOrNull { it.numberInSurah == actionBarAyah }
+    val ayahShareBody = actionAyah?.let { ayah ->
+        listOfNotNull(
+            cleanQuranArabic(ayah.arabicText),
+            ayah.translation.takeIf { it.isNotBlank() },
+            context.getString(R.string.quran_reference, surah.number, ayah.numberInSurah)
+        ).joinToString("\n\n")
+    }
+    val copyActionAyah: () -> Unit = {
+        ayahShareBody?.let { clipboard.setText(AnnotatedString(it)) }
+    }
+    val shareActionAyah: () -> Unit = {
+        ayahShareBody?.let { body ->
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, body)
+                putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.quran_share_subject))
+            }
+            context.startActivity(
+                Intent.createChooser(send, context.getString(R.string.quran_action_share))
+            )
+        }
+    }
     val toggleStudyMode: () -> Unit = {
-        vm.onIntent(QuranUiIntent.ToggleLayoutMode)
+        vm.onIntent(QuranUiIntent.ToggleReadingMode)
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -235,7 +341,11 @@ fun QuranScreen(
 
                 if (!focusMode) {
                     // Null until Room reports coverage: no "missing pack" flash on launch.
-                    state.offlineStatus?.let { QuranOfflineStatusBanner(status = it) }
+                    // A complete pack stays silent — the banner is only for genuinely
+                    // missing or partial coverage, whose details also live in the options sheet.
+                    state.offlineStatus
+                        ?.takeIf { !it.isComplete }
+                        ?.let { QuranOfflineStatusBanner(status = it) }
                 }
 
                 if (searchExpanded || state.searchQuery.isNotBlank()) {
@@ -320,6 +430,7 @@ fun QuranScreen(
                             onAyahClick = onAyahClick,
                             onTafseer = onTafseerClick,
                             onTagMistake = onTagMistakeClick,
+                            onToggleBookmark = onToggleBookmark,
                             onToggleStudyMode = toggleStudyMode,
                             listState = listState
                         )
@@ -385,15 +496,24 @@ fun QuranScreen(
                                             color = if (active) MaterialTheme.colorScheme.primary
                                             else MaterialTheme.colorScheme.surfaceVariant,
                                             modifier = Modifier.clickable {
+                                                // Selecting from the chip bar is how the mushaf page
+                                                // reaches one ayah's actions without per-ayah rows.
                                                 selectedAyahNumber = ayah.numberInSurah
+                                                actionBarAyah = ayah.numberInSurah
                                                 vm.onIntent(
-                                                    QuranUiIntent.SelectAyahForTafseer(ayah.numberInSurah)
+                                                    QuranUiIntent.SaveReadingPosition(
+                                                        surah.number,
+                                                        ayah.numberInSurah,
+                                                        listState.firstVisibleItemIndex
+                                                    )
                                                 )
-                                                studioSheetTab = 2
                                             }
                                         ) {
                                             Text(
-                                                text = "Ayah ${ayah.numberInSurah}",
+                                                text = stringResource(
+                                                    R.string.quran_ayah_chip,
+                                                    ayah.numberInSurah
+                                                ),
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.SemiBold,
                                                 color = if (active) MaterialTheme.colorScheme.onPrimary
@@ -412,11 +532,37 @@ fun QuranScreen(
                 }
             }
 
+            if (!focusMode && actionAyah != null) {
+                AyahActionBar(
+                    ayahNumber = actionAyah.numberInSurah,
+                    bookmarked = actionBarAyah in state.bookmarkedAyahNumbers,
+                    onBookmark = { onToggleBookmark(actionAyah) },
+                    onCopy = copyActionAyah,
+                    onShare = shareActionAyah,
+                    onTafseer = { onTafseerClick(actionAyah) },
+                    onClose = { actionBarAyah = 0 },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 72.dp)
+                )
+            }
+
             UnifiedReaderPill(
                 title = "${surah.number}. ${surah.nameEnglish} ▾",
                 onTitleClick = { studioSheetTab = 0 },
                 onMenuClick = { showQuranOptions = true },
-                modifier = Modifier.align(Alignment.BottomCenter)
+                menuContentDescription = stringResource(R.string.quran_options_title),
+                modifier = Modifier.align(Alignment.BottomCenter),
+                actions = {
+                    ReaderPillLayoutMenu(
+                        selected = readingLayout,
+                        onSelect = { appearancePrefs.updateQuranReadingLayout(it) }
+                    )
+                    ReaderPillModeButton(
+                        studyMode = state.isStudyMode,
+                        onClick = { vm.onIntent(QuranUiIntent.ToggleReadingMode) }
+                    )
+                }
             )
         }
 
@@ -761,55 +907,370 @@ fun QuranScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Reading Options",
+                    text = stringResource(R.string.quran_options_title),
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
                     color = MaterialTheme.colorScheme.primary
                 )
-                // a) Search Quran
                 TextButton(onClick = { searchExpanded = true; showQuranOptions = false }) {
                     Icon(Icons.Default.Search, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Search Quran")
+                    Text(stringResource(R.string.quran_options_search))
                 }
-                // b) Reading Mode switch
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Reading Mode", fontWeight = FontWeight.SemiBold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilledTonalButton(onClick = {
-                            if (state.isStudyMode) vm.onIntent(QuranUiIntent.ToggleLayoutMode)
-                            showQuranOptions = false
-                        }) { Text(if (state.isStudyMode) "Mus-haf" else "Study") }
+                // Reading mode and layout are both selectable here and in the pill bar.
+                Text(
+                    text = stringResource(R.string.quran_reading_mode_title),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp
+                )
+                SegmentedPillBar(
+                    options = QuranReadingMode.entries.map { it.localizedLabel() },
+                    selectedIndex = QuranReadingMode.entries.indexOf(state.readingMode).coerceAtLeast(0),
+                    onSelect = { index ->
+                        QuranReadingMode.entries.getOrNull(index)?.let {
+                            vm.onIntent(QuranUiIntent.SetReadingMode(it))
+                        }
                     }
+                )
+                Text(
+                    text = stringResource(R.string.quran_layout_menu_title),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp
+                )
+                SegmentedPillBar(
+                    options = QuranReadingLayout.entries.map { it.shortLabel() },
+                    selectedIndex = QuranReadingLayout.entries.indexOf(readingLayout),
+                    onSelect = { index ->
+                        QuranReadingLayout.entries.getOrNull(index)?.let {
+                            appearancePrefs.updateQuranReadingLayout(it)
+                        }
+                    }
+                )
+                TextButton(onClick = { showBookmarks = true; showQuranOptions = false }) {
+                    Icon(Icons.Default.Bookmark, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.quran_options_bookmarks))
                 }
-                // c) Translation & Arabic Script
                 TextButton(onClick = { studioSheetTab = 1; showQuranOptions = false }) {
                     Icon(Icons.Default.Translate, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Translation & Arabic Script")
+                    Text(stringResource(R.string.quran_options_translation))
                 }
-                // d) Tafsir
                 TextButton(onClick = { studioSheetTab = 2; showQuranOptions = false }) {
                     Icon(Icons.Default.Book, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Tafsir")
+                    Text(stringResource(R.string.quran_options_tafseer))
                 }
-                // e) Hifz Mistake Tagger switch
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Hifz Mistake Tagger", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = stringResource(R.string.quran_options_hifz),
+                        fontWeight = FontWeight.SemiBold
+                    )
                     Switch(
                         checked = hifzOverlayActive,
                         onCheckedChange = { hifzOverlayActive = it }
                     )
                 }
+                state.offlineStatus?.let { status ->
+                    Text(
+                        text = stringResource(
+                            R.string.quran_offline_compact,
+                            status.ayahsAvailable,
+                            status.totalAyahs
+                        ),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+
+    if (showBookmarks) {
+        ModalBottomSheet(onDismissRequest = { showBookmarks = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.quran_bookmarks_title),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    IconButton(onClick = { showBookmarks = false }) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = stringResource(R.string.quran_action_close)
+                        )
+                    }
+                }
+                if (state.bookmarks.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.quran_bookmarks_empty),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 18.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp)
+                    ) {
+                        items(
+                            items = state.bookmarks,
+                            key = { "${it.surahNumber}:${it.ayahNumber}" }
+                        ) { bookmark ->
+                            val surahName = state.surahs
+                                .find { it.number == bookmark.surahNumber }
+                                ?.nameEnglish
+                                ?: stringResource(R.string.quran_surah_chip, bookmark.surahNumber)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        showBookmarks = false
+                                        selectedAyahNumber = bookmark.ayahNumber
+                                        actionBarAyah = bookmark.ayahNumber
+                                        vm.onIntent(
+                                            QuranUiIntent.SelectSurahAtAyah(
+                                                bookmark.surahNumber,
+                                                bookmark.ayahNumber
+                                            )
+                                        )
+                                    }
+                                    .padding(vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Bookmark,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(
+                                            R.string.quran_bookmark_jump,
+                                            bookmark.surahNumber,
+                                            bookmark.ayahNumber
+                                        ),
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "$surahName · " + stringResource(
+                                            R.string.quran_ayah_chip,
+                                            bookmark.ayahNumber
+                                        ),
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        vm.onIntent(
+                                            QuranUiIntent.ToggleBookmark(
+                                                bookmark.surahNumber,
+                                                bookmark.ayahNumber
+                                            )
+                                        )
+                                    },
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = stringResource(
+                                            R.string.quran_bookmark_remove
+                                        ),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Full, localized preset name used by menus and Settings. */
+@Composable
+internal fun QuranReadingLayout.localizedLabel(): String = when (this) {
+    QuranReadingLayout.DIVIDER_HAIRLINE -> stringResource(R.string.quran_layout_divider_hairline)
+    QuranReadingLayout.CONTINUOUS_MUSHAF -> stringResource(R.string.quran_layout_continuous_mushaf)
+    QuranReadingLayout.SPLIT_COLUMN -> stringResource(R.string.quran_layout_split_column)
+    QuranReadingLayout.THUMB_BOTTOM_DOCK -> stringResource(R.string.quran_layout_thumb_bottom_dock)
+}
+
+/** Compact name for the four-option segmented bar, where long labels would wrap. */
+@Composable
+internal fun QuranReadingLayout.shortLabel(): String = when (this) {
+    QuranReadingLayout.DIVIDER_HAIRLINE -> stringResource(R.string.quran_layout_short_hairline)
+    QuranReadingLayout.CONTINUOUS_MUSHAF -> stringResource(R.string.quran_layout_short_mushaf)
+    QuranReadingLayout.SPLIT_COLUMN -> stringResource(R.string.quran_layout_short_split)
+    QuranReadingLayout.THUMB_BOTTOM_DOCK -> stringResource(R.string.quran_layout_short_dock)
+}
+
+@Composable
+internal fun QuranReadingMode.localizedLabel(): String = when (this) {
+    QuranReadingMode.STUDY -> stringResource(R.string.quran_mode_study)
+    QuranReadingMode.MUSHAF -> stringResource(R.string.quran_mode_mushaf)
+}
+
+/** Layout picker shown inside the bottom reader pill. */
+@Composable
+private fun ReaderPillLayoutMenu(
+    selected: QuranReadingLayout,
+    onSelect: (QuranReadingLayout) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(
+            onClick = { expanded = true },
+            modifier = Modifier.size(40.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.ViewColumn,
+                contentDescription = stringResource(R.string.quran_pill_layout),
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(19.dp)
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            QuranReadingLayout.entries.forEach { layout ->
+                DropdownMenuItem(
+                    text = { Text(text = layout.localizedLabel(), fontSize = 13.sp) },
+                    onClick = {
+                        expanded = false
+                        onSelect(layout)
+                    },
+                    leadingIcon = {
+                        if (layout == selected) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        } else {
+                            Spacer(Modifier.size(16.dp))
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+/** One-tap switch between the verse pages and the flowing mushaf page. */
+@Composable
+private fun ReaderPillModeButton(
+    studyMode: Boolean,
+    onClick: () -> Unit
+) {
+    IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
+        Icon(
+            imageVector = if (studyMode) Icons.Default.ViewAgenda
+            else Icons.AutoMirrored.Filled.MenuBook,
+            contentDescription = stringResource(R.string.quran_pill_reading_mode),
+            tint = if (studyMode) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.secondary,
+            modifier = Modifier.size(19.dp)
+        )
+    }
+}
+
+/** Bookmark, copy, share and tafsir actions for the ayah last tapped. */
+@Composable
+private fun AyahActionBar(
+    ayahNumber: Int,
+    bookmarked: Boolean,
+    onBookmark: () -> Unit,
+    onCopy: () -> Unit,
+    onShare: () -> Unit,
+    onTafseer: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.padding(horizontal = 12.dp),
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)),
+        shadowElevation = 6.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.quran_ayah_chip, ayahNumber),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                modifier = Modifier.padding(start = 8.dp, end = 2.dp)
+            )
+            IconButton(onClick = onBookmark, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    imageVector = if (bookmarked) Icons.Default.Bookmark
+                    else Icons.Outlined.BookmarkBorder,
+                    contentDescription = stringResource(
+                        if (bookmarked) R.string.quran_bookmark_remove else R.string.quran_bookmark_add
+                    ),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            IconButton(onClick = onCopy, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    imageVector = Icons.Default.ContentCopy,
+                    contentDescription = stringResource(R.string.quran_action_copy),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            IconButton(onClick = onShare, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    imageVector = Icons.Default.Share,
+                    contentDescription = stringResource(R.string.quran_action_share),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            IconButton(onClick = onTafseer, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    imageVector = Icons.Default.Book,
+                    contentDescription = stringResource(R.string.quran_action_tafseer),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            IconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = stringResource(R.string.quran_action_close),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
     }

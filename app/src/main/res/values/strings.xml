@@ -492,4 +492,42 @@
     <string name="theme_palette_crimson_terracotta_name">Crimson Terracotta</string>
     <string name="theme_palette_crimson_terracotta_subtitle">Burnt crimson with sun-baked clay</string>
 
+    <!-- Quran reader: pill controls, reading mode, layout picker, bookmarks -->
+    <string name="quran_pill_layout">Choose reading layout</string>
+    <string name="quran_pill_reading_mode">Switch reading mode</string>
+    <string name="quran_layout_menu_title">Reading layout</string>
+    <string name="quran_layout_divider_hairline">Divider hairline</string>
+    <string name="quran_layout_continuous_mushaf">Continuous mushaf</string>
+    <string name="quran_layout_split_column">Split-column study</string>
+    <string name="quran_layout_thumb_bottom_dock">Thumb-zone dock</string>
+    <string name="quran_layout_short_hairline">Hairline</string>
+    <string name="quran_layout_short_mushaf">Mushaf</string>
+    <string name="quran_layout_short_split">Split</string>
+    <string name="quran_layout_short_dock">Dock</string>
+    <string name="quran_reading_mode_title">Reading mode</string>
+    <string name="quran_mode_study">Verse by verse</string>
+    <string name="quran_mode_mushaf">Mushaf page</string>
+    <string name="quran_bookmarks_title">Ayah bookmarks</string>
+    <string name="quran_bookmarks_empty">No bookmarked ayahs yet. Tap the bookmark icon on any ayah.</string>
+    <string name="quran_bookmark_add">Bookmark ayah</string>
+    <string name="quran_bookmark_remove">Remove bookmark</string>
+    <string name="quran_bookmark_jump">Go to %1$d:%2$d</string>
+    <string name="quran_action_copy">Copy ayah</string>
+    <string name="quran_action_share">Share ayah</string>
+    <string name="quran_action_tafseer">Open tafsir</string>
+    <string name="quran_action_close">Close ayah actions</string>
+    <string name="quran_ayah_chip">Ayah %1$d</string>
+    <string name="quran_selected_badge">Reading</string>
+    <string name="quran_switch_to_study">Switch to study</string>
+    <string name="quran_offline_compact">%1$d of %2$d ayahs cached</string>
+    <string name="quran_options_title">Reading options</string>
+    <string name="quran_options_search">Search Quran</string>
+    <string name="quran_options_translation">Translation &amp; Arabic script</string>
+    <string name="quran_options_tafseer">Tafsir</string>
+    <string name="quran_options_hifz">Hifz mistake tagger</string>
+    <string name="quran_options_bookmarks">Bookmarks</string>
+    <string name="quran_share_subject">Quran ayah</string>
+    <string name="quran_reference">Quran %1$d:%2$d</string>
+    <string name="quran_surah_chip">Surah %1$d</string>
+
 </resources>

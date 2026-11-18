@@ -469,4 +469,42 @@
     <string name="theme_palette_crimson_terracotta_name">سرخ ٹیراکوٹا</string>
     <string name="theme_palette_crimson_terracotta_subtitle">جھلسا ہوا سرخ اور دھوپ میں تپا مٹی</string>
 
+    <!-- Quran reader: pill controls, reading mode, layout picker, bookmarks -->
+    <string name="quran_pill_layout">پڑھنے کا لے آؤٹ منتخب کریں</string>
+    <string name="quran_pill_reading_mode">پڑھنے کا موڈ بدلیں</string>
+    <string name="quran_layout_menu_title">پڑھنے کا لے آؤٹ</string>
+    <string name="quran_layout_divider_hairline">باریک لکیریں</string>
+    <string name="quran_layout_continuous_mushaf">مسلسل مصحف</string>
+    <string name="quran_layout_split_column">دو کالم مطالعہ</string>
+    <string name="quran_layout_thumb_bottom_dock">نیچے انگوٹھے کی پٹی</string>
+    <string name="quran_layout_short_hairline">لکیریں</string>
+    <string name="quran_layout_short_mushaf">مصحف</string>
+    <string name="quran_layout_short_split">دو کالم</string>
+    <string name="quran_layout_short_dock">پٹی</string>
+    <string name="quran_reading_mode_title">پڑھنے کا موڈ</string>
+    <string name="quran_mode_study">آیت بآیت</string>
+    <string name="quran_mode_mushaf">مصحف کا صفحہ</string>
+    <string name="quran_bookmarks_title">محفوظ آیات</string>
+    <string name="quran_bookmarks_empty">ابھی کوئی آیت محفوظ نہیں۔ کسی بھی آیت پر بک مارک آئیکن دبائیں۔</string>
+    <string name="quran_bookmark_add">آیت محفوظ کریں</string>
+    <string name="quran_bookmark_remove">بک مارک ہٹائیں</string>
+    <string name="quran_bookmark_jump">%1$d:%2$d پر جائیں</string>
+    <string name="quran_action_copy">آیت کاپی کریں</string>
+    <string name="quran_action_share">آیت شیئر کریں</string>
+    <string name="quran_action_tafseer">تفسیر کھولیں</string>
+    <string name="quran_action_close">آیت کے اعمال بند کریں</string>
+    <string name="quran_ayah_chip">آیت %1$d</string>
+    <string name="quran_selected_badge">زیرِ مطالعہ</string>
+    <string name="quran_switch_to_study">مطالعے پر جائیں</string>
+    <string name="quran_offline_compact">%1$d از %2$d آیات محفوظ</string>
+    <string name="quran_options_title">پڑھنے کے اختیارات</string>
+    <string name="quran_options_search">قرآن میں تلاش</string>
+    <string name="quran_options_translation">ترجمہ اور عربی رسم الخط</string>
+    <string name="quran_options_tafseer">تفسیر</string>
+    <string name="quran_options_hifz">حفظ کی غلطیوں کی نشان دہی</string>
+    <string name="quran_options_bookmarks">محفوظات</string>
+    <string name="quran_share_subject">قرآنی آیت</string>
+    <string name="quran_reference">قرآن %1$d:%2$d</string>
+    <string name="quran_surah_chip">سورہ %1$d</string>
+
 </resources>

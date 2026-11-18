@@ -22,11 +22,17 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sakinah.deen.data.model.AyahModel
 import com.sakinah.deen.data.model.SurahModel
+import com.sakinah.deen.R
 import com.sakinah.deen.data.prefs.QuranReadingLayout
 import com.sakinah.deen.ui.components.ArabicVerseBlock
 import com.sakinah.deen.util.ArabicNormalizer
@@ -48,7 +55,8 @@ internal data class QuranAyahUiState(
     val hifzMistakes: Map<Pair<Int, Int>, String>,
     val translationIsRtl: Boolean,
     val arabicFontSizeSp: Int,
-    val focusMode: Boolean
+    val focusMode: Boolean,
+    val bookmarkedAyahNumbers: Set<Int> = emptySet()
 )
 
 internal fun cleanQuranArabic(raw: String): String =
@@ -80,14 +88,36 @@ private fun AyahNumberBadge(number: Int, modifier: Modifier = Modifier) {
     }
 }
 
+/** Per-ayah bookmark toggle; shown on every verse row in the study layouts. */
+@Composable
+private fun BookmarkToggle(
+    bookmarked: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier.size(32.dp)
+    ) {
+        Icon(
+            imageVector = if (bookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+            contentDescription = stringResource(
+                if (bookmarked) R.string.quran_bookmark_remove else R.string.quran_bookmark_add
+            ),
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
+
 @Composable
 private fun TafseerLink(
     onClick: () -> Unit,
-    text: String = "Tafseer",
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    text: String? = null
 ) {
     Text(
-        text = text,
+        text = text ?: stringResource(R.string.quran_options_tafseer),
         modifier = modifier.clickable(onClick = onClick),
         fontSize = 10.sp,
         fontWeight = FontWeight.SemiBold,
@@ -172,6 +202,7 @@ private fun DividerHairlineLayout(
     onAyahClick: (AyahModel) -> Unit,
     onTafseer: (AyahModel) -> Unit,
     onTagMistake: (AyahModel, String) -> Unit,
+    onToggleBookmark: (AyahModel) -> Unit,
     listState: LazyListState
 ) {
     val ayahs = surah.ayahs
@@ -204,12 +235,21 @@ private fun DividerHairlineLayout(
                         AyahNumberBadge(ayah.numberInSurah)
                         TafseerLink(onClick = { onTafseer(ayah) })
                     }
-                    if (state.selectedAyahNumber == ayah.numberInSurah) {
-                        Text(
-                            text = "Reading",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (state.selectedAyahNumber == ayah.numberInSurah) {
+                            Text(
+                                text = stringResource(R.string.quran_selected_badge),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        BookmarkToggle(
+                            bookmarked = ayah.numberInSurah in state.bookmarkedAyahNumbers,
+                            onClick = { onToggleBookmark(ayah) }
                         )
                     }
                 }
@@ -236,6 +276,7 @@ private fun ContinuousMushafLayout(
     onAyahClick: (AyahModel) -> Unit,
     onTafseer: (AyahModel) -> Unit,
     onTagMistake: (AyahModel, String) -> Unit,
+    onToggleBookmark: (AyahModel) -> Unit,
     onToggleStudyMode: () -> Unit,
     listState: LazyListState
 ) {
@@ -278,8 +319,24 @@ private fun ContinuousMushafLayout(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     AyahArabic(ayah, (state.arabicFontSizeSp + 4).coerceAtMost(36))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AyahNumberBadge(ayah.numberInSurah)
+                            TafseerLink(onClick = { onTafseer(ayah) })
+                        }
+                        BookmarkToggle(
+                            bookmarked = ayah.numberInSurah in state.bookmarkedAyahNumbers,
+                            onClick = { onToggleBookmark(ayah) }
+                        )
+                    }
                     TranslationText(ayah, state, fontSize = 12)
-                    TafseerLink(onClick = { onTafseer(ayah) })
                     HifzTagRow(surah, ayah, state, onTagMistake)
                 }
             }
@@ -297,7 +354,7 @@ private fun ContinuousMushafLayout(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
         ) {
             Text(
-                text = "Switch to Study",
+                text = stringResource(R.string.quran_switch_to_study),
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold
@@ -314,6 +371,7 @@ private fun SplitColumnLayout(
     onAyahClick: (AyahModel) -> Unit,
     onTafseer: (AyahModel) -> Unit,
     onTagMistake: (AyahModel, String) -> Unit,
+    onToggleBookmark: (AyahModel) -> Unit,
     listState: LazyListState
 ) {
     val ayahs = surah.ayahs
@@ -336,7 +394,17 @@ private fun SplitColumnLayout(
                         .padding(vertical = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    AyahNumberBadge(ayah.numberInSurah)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AyahNumberBadge(ayah.numberInSurah)
+                        BookmarkToggle(
+                            bookmarked = ayah.numberInSurah in state.bookmarkedAyahNumbers,
+                            onClick = { onToggleBookmark(ayah) }
+                        )
+                    }
                     TranslationText(ayah, state, fontSize = 12)
                     HifzTagRow(surah, ayah, state, onTagMistake)
                     TafseerLink(onClick = { onTafseer(ayah) })
@@ -373,6 +441,7 @@ private fun ThumbBottomDockLayout(
     onAyahClick: (AyahModel) -> Unit,
     onTafseer: (AyahModel) -> Unit,
     onTagMistake: (AyahModel, String) -> Unit,
+    onToggleBookmark: (AyahModel) -> Unit,
     listState: LazyListState
 ) {
     val ayahs = surah.ayahs
@@ -400,7 +469,16 @@ private fun ThumbBottomDockLayout(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     AyahNumberBadge(ayah.numberInSurah)
-                    TafseerLink(onClick = { onTafseer(ayah) })
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TafseerLink(onClick = { onTafseer(ayah) })
+                        BookmarkToggle(
+                            bookmarked = ayah.numberInSurah in state.bookmarkedAyahNumbers,
+                            onClick = { onToggleBookmark(ayah) }
+                        )
+                    }
                 }
                 AyahArabic(ayah, state.arabicFontSizeSp)
                 TranslationText(ayah, state)
@@ -422,21 +500,23 @@ internal fun QuranReadingLayoutContent(
     onAyahClick: (AyahModel) -> Unit,
     onTafseer: (AyahModel) -> Unit,
     onTagMistake: (AyahModel, String) -> Unit,
+    onToggleBookmark: (AyahModel) -> Unit,
     onToggleStudyMode: () -> Unit,
     listState: LazyListState
 ) {
     when (layout) {
         QuranReadingLayout.DIVIDER_HAIRLINE -> DividerHairlineLayout(
-            surah, state, onAyahClick, onTafseer, onTagMistake, listState
+            surah, state, onAyahClick, onTafseer, onTagMistake, onToggleBookmark, listState
         )
         QuranReadingLayout.CONTINUOUS_MUSHAF -> ContinuousMushafLayout(
-            surah, state, onAyahClick, onTafseer, onTagMistake, onToggleStudyMode, listState
+            surah, state, onAyahClick, onTafseer, onTagMistake, onToggleBookmark,
+            onToggleStudyMode, listState
         )
         QuranReadingLayout.SPLIT_COLUMN -> SplitColumnLayout(
-            surah, state, onAyahClick, onTafseer, onTagMistake, listState
+            surah, state, onAyahClick, onTafseer, onTagMistake, onToggleBookmark, listState
         )
         QuranReadingLayout.THUMB_BOTTOM_DOCK -> ThumbBottomDockLayout(
-            surah, state, onAyahClick, onTafseer, onTagMistake, listState
+            surah, state, onAyahClick, onTafseer, onTagMistake, onToggleBookmark, listState
         )
     }
 }

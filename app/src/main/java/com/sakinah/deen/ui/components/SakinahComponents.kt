@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.defaultMinSize
@@ -319,7 +320,10 @@ fun UnifiedReaderPill(
     title: String,
     onTitleClick: () -> Unit,
     onMenuClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    menuContentDescription: String = "Reading options",
+    /** Compact reader controls rendered between the title and the overflow menu. */
+    actions: @Composable RowScope.() -> Unit = {}
 ) {
     Surface(
         modifier = modifier
@@ -357,18 +361,20 @@ fun UnifiedReaderPill(
                 Spacer(Modifier.width(4.dp))
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = "Choose",
+                    // Decorative: the title itself is the actionable label.
+                    contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(18.dp)
                 )
             }
+            actions()
             IconButton(
                 onClick = onMenuClick,
                 modifier = Modifier.size(48.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.MoreHoriz,
-                    contentDescription = "Reading options",
+                    contentDescription = menuContentDescription,
                     tint = MaterialTheme.colorScheme.onSurface
                 )
             }

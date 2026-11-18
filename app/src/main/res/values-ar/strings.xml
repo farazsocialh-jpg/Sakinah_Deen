@@ -469,4 +469,42 @@
     <string name="theme_palette_crimson_terracotta_name">طين قرمزي</string>
     <string name="theme_palette_crimson_terracotta_subtitle">قرمزي محروق مع طين مشمس</string>
 
+    <!-- Quran reader: pill controls, reading mode, layout picker, bookmarks -->
+    <string name="quran_pill_layout">اختيار تخطيط القراءة</string>
+    <string name="quran_pill_reading_mode">تبديل وضع القراءة</string>
+    <string name="quran_layout_menu_title">تخطيط القراءة</string>
+    <string name="quran_layout_divider_hairline">فواصل رفيعة</string>
+    <string name="quran_layout_continuous_mushaf">مصحف متصل</string>
+    <string name="quran_layout_split_column">دراسة بعمودين</string>
+    <string name="quran_layout_thumb_bottom_dock">شريط الإبهام السفلي</string>
+    <string name="quran_layout_short_hairline">فواصل</string>
+    <string name="quran_layout_short_mushaf">مصحف</string>
+    <string name="quran_layout_short_split">عمودان</string>
+    <string name="quran_layout_short_dock">شريط</string>
+    <string name="quran_reading_mode_title">وضع القراءة</string>
+    <string name="quran_mode_study">آية بآية</string>
+    <string name="quran_mode_mushaf">صفحة المصحف</string>
+    <string name="quran_bookmarks_title">الآيات المحفوظة</string>
+    <string name="quran_bookmarks_empty">لا توجد آيات محفوظة بعد. اضغط أيقونة الحفظ على أي آية.</string>
+    <string name="quran_bookmark_add">حفظ الآية</string>
+    <string name="quran_bookmark_remove">إزالة الحفظ</string>
+    <string name="quran_bookmark_jump">الانتقال إلى %1$d:%2$d</string>
+    <string name="quran_action_copy">نسخ الآية</string>
+    <string name="quran_action_share">مشاركة الآية</string>
+    <string name="quran_action_tafseer">فتح التفسير</string>
+    <string name="quran_action_close">إغلاق إجراءات الآية</string>
+    <string name="quran_ayah_chip">الآية %1$d</string>
+    <string name="quran_selected_badge">قيد القراءة</string>
+    <string name="quran_switch_to_study">التبديل إلى الدراسة</string>
+    <string name="quran_offline_compact">تم تخزين %1$d من %2$d آية</string>
+    <string name="quran_options_title">خيارات القراءة</string>
+    <string name="quran_options_search">البحث في القرآن</string>
+    <string name="quran_options_translation">الترجمة والرسم العثماني</string>
+    <string name="quran_options_tafseer">التفسير</string>
+    <string name="quran_options_hifz">وسم أخطاء الحفظ</string>
+    <string name="quran_options_bookmarks">المحفوظات</string>
+    <string name="quran_share_subject">آية قرآنية</string>
+    <string name="quran_reference">القرآن %1$d:%2$d</string>
+    <string name="quran_surah_chip">سورة %1$d</string>
+
 </resources>

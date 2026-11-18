@@ -733,7 +733,7 @@ fun SettingsScreen(
 
                         AppearanceAccordion(
                             title = "Quran Reading Layout",
-                            summary = appearanceConfig.quranReadingLayout.displayName,
+                            summary = appearanceConfig.quranReadingLayout.localizedLabel(),
                             expanded = quranExpanded,
                             onToggle = { quranExpanded = !quranExpanded }
                         ) {
@@ -753,7 +753,7 @@ fun SettingsScreen(
                             ) {
                                 items(QuranReadingLayout.entries) { layout ->
                                     PortraitTemplateCard(
-                                        label = layout.displayName,
+                                        label = layout.localizedLabel(),
                                         selected = appearanceConfig.quranReadingLayout == layout,
                                         onClick = { appearancePrefs.updateQuranReadingLayout(layout) }
                                     ) {
