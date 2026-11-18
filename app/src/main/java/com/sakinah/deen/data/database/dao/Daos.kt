@@ -71,6 +71,9 @@ interface QadhaDao {
     @Query("SELECT * FROM qadha_ledger ORDER BY prayerType ASC")
     fun observeQadhaLedger(): Flow<List<QadhaLedgerEntity>>
 
+    @Query("SELECT * FROM qadha_ledger ORDER BY prayerType ASC")
+    suspend fun getAllQadha(): List<QadhaLedgerEntity>
+
     @Query("SELECT * FROM qadha_ledger WHERE prayerType = :prayerType LIMIT 1")
     suspend fun getQadhaForPrayer(prayerType: String): QadhaLedgerEntity?
 
@@ -129,6 +132,9 @@ interface HifzDao {
     @Query("SELECT * FROM hifz_mistakes WHERE lastReviewedTimestamp <= :cutoffTimestamp ORDER BY lastReviewedTimestamp ASC")
     fun observeSpacedRepetitionCandidates(cutoffTimestamp: Long): Flow<List<HifzMistakeEntity>>
 
+    @Query("SELECT * FROM hifz_mistakes")
+    suspend fun getAllMistakes(): List<HifzMistakeEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertMistake(entity: HifzMistakeEntity)
 
@@ -151,6 +157,9 @@ interface SadaqahDao {
 
     @Query("SELECT * FROM sadaqah_logs ORDER BY timestamp DESC LIMIT :limit")
     fun observeRecentLogs(limit: Int = 20): Flow<List<SadaqahLogEntity>>
+
+    @Query("SELECT * FROM sadaqah_logs")
+    suspend fun getAllLogs(): List<SadaqahLogEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLog(log: SadaqahLogEntity)
@@ -209,6 +218,9 @@ interface QuranDao {
 
     @Query("SELECT COUNT(*) FROM surah_metadata")
     suspend fun countSurahs(): Int
+
+    @Query("SELECT surahNumber, ayahNumber FROM quran_ayahs WHERE isBookmarked = 1")
+    suspend fun getBookmarkedKeys(): List<BookmarkKey>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAyahsRaw(ayahs: List<QuranAyahEntity>)
@@ -456,4 +468,9 @@ data class HadithCatalogSummary(
 data class HadithSectionSummary(
     val sectionNumber: Int,
     val chapterTitle: String
+)
+
+data class BookmarkKey(
+    val surahNumber: Int,
+    val ayahNumber: Int
 )

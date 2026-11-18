@@ -22,6 +22,8 @@ class FakeSadaqahDao : SadaqahDao {
     override fun observeRecentLogs(limit: Int): Flow<List<SadaqahLogEntity>> =
         logs.map { it.take(limit) }
 
+    override suspend fun getAllLogs(): List<SadaqahLogEntity> = logs.value
+
     override suspend fun insertLog(log: SadaqahLogEntity) {
         logs.value = logs.value + log
     }

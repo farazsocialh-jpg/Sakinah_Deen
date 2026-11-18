@@ -80,6 +80,9 @@ class FakeQuranDao : QuranDao {
 
     override suspend fun countSurahs(): Int = surahs.size
 
+    override suspend fun getBookmarkedKeys(): List<com.sakinah.deen.data.database.dao.BookmarkKey> =
+        ayahs.values.filter { it.isBookmarked }.map { com.sakinah.deen.data.database.dao.BookmarkKey(it.surahNumber, it.ayahNumber) }
+
     override fun observeSurahs(): Flow<List<SurahMetadataEntity>> =
         flow { emit(surahs.values.sortedBy { it.surahNumber }) }
 

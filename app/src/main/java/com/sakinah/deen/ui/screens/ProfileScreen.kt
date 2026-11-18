@@ -28,6 +28,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +37,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,6 +51,8 @@ import com.sakinah.deen.profile.UserProfileRepository
 import com.sakinah.deen.ui.components.DateOfBirthField
 import com.sakinah.deen.ui.components.GenderSelector
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
+import android.net.Uri
+import com.sakinah.deen.data.backup.EncryptedBackupManager
 import com.sakinah.deen.ui.components.ProfileAvatar
 import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.PrayerGuideGender
@@ -59,6 +64,7 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     val authRepo = rememberInject<AuthRepository>()
     val profileRepo = rememberInject<UserProfileRepository>()
     val appearance = rememberInject<AppearancePreferences>()
@@ -82,6 +88,28 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     // Set when the user picks a city so saving also updates the shared home anchor.
     var pickedHome by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     var isSaving by remember { mutableStateOf(false) }
+
+    var backupPassphrase by remember { mutableStateOf("") }
+    var showExportPassphrase by remember { mutableStateOf(false) }
+    var showImportPassphrase by remember { mutableStateOf(false) }
+    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingExportUri by remember { mutableStateOf<Uri?>(null) }
+    var backupMessage by remember { mutableStateOf<String?>(null) }
+
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri != null) {
+            pendingExportUri = uri
+            backupPassphrase = ""
+            showExportPassphrase = true
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            pendingImportUri = uri
+            backupPassphrase = ""
+            showImportPassphrase = true
+        }
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -309,6 +337,34 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     Text(if (isSaving) "Saving…" else "Save Changes")
                 }
 
+                backupMessage?.let { msg ->
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = msg,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = { exportLauncher.launch("sakinah-backup.skbak") },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Export Encrypted Backup")
+                }
+
+                OutlinedButton(
+                    onClick = { importLauncher.launch(arrayOf("*/*")) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Import Encrypted Backup")
+                }
+
                 // Every account lifecycle action lives here, not in the tools hub.
                 OutlinedButton(
                     onClick = { showSignOut = true },
@@ -388,6 +444,88 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 city = picked.name
                 pickedHome = picked.latitude to picked.longitude
                 showHomeCityPicker = false
+            }
+        )
+    }
+
+    if (showExportPassphrase) {
+        AlertDialog(
+            onDismissRequest = { showExportPassphrase = false },
+            title = { Text("Export Encrypted Backup") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Enter a passphrase to encrypt the backup.")
+                    OutlinedTextField(
+                        value = backupPassphrase,
+                        onValueChange = { backupPassphrase = it },
+                        label = { Text("Passphrase") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val uri = pendingExportUri
+                    val pass = backupPassphrase
+                    if (uri != null && pass.isNotBlank()) {
+                        showExportPassphrase = false
+                        scope.launch {
+                            EncryptedBackupManager.export(
+                                context = context,
+                                uri = uri,
+                                passphrase = pass
+                            ).onSuccess {
+                                backupMessage = "Backup exported."
+                            }.onFailure { e ->
+                                backupMessage = "Export failed: ${e.message}"
+                            }
+                        }
+                    }
+                }) { Text("Export") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExportPassphrase = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showImportPassphrase) {
+        AlertDialog(
+            onDismissRequest = { showImportPassphrase = false },
+            title = { Text("Import Encrypted Backup") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Enter the passphrase used to encrypt the backup.")
+                    OutlinedTextField(
+                        value = backupPassphrase,
+                        onValueChange = { backupPassphrase = it },
+                        label = { Text("Passphrase") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val uri = pendingImportUri
+                    val pass = backupPassphrase
+                    if (uri != null && pass.isNotBlank()) {
+                        showImportPassphrase = false
+                        scope.launch {
+                            EncryptedBackupManager.import(
+                                context = context,
+                                uri = uri,
+                                passphrase = pass
+                            ).onSuccess {
+                                backupMessage = "Backup imported."
+                            }.onFailure { e ->
+                                backupMessage = "Import failed: ${e.message}"
+                            }
+                        }
+                    }
+                }) { Text("Import") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportPassphrase = false }) { Text("Cancel") }
             }
         )
     }
