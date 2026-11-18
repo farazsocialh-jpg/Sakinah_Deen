@@ -6,6 +6,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.sakinah.deen.data.database.OfflineContentSeeder
+import com.sakinah.deen.data.database.SakinahEncryptedDatabase
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.PrayerTimeRepository
 import com.sakinah.deen.di.appModules
@@ -74,6 +75,13 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
         // Seed the bundled Quran/hadith/adhkar content before the first screen query so a
         // fresh install works in airplane mode. Data reads wait on this (bounded).
         applicationScope.launch(Dispatchers.IO) { contentSeeder.start() }
+
+        // Open the encrypted database off the main thread so cold start never blocks the UI.
+        // getInstance caches the instance; subsequent callers reuse it.
+        applicationScope.launch(Dispatchers.IO) {
+            val passphrase = com.sakinah.deen.data.database.DatabasePassphraseProvider.getPassphrase(this@SakinahApp)
+            runCatching { SakinahEncryptedDatabase.getInstance(this@SakinahApp, passphrase) }
+        }
 
         NotificationChannels.createChannels(this)
 

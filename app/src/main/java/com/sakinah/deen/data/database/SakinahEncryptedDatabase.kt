@@ -151,6 +151,14 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Observable cold-start state so the UI can show Loading/Ready/DecryptionFailed without
+         * blocking the main thread. Updated by [buildWithRecovery].
+         */
+        @Volatile
+        var loadState: DatabaseLoadState = DatabaseLoadState.Loading
+            private set
+
         @Volatile
         private var INSTANCE: SakinahEncryptedDatabase? = null
 
@@ -182,14 +190,20 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
             context: Context,
             passphraseBytes: ByteArray
         ): SakinahEncryptedDatabase = try {
-            build(context, passphraseBytes).also(::openNow)
+            build(context, passphraseBytes).also(::openNow).also {
+                loadState = DatabaseLoadState.Ready
+            }
         } catch (first: Exception) {
             val preserved = preserveUnreadableDatabase(context, first)
             lastRecovery = preserved
+            loadState = DatabaseLoadState.DecryptionFailed(
+                reason = first.message ?: first::class.java.simpleName,
+                recovery = preserved
+            )
             runCatching { build(context, passphraseBytes).also(::openNow) }.getOrElse { rebuildError ->
                 first.addSuppressed(rebuildError)
                 throw first
-            }
+            }.also { loadState = DatabaseLoadState.Ready }
         }
 
         /**
@@ -274,3 +288,14 @@ data class DatabaseRecovery(
     val occurredAtEpochMillis: Long,
     val reason: String
 )
+
+/**
+ * Cold-start state for the encrypted database. [Loading] until the first open attempt finishes,
+ * [Ready] on success, [DecryptionFailed] when the keystore key cannot read the file (the
+ * original is preserved under [DatabaseRecovery]).
+ */
+sealed class DatabaseLoadState {
+    object Loading : DatabaseLoadState()
+    object Ready : DatabaseLoadState()
+    data class DecryptionFailed(val reason: String, val recovery: DatabaseRecovery?) : DatabaseLoadState()
+}
