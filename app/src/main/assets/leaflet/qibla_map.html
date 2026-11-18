@@ -29,10 +29,14 @@
   function call(name, payload) {
     try {
       if (bridge && typeof bridge[name] === "function") {
-        bridge[name](payload === undefined ? "" : String(payload));
+        if (payload === undefined) {
+          bridge[name]();
+        } else {
+          bridge[name](String(payload));
+        }
       }
     } catch (e) {
-      /* the host bridge is optional */
+      console.error("QiblaBridge error:", name, e);
     }
   }
 
@@ -87,7 +91,7 @@
   var tileLayer = null;
 
   function markReady() {
-    call("onTileLoaded", "");
+    call("onTileLoaded");
   }
 
   function installTiles(index) {
@@ -154,7 +158,7 @@
   }).addTo(map);
 
   map.whenReady(function () {
-    call("onMapReady", "");
+    call("onMapReady");
   });
 
   window.addEventListener("error", function (event) {

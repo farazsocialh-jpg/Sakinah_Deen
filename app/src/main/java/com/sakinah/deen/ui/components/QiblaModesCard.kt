@@ -796,7 +796,13 @@ private class QiblaMapBridge(
     fun onMapReady() = onReadyCallback()
 
     @JavascriptInterface
+    fun onMapReady(unused: String) = onReadyCallback()
+
+    @JavascriptInterface
     fun onTileLoaded() = onTileLoadedCallback()
+
+    @JavascriptInterface
+    fun onTileLoaded(unused: String) = onTileLoadedCallback()
 
     @JavascriptInterface
     fun onMapError(reason: String) = onErrorCallback(reason)
