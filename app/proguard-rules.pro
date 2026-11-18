@@ -118,3 +118,14 @@
 -keepclassmembers class * extends androidx.work.Worker {
     public <init>(android.content.Context, androidx.work.WorkerParameters);
 }
+
+# ------------------------------------------------------------------------------
+# 11. WebView JavaScript Bridge (@JavascriptInterface)
+# ------------------------------------------------------------------------------
+# R8 must not rename or strip methods called from the bundled Leaflet page;
+# otherwise the bridge silently fails and the map times out for lack of tiles.
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+
+-keep class com.sakinah.deen.ui.components.QiblaMapBridge { *; }
