@@ -1,5 +1,7 @@
 package com.sakinah.deen.ui.screens
 
+import com.sakinah.deen.R
+
 import android.Manifest
 import android.app.AlarmManager
 import android.content.Context
@@ -49,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -180,12 +183,12 @@ fun NotificationSettingsScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Prayer Notifications",
+                        text = stringResource(R.string.notif_prayer_notifications),
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Exact alarm-clock reminders that survive Doze and reboot.",
+                        text = stringResource(R.string.notif_exact_alarm),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -212,14 +215,14 @@ fun NotificationSettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Permission health",
+                        text = stringResource(R.string.notif_permission_health),
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
                     if (needsNotificationPermission) {
                         Text(
-                            text = "Notifications are blocked, so Azaan cannot appear.",
+                            text = stringResource(R.string.notif_blocked),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -232,12 +235,12 @@ fun NotificationSettingsScreen(
                                 }
                             }
                         ) {
-                            Text("Enable Notifications", fontSize = 12.sp)
+                            Text(stringResource(R.string.notif_enable_notifications), fontSize = 12.sp)
                         }
                     }
                     if (azaanChannelBlocked) {
                         Text(
-                            text = "The Azaan notification channel is silenced in Android settings.",
+                            text = stringResource(R.string.notif_channel_silenced),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -250,11 +253,11 @@ fun NotificationSettingsScreen(
                                 }
                                 runCatching { context.startActivity(intent) }
                             }
-                        ) { Text("Open channel settings", fontSize = 12.sp) }
+                        ) { Text(stringResource(R.string.notif_open_channel_settings), fontSize = 12.sp) }
                     }
                     if (needsExactAlarmPermission) {
                         Text(
-                            text = "Exact alarms are disabled; reminders may arrive late.",
+                            text = stringResource(R.string.notif_exact_disabled),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -270,7 +273,7 @@ fun NotificationSettingsScreen(
                                 exactAlarmsAllowed = canScheduleExactAlarms(context)
                             }
                         ) {
-                            Text("Allow Exact Alarms", fontSize = 12.sp)
+                            Text(stringResource(R.string.notif_allow_exact_alarms), fontSize = 12.sp)
                         }
                     }
                 }
@@ -280,13 +283,13 @@ fun NotificationSettingsScreen(
         
         // 2. Per-Prayer Alerts (collapsible)
         AppearanceAccordion(
-            title = "Per-Prayer Alerts",
-            summary = if (azaanSettings.enabled) "Customized" else "Disabled",
+            title = stringResource(R.string.notif_per_prayer_alerts),
+            summary = if (azaanSettings.enabled) stringResource(R.string.notif_customized) else stringResource(R.string.notif_disabled),
             expanded = expandedSection == "perprayer",
             onToggle = { expandedSection = if (expandedSection == "perprayer") null else "perprayer" }
         ) {
 // 4. Per-prayer alert mode and offset
-        Text("Per-Prayer Alerts", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.notif_per_prayer_alerts), style = MaterialTheme.typography.titleMedium)
         AzaanSettings.ALERT_PRAYERS.forEach { prayer ->
             val mode = azaanSettings.modeFor(prayer)
             val offset = azaanSettings.offsetFor(prayer)
@@ -315,7 +318,7 @@ fun NotificationSettingsScreen(
                         }
                     }
                     Text(
-                        text = "Timing offset",
+                        text = stringResource(R.string.notif_timing_offset),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -345,12 +348,12 @@ fun NotificationSettingsScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Special Fajr Azaan",
+                        text = stringResource(R.string.notif_special_fajr),
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Includes “As-Salatu Khayrun Minan-Nawm”",
+                        text = stringResource(R.string.notif_fajr_includes),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -371,15 +374,12 @@ fun NotificationSettingsScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Critical Fajr Channel",
+                        text = stringResource(R.string.notif_critical_fajr),
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Posts Fajr on its own maximum-importance channel with sound and " +
-                            "vibration. Android still applies Do Not Disturb and silent mode unless " +
-                            "you grant notification policy access; app channels cannot override " +
-                            "the user's DND choice on their own.",
+                        text = stringResource(R.string.notif_critical_fajr_desc),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -397,9 +397,9 @@ fun NotificationSettingsScreen(
             if (azaanSettings.criticalFajrChannel) {
                 Text(
                     text = if (NotificationChannels.hasDndPolicyAccess(context)) {
-                        "Notification policy access is granted — Fajr can bypass DND."
+                        stringResource(R.string.notif_dnd_granted)
                     } else {
-                        "DND override is not granted yet; use the self-test card to open the access screen."
+                        stringResource(R.string.notif_dnd_not_granted)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -413,15 +413,15 @@ fun NotificationSettingsScreen(
 
         // 3. Muezzin Voice (collapsible)
         AppearanceAccordion(
-            title = "Muezzin Voice",
+            title = stringResource(R.string.notif_muezzin_voice),
             summary = notificationMuezzinLabel(azaanSettings.muezzin),
             expanded = expandedSection == "muezzin",
             onToggle = { expandedSection = if (expandedSection == "muezzin") null else "muezzin" }
         ) {
 // 5. Muezzin / Azaan voice picker with a single shared preview player
-        Text("Muezzin / Azaan Voice", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.notif_muezzin_voice), style = MaterialTheme.typography.titleMedium)
         Text(
-            text = "Tap a voice to select it and hear a preview. Tapping the active voice again stops it.",
+            text = stringResource(R.string.notif_muezzin_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -442,7 +442,7 @@ fun NotificationSettingsScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = if (selected) "Selected" else "Tap to select & preview",
+                            text = if (selected) stringResource(R.string.notif_selected) else stringResource(R.string.notif_tap_to_select),
                             fontSize = 11.sp,
                             color = if (selected) {
                                 MaterialTheme.colorScheme.primary
@@ -465,7 +465,7 @@ fun NotificationSettingsScreen(
                                 previewingMuezzin = if (previewPlayer.play(muezzin)) muezzin else null
                             }
                         },
-                        label = { Text(if (previewing) "Stop" else "Preview", fontSize = 11.sp) }
+                        label = { Text(if (previewing) stringResource(R.string.notif_stop) else stringResource(R.string.notif_preview), fontSize = 11.sp) }
                     )
                 }
             }
@@ -474,8 +474,8 @@ fun NotificationSettingsScreen(
 
         // 4. Alarm Health (collapsible, at end)
         AppearanceAccordion(
-            title = "Alarm Health",
-            summary = if (selfTestRows.value.any { it.status != SelfTestStatus.OK }) "Issues" else "All Good",
+            title = stringResource(R.string.notif_alarm_health),
+            summary = if (selfTestRows.value.any { it.status != SelfTestStatus.OK }) stringResource(R.string.notif_issues) else stringResource(R.string.notif_all_good),
             expanded = expandedSection == "health",
             onToggle = { expandedSection = if (expandedSection == "health") null else "health" },
             leading = if (selfTestRows.value.any { it.status != SelfTestStatus.OK }) {
@@ -488,14 +488,14 @@ fun NotificationSettingsScreen(
         SakinahCard(contentPadding = 14.dp) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = "Reminder reliability",
+                    text = stringResource(R.string.notif_reminder_reliability),
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
                     text = if (savedCoordinates == null) {
-                        "No prayer location saved. Choose a city on the Prayer tab before alarms can be armed."
+                        stringResource(R.string.notif_no_location)
                     } else {
                         "Location: ${appPrefs.locationLabel} · ${appPrefs.locationTimeZoneId ?: "zone pending"}"
                     },
@@ -524,7 +524,7 @@ fun NotificationSettingsScreen(
                         onClick = { BatteryOptimizationGuidance.openBestSettings(context) }
                     ) {
                         Text(
-                            text = if (oemLabel != null) "Open $oemLabel battery settings" else "Battery settings",
+                            text = if (oemLabel != null) "Open $oemLabel battery settings" else stringResource(R.string.notif_battery_settings),
                             fontSize = 12.sp
                         )
                     }
@@ -542,19 +542,19 @@ fun NotificationSettingsScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Notification & Alarm Self-Test",
+                            text = stringResource(R.string.notif_self_test),
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "Checked live against Android, not from saved settings.",
+                            text = stringResource(R.string.notif_self_test_desc),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     OutlinedButton(onClick = { refreshSelfTest() }) {
-                        Text("Refresh", fontSize = 11.sp)
+                        Text(stringResource(R.string.notif_refresh), fontSize = 11.sp)
                     }
                 }
                 selfTestRows.value.forEach { row ->
@@ -602,7 +602,7 @@ fun NotificationSettingsScreen(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(14.dp)
         ) {
-            Text("Test Prayer Notification (5s)", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            Text(stringResource(R.string.notif_test_prayer), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
         }
         testResult?.let { result ->
             Text(

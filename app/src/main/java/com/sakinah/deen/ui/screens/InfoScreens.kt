@@ -1,5 +1,7 @@
 package com.sakinah.deen.ui.screens
 
+import com.sakinah.deen.R
+
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -43,13 +45,14 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.sakinah.deen.BuildConfig
 import kotlinx.coroutines.launch
 
 @Composable
 fun DataSourcesScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
-    SimpleInfoScreen("Islamic Data Sources & Attribution", onBack, modifier) {
+    SimpleInfoScreen(stringResource(R.string.info_data_sources_title), onBack, modifier) {
         Text("• AlAdhan API & Islamic authorities — prayer times and methods.")
         Text("• Quran.com v4 API — Quran text, translations, audio.")
         Text("• fawazahmed0/hadith-api — Kutub al-Tis'ah hadith collections.")
@@ -71,18 +74,18 @@ fun HelpScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
         SimpleInfoScreen(
-            title = "Help, Feedback & Bug Report",
+            title = stringResource(R.string.info_help_title),
             onBack = onBack,
             modifier = Modifier.padding(innerPadding)
         ) {
-            Text("Contact support and report issues to support@imancore.app.")
+            Text(stringResource(R.string.info_help_contact))
             Button(onClick = {
                 val opened = sendFeedbackEmail(context)
                 if (!opened) {
                     showEmailFallback = true
                 }
             }) {
-                Text("Send Feedback / Report a Bug")
+                Text(stringResource(R.string.info_help_send_feedback))
             }
         }
     }
@@ -90,10 +93,10 @@ fun HelpScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     if (showEmailFallback) {
         AlertDialog(
             onDismissRequest = { showEmailFallback = false },
-            title = { Text("No Email App Found") },
+            title = { Text(stringResource(R.string.info_help_no_email_app)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("No email client is configured on this device. Send feedback directly to:")
+                    Text(stringResource(R.string.info_help_no_email_client))
                     SelectionContainer {
                         Text(
                             text = "support@imancore.app",
@@ -108,15 +111,15 @@ fun HelpScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     clipboard.setText(AnnotatedString("support@imancore.app"))
                     showEmailFallback = false
                     scope.launch {
-                        snackbarHostState.showSnackbar("Copied support@imancore.app")
+                        snackbarHostState.showSnackbar(context.getString(R.string.info_help_copied))
                     }
                 }) {
-                    Text("Copy Email")
+                    Text(stringResource(R.string.info_help_copy_email))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showEmailFallback = false }) {
-                    Text("Close")
+                    Text(stringResource(R.string.info_close))
                 }
             }
         )
@@ -134,24 +137,21 @@ fun PrivacyScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
         SimpleInfoScreen(
-            title = "Privacy Policy & Terms",
+            title = stringResource(R.string.info_privacy_title),
             onBack = onBack,
             modifier = Modifier.padding(innerPadding)
         ) {
-            Text("Location: used only to calculate prayer times and Qibla; stored locally on device.")
-            Text("Notifications: scheduled locally for prayer reminders; no data is shared.")
-            Text("Bluetooth: used only to detect vehicle connection for travel mode; no data is transmitted.")
-            Text("AI Scholar queries: sent to the AI proxy only when you ask a question; not stored beyond the session.")
+            Text(stringResource(R.string.info_privacy_location))
+            Text(stringResource(R.string.info_privacy_notifications))
+            Text(stringResource(R.string.info_privacy_bluetooth))
+            Text(stringResource(R.string.info_privacy_ai))
             Text(
-                "On-device storage: prayer logs, Qadha, Hifz, bookmarks and Zakat are kept in an " +
-                    "encrypted database on this device only."
+                stringResource(R.string.info_privacy_on_device)
             )
             // Honesty about a failed decryption: the old file was kept, not deleted.
             com.sakinah.deen.data.database.SakinahEncryptedDatabase.lastRecovery?.let { recovery ->
                 Text(
-                    text = "A previous database could not be opened on this device and was kept " +
-                        "as a recovery copy: ${recovery.backupPath}. Export it before starting fresh " +
-                        "if you need the old records."
+                    text = stringResource(R.string.info_privacy_recovery, recovery.backupPath)
                 )
             }
             TextButton(onClick = {
@@ -160,18 +160,18 @@ fun PrivacyScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     context.startActivity(intent)
                 } catch (_: ActivityNotFoundException) {
                     scope.launch {
-                        snackbarHostState.showSnackbar("No browser app found to open https://imancore.app/privacy")
+                        snackbarHostState.showSnackbar(context.getString(R.string.info_privacy_no_browser))
                     }
                 }
-            }) { Text("Open Full Privacy Policy") }
+            }) { Text(stringResource(R.string.info_privacy_open_full)) }
         }
     }
 }
 
 @Composable
 fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
-    SimpleInfoScreen("About ImanCore", onBack, modifier) {
-        Text("Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+    SimpleInfoScreen(stringResource(R.string.info_about_title), onBack, modifier) {
+        Text(stringResource(R.string.info_about_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE))
     }
 }
 
@@ -201,7 +201,7 @@ private fun SimpleInfoScreen(
                 IconButton(onClick = onBack) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back"
+                        contentDescription = stringResource(R.string.info_back_cd)
                     )
                 }
             }

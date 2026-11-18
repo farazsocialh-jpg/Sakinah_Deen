@@ -278,12 +278,12 @@ fun SettingsScreen(
                         ) {
                             OutlinedTextField(
                                 value = methodOverride?.name?.replace('_', ' ')
-                                    ?: "Automatic (by country)",
+                                    ?: stringResource(R.string.settings_calculation_automatic_option),
                                 onValueChange = {},
                                 readOnly = true,
-                                label = { Text("Calculation method") },
+                                label = { Text(stringResource(R.string.settings_calculation_method)) },
                                 supportingText = {
-                                    Text("Automatic uses your country's Islamic authority.")
+                                    Text(stringResource(R.string.settings_calculation_automatic))
                                 },
                                 trailingIcon = {
                                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = calcExpanded)
@@ -297,7 +297,7 @@ fun SettingsScreen(
                                 onDismissRequest = { calcExpanded = false }
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("Automatic (by country)") },
+                                    text = { Text(stringResource(R.string.settings_calculation_automatic_option)) },
                                     onClick = {
                                         appPrefs.calculationMethodOverride = null
                                         methodOverride = null
@@ -510,7 +510,7 @@ fun SettingsScreen(
                         }
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Hijri offset: ${settings.prayer.hijriOffset}")
+                                                            Text(stringResource(R.string.settings_hijri_offset, settings.prayer.hijriOffset))
                             Slider(
                                 value = settings.prayer.hijriOffset.toFloat(),
                                 onValueChange = { v ->
@@ -849,7 +849,7 @@ fun SettingsScreen(
                                     }
                                 )
 
-                                Text("Arabic font size: ${settings.appearance.arabicFontSize}")
+                                Text(stringResource(R.string.settings_arabic_font_size, settings.appearance.arabicFontSize))
                                 Slider(
                                     value = settings.appearance.arabicFontSize.toFloat(),
                                     onValueChange = { v ->
@@ -922,7 +922,7 @@ fun SettingsScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Text("Re-run Personalized Onboarding")
+                                    Text(stringResource(R.string.settings_rerun_onboarding))
                                 }
                             }
                         }
@@ -1010,7 +1010,7 @@ fun SettingsScreen(
                                 cacheBytes = repo.cacheSizeBytes()
                                 snackbarHostState.showSnackbar("Offline cache cleared.")
                             }
-                        }) { Text("Clear cache") }
+                        }) { Text(stringResource(R.string.settings_clear_cache)) }
 
                         Text("Tafseer Packs", style = MaterialTheme.typography.titleSmall)
                         tafseerPackages.forEach { pack ->
@@ -1152,7 +1152,7 @@ fun SettingsScreen(
                     value = translationQuery,
                     onValueChange = { translationQuery = it },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Search language, translator or name") },
+                    placeholder = { Text(stringResource(R.string.settings_search_language)) },
                     singleLine = true,
                     shape = RoundedCornerShape(14.dp)
                 )

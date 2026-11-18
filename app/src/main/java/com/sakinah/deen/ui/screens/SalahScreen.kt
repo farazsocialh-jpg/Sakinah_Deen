@@ -1,5 +1,7 @@
 package com.sakinah.deen.ui.screens
 
+import com.sakinah.deen.R
+
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
@@ -86,6 +88,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.ui.unit.dp
@@ -246,7 +249,7 @@ fun SalahScreen(
                                     )
                                     Spacer(Modifier.width(6.dp))
                                     Text(
-                                        text = "Enable location for exact local prayer times. Tap to choose a city.",
+                                        text = stringResource(R.string.salah_enable_location),
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
@@ -260,14 +263,12 @@ fun SalahScreen(
                             SakinahCard(contentPadding = 16.dp) {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text(
-                                        text = "Set your location",
+                                        text = stringResource(R.string.salah_set_location),
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                     Text(
-                                        text = "No location has been chosen yet, so prayer times " +
-                                            "cannot be calculated. Allow location access or pick " +
-                                            "a city.",
+                                        text = stringResource(R.string.salah_no_location),
                                         fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -289,10 +290,10 @@ fun SalahScreen(
                                                 )
                                             }
                                         }) {
-                                            Text("Use my location")
+                                            Text(stringResource(R.string.salah_use_my_location))
                                         }
                                         OutlinedButton(onClick = { showManualCityDialog = true }) {
-                                            Text("Choose city")
+                                            Text(stringResource(R.string.salah_choose_city))
                                         }
                                     }
                                 }
@@ -351,7 +352,7 @@ fun SalahScreen(
                                         )
                                     }
                                     Text(
-                                        text = if (!isSunrise) "${prayer.fardRakats} Rakat Fard" else "No Prayer (Prohibited Time)",
+                                        text = if (!isSunrise) stringResource(R.string.salah_rakat_fard, prayer.fardRakats) else stringResource(R.string.salah_no_prayer),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -367,21 +368,21 @@ fun SalahScreen(
                                         )
                                         if (prayer.id == "isha" && prayer.endTime.isNotBlank()) {
                                             Text(
-                                                text = "Necessity until Fajr",
+                                                text = stringResource(R.string.salah_necessity_until_fajr),
                                                 fontSize = 9.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                         if (prayer.id == "sunrise") {
                                             Text(
-                                                text = "Prohibited prayer window · Fajr ends",
+                                                text = stringResource(R.string.salah_prohibited_window),
                                                 fontSize = 9.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                         if (prayer.id == "asr") {
                                             Text(
-                                                text = "Preferred before ~15m pre-sunset",
+                                                text = stringResource(R.string.salah_preferred_sunset),
                                                 fontSize = 9.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -406,7 +407,7 @@ fun SalahScreen(
                                                 if (prayer.isFardCompleted) {
                                                     Icon(
                                                         imageVector = Icons.Default.Check,
-                                                        contentDescription = "Completed",
+                                                        contentDescription = stringResource(R.string.salah_completed_cd),
                                                         tint = MaterialTheme.colorScheme.onPrimary,
                                                         modifier = Modifier.size(18.dp)
                                                     )
@@ -421,7 +422,7 @@ fun SalahScreen(
                                         ) {
                                             Icon(
                                                 imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                                contentDescription = "Expand",
+                                                contentDescription = stringResource(R.string.salah_expand_cd),
                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
@@ -455,7 +456,7 @@ fun SalahScreen(
                                     }
                                     if (prayer.nawafilName != null) {
                                         Text(
-                                            text = "Recommended Nafl: ${prayer.nawafilName}",
+                                            text = stringResource(R.string.salah_nawafil_recommended, prayer.nawafilName),
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.primary,
                                             fontWeight = FontWeight.SemiBold
@@ -468,7 +469,7 @@ fun SalahScreen(
                                     ) {
                                         Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                                         Spacer(Modifier.width(6.dp))
-                                        Text("Open ${prayer.nameEnglish} Step Guide (${prayer.fardRakats} Rakats)", fontSize = 12.sp)
+                                        Text(stringResource(R.string.salah_open_guide, prayer.nameEnglish, prayer.fardRakats), fontSize = 12.sp)
                                     }
                                 }
                             }
@@ -555,7 +556,7 @@ fun SalahScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Prayer Calculation Settings",
+                                text = stringResource(R.string.salah_calc_settings),
                                 fontFamily = FontFamily.Serif,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 17.sp,
@@ -563,12 +564,12 @@ fun SalahScreen(
                                 modifier = Modifier.weight(1f)
                             )
                             IconButton(onClick = { showSettingsDialog = false }) {
-                                Icon(Icons.Default.Close, contentDescription = "Close")
+                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.salah_close_cd))
                             }
                         }
 
                         Text(
-                            text = "Calculation Authority / Method",
+                            text = stringResource(R.string.salah_calc_authority),
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.primary
@@ -583,7 +584,7 @@ fun SalahScreen(
                                 .clickable { draftIsAutomatic = true }
                         ) {
                             Text(
-                                text = "Automatic — ${state.authorityName} (by country)",
+                                text = stringResource(R.string.salah_auto_authority, state.authorityName),
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                                 fontSize = 12.sp,
                                 fontWeight = if (draftIsAutomatic) FontWeight.Bold else FontWeight.Normal,
@@ -599,12 +600,12 @@ fun SalahScreen(
                         OutlinedTextField(
                             value = methodSearch,
                             onValueChange = { methodSearch = it },
-                            placeholder = { Text("Search by body, country or region", fontSize = 12.sp) },
+                            placeholder = { Text(stringResource(R.string.salah_search_city), fontSize = 12.sp) },
                             singleLine = true,
                             trailingIcon = {
                                 if (methodSearch.isNotBlank()) {
                                     IconButton(onClick = { methodSearch = "" }) {
-                                        Icon(Icons.Filled.Close, contentDescription = "Clear")
+                                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.salah_clear_cd))
                                     }
                                 }
                             },
@@ -644,7 +645,7 @@ fun SalahScreen(
                         }
 
                         Text(
-                            text = "Asr Juristic Method",
+                            text = stringResource(R.string.salah_asr_method),
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.primary
@@ -665,7 +666,7 @@ fun SalahScreen(
                                 onClick = { showSettingsDialog = false },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Cancel")
+                                Text(stringResource(R.string.salah_cancel))
                             }
                             Button(
                                 onClick = {
@@ -684,7 +685,7 @@ fun SalahScreen(
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
                                 Text(
-                                    text = "Apply",
+                                    text = stringResource(R.string.salah_apply),
                                     color = MaterialTheme.colorScheme.onPrimary,
                                     maxLines = 1,
                                     softWrap = false
@@ -699,8 +700,8 @@ fun SalahScreen(
         // 6. Unified Searchable City & GPS Selector Dialog
         if (showManualCityDialog) {
             HomeLocationCityPickerDialog(
-                title = "Select Prayer Location",
-                subtitle = "Choose a city or switch back to device GPS.",
+                title = stringResource(R.string.salah_select_location_title),
+                subtitle = stringResource(R.string.salah_select_location_subtitle),
                 onUseDeviceGps = {
                     showManualCityDialog = false
                     val granted = ContextCompat.checkSelfPermission(
@@ -756,11 +757,10 @@ fun SalahScreen(
         if (showGpsSettingsDialog) {
             AlertDialog(
                 onDismissRequest = { showGpsSettingsDialog = false },
-                title = { Text("Location permission needed") },
+                title = { Text(stringResource(R.string.salah_location_permission_title)) },
                 text = {
                     Text(
-                        "Device GPS is blocked. Enable Location for ImanCore in Android Settings, " +
-                            "then tap Use Device GPS again."
+                        stringResource(R.string.salah_location_permission_body)
                     )
                 },
                 confirmButton = {
@@ -773,10 +773,10 @@ fun SalahScreen(
                             )
                             runCatching { context.startActivity(intent) }
                         }
-                    ) { Text("Open Settings") }
+                    ) { Text(stringResource(R.string.salah_open_settings)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showGpsSettingsDialog = false }) { Text("Cancel") }
+                    TextButton(onClick = { showGpsSettingsDialog = false }) { Text(stringResource(R.string.salah_cancel)) }
                 }
             )
         }
@@ -805,7 +805,7 @@ fun SalahScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Qadha al-Umri Ledger",
+                                text = stringResource(R.string.salah_qadha_title),
                                 fontFamily = FontFamily.Serif,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 18.sp,
@@ -813,7 +813,7 @@ fun SalahScreen(
                                 modifier = Modifier.weight(1f)
                             )
                             IconButton(onClick = { showQadhaDialog = false }) {
-                                Icon(Icons.Default.Close, contentDescription = "Close")
+                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.salah_close_cd))
                             }
                         }
 
@@ -822,9 +822,9 @@ fun SalahScreen(
                         val daysRemaining = if (totalMissed == 0) 0 else (totalMissed + 1) / 2
                         Text(
                             text = if (totalMissed == 0) {
-                                "Total Missed Prayers: 0 · Alhamdulillah, nothing outstanding."
+                                stringResource(R.string.salah_qadha_none)
                             } else {
-                                "Total Missed Prayers: $totalMissed · $daysRemaining days remaining at 2/day"
+                                stringResource(R.string.salah_qadha_summary, totalMissed, daysRemaining)
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -885,7 +885,7 @@ fun SalahScreen(
                             shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
-                            Text("Done", color = MaterialTheme.colorScheme.onPrimary)
+                            Text(stringResource(R.string.salah_done), color = MaterialTheme.colorScheme.onPrimary)
                         }
                     }
                 }
@@ -930,7 +930,7 @@ private fun TahajjudCard(state: SalahUiState) {
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Tahajjud · Last Third of the Night",
+                    text = stringResource(R.string.salah_tahajjud),
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.primary

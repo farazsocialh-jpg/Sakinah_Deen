@@ -1,5 +1,7 @@
 package com.sakinah.deen.ui.screens
 
+import com.sakinah.deen.R
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,10 +42,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.auth.AuthRepository
 import com.sakinah.deen.auth.AuthState
@@ -66,6 +70,7 @@ fun ToolsHubScreen(
     /** Re-opens the onboarding wizard so the tour is always discoverable again. */
     onReplayTour: (() -> Unit)? = null
 ) {
+    val context = LocalContext.current
     val authRepo = rememberInject<AuthRepository>()
     val profileRepo = rememberInject<UserProfileRepository>()
     val authState by authRepo.authState.collectAsStateWithLifecycle()
@@ -84,14 +89,14 @@ fun ToolsHubScreen(
         runCatching { profileRepo.loadForUser(user.id) }
             .onFailure { err ->
                 if (err is kotlinx.coroutines.CancellationException) throw err
-                errorMessage = err.message ?: "Could not load your saved profile."
+                errorMessage = err.message ?: context.getString(R.string.tools_load_profile_failed)
             }
         isLoadingProfile = false
     }
 
     val effectiveName = profile?.displayName?.takeIf { it.isNotBlank() }
         ?: signedInUser?.displayName?.takeIf { it.isNotBlank() }
-        ?: "Guest Seeker"
+        ?: stringResource(R.string.tools_guest_seeker)
 
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
@@ -134,8 +139,8 @@ fun ToolsHubScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = signedInUser?.email?.ifBlank { "Signed in locally" }
-                                ?: "Tap to sign in or create an account",
+                            text = signedInUser?.email?.ifBlank { stringResource(R.string.tools_signed_in_locally) }
+                                ?: stringResource(R.string.tools_tap_to_sign_in),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -148,7 +153,7 @@ fun ToolsHubScreen(
                         )
                     } else {
                         StatusBadge(
-                            text = if (signedInUser != null) "Profile" else "Sign In",
+                            text = if (signedInUser != null) stringResource(R.string.tools_status_profile) else stringResource(R.string.tools_status_sign_in),
                             accentColor = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -170,106 +175,105 @@ fun ToolsHubScreen(
                 }
             }
 
-            HubSectionTitle("Islamic Tools")
+            HubSectionTitle(stringResource(R.string.tools_section_islamic))
             SakinahCard(contentPadding = 0.dp) {
                 HubRow(
                     icon = Icons.Outlined.AccessibilityNew,
-                    title = "Visual Salah Posture Guide",
-                    subtitle = "Step-by-step Rakat sequence & recitations",
+                    title = stringResource(R.string.tools_visual_salat_title),
+                    subtitle = stringResource(R.string.tools_visual_salat_subtitle),
                     onClick = { onNavigate(SakinahScreen.VisualGuide) }
                 )
                 HubDivider()
                 HubRow(
                     icon = Icons.Outlined.MonetizationOn,
-                    title = "Zakat & Sadaqah Jar",
-                    subtitle = "Gold/Silver Nisab, PDF summary & monthly charity log",
+                    title = stringResource(R.string.tools_zakat_title),
+                    subtitle = stringResource(R.string.tools_zakat_subtitle),
                     onClick = { onNavigate(SakinahScreen.Wealth) }
                 )
             }
 
-            HubSectionTitle("Discover")
+            HubSectionTitle(stringResource(R.string.tools_section_discover))
             SakinahCard(contentPadding = 0.dp) {
                 HubRow(
                     icon = Icons.Outlined.Palette,
-                    title = "Replay Quick Tour",
-                    subtitle = "Re-run the setup wizard without losing your settings",
+                    title = stringResource(R.string.tools_replay_tour_title),
+                    subtitle = stringResource(R.string.tools_replay_tour_subtitle),
                     onClick = { onReplayTour?.invoke() }
                 )
                 HubDivider()
                 HubRow(
                     icon = Icons.Outlined.Info,
-                    title = "What's New",
-                    subtitle = "Recent changes in this version",
+                    title = stringResource(R.string.tools_whats_new_title),
+                    subtitle = stringResource(R.string.tools_whats_new_subtitle),
                     onClick = { showWhatsNew = true }
                 )
                 HubDivider()
                 HubRow(
                     icon = Icons.Outlined.DownloadForOffline,
-                    title = "Offline Capabilities",
-                    subtitle = "Quran text, Adhkar, Hadith and Zakat work without internet; " +
-                        "new tafseer, translations and live Nisab rates need a connection",
+                    title = stringResource(R.string.tools_offline_title),
+                    subtitle = stringResource(R.string.tools_offline_subtitle),
                     onClick = { onNavigate(SakinahScreen.SettingsQuran) }
                 )
             }
 
-            HubSectionTitle("Settings")
+            HubSectionTitle(stringResource(R.string.tools_section_settings))
             SakinahCard(contentPadding = 0.dp) {
                 HubRow(
                     icon = Icons.Outlined.Place,
-                    title = "Prayer & Location",
-                    subtitle = "Calculation method, home location, Asr school, travel & car",
+                    title = stringResource(R.string.tools_prayer_location_title),
+                    subtitle = stringResource(R.string.tools_prayer_location_subtitle),
                     onClick = { onNavigate(SakinahScreen.SettingsPrayer) }
                 )
                 HubDivider()
                 HubRow(
                     icon = Icons.Outlined.Notifications,
-                    title = "Prayer Notifications",
-                    subtitle = "Per-prayer alerts, Fajr Azaan, muezzin voice & test alert",
+                    title = stringResource(R.string.tools_prayer_notifications_title),
+                    subtitle = stringResource(R.string.tools_prayer_notifications_subtitle),
                     onClick = { onNavigate(SakinahScreen.NotificationSettings) }
                 )
                 HubDivider()
                 HubRow(
                     icon = Icons.Outlined.Palette,
-                    title = "Appearance & Reading",
-                    subtitle = "Theme, palette, typography & reader layouts",
+                    title = stringResource(R.string.tools_appearance_title),
+                    subtitle = stringResource(R.string.tools_appearance_subtitle),
                     onClick = { onNavigate(SakinahScreen.SettingsAppearance) }
                 )
                 HubDivider()
                 HubRow(
                     icon = Icons.Outlined.DownloadForOffline,
-                    title = "Quran & Offline Packs",
-                    subtitle = "Translation edition, tafseer downloads & cache",
+                    title = stringResource(R.string.tools_quran_offline_title),
+                    subtitle = stringResource(R.string.tools_quran_offline_subtitle),
                     onClick = { onNavigate(SakinahScreen.SettingsQuran) }
                 )
             }
 
-            HubSectionTitle("Support & About")
+            HubSectionTitle(stringResource(R.string.tools_section_support))
             SakinahCard(contentPadding = 0.dp) {
                 HubRow(
                     icon = Icons.AutoMirrored.Outlined.HelpOutline,
-                    title = "Help & Feedback",
-                    subtitle = "Contact support@imancore.app or report a bug",
+                    title = stringResource(R.string.tools_help_title),
+                    subtitle = stringResource(R.string.tools_help_subtitle),
                     onClick = { onNavigate(SakinahScreen.Help) }
                 )
                 HubDivider()
                 HubRow(
                     icon = Icons.Outlined.MenuBook,
-                    title = "Islamic Data Sources",
-                    subtitle = "AlAdhan, Quran.com v4, Hadith CDN & offline seeds",
+                    title = stringResource(R.string.tools_data_sources_title),
+                    subtitle = stringResource(R.string.tools_data_sources_subtitle),
                     onClick = { onNavigate(SakinahScreen.DataSources) }
                 )
                 HubDivider()
                 HubRow(
                     icon = Icons.Outlined.PrivacyTip,
-                    title = "Privacy & Terms",
-                    subtitle = "On-device encryption & permissions disclosure",
+                    title = stringResource(R.string.tools_privacy_title),
+                    subtitle = stringResource(R.string.tools_privacy_subtitle),
                     onClick = { onNavigate(SakinahScreen.Privacy) }
                 )
                 HubDivider()
                 HubRow(
                     icon = Icons.Outlined.Info,
-                    title = "About ImanCore",
-                    subtitle = "Version & build details",
+                    title = stringResource(R.string.tools_about_title),
+                    subtitle = stringResource(R.string.tools_about_subtitle),
                     onClick = { onNavigate(SakinahScreen.About) }
                 )
             }
@@ -283,17 +287,17 @@ fun ToolsHubScreen(
                     modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("What's new", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.tools_whats_new_dialog), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     listOf(
-                        "Salah times now follow your real location, timezone and high-latitude rule.",
-                        "Zakat shows its Nisab source, currency and last update time.",
-                        "Hadith cards name their collection, number, grading and edition.",
-                        "Qibla, Azaan scheduling and the Quran reader got reliability fixes."
+                        stringResource(R.string.tools_whats_new_1),
+                        stringResource(R.string.tools_whats_new_2),
+                        stringResource(R.string.tools_whats_new_3),
+                        stringResource(R.string.tools_whats_new_4)
                     ).forEach { line ->
                         Text("•  $line", style = MaterialTheme.typography.bodySmall)
                     }
-                    androidx.compose.material3.TextButton(onClick = { showWhatsNew = false }) {
-                        Text("Close")
+                                            androidx.compose.material3.TextButton(onClick = { showWhatsNew = false }) {
+                        Text(stringResource(R.string.tools_close))
                     }
                 }
             }

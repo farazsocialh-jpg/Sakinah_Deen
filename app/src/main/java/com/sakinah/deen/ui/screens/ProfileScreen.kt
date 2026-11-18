@@ -1,5 +1,7 @@
 package com.sakinah.deen.ui.screens
 
+import com.sakinah.deen.R
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.auth.AuthRepository
 import com.sakinah.deen.auth.AuthState
@@ -131,9 +134,9 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         ?: signedInUser?.avatarUrl
     val age = remember(dateOfBirth) { UserProfile(dateOfBirth = dateOfBirth).ageYears() }
     val providerLabel = when (profile?.authProvider) {
-        "google" -> "Google account"
-        "guest" -> "Guest session"
-        else -> "Local account"
+        "google" -> stringResource(R.string.profile_google_account)
+        "guest" -> stringResource(R.string.profile_guest_session)
+        else -> stringResource(R.string.profile_local_account)
     }
 
     Scaffold(
@@ -156,7 +159,7 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Profile & Account",
+                    text = stringResource(R.string.profile_title),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -167,7 +170,7 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = displayName.ifBlank { "Your account" },
+                            text = displayName.ifBlank { stringResource(R.string.profile_your_account) },
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -193,8 +196,7 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "Add your gender, date of birth, city and country to tailor " +
-                                "prayer times and the Salah guide.",
+                            text = stringResource(R.string.profile_complete_prompt),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(12.dp)
@@ -220,7 +222,7 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 OutlinedTextField(
                     value = displayName,
                     onValueChange = { displayName = it; validationError = null },
-                    label = { Text("Display name") },
+                    label = { Text(stringResource(R.string.profile_display_name)) },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -230,11 +232,11 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it; validationError = null },
-                    label = { Text("Email") },
+                    label = { Text(stringResource(R.string.profile_email)) },
                     singleLine = true,
                     readOnly = signedInUser?.isGuest == false,
                     supportingText = if (signedInUser?.isGuest == false) {
-                        { Text("Email is tied to your sign-in method.") }
+                        { Text(stringResource(R.string.profile_email_tied)) }
                     } else {
                         null
                     },
@@ -249,7 +251,7 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
                 if (age != null) {
                     Text(
-                        text = "Age: $age",
+                        text = stringResource(R.string.profile_age, age),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -265,17 +267,17 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         value = city,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Home city") },
+                        label = { Text(stringResource(R.string.profile_home_city)) },
                         singleLine = true,
-                        supportingText = { Text("Shared with Prayer & Location settings") },
+                        supportingText = { Text(stringResource(R.string.profile_home_city_shared)) },
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(onClick = { showHomeCityPicker = true }) { Text("Change") }
+                    TextButton(onClick = { showHomeCityPicker = true }) {                     Text(stringResource(R.string.profile_change)) }
                 }
                 OutlinedTextField(
                     value = country,
                     onValueChange = { country = it; validationError = null },
-                    label = { Text("Country") },
+                    label = { Text(stringResource(R.string.profile_country)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -285,7 +287,7 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         if (isSaving) return@Button
                         val cleanName = displayName.trim()
                         if (cleanName.isEmpty()) {
-                            validationError = "Display name cannot be empty."
+                            validationError = context.getString(R.string.profile_display_name_empty)
                             return@Button
                         }
                         val cleanCity = city.trim()
@@ -320,10 +322,10 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                 if (signedInUser != null && !signedInUser.isGuest) {
                                     authRepo.updateDisplayName(cleanName)
                                 }
-                                snackbarHostState.showSnackbar("Profile saved.")
+                                snackbarHostState.showSnackbar(context.getString(R.string.profile_saved))
                             } catch (e: Exception) {
                                 if (e is kotlinx.coroutines.CancellationException) throw e
-                                validationError = e.message ?: "Could not save your profile."
+                                validationError = e.message ?: context.getString(R.string.profile_save_failed)
                             } finally {
                                 isSaving = false
                             }
@@ -334,7 +336,7 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         .fillMaxWidth()
                         .height(48.dp)
                 ) {
-                    Text(if (isSaving) "Saving…" else "Save Changes")
+                    Text(if (isSaving) stringResource(R.string.profile_saving) else stringResource(R.string.profile_save_changes))
                 }
 
                 backupMessage?.let { msg ->
@@ -355,14 +357,14 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     onClick = { exportLauncher.launch("sakinah-backup.skbak") },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Export Encrypted Backup")
+                    Text(stringResource(R.string.profile_export_backup))
                 }
 
                 OutlinedButton(
                     onClick = { importLauncher.launch(arrayOf("*/*")) },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Import Encrypted Backup")
+                    Text(stringResource(R.string.profile_import_backup))
                 }
 
                 // Every account lifecycle action lives here, not in the tools hub.
@@ -370,22 +372,22 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     onClick = { showSignOut = true },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Sign Out")
+                    Text(stringResource(R.string.profile_sign_out))
                 }
 
                 OutlinedButton(
                     onClick = { showDelete = true },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Delete Account")
+                    Text(stringResource(R.string.profile_delete_account))
                 }
 
                 if (showSignOut) {
                     AlertDialog(
                         onDismissRequest = { showSignOut = false },
-                        title = { Text("Sign out?") },
+                        title = { Text(stringResource(R.string.profile_sign_out_title)) },
                         text = {
-                            Text("Your saved Quran, Hadith and Salah progress stays on this device.")
+                            Text(stringResource(R.string.profile_sign_out_body))
                         },
                         confirmButton = {
                             TextButton(onClick = {
@@ -401,13 +403,13 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                         }
                                         .onFailure { err ->
                                             if (err is kotlinx.coroutines.CancellationException) throw err
-                                            validationError = err.message ?: "Could not sign out."
+                                            validationError = err.message ?: context.getString(R.string.profile_sign_out_failed)
                                         }
                                 }
-                            }) { Text("Sign Out") }
+                            }) { Text(stringResource(R.string.profile_sign_out)) }
                         },
                         dismissButton = {
-                            TextButton(onClick = { showSignOut = false }) { Text("Cancel") }
+                            TextButton(onClick = { showSignOut = false }) { Text(stringResource(R.string.profile_cancel)) }
                         }
                     )
                 }
@@ -415,8 +417,8 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 if (showDelete) {
                     AlertDialog(
                         onDismissRequest = { showDelete = false },
-                        title = { Text("Delete account?") },
-                        text = { Text("This action cannot be undone.") },
+                        title = { Text(stringResource(R.string.profile_delete_account_title)) },
+                        text = { Text(stringResource(R.string.profile_delete_account_body)) },
                         confirmButton = {
                             TextButton(onClick = {
                                 scope.launch {
@@ -425,10 +427,10 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                     showDelete = false
                                     onBack()
                                 }
-                            }) { Text("Delete") }
+                            }) { Text(stringResource(R.string.profile_delete)) }
                         },
                         dismissButton = {
-                            TextButton(onClick = { showDelete = false }) { Text("Cancel") }
+                            TextButton(onClick = { showDelete = false }) { Text(stringResource(R.string.profile_cancel)) }
                         }
                     )
                 }
@@ -451,14 +453,14 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     if (showExportPassphrase) {
         AlertDialog(
             onDismissRequest = { showExportPassphrase = false },
-            title = { Text("Export Encrypted Backup") },
+            title = { Text(stringResource(R.string.profile_export_backup)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Enter a passphrase to encrypt the backup.")
+                    Text(stringResource(R.string.profile_backup_passphrase_prompt_export))
                     OutlinedTextField(
                         value = backupPassphrase,
                         onValueChange = { backupPassphrase = it },
-                        label = { Text("Passphrase") },
+                        label = { Text(stringResource(R.string.profile_backup_passphrase)) },
                         singleLine = true
                     )
                 }
@@ -475,16 +477,16 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                 uri = uri,
                                 passphrase = pass
                             ).onSuccess {
-                                backupMessage = "Backup exported."
+                                backupMessage = context.getString(R.string.profile_backup_exported)
                             }.onFailure { e ->
-                                backupMessage = "Export failed: ${e.message}"
+                                backupMessage = context.getString(R.string.profile_backup_export_failed, e.message ?: "")
                             }
                         }
                     }
-                }) { Text("Export") }
+                }) { Text(stringResource(R.string.profile_backup_export_action)) }
             },
             dismissButton = {
-                TextButton(onClick = { showExportPassphrase = false }) { Text("Cancel") }
+                TextButton(onClick = { showExportPassphrase = false }) { Text(stringResource(R.string.profile_cancel)) }
             }
         )
     }
@@ -492,14 +494,14 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     if (showImportPassphrase) {
         AlertDialog(
             onDismissRequest = { showImportPassphrase = false },
-            title = { Text("Import Encrypted Backup") },
+            title = { Text(stringResource(R.string.profile_import_backup)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Enter the passphrase used to encrypt the backup.")
+                    Text(stringResource(R.string.profile_backup_passphrase_prompt_import))
                     OutlinedTextField(
                         value = backupPassphrase,
                         onValueChange = { backupPassphrase = it },
-                        label = { Text("Passphrase") },
+                        label = { Text(stringResource(R.string.profile_backup_passphrase)) },
                         singleLine = true
                     )
                 }
@@ -516,16 +518,16 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                 uri = uri,
                                 passphrase = pass
                             ).onSuccess {
-                                backupMessage = "Backup imported."
+                                backupMessage = context.getString(R.string.profile_backup_imported)
                             }.onFailure { e ->
-                                backupMessage = "Import failed: ${e.message}"
+                                backupMessage = context.getString(R.string.profile_backup_import_failed, e.message ?: "")
                             }
                         }
                     }
-                }) { Text("Import") }
+                }) { Text(stringResource(R.string.profile_backup_import_action)) }
             },
             dismissButton = {
-                TextButton(onClick = { showImportPassphrase = false }) { Text("Cancel") }
+                TextButton(onClick = { showImportPassphrase = false }) { Text(stringResource(R.string.profile_cancel)) }
             }
         )
     }

@@ -1,5 +1,7 @@
 package com.sakinah.deen.ui.screens
 
+import com.sakinah.deen.R
+
 import android.Manifest
 import android.media.MediaPlayer
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -54,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -96,7 +99,7 @@ fun TravelScreen(
     // The shared Qibla card owns its own sensors; Travel only supplies the current position.
     var qiblaLatitude by remember { mutableDoubleStateOf(homeCoordinates?.first ?: 21.4225) }
     var qiblaLongitude by remember { mutableDoubleStateOf(homeCoordinates?.second ?: 39.8262) }
-    var qiblaCity by remember { mutableStateOf(homeCity ?: "Current location") }
+    var qiblaCity by remember { mutableStateOf(homeCity ?: context.getString(R.string.travel_current_location)) }
     var qiblaLocationAvailable by remember { mutableStateOf(false) }
 
     var duaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
@@ -110,7 +113,7 @@ fun TravelScreen(
             val label = listOf(resolved.cityName, resolved.countryName)
                 .filter { it.isNotBlank() }
                 .joinToString(", ")
-                .ifBlank { "Saved Location" }
+                .ifBlank { context.getString(R.string.travel_saved_location) }
             appPrefs.saveHomeAnchor(resolved.latitude, resolved.longitude, label)
             homeCoordinates = appPrefs.homeCoordinates
             homeCity = appPrefs.homeCityName
@@ -136,7 +139,7 @@ fun TravelScreen(
         qiblaCity = listOf(resolved.cityName, resolved.countryName)
             .filter { it.isNotBlank() }
             .joinToString(", ")
-            .ifBlank { "Current location" }
+            .ifBlank { context.getString(R.string.travel_current_location) }
         qiblaLocationAvailable = true
         val travelState = travelManager.evaluateTravelState(Pair(resolved.latitude, resolved.longitude))
         distanceKm = travelState.distanceKm.toFloat()
@@ -180,12 +183,12 @@ fun TravelScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             val homeDisplay = if (homeCoordinates != null) {
-                                homeCity ?: "Saved Location"
+                                homeCity ?: context.getString(R.string.travel_saved_location)
                             } else {
-                                "Not set"
+                                context.getString(R.string.travel_not_set)
                             }
                             Text(
-                                text = "Home Anchor: $homeDisplay",
+                                text = stringResource(R.string.travel_home_anchor, homeDisplay),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -199,7 +202,7 @@ fun TravelScreen(
                     }
 
                     StatusBadge(
-                        text = if (isSafar) "Safar Active" else "Resident Mode",
+                        text = if (isSafar) stringResource(R.string.travel_safar_active) else stringResource(R.string.travel_resident_mode),
                         accentColor = if (isSafar) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -235,9 +238,9 @@ fun TravelScreen(
                     ) {
                         Text(
                             text = if (isSafar) {
-                                "Simulate Local Return (<${thresholdKm.toInt()}km) — debug only"
+                                stringResource(R.string.travel_simulate_return, thresholdKm.toInt())
                             } else {
-                                "Simulate Travel Departure (>${thresholdKm.toInt()}km) — debug only"
+                                stringResource(R.string.travel_simulate_departure, thresholdKm.toInt())
                             },
                             fontSize = 11.sp
                         )
@@ -252,7 +255,7 @@ fun TravelScreen(
             shape = RoundedCornerShape(12.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Change Home", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text(stringResource(R.string.travel_change_home), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
             }
         }
@@ -261,7 +264,7 @@ fun TravelScreen(
         SakinahCard(contentPadding = 16.dp) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Qasr & Jam‘ Prayer Matrix",
+                    text = stringResource(R.string.travel_qasr_matrix),
                     fontFamily = FontFamily.Serif,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
@@ -307,14 +310,12 @@ fun TravelScreen(
                 }
 
                 Text(
-                    text = "Permissible Combining (Jam‘): Dhuhr & Asr can be prayed together during either Dhuhr (Taqdim) or Asr (Ta'khir) time. Maghrib & Isha may likewise be combined.",
+                    text = stringResource(R.string.travel_combining),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "The ~${thresholdKm.toInt()} km (≈48 mi) distance, the journey duration " +
-                        "required before Qasr applies, and which prayers may be combined differ " +
-                        "between the madhhabs. Ask a qualified scholar for your school.",
+                    text = stringResource(R.string.travel_qasr_note, thresholdKm.toInt()),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -347,9 +348,9 @@ fun TravelScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Bluetooth, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Vehicle Audio Ready", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.travel_vehicle_audio), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
-                    Text("Dua al-Safar", color = MaterialTheme.colorScheme.secondary, fontSize = 10.sp)
+                    Text(stringResource(R.string.travel_dua_title), color = MaterialTheme.colorScheme.secondary, fontSize = 10.sp)
                 }
 
                 ArabicVerseBlock(
@@ -360,7 +361,7 @@ fun TravelScreen(
                 )
 
                 Text(
-                    text = "\"Subḥānal-ladhī sakh-khara lanā hādhā wa mā kunnā lahū muqrinīn...\"",
+                    text = stringResource(R.string.travel_dua_arabic),
                     color = MaterialTheme.colorScheme.secondary,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -399,7 +400,7 @@ fun TravelScreen(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (isDuaPlaying) "Stop Dua al-Safar" else "Play Dua al-Safar via Audio",
+                        text = if (isDuaPlaying) stringResource(R.string.travel_stop_dua) else stringResource(R.string.travel_play_dua),
                         color = MaterialTheme.colorScheme.onSecondary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
@@ -413,12 +414,12 @@ fun TravelScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Car Bluetooth Dua al-Safar auto-play",
+                        text = stringResource(R.string.travel_bt_auto),
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Play the travel dua when your vehicle audio connects",
+                        text = stringResource(R.string.travel_bt_play),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -451,14 +452,14 @@ fun TravelScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "Home Location",
+                        text = stringResource(R.string.travel_home_location),
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
                         text = homeCity
-                            ?: if (homeCoordinates != null) "Saved location" else "Not set (normal 4 rakat)",
+                            ?: if (homeCoordinates != null) stringResource(R.string.travel_saved_location_status) else stringResource(R.string.travel_not_set_normal),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -476,7 +477,7 @@ fun TravelScreen(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Use Current GPS as Home", fontSize = 12.sp)
+                        Text(stringResource(R.string.travel_use_gps), fontSize = 12.sp)
                     }
                     OutlinedButton(
                         onClick = {
@@ -486,7 +487,7 @@ fun TravelScreen(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Choose Home City", fontSize = 12.sp)
+                        Text(stringResource(R.string.travel_choose_home_city), fontSize = 12.sp)
                     }
                     if (homeCoordinates != null) {
                         TextButton(
@@ -500,14 +501,14 @@ fun TravelScreen(
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Clear Home Location", fontSize = 12.sp)
+                            Text(stringResource(R.string.travel_clear_home), fontSize = 12.sp)
                         }
                     }
                     TextButton(
                         onClick = { showHomeOptions = false },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Cancel", fontSize = 12.sp)
+                        Text(stringResource(R.string.travel_cancel), fontSize = 12.sp)
                     }
                 }
             }

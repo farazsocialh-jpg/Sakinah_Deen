@@ -1,5 +1,7 @@
 package com.sakinah.deen.ui.screens
 
+import com.sakinah.deen.R
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.auth.AuthRepository
 import com.sakinah.deen.auth.AuthState
@@ -114,10 +117,10 @@ fun CompleteProfileScreen(
         if (city.isNotBlank() && country.isNotBlank()) return@LaunchedEffect
         val latitude = prefs.locationLatitude ?: return@LaunchedEffect
         val longitude = prefs.locationLongitude ?: return@LaunchedEffect
-        geocodeStatus = "Looking up your saved location…"
+        geocodeStatus = context.getString(R.string.complete_profile_geocode_looking)
         val resolved = ReverseGeocoder.lookup(context, latitude, longitude)
         if (resolved == null) {
-            geocodeStatus = "Could not detect your city. Please enter it manually."
+            geocodeStatus = context.getString(R.string.complete_profile_geocode_failed)
         } else {
             if (city.isBlank() && resolved.city.isNotBlank()) city = resolved.city
             if (country.isBlank() && resolved.country.isNotBlank()) country = resolved.country
@@ -136,14 +139,13 @@ fun CompleteProfileScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Complete your profile",
+                text = stringResource(R.string.complete_profile_title),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = "A little about you tailors prayer times, the Salah guide and reminders. " +
-                    "You can change any of this later.",
+                text = stringResource(R.string.complete_profile_subtitle),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -156,7 +158,7 @@ fun CompleteProfileScreen(
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = displayName.ifBlank { "Your account" },
+                                                    text = displayName.ifBlank { stringResource(R.string.complete_profile_your_account) },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -170,7 +172,7 @@ fun CompleteProfileScreen(
                     val provider = profile?.authProvider.orEmpty()
                     if (provider == "google") {
                         Text(
-                            text = "Signed in with Google",
+                            text = stringResource(R.string.complete_profile_signed_in_google),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -196,7 +198,7 @@ fun CompleteProfileScreen(
             OutlinedTextField(
                 value = displayName,
                 onValueChange = { displayName = it; error = null },
-                label = { Text("Display name") },
+                label = { Text(stringResource(R.string.complete_profile_display_name)) },
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -206,7 +208,7 @@ fun CompleteProfileScreen(
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it; error = null },
-                label = { Text("Email") },
+                label = { Text(stringResource(R.string.complete_profile_email)) },
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -233,7 +235,7 @@ fun CompleteProfileScreen(
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(
-                            text = "City",
+                            text = stringResource(R.string.complete_profile_city),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -243,7 +245,7 @@ fun CompleteProfileScreen(
                         )
                     }
                     Text(
-                        text = "Change",
+                        text = stringResource(R.string.complete_profile_change),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -262,19 +264,19 @@ fun CompleteProfileScreen(
                     if (isSaving) return@Button
                     val cleanName = displayName.trim()
                     if (cleanName.isEmpty()) {
-                        error = "Please enter a display name."
+                        error = context.getString(R.string.complete_profile_name_required)
                         return@Button
                     }
                     if (gender.isBlank()) {
-                        error = "Please select your gender."
+                        error = context.getString(R.string.complete_profile_gender_required)
                         return@Button
                     }
                     if (dateOfBirth.isBlank()) {
-                        error = "Please set your date of birth."
+                        error = context.getString(R.string.complete_profile_dob_required)
                         return@Button
                     }
                     if (city.isBlank() || country.isBlank()) {
-                        error = "Please enter your city and country."
+                        error = context.getString(R.string.complete_profile_city_country_required)
                         return@Button
                     }
                     scope.launch {
@@ -307,7 +309,7 @@ fun CompleteProfileScreen(
                             onDone()
                         } catch (e: Exception) {
                             if (e is kotlinx.coroutines.CancellationException) throw e
-                            error = e.message ?: "Could not save your profile."
+                            error = e.message ?: context.getString(R.string.complete_profile_save_failed)
                         } finally {
                             isSaving = false
                         }
@@ -325,7 +327,7 @@ fun CompleteProfileScreen(
                         color = MaterialTheme.colorScheme.onPrimary
                     )
                 } else {
-                    Text("Save & Continue")
+                    Text(stringResource(R.string.complete_profile_save_continue))
                 }
             }
 
@@ -334,15 +336,15 @@ fun CompleteProfileScreen(
                 enabled = !isSaving,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Skip for now")
+                Text(stringResource(R.string.complete_profile_skip))
             }
         }
     }
 
     if (showCityPicker) {
         HomeLocationCityPickerDialog(
-            title = "Choose your city",
-            subtitle = "Prayer times and reminders follow this city until you change it.",
+            title = stringResource(R.string.complete_profile_choose_city),
+            subtitle = stringResource(R.string.complete_profile_choose_city_subtitle),
             onDismiss = { showCityPicker = false },
             onCitySelected = { picked ->
                 city = picked.name.substringBefore(',').trim()

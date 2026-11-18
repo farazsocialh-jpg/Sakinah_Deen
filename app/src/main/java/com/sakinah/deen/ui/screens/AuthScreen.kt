@@ -1,5 +1,7 @@
 package com.sakinah.deen.ui.screens
 
+import com.sakinah.deen.R
+
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -58,6 +60,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import com.sakinah.deen.auth.AuthRepository
 import com.sakinah.deen.auth.AuthUser
 import com.sakinah.deen.auth.GoogleAccount
@@ -116,25 +119,25 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
         clearErrors()
         var valid = true
         if (isSignUp && displayName.trim().isEmpty()) {
-            nameError = "Please enter your display name."
+            nameError = context.getString(R.string.auth_name_required)
             valid = false
         }
         val cleanEmail = email.trim()
         if (!cleanEmail.contains("@") || !cleanEmail.contains(".") || cleanEmail.contains(" ")) {
-            emailError = "Please enter a valid email address."
+            emailError = context.getString(R.string.auth_email_invalid)
             valid = false
         }
         if (isSignUp) {
             if (password.length < 6) {
-                passwordError = "Use at least 6 characters."
+                passwordError = context.getString(R.string.auth_password_min)
                 valid = false
             }
             if (confirmPassword != password) {
-                confirmError = "Passwords do not match."
+                confirmError = context.getString(R.string.auth_passwords_mismatch)
                 valid = false
             }
         } else if (password.isBlank()) {
-            passwordError = "Please enter your password."
+            passwordError = context.getString(R.string.auth_password_required)
             valid = false
         }
         return valid
@@ -193,7 +196,7 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                     )
                     onDone()
                 }.onFailure { err ->
-                    errorMessage = err.message ?: "Authentication failed. Please check your details."
+                    errorMessage = err.message ?: context.getString(R.string.auth_failed)
                 }
             } finally {
                 isSubmitting = false
@@ -211,7 +214,7 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
         }
         val activity = context.findActivity()
         if (activity == null) {
-            errorMessage = "Google Sign-In needs the app window. Please reopen the app and try again."
+            errorMessage = context.getString(R.string.auth_google_needs_window)
             return
         }
         scope.launch {
@@ -221,7 +224,7 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                 val account = googleResult.getOrElse { err ->
                     // A cancelled sheet is a normal user action, not an error to display.
                     if (err !is GoogleSignInCancelled) {
-                        errorMessage = err.message ?: "Google Sign-In failed. Please try again."
+                        errorMessage = err.message ?: context.getString(R.string.auth_google_failed)
                     }
                     return@launch
                 }
@@ -236,7 +239,7 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                     prepareProfile(user = user, provider = "google", google = account)
                     onDone()
                 }.onFailure { err ->
-                    errorMessage = err.message ?: "Could not complete Google Sign-In."
+                    errorMessage = err.message ?: context.getString(R.string.auth_google_incomplete)
                 }
             } finally {
                 isGoogleSubmitting = false
@@ -255,16 +258,16 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = if (isSignUp) "Create Account" else "Sign In",
+                text = if (isSignUp) stringResource(R.string.auth_create_account) else stringResource(R.string.auth_sign_in),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
             Text(
                 text = if (isSignUp) {
-                    "Your account is stored securely on this device."
+                    stringResource(R.string.auth_account_stored)
                 } else {
-                    "Sign in to access your saved profile and preferences."
+                    stringResource(R.string.auth_sign_in_access)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -318,11 +321,11 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                         color = MaterialTheme.colorScheme.primary
                     )
                     Spacer(Modifier.width(10.dp))
-                    Text("Signing in…")
+                    Text(stringResource(R.string.auth_signing_in))
                 } else {
                     GoogleMark()
                     Spacer(Modifier.width(10.dp))
-                    Text("Continue with Google", fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.auth_continue_google), fontWeight = FontWeight.SemiBold)
                 }
             }
 
@@ -334,7 +337,7 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
             ) {
                 HorizontalDivider(modifier = Modifier.weight(1f))
                 Text(
-                    text = "or",
+                    text = stringResource(R.string.auth_or),
                     modifier = Modifier.padding(horizontal = 12.dp),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -347,7 +350,7 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                 OutlinedTextField(
                     value = displayName,
                     onValueChange = { displayName = it; nameError = null; errorMessage = null },
-                    label = { Text("Display name") },
+                    label = { Text(stringResource(R.string.auth_display_name)) },
                     singleLine = true,
                     isError = nameError != null,
                     supportingText = nameError?.let { { Text(it) } },
@@ -367,7 +370,7 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it; emailError = null; errorMessage = null },
-                label = { Text("Email") },
+                label = { Text(stringResource(R.string.auth_email)) },
                 singleLine = true,
                 isError = emailError != null,
                 supportingText = emailError?.let { { Text(it) } },
@@ -386,12 +389,12 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it; passwordError = null; confirmError = null; errorMessage = null },
-                label = { Text("Password") },
+                label = { Text(stringResource(R.string.auth_password)) },
                 singleLine = true,
                 isError = passwordError != null,
                 supportingText = {
                     val hint = passwordError
-                        ?: if (isSignUp) "At least 6 characters" else null
+                        ?: if (isSignUp) stringResource(R.string.auth_password_hint) else null
                     if (hint != null) Text(hint)
                 },
                 visualTransformation = if (passwordVisible) {
@@ -414,7 +417,7 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                     IconButton(onClick = { passwordVisible = !passwordVisible }) {
                         Icon(
                             imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                            contentDescription = if (passwordVisible) stringResource(R.string.auth_hide_password) else stringResource(R.string.auth_show_password)
                         )
                     }
                 },
@@ -427,7 +430,7 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                 OutlinedTextField(
                     value = confirmPassword,
                     onValueChange = { confirmPassword = it; confirmError = null; errorMessage = null },
-                    label = { Text("Confirm password") },
+                    label = { Text(stringResource(R.string.auth_confirm_password)) },
                     singleLine = true,
                     isError = confirmError != null,
                     supportingText = confirmError?.let { { Text(it) } },
@@ -461,7 +464,7 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                         color = MaterialTheme.colorScheme.onPrimary
                     )
                 } else {
-                    Text(if (isSignUp) "Create Account" else "Sign In")
+                    Text(if (isSignUp) stringResource(R.string.auth_create_account_action) else stringResource(R.string.auth_sign_in_action))
                 }
             }
 
@@ -474,7 +477,7 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                 },
                 enabled = !busy
             ) {
-                Text(if (isSignUp) "Already have an account? Sign in" else "Create account")
+                Text(if (isSignUp) stringResource(R.string.auth_already_have_account) else stringResource(R.string.auth_create_account_link))
             }
 
             // There is no "Forgot password?" action: local accounts cannot receive email, so
@@ -492,7 +495,7 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                             onDone()
                         } catch (e: Exception) {
                             if (e is kotlinx.coroutines.CancellationException) throw e
-                            errorMessage = e.message ?: "Could not continue as guest."
+                            errorMessage = e.message ?: context.getString(R.string.auth_guest_failed)
                         } finally {
                             isSubmitting = false
                         }
@@ -500,7 +503,7 @@ fun AuthScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                 },
                 enabled = !busy
             ) {
-                Text("Continue as Guest")
+                Text(stringResource(R.string.auth_continue_guest))
             }
         }
     }
@@ -516,7 +519,7 @@ private fun GoogleMark() {
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = "G",
+            text = stringResource(R.string.auth_google_mark),
             color = Color(0xFF4285F4),
             fontWeight = FontWeight.Bold,
             fontSize = 15.sp

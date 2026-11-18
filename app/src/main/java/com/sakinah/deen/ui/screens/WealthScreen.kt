@@ -1,5 +1,7 @@
 package com.sakinah.deen.ui.screens
 
+import com.sakinah.deen.R
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -54,6 +56,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -143,21 +146,20 @@ fun WealthScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Text(
-                        text = "Māl, Zakat & Sadaqah Hub",
+                        text = stringResource(R.string.wealth_hub_title),
                         fontFamily = FontFamily.Serif,
                         fontWeight = FontWeight.Bold,
                         fontSize = 22.sp,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "Currency: ${state.currencyCode}  •  Nisab source: ${state.rateSource}" +
+                        text = stringResource(R.string.wealth_currency_nisab, state.currencyCode, state.rateSource) +
                             (if (state.nisabLastUpdatedEpochMillis > 0L) "  •  ${ratesUpdatedLabel}" else ""),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Zakat is a scholarly aid, not a universal fatwa; Hawl and local " +
-                            "madhhab assumptions apply.",
+                        text = stringResource(R.string.wealth_zakat_aid),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -179,7 +181,7 @@ fun WealthScreen(
             SakinahCard(contentPadding = 16.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Nisab Valuation Benchmark",
+                        text = stringResource(R.string.wealth_nisab_benchmark),
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.primary
@@ -194,7 +196,7 @@ fun WealthScreen(
                     )
 
                     Text(
-                        text = "Current Nisab Threshold: $${String.format(Locale.US, "%.0f", state.nisabThreshold)} USD",
+                        text = stringResource(R.string.wealth_nisab_threshold, String.format(Locale.US, "%.0f", state.nisabThreshold)),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -216,11 +218,11 @@ fun WealthScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                                 Spacer(Modifier.width(4.dp))
-                                Text("Refreshing…", fontSize = 11.sp)
+                                Text(stringResource(R.string.wealth_refreshing), fontSize = 11.sp)
                             }
                         } else {
                             Text(
-                                text = "Refresh rates",
+                                text = stringResource(R.string.wealth_refresh_rates),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary,
@@ -266,9 +268,9 @@ fun WealthScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = if (state.isEligible) {
-                                    "Eligible for Zakat (Wealth exceeds threshold)"
+                                    stringResource(R.string.wealth_eligible)
                                 } else {
-                                    "Wealth is currently below Nisab threshold"
+                                    stringResource(R.string.wealth_below_threshold)
                                 },
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,
@@ -283,7 +285,7 @@ fun WealthScreen(
             SakinahCard(contentPadding = 16.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Multi-Asset Balance Sheet",
+                        text = stringResource(R.string.wealth_balance_sheet),
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.primary
@@ -291,7 +293,7 @@ fun WealthScreen(
 
                     ZakatNumberField(
                         value = cashText,
-                        label = "Cash in Hand & Bank Accounts ($)",
+                        label = stringResource(R.string.wealth_cash_label),
                         onValueChange = { raw ->
                             cashText = raw
                             // A blank field means zero (amountFromInput maps it) rather than
@@ -301,7 +303,7 @@ fun WealthScreen(
                     )
                     ZakatNumberField(
                         value = goldText,
-                        label = "Gold Value Held ($)",
+                        label = stringResource(R.string.wealth_gold_label),
                         onValueChange = { raw ->
                             goldText = raw
                             amountFromInput(raw)?.let { viewModel.onIntent(WealthUiIntent.UpdateGoldHeld(it)) }
@@ -309,7 +311,7 @@ fun WealthScreen(
                     )
                     ZakatNumberField(
                         value = silverText,
-                        label = "Silver Value Held ($)",
+                        label = stringResource(R.string.wealth_silver_label),
                         onValueChange = { raw ->
                             silverText = raw
                             amountFromInput(raw)?.let { viewModel.onIntent(WealthUiIntent.UpdateSilverHeld(it)) }
@@ -317,7 +319,7 @@ fun WealthScreen(
                     )
                     ZakatNumberField(
                         value = inventoryText,
-                        label = "Trade & Business Inventory ($)",
+                        label = stringResource(R.string.wealth_inventory_label),
                         onValueChange = { raw ->
                             inventoryText = raw
                             amountFromInput(raw)?.let { viewModel.onIntent(WealthUiIntent.UpdateTradeInventory(it)) }
@@ -325,7 +327,7 @@ fun WealthScreen(
                     )
                     ZakatNumberField(
                         value = stocksText,
-                        label = "Stocks / Liquid Portfolios ($)",
+                        label = stringResource(R.string.wealth_stocks_label),
                         onValueChange = { raw ->
                             stocksText = raw
                             amountFromInput(raw)?.let { viewModel.onIntent(WealthUiIntent.UpdateStocksValue(it)) }
@@ -333,7 +335,7 @@ fun WealthScreen(
                     )
                     ZakatNumberField(
                         value = debtsText,
-                        label = "Deductible Immediate Debts ($)",
+                        label = stringResource(R.string.wealth_debts_label),
                         onValueChange = { raw ->
                             debtsText = raw
                             amountFromInput(raw)?.let { viewModel.onIntent(WealthUiIntent.UpdateDebts(it)) }
@@ -349,7 +351,7 @@ fun WealthScreen(
             ) {
                 Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Payable Zakat Summary (2.5%)",
+                        text = stringResource(R.string.wealth_payable_summary),
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
@@ -362,7 +364,7 @@ fun WealthScreen(
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                     Text(
-                        text = "Net Zakat-Eligible Wealth: $${String.format(Locale.US, "%.0f", state.netEligible)} USD",
+                        text = stringResource(R.string.wealth_net_eligible, String.format(Locale.US, "%.0f", state.netEligible)),
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
                         fontSize = 12.sp
                     )
@@ -376,10 +378,10 @@ fun WealthScreen(
                                 scope.launch {
                                     val result = ZakatPdfExporter.exportAndShare(context, state)
                                     if (result.isSuccess) {
-                                        snackbarHostState.showSnackbar("Zakat summary PDF ready to share.")
+                                        snackbarHostState.showSnackbar(context.getString(R.string.wealth_pdf_ready))
                                     } else {
                                         snackbarHostState.showSnackbar(
-                                            "Could not export PDF: ${result.exceptionOrNull()?.message ?: "unknown error"}"
+                                            context.getString(R.string.wealth_pdf_failed, result.exceptionOrNull()?.message ?: "unknown error")
                                         )
                                     }
                                 }
@@ -388,7 +390,7 @@ fun WealthScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Export PDF", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text(stringResource(R.string.wealth_export_pdf), color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                         Button(
                             onClick = {
@@ -404,7 +406,7 @@ fun WealthScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Reset", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                            Text(stringResource(R.string.wealth_reset), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                         }
                     }
                 }
@@ -423,14 +425,14 @@ fun WealthScreen(
                             Icon(Icons.Default.Favorite, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Daily Micro-Sadaqah Jar",
+                                text = stringResource(R.string.wealth_sadaqah_jar),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                         Text(
-                            text = "Goal: $${state.sadaqahGoal.toInt()} / mo",
+                            text = stringResource(R.string.wealth_sadaqah_goal, state.sadaqahGoal.toInt()),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
