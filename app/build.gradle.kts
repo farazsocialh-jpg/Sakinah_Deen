@@ -57,7 +57,7 @@ android {
         // Supply via AI_PROXY_URL env var or keystore.properties; otherwise use the deployed Worker.
         val aiProxyUrl = signingValue("AI_PROXY_URL", "AI_PROXY_URL")
             ?.takeIf { it.isNotBlank() }
-            ?: "https://sakinahdeen.farazsocialh.workers.dev"
+            ?: "https://ai.insightsltd.com"
         buildConfigField("String", "AI_PROXY_URL", "\"$aiProxyUrl\"")
 
         // Public metal-price endpoint used for the live nisab threshold. Empty disables
