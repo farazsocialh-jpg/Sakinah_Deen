@@ -507,4 +507,12 @@
     <string name="quran_reference">قرآن %1$d:%2$d</string>
     <string name="quran_surah_chip">سورہ %1$d</string>
 
+    <string name="hadith_tab_books">کتب</string>
+    <string name="hadith_tab_daily">روزانہ</string>
+    <string name="hadith_tab_search">تلاش</string>
+    <string name="hadith_tab_saved">محفوظ</string>
+    <string name="hadith_open_collection">کھولیں</string>
+    <string name="hadith_cover_cd">حدیث مجموعہ کا سرورق: %1$s</string>
+    <string name="hadith_compiled_by">مرتب کردہ: %1$s</string>
+    <string name="hadith_chapters_count">%1$d ابواب</string>
 </resources>

@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -55,18 +57,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sakinah.deen.R
+import com.sakinah.deen.data.model.HadithCollectionCovers
 import com.sakinah.deen.data.model.HadithModel
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.HadithReadingLayout
+import com.sakinah.deen.ui.components.HadithBookCover
 import com.sakinah.deen.ui.components.SakinahCard
+import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.components.UnifiedReaderPill
 import com.sakinah.deen.ui.rememberInject
+import com.sakinah.deen.ui.viewmodel.HadithTab
 import com.sakinah.deen.ui.viewmodel.HadithUiIntent
 import com.sakinah.deen.ui.viewmodel.HadithViewModel
 import kotlinx.coroutines.delay
@@ -95,6 +105,12 @@ fun HadithScreen(
     var showLanguagePicker by remember { mutableStateOf(false) }
     var languageQuery by remember { mutableStateOf("") }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val tabLabels = listOf(
+        stringResource(R.string.hadith_tab_books),
+        stringResource(R.string.hadith_tab_daily),
+        stringResource(R.string.hadith_tab_search),
+        stringResource(R.string.hadith_tab_saved)
+    )
 
     val appearancePrefs = rememberInject<AppearancePreferences>()
     val appearanceConfig by appearancePrefs.effectiveConfig.collectAsStateWithLifecycle()
@@ -121,6 +137,15 @@ fun HadithScreen(
             putExtra(Intent.EXTRA_TEXT, shareText)
         }
         context.startActivity(Intent.createChooser(sendIntent, "Share hadith"))
+    }
+
+    LaunchedEffect(state.selectedTab) {
+        when (state.selectedTab) {
+            HadithTab.SEARCH -> searchExpanded = true
+            HadithTab.SAVED -> savedOnly = true
+            HadithTab.DAILY -> savedOnly = false
+            HadithTab.BOOKS -> Unit
+        }
     }
 
     LaunchedEffect(state.deepLinkToastMessage) {
@@ -166,6 +191,24 @@ fun HadithScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        SegmentedPillBar(
+            options = tabLabels,
+            selectedIndex = state.selectedTab.ordinal,
+            onSelect = { index ->
+                vm.onIntent(HadithUiIntent.SelectTab(HadithTab.entries[index]))
+            }
+        )
+
+        if (state.selectedTab == HadithTab.BOOKS) {
+            HadithBooksContent(
+                books = state.books,
+                onOpen = { bookKey ->
+                    vm.onIntent(HadithUiIntent.SelectBook(bookKey))
+                }
+            )
+            return@Column
+        }
+
         if (readingLayout == HadithReadingLayout.THUMB_BOTTOM_DOCK) {
             Text(
                 text = listOf(selectedBookTitle, selectedSectionTitle)
@@ -316,7 +359,7 @@ fun HadithScreen(
             )
 
             UnifiedReaderPill(
-                title = if (state.selectedBookKey == "all") "All Books ▾" else "${selectedBookTitle ?: "Book"} ▾",
+                title = if (state.selectedBookKey == "all") "All Books ▾" else "$selectedBookTitle ▾",
                 onTitleClick = { showBookPicker = true },
                 onMenuClick = { showHadithOptions = true },
                 modifier = Modifier.align(Alignment.BottomCenter)
@@ -582,6 +625,117 @@ fun HadithScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HadithBooksContent(
+    books: List<com.sakinah.deen.ui.viewmodel.HadithBookInfo>,
+    onOpen: (String) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)
+    ) {
+        items(books, key = { it.key }) { book ->
+            HadithCollectionRow(book = book, onOpen = { onOpen(book.key) })
+        }
+    }
+}
+
+@Composable
+private fun HadithCollectionRow(
+    book: com.sakinah.deen.ui.viewmodel.HadithBookInfo,
+    onOpen: () -> Unit
+) {
+    val cover = HadithCollectionCovers.forBook(book.key)
+    val coverDescription = stringResource(R.string.hadith_cover_cd, cover.englishTitle)
+    SakinahCard(onClick = onOpen, contentPadding = 12.dp) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            HadithBookCover(
+                cover = cover,
+                modifier = Modifier
+                    .width(84.dp)
+                    .aspectRatio(0.75f)
+                    .semantics { contentDescription = coverDescription }
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = cover.englishTitle.ifBlank { book.title },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (cover.arabicTitle.isNotBlank()) {
+                    Text(
+                        text = cover.arabicTitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (cover.compiler.isNotBlank()) {
+                    Text(
+                        text = stringResource(R.string.hadith_compiled_by, cover.compiler),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Text(
+                    text = if (book.chapterCount > 0) {
+                        "${book.totalCount} · ${stringResource(R.string.hadith_chapters_count, book.chapterCount)}"
+                    } else {
+                        book.totalCount
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Row(
+                    modifier = Modifier.padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.primary
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.hadith_open_collection),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(14.dp)
+                            )
                         }
                     }
                 }

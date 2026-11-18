@@ -1,5 +1,6 @@
 package com.sakinah.deen
 
+import com.sakinah.deen.ui.viewmodel.HadithTab
 import com.sakinah.deen.ui.viewmodel.HadithUiIntent
 import com.sakinah.deen.ui.viewmodel.HadithViewModel
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +20,12 @@ class HadithViewModelTest {
     private lateinit var testDispatcher: TestDispatcher
     @Before fun setUp() { testDispatcher = StandardTestDispatcher(); Dispatchers.setMain(testDispatcher) }
     @After fun tearDown() { Dispatchers.resetMain() }
+    @Test
+    fun initialState_opensBooksTab() = runTest(testDispatcher) {
+        val vm = HadithViewModel(computeDispatcher = testDispatcher)
+        assertEquals(HadithTab.BOOKS, vm.uiState.value.selectedTab)
+    }
+
     @Test
     fun initialState_hasHadiths() = runTest(testDispatcher) {
         val vm = HadithViewModel(computeDispatcher = testDispatcher)

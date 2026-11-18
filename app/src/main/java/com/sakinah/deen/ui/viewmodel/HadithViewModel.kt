@@ -24,10 +24,14 @@ import kotlinx.coroutines.withContext
 data class HadithBookInfo(
     val key: String,
     val title: String,
-    val totalCount: String
+    val totalCount: String,
+    val chapterCount: Int = 0
 )
 
+enum class HadithTab { BOOKS, DAILY, SEARCH, SAVED }
+
 data class HadithUiState(
+    val selectedTab: HadithTab = HadithTab.BOOKS,
     val books: List<HadithBookInfo> = emptyList(),
     val selectedBookKey: String = "all",
     val selectedLanguageCode: String = "eng",
@@ -56,6 +60,7 @@ data class HadithUiState(
 )
 
 sealed class HadithUiIntent {
+    data class SelectTab(val tab: HadithTab) : HadithUiIntent()
     data class SelectBook(val bookKey: String) : HadithUiIntent()
     data class SelectLanguage(val languageCode: String) : HadithUiIntent()
     data class SelectSection(val sectionNumber: Int) : HadithUiIntent()
@@ -179,9 +184,13 @@ class HadithViewModel(
 
     fun onIntent(intent: HadithUiIntent) {
         when (intent) {
+            is HadithUiIntent.SelectTab -> {
+                _uiState.update { it.copy(selectedTab = intent.tab) }
+            }
             is HadithUiIntent.SelectBook -> {
                 _uiState.update {
                     it.copy(
+                        selectedTab = if (intent.bookKey == "all") HadithTab.BOOKS else HadithTab.DAILY,
                         selectedBookKey = intent.bookKey,
                         resolvedLanguageCode = null,
                         selectedSectionNumber = 0,
@@ -333,13 +342,28 @@ class HadithViewModel(
                 val languageOptions = languageOptionsFor(editions)
                 state.copy(
                     books = if (catalog.isNotEmpty()) {
-                        catalog.map { info ->
+                        val catalogByKey = catalog.associateBy { it.bookKey }
+                        val knownKeys = canonicalBooks.map { it.key }.toSet()
+                        val canonical = canonicalBooks.map { canonical ->
+                            val info = catalogByKey[canonical.key]
+                            if (info == null) {
+                                canonical
+                            } else {
+                                canonical.copy(
+                                    title = info.bookTitle.ifBlank { canonical.title },
+                                    chapterCount = info.sections.size
+                                )
+                            }
+                        }
+                        val additional = catalog.filterNot { it.bookKey in knownKeys }.map { info ->
                             HadithBookInfo(
                                 key = info.bookKey,
                                 title = info.bookTitle.ifBlank { info.bookKey },
-                                totalCount = "${info.editions.size} editions"
+                                totalCount = "${info.editions.size} editions",
+                                chapterCount = info.sections.size
                             )
                         }
+                        canonical + additional
                     } else {
                         state.books
                     },

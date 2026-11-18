@@ -530,4 +530,12 @@
     <string name="quran_reference">Quran %1$d:%2$d</string>
     <string name="quran_surah_chip">Surah %1$d</string>
 
+    <string name="hadith_tab_books">Books</string>
+    <string name="hadith_tab_daily">Daily</string>
+    <string name="hadith_tab_search">Search</string>
+    <string name="hadith_tab_saved">Saved</string>
+    <string name="hadith_open_collection">Open</string>
+    <string name="hadith_cover_cd">Hadith collection cover: %1$s</string>
+    <string name="hadith_compiled_by">Compiled by %1$s</string>
+    <string name="hadith_chapters_count">%1$d chapters</string>
 </resources>
