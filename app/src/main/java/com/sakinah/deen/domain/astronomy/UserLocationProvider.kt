@@ -24,8 +24,28 @@ data class ResolvedLocation(
     val countryName: String,
     val isFromGps: Boolean,
     /** ISO 3166-1 alpha-2 code, used to pick the country's Sunni calculation authority. */
-    val countryCode: String = ""
-)
+    val countryCode: String = "",
+    /** When this fix was obtained/saved; 0 for a legacy record without a timestamp. */
+    val timestampMillis: Long = 0L,
+    /** "gps" or "manual" — how the coordinates were produced. */
+    val source: String = "gps"
+) {
+    /** Age in millis, or null when no timestamp was recorded. */
+    fun ageMillis(nowMillis: Long = System.currentTimeMillis()): Long? =
+        if (timestampMillis <= 0L) null else (nowMillis - timestampMillis).coerceAtLeast(0L)
+
+    /**
+     * True when this fix is older than [maxAgeMillis]. Stale coordinates must not be shown as
+     * a current GPS position without saying so.
+     */
+    fun isStale(
+        maxAgeMillis: Long = UserLocationProvider.CACHED_LOCATION_MAX_AGE_MS,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Boolean {
+        val age = ageMillis(nowMillis) ?: return false
+        return age > maxAgeMillis
+    }
+}
 
 class UserLocationProvider(private val context: Context) {
 
@@ -38,9 +58,14 @@ class UserLocationProvider(private val context: Context) {
         private const val KEY_CITY = "saved_city"
         private const val KEY_COUNTRY = "saved_country"
         private const val KEY_COUNTRY_CODE = "saved_country_code"
+        private const val KEY_TIMESTAMP = "saved_timestamp_millis"
+        private const val KEY_SOURCE = "saved_source"
 
         /** A cached fix older than this is not considered a usable "current" location. */
         private const val LAST_LOCATION_MAX_AGE_MS = 5 * 60 * 1000L
+
+        /** How long a cached location may be presented as current in the UI. */
+        const val CACHED_LOCATION_MAX_AGE_MS = 6L * 60 * 60 * 1000
 
         // Defaults to Makkah al-Mukarramah if permissions are denied and no cache exists
         val DEFAULT_MAKKAH = ResolvedLocation(
@@ -91,7 +116,9 @@ class UserLocationProvider(private val context: Context) {
                 cityName = area.city,
                 countryName = area.countryName,
                 isFromGps = true,
-                countryCode = area.countryCode
+                countryCode = area.countryCode,
+                timestampMillis = System.currentTimeMillis(),
+                source = "gps"
             )
             saveCachedLocation(resolved)
             resolved
@@ -179,11 +206,33 @@ class UserLocationProvider(private val context: Context) {
         if (!prefs.contains(KEY_LAT_BITS) && !prefs.contains(KEY_LAT)) return null
         val lat = readDouble(KEY_LAT_BITS, KEY_LAT) ?: return null
         val lon = readDouble(KEY_LON_BITS, KEY_LON) ?: return null
+        // A junk pair persisted by an older build must not become a timetable input.
+        val sane = LocationValidator.sanitize(lat, lon) ?: return null
         val city = prefs.getString(KEY_CITY, "Saved Location") ?: "Saved Location"
         val country = prefs.getString(KEY_COUNTRY, "") ?: ""
         val countryCode = prefs.getString(KEY_COUNTRY_CODE, "") ?: ""
-        return ResolvedLocation(lat, lon, city, country, isFromGps = false, countryCode = countryCode)
+        val source = prefs.getString(KEY_SOURCE, "") ?: ""
+        return ResolvedLocation(
+            latitude = sane.first,
+            longitude = sane.second,
+            cityName = city,
+            countryName = country,
+            isFromGps = source == "gps",
+            countryCode = countryCode,
+            timestampMillis = prefs.getLong(KEY_TIMESTAMP, 0L),
+            source = source.ifBlank { "cached" }
+        )
     }
+
+    /** The cached fix only when it is still fresh enough to count as "current". */
+    fun getCachedLocationIfFresh(
+        maxAgeMillis: Long = CACHED_LOCATION_MAX_AGE_MS,
+        nowMillis: Long = System.currentTimeMillis()
+    ): ResolvedLocation? = getCachedLocation()?.takeIf { !it.isStale(maxAgeMillis, nowMillis) }
+
+    /** Age of the cached fix for the UI, or null when there is no timestamped cache. */
+    fun cachedLocationAgeMillis(nowMillis: Long = System.currentTimeMillis()): Long? =
+        getCachedLocation()?.ageMillis(nowMillis)
 
     private fun readDouble(bitsKey: String, legacyFloatKey: String): Double? {
         return if (prefs.contains(bitsKey)) {
@@ -194,14 +243,24 @@ class UserLocationProvider(private val context: Context) {
         }
     }
 
-    fun saveCachedLocation(location: ResolvedLocation) {
+    /**
+     * The single write boundary for cached fixes. Invalid coordinates are rejected here, so a
+     * fresh GPS fix, a cached fix and a manual entry can never persist `(0,0)`, NaN or an
+     * out-of-range pair.
+     */
+    fun saveCachedLocation(location: ResolvedLocation): Boolean {
+        val sane = LocationValidator.sanitize(location.latitude, location.longitude) ?: return false
+        val stamp = location.timestampMillis.takeIf { it > 0L } ?: System.currentTimeMillis()
         prefs.edit()
-            .putLong(KEY_LAT_BITS, location.latitude.toRawBits())
-            .putLong(KEY_LON_BITS, location.longitude.toRawBits())
+            .putLong(KEY_LAT_BITS, sane.first.toRawBits())
+            .putLong(KEY_LON_BITS, sane.second.toRawBits())
             .putString(KEY_CITY, location.cityName)
             .putString(KEY_COUNTRY, location.countryName)
             .putString(KEY_COUNTRY_CODE, location.countryCode)
+            .putLong(KEY_TIMESTAMP, stamp)
+            .putString(KEY_SOURCE, location.source.ifBlank { if (location.isFromGps) "gps" else "cached" })
             .apply()
+        return true
     }
 }
 

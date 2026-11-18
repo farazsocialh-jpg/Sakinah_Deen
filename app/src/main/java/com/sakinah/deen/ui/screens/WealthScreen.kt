@@ -195,12 +195,53 @@ fun WealthScreen(
                         }
                     )
 
+                    // Currency is part of the Nisab identity, not a bare number: amounts are
+                    // always rendered with the currency that priced them.
+                    val currencyOptions = remember(state.currencyCode) {
+                        listOf(state.currencyCode) +
+                            listOf("QAR", "USD", "SAR", "AED", "GBP", "EUR")
+                                .filter { it != state.currencyCode }
+                    }
+                    SegmentedPillBar(
+                        options = currencyOptions,
+                        selectedIndex = 0,
+                        onSelect = { idx ->
+                            viewModel.onIntent(WealthUiIntent.SetCurrency(currencyOptions[idx]))
+                        }
+                    )
+
                     Text(
-                        text = stringResource(R.string.wealth_nisab_threshold, String.format(Locale.US, "%.0f", state.nisabThreshold)),
+                        text = stringResource(
+                            R.string.wealth_nisab_threshold,
+                            // The threshold is only meaningful in the currency the metal rate
+                            // is quoted in; it is never silently converted to another.
+                            formatMoney(state.nisabThreshold, state.nisabRateCurrencyCode)
+                        ),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+
+                    Text(
+                        text = stringResource(
+                            R.string.wealth_nisab_rate_currency,
+                            state.nisabRateCurrencyCode,
+                            if (state.isNisabRateFallback) "built-in estimate" else "live quote"
+                        ),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    state.currencyChangeNotice?.let { notice ->
+                        Text(
+                            text = notice,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.clickable {
+                                viewModel.onIntent(WealthUiIntent.DismissCurrencyChangeNotice)
+                            }
+                        )
+                    }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -293,7 +334,7 @@ fun WealthScreen(
 
                     ZakatNumberField(
                         value = cashText,
-                        label = stringResource(R.string.wealth_cash_label),
+                        label = stringResource(R.string.wealth_cash_label, state.currencyCode),
                         onValueChange = { raw ->
                             cashText = raw
                             // A blank field means zero (amountFromInput maps it) rather than
@@ -303,7 +344,7 @@ fun WealthScreen(
                     )
                     ZakatNumberField(
                         value = goldText,
-                        label = stringResource(R.string.wealth_gold_label),
+                        label = stringResource(R.string.wealth_gold_label, state.currencyCode),
                         onValueChange = { raw ->
                             goldText = raw
                             amountFromInput(raw)?.let { viewModel.onIntent(WealthUiIntent.UpdateGoldHeld(it)) }
@@ -311,7 +352,7 @@ fun WealthScreen(
                     )
                     ZakatNumberField(
                         value = silverText,
-                        label = stringResource(R.string.wealth_silver_label),
+                        label = stringResource(R.string.wealth_silver_label, state.currencyCode),
                         onValueChange = { raw ->
                             silverText = raw
                             amountFromInput(raw)?.let { viewModel.onIntent(WealthUiIntent.UpdateSilverHeld(it)) }
@@ -319,7 +360,7 @@ fun WealthScreen(
                     )
                     ZakatNumberField(
                         value = inventoryText,
-                        label = stringResource(R.string.wealth_inventory_label),
+                        label = stringResource(R.string.wealth_inventory_label, state.currencyCode),
                         onValueChange = { raw ->
                             inventoryText = raw
                             amountFromInput(raw)?.let { viewModel.onIntent(WealthUiIntent.UpdateTradeInventory(it)) }
@@ -327,7 +368,7 @@ fun WealthScreen(
                     )
                     ZakatNumberField(
                         value = stocksText,
-                        label = stringResource(R.string.wealth_stocks_label),
+                        label = stringResource(R.string.wealth_stocks_label, state.currencyCode),
                         onValueChange = { raw ->
                             stocksText = raw
                             amountFromInput(raw)?.let { viewModel.onIntent(WealthUiIntent.UpdateStocksValue(it)) }
@@ -335,7 +376,7 @@ fun WealthScreen(
                     )
                     ZakatNumberField(
                         value = debtsText,
-                        label = stringResource(R.string.wealth_debts_label),
+                        label = stringResource(R.string.wealth_debts_label, state.currencyCode),
                         onValueChange = { raw ->
                             debtsText = raw
                             amountFromInput(raw)?.let { viewModel.onIntent(WealthUiIntent.UpdateDebts(it)) }
@@ -357,14 +398,17 @@ fun WealthScreen(
                         fontSize = 12.sp
                     )
                     Text(
-                        text = "$${String.format(Locale.US, "%.2f", state.zakatPayable)}",
+                        text = formatMoney(state.zakatPayable, state.currencyCode),
                         fontFamily = FontFamily.Serif,
                         fontSize = 32.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                     Text(
-                        text = stringResource(R.string.wealth_net_eligible, String.format(Locale.US, "%.0f", state.netEligible)),
+                        text = stringResource(
+                            R.string.wealth_net_eligible,
+                            formatMoney(state.netEligible, state.currencyCode)
+                        ),
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
                         fontSize = 12.sp
                     )
@@ -432,7 +476,7 @@ fun WealthScreen(
                             )
                         }
                         Text(
-                            text = stringResource(R.string.wealth_sadaqah_goal, state.sadaqahGoal.toInt()),
+                            text = stringResource(R.string.wealth_sadaqah_goal, state.currencyCode, state.sadaqahGoal.toInt()),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -470,7 +514,10 @@ fun WealthScreen(
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "$${String.format(Locale.US, "%.0f", state.sadaqahJarCollected)} Collected",
+                                text = stringResource(
+                                    R.string.wealth_sadaqah_collected,
+                                    formatMoney(state.sadaqahJarCollected, state.currencyCode)
+                                ),
                                 fontFamily = FontFamily.Serif,
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
@@ -480,7 +527,7 @@ fun WealthScreen(
                                 ((state.sadaqahJarCollected / state.sadaqahGoal) * 100).toInt()
                             } else 0
                             Text(
-                                text = "$pct% of monthly charity target",
+                                text = stringResource(R.string.wealth_sadaqah_progress, pct),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -491,7 +538,11 @@ fun WealthScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf(1f to "+$1", 5f to "+$5", 10f to "+$10").forEach { (amount, label) ->
+                        listOf(1f, 5f, 10f).forEach { amount ->
+                            val label = stringResource(
+                                R.string.wealth_sadaqah_add,
+                                formatMoney(amount, state.currencyCode)
+                            )
                             Button(
                                 onClick = { viewModel.onIntent(WealthUiIntent.AddMicroSadaqah(amount)) },
                                 shape = RoundedCornerShape(12.dp),
@@ -545,6 +596,10 @@ private fun validationError(raw: String): String? = when {
     raw.toDouble() > 1_000_000_000_000.0 -> "Amount must be 1 trillion or less"
     else -> null
 }
+
+/** "QAR 1,234.00" without assuming a dollar sign anywhere. */
+internal fun formatMoney(amount: Number, currencyCode: String): String =
+    "${currencyCode.trim().uppercase()} ${String.format(Locale.US, "%,.2f", amount.toDouble())}"
 
 private fun amountFromInput(raw: String): Float? {
     if (raw.isBlank() || raw == "." || raw == "-") return 0f

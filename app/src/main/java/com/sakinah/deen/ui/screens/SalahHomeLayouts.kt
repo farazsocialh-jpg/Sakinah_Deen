@@ -115,6 +115,13 @@ internal fun SalahTopHeader(
         .ifBlank { state.gregorianDate }
     val cityShort = state.locationName.substringBefore(",").trim().ifBlank { "Location" }
     val methodShort = state.authorityName.ifBlank { state.sourceLabel }
+    // A stale fix must say so rather than reading as the current position.
+    val staleNote = if (state.isLocationStale) {
+        val hours = (state.locationAgeMinutes / 60).coerceAtLeast(1L)
+        " · saved ${hours}h ago"
+    } else {
+        ""
+    }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -133,7 +140,7 @@ internal fun SalahTopHeader(
                 color = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = "$shortDate · $cityShort ▾ · $methodShort",
+                text = "$shortDate · $cityShort ▾ · $methodShort$staleNote",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

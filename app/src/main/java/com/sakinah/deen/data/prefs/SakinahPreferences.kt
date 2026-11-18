@@ -6,6 +6,7 @@ import com.sakinah.deen.data.model.AzaanSettings
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
 import com.sakinah.deen.data.model.Muezzin
+import com.sakinah.deen.data.model.NaflType
 import com.sakinah.deen.data.model.PrayerAlertMode
 import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.data.model.QuranArabicScript
@@ -24,16 +25,29 @@ import com.sakinah.deen.settings.HighLatitudeRule
  * The [SharedPreferences] constructor is internal so the preference rules ("a saved Home
  * clears Travel Mode", "(0,0) is not a Home") can be unit tested without Android.
  */
-class SakinahPreferences internal constructor(private val prefs: SharedPreferences) {
+class SakinahPreferences internal constructor(
+    private val prefs: SharedPreferences,
+    /** Encrypted store for coordinates and Zakat balances; falls back to [prefs] in tests. */
+    private val securePrefs: SharedPreferences = prefs
+) {
 
     constructor(context: Context) : this(
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE),
+        SensitivePreferences.create(context.applicationContext)
+            ?: context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     )
 
     init {
+        migrateSensitiveValuesIfNeeded()
         // Existing installs may have inherited a London default Home; drop it once.
         migrateLondonHomeIfNeeded()
     }
+
+    /** Non-null when encrypted storage could not be opened; surfaced in Settings. */
+    val storageSecurityWarning: String?
+        get() = SensitivePreferences.error.value
+
+    private fun secureEdit(): SharedPreferences.Editor = securePrefs.edit()
 
     companion object {
         /**
@@ -102,24 +116,58 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         private const val KEY_ADJUST_MAGHRIB = "prayer_adjust_maghrib"
         private const val KEY_ADJUST_ISHA = "prayer_adjust_isha"
         private const val KEY_HIGH_LATITUDE_RULE = "prayer_high_latitude_rule"
+        private const val KEY_LOCATION_TIMESTAMP = "location_timestamp_millis"
+        private const val KEY_LOCATION_SOURCE = "location_source"
+        private const val KEY_NAFL_COMPLETIONS = "nafl_completions"
+        private const val KEY_SAFAR_METHODOLOGY = "safar_methodology"
+        private const val KEY_SAFAR_MAX_STAY_DAYS = "safar_max_stay_days"
+        private const val KEY_SAFAR_JAM_PERMITTED = "safar_jam_permitted"
+        private const val KEY_SAFAR_TRAVEL_START = "safar_travel_start_epoch_day"
+
+        /** A saved location older than this is reported as stale in the UI. */
+        const val CACHED_LOCATION_MAX_AGE_MS: Long = 6L * 60 * 60 * 1000
+
+        const val LOCATION_SOURCE_GPS = "gps"
+        const val LOCATION_SOURCE_MANUAL = "manual"
+
+        /** Values that are written to the encrypted store instead of plain SharedPreferences. */
+        private val SENSITIVE_KEYS = listOf(
+            KEY_LATITUDE,
+            KEY_LONGITUDE,
+            KEY_LOCATION_LABEL,
+            KEY_LOCATION_COUNTRY_CODE,
+            KEY_LOCATION_TIMEZONE_ID,
+            KEY_IS_MANUAL_LOCATION,
+            KEY_HOME_LATITUDE,
+            KEY_HOME_LONGITUDE,
+            KEY_HOME_CITY,
+            KEY_HOME_EXPLICITLY_SET,
+            KEY_ZAKAT_CURRENCY,
+            KEY_ZAKAT_CASH,
+            KEY_ZAKAT_GOLD,
+            KEY_ZAKAT_SILVER,
+            KEY_ZAKAT_INVENTORY,
+            KEY_ZAKAT_STOCKS,
+            KEY_ZAKAT_DEBTS
+        )
     }
 
     /** Double is stored as raw bits so stored coordinates do not lose precision. */
     var locationLatitude: Double?
-        get() = if (prefs.contains(KEY_LATITUDE)) Double.fromBits(prefs.getLong(KEY_LATITUDE, 0L)) else null
-        set(value) = prefs.edit().apply {
+        get() = if (securePrefs.contains(KEY_LATITUDE)) Double.fromBits(securePrefs.getLong(KEY_LATITUDE, 0L)) else null
+        set(value) = secureEdit().apply {
             if (value == null) remove(KEY_LATITUDE) else putLong(KEY_LATITUDE, value.toBits())
         }.apply()
 
     var locationLongitude: Double?
-        get() = if (prefs.contains(KEY_LONGITUDE)) Double.fromBits(prefs.getLong(KEY_LONGITUDE, 0L)) else null
-        set(value) = prefs.edit().apply {
+        get() = if (securePrefs.contains(KEY_LONGITUDE)) Double.fromBits(securePrefs.getLong(KEY_LONGITUDE, 0L)) else null
+        set(value) = secureEdit().apply {
             if (value == null) remove(KEY_LONGITUDE) else putLong(KEY_LONGITUDE, value.toBits())
         }.apply()
 
     var locationLabel: String
-        get() = prefs.getString(KEY_LOCATION_LABEL, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_LOCATION_LABEL, value).apply()
+        get() = securePrefs.getString(KEY_LOCATION_LABEL, "") ?: ""
+        set(value) = secureEdit().putString(KEY_LOCATION_LABEL, value).apply()
 
     /**
      * The saved fix, or null when it cannot be trusted. Range-checking here (not only on
@@ -136,22 +184,49 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
 
     /** ISO 3166-1 alpha-2 code of the last resolved location (e.g. "QA"). */
     var locationCountryCode: String?
-        get() = prefs.getString(KEY_LOCATION_COUNTRY_CODE, null)?.takeIf { it.isNotBlank() }
-        set(value) = prefs.edit().apply {
+        get() = securePrefs.getString(KEY_LOCATION_COUNTRY_CODE, null)?.takeIf { it.isNotBlank() }
+        set(value) = secureEdit().apply {
             if (value.isNullOrBlank()) remove(KEY_LOCATION_COUNTRY_CODE) else putString(KEY_LOCATION_COUNTRY_CODE, value.uppercase())
         }.apply()
 
     /** IANA timezone ID for the active prayer location (e.g. "America/Los_Angeles"). */
     var locationTimeZoneId: String?
-        get() = prefs.getString(KEY_LOCATION_TIMEZONE_ID, null)?.takeIf { it.isNotBlank() }
-        set(value) = prefs.edit().apply {
+        get() = securePrefs.getString(KEY_LOCATION_TIMEZONE_ID, null)?.takeIf { it.isNotBlank() }
+        set(value) = secureEdit().apply {
             if (value.isNullOrBlank()) remove(KEY_LOCATION_TIMEZONE_ID) else putString(KEY_LOCATION_TIMEZONE_ID, value)
         }.apply()
 
     /** True when the user explicitly chose a city manually (prevents GPS overwrite on restart). */
     var isManualLocation: Boolean
-        get() = prefs.getBoolean(KEY_IS_MANUAL_LOCATION, false)
-        set(value) = prefs.edit().putBoolean(KEY_IS_MANUAL_LOCATION, value).apply()
+        get() = securePrefs.getBoolean(KEY_IS_MANUAL_LOCATION, false)
+        set(value) = secureEdit().putBoolean(KEY_IS_MANUAL_LOCATION, value).apply()
+
+    /** Epoch millis at which the saved location was last written, or 0 when unknown. */
+    var locationTimestampMillis: Long
+        get() = securePrefs.getLong(KEY_LOCATION_TIMESTAMP, 0L)
+        set(value) = secureEdit().putLong(KEY_LOCATION_TIMESTAMP, value).apply()
+
+    /** "gps" or "manual" — which path produced the saved coordinates. */
+    var locationSource: String
+        get() = securePrefs.getString(KEY_LOCATION_SOURCE, "") ?: ""
+        set(value) = secureEdit().putString(KEY_LOCATION_SOURCE, value).apply()
+
+    /** Age of the saved location in millis, or null when nothing (or no timestamp) is saved. */
+    fun locationAgeMillis(nowMillis: Long = System.currentTimeMillis()): Long? {
+        if (locationCoordinates == null) return null
+        val savedAt = locationTimestampMillis
+        if (savedAt <= 0L) return null
+        return (nowMillis - savedAt).coerceAtLeast(0L)
+    }
+
+    /** True when the saved fix is older than [maxAgeMillis] and must not read as current. */
+    fun isLocationStale(
+        maxAgeMillis: Long = CACHED_LOCATION_MAX_AGE_MS,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Boolean {
+        val age = locationAgeMillis(nowMillis) ?: return false
+        return age > maxAgeMillis
+    }
 
     /**
      * A calculation method the user picked by hand. `null` means "follow the country's
@@ -165,20 +240,20 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         }.apply()
 
     var homeLatitude: Double?
-        get() = if (prefs.contains(KEY_HOME_LATITUDE)) Double.fromBits(prefs.getLong(KEY_HOME_LATITUDE, 0L)) else null
-        set(value) = prefs.edit().apply {
+        get() = if (securePrefs.contains(KEY_HOME_LATITUDE)) Double.fromBits(securePrefs.getLong(KEY_HOME_LATITUDE, 0L)) else null
+        set(value) = secureEdit().apply {
             if (value == null) remove(KEY_HOME_LATITUDE) else putLong(KEY_HOME_LATITUDE, value.toBits())
         }.apply()
 
     var homeLongitude: Double?
-        get() = if (prefs.contains(KEY_HOME_LONGITUDE)) Double.fromBits(prefs.getLong(KEY_HOME_LONGITUDE, 0L)) else null
-        set(value) = prefs.edit().apply {
+        get() = if (securePrefs.contains(KEY_HOME_LONGITUDE)) Double.fromBits(securePrefs.getLong(KEY_HOME_LONGITUDE, 0L)) else null
+        set(value) = secureEdit().apply {
             if (value == null) remove(KEY_HOME_LONGITUDE) else putLong(KEY_HOME_LONGITUDE, value.toBits())
         }.apply()
 
     var homeCityName: String?
-        get() = prefs.getString(KEY_HOME_CITY, null)?.takeIf { it.isNotBlank() }
-        set(value) = prefs.edit().apply {
+        get() = securePrefs.getString(KEY_HOME_CITY, null)?.takeIf { it.isNotBlank() }
+        set(value) = secureEdit().apply {
             if (value.isNullOrBlank()) remove(KEY_HOME_CITY) else putString(KEY_HOME_CITY, value)
         }.apply()
 
@@ -192,8 +267,8 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
 
     /** True only when the user explicitly chose a Home Location. */
     var homeExplicitlySet: Boolean
-        get() = prefs.getBoolean(KEY_HOME_EXPLICITLY_SET, false)
-        set(value) = prefs.edit().putBoolean(KEY_HOME_EXPLICITLY_SET, value).apply()
+        get() = securePrefs.getBoolean(KEY_HOME_EXPLICITLY_SET, false)
+        set(value) = secureEdit().putBoolean(KEY_HOME_EXPLICITLY_SET, value).apply()
 
     var calculationMethod: CalculationMethod
         get() = runCatching {
@@ -388,32 +463,32 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
      * closing the app never loses an entered amount.
      */
     var zakatCurrency: String
-        get() = prefs.getString(KEY_ZAKAT_CURRENCY, "USD") ?: "USD"
-        set(value) = prefs.edit().putString(KEY_ZAKAT_CURRENCY, value).apply()
+        get() = securePrefs.getString(KEY_ZAKAT_CURRENCY, "USD") ?: "USD"
+        set(value) = secureEdit().putString(KEY_ZAKAT_CURRENCY, value).apply()
 
     var zakatCashInBank: Float
-        get() = prefs.getFloat(KEY_ZAKAT_CASH, 0f)
-        set(value) = prefs.edit().putFloat(KEY_ZAKAT_CASH, value).apply()
+        get() = securePrefs.getFloat(KEY_ZAKAT_CASH, 0f)
+        set(value) = secureEdit().putFloat(KEY_ZAKAT_CASH, value).apply()
 
     var zakatGoldHeld: Float
-        get() = prefs.getFloat(KEY_ZAKAT_GOLD, 0f)
-        set(value) = prefs.edit().putFloat(KEY_ZAKAT_GOLD, value).apply()
+        get() = securePrefs.getFloat(KEY_ZAKAT_GOLD, 0f)
+        set(value) = secureEdit().putFloat(KEY_ZAKAT_GOLD, value).apply()
 
     var zakatSilverHeld: Float
-        get() = prefs.getFloat(KEY_ZAKAT_SILVER, 0f)
-        set(value) = prefs.edit().putFloat(KEY_ZAKAT_SILVER, value).apply()
+        get() = securePrefs.getFloat(KEY_ZAKAT_SILVER, 0f)
+        set(value) = secureEdit().putFloat(KEY_ZAKAT_SILVER, value).apply()
 
     var zakatTradeInventory: Float
-        get() = prefs.getFloat(KEY_ZAKAT_INVENTORY, 0f)
-        set(value) = prefs.edit().putFloat(KEY_ZAKAT_INVENTORY, value).apply()
+        get() = securePrefs.getFloat(KEY_ZAKAT_INVENTORY, 0f)
+        set(value) = secureEdit().putFloat(KEY_ZAKAT_INVENTORY, value).apply()
 
     var zakatStocksValue: Float
-        get() = prefs.getFloat(KEY_ZAKAT_STOCKS, 0f)
-        set(value) = prefs.edit().putFloat(KEY_ZAKAT_STOCKS, value).apply()
+        get() = securePrefs.getFloat(KEY_ZAKAT_STOCKS, 0f)
+        set(value) = secureEdit().putFloat(KEY_ZAKAT_STOCKS, value).apply()
 
     var zakatShortTermDebts: Float
-        get() = prefs.getFloat(KEY_ZAKAT_DEBTS, 0f)
-        set(value) = prefs.edit().putFloat(KEY_ZAKAT_DEBTS, value).apply()
+        get() = securePrefs.getFloat(KEY_ZAKAT_DEBTS, 0f)
+        set(value) = secureEdit().putFloat(KEY_ZAKAT_DEBTS, value).apply()
 
     /**
      * Hifz verse annotations keyed by "surahNumber:ayahNumber" (e.g. "2:255" to "Mutashabihat").
@@ -450,6 +525,8 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         locationLatitude = sane.first
         locationLongitude = sane.second
         locationLabel = label
+        locationTimestampMillis = System.currentTimeMillis()
+        locationSource = LOCATION_SOURCE_MANUAL
         return true
     }
 
@@ -472,6 +549,8 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         locationCountryCode = countryCode
         locationTimeZoneId = timeZoneId?.takeIf(LocationValidator::isValidZoneId)
         isManualLocation = true
+        locationTimestampMillis = System.currentTimeMillis()
+        locationSource = LOCATION_SOURCE_MANUAL
         return true
     }
 
@@ -489,8 +568,81 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         locationCountryCode = countryCode
         locationTimeZoneId = timeZoneId?.takeIf(LocationValidator::isValidZoneId)
         isManualLocation = false
+        locationTimestampMillis = System.currentTimeMillis()
+        locationSource = LOCATION_SOURCE_GPS
         return true
     }
+
+    // --- Nafl completion (date-aware so a new day starts unchecked) -------------------
+
+    private fun naflKey(epochDay: Long, prayerType: PrayerType, nafl: NaflType): String =
+        "$epochDay:${prayerType.name}:${nafl.name}"
+
+    /** Nafl entries recorded for [epochDay], as `epochDay:PRAYER:NAFL` keys. */
+    fun naflCompletions(epochDay: Long): Set<String> =
+        prefs.getStringSet(KEY_NAFL_COMPLETIONS, emptySet()).orEmpty()
+            .filterTo(mutableSetOf()) { it.startsWith("$epochDay:") }
+
+    fun isNaflCompleted(epochDay: Long, prayerType: PrayerType, nafl: NaflType): Boolean =
+        prefs.getStringSet(KEY_NAFL_COMPLETIONS, emptySet()).orEmpty()
+            .contains(naflKey(epochDay, prayerType, nafl))
+
+    /**
+     * Toggles one date/prayer/nafl entry and drops every other day's entries, so Nafl
+     * completion resets on a new date and survives process death within the same day.
+     * Returns the new completed state.
+     */
+    fun toggleNaflCompletion(epochDay: Long, prayerType: PrayerType, nafl: NaflType): Boolean {
+        val key = naflKey(epochDay, prayerType, nafl)
+        val current = prefs.getStringSet(KEY_NAFL_COMPLETIONS, emptySet()).orEmpty()
+        val sameDay = current.filterTo(mutableSetOf()) { it.startsWith("$epochDay:") }
+        val completed = if (key in sameDay) {
+            sameDay.remove(key)
+            false
+        } else {
+            sameDay.add(key)
+            true
+        }
+        prefs.edit().putStringSet(KEY_NAFL_COMPLETIONS, sameDay).apply()
+        return completed
+    }
+
+    // --- Safar methodology ------------------------------------------------------------
+
+    /** Distance-only Qasr or distance plus a stay-duration limit. */
+    var safarMethodology: SafarPolicy.SafarMethodology
+        get() = runCatching {
+            SafarPolicy.SafarMethodology.valueOf(
+                prefs.getString(KEY_SAFAR_METHODOLOGY, null)
+                    ?: return@runCatching SafarPolicy.SafarMethodology.DISTANCE_AND_STAY_DURATION
+            )
+        }.getOrDefault(SafarPolicy.SafarMethodology.DISTANCE_AND_STAY_DURATION)
+        set(value) = prefs.edit().putString(KEY_SAFAR_METHODOLOGY, value.name).apply()
+
+    /** Nights after which a traveller following the stay-limit methodology becomes Muqim. */
+    var safarMaxStayDays: Int
+        get() = prefs.getInt(KEY_SAFAR_MAX_STAY_DAYS, SafarPolicy.DEFAULT_MAX_STAY_DAYS)
+        set(value) = prefs.edit().putInt(KEY_SAFAR_MAX_STAY_DAYS, value.coerceAtLeast(1)).apply()
+
+    /** Explicit opt-in: Jam is never enabled merely by crossing the distance threshold. */
+    var safarJamPermitted: Boolean
+        get() = prefs.getBoolean(KEY_SAFAR_JAM_PERMITTED, false)
+        set(value) = prefs.edit().putBoolean(KEY_SAFAR_JAM_PERMITTED, value).apply()
+
+    var safarTravelStartEpochDay: Long?
+        get() = prefs.getLong(KEY_SAFAR_TRAVEL_START, 0L).takeIf { it > 0L }
+        set(value) = prefs.edit().apply {
+            if (value == null) remove(KEY_SAFAR_TRAVEL_START) else putLong(KEY_SAFAR_TRAVEL_START, value)
+        }.apply()
+
+    /** Current Safar rules, shared by the dashboard, the travel card and background code. */
+    val safarSettings: SafarPolicy.SafarSettings
+        get() = SafarPolicy.SafarSettings(
+            methodology = safarMethodology,
+            maxStayDays = safarMaxStayDays,
+            jamPermittedByUser = safarJamPermitted,
+            travelStartEpochDay = safarTravelStartEpochDay
+        )
 
     /**
      * Saves a Home Location. Invalid coordinates (e.g. an unresolved `(0.0, 0.0)` fix) are
@@ -519,6 +671,37 @@ class SakinahPreferences internal constructor(private val prefs: SharedPreferenc
         lastDistanceFromHomeKm = 0f
         homeExplicitlySet = false
         HomeAnchorStore.publish(null)
+    }
+
+    /**
+     * Moves coordinates and Zakat balances into the encrypted store, then removes the
+     * plaintext copies only after the encrypted write is verified.
+     */
+    private fun migrateSensitiveValuesIfNeeded() {
+        if (securePrefs === prefs) return
+        val editor = securePrefs.edit()
+        val copied = mutableListOf<String>()
+        SENSITIVE_KEYS.forEach { key ->
+            if (!prefs.contains(key) || securePrefs.contains(key)) return@forEach
+            when (val value = prefs.all[key]) {
+                is String -> editor.putString(key, value)
+                is Boolean -> editor.putBoolean(key, value)
+                is Int -> editor.putInt(key, value)
+                is Long -> editor.putLong(key, value)
+                is Float -> editor.putFloat(key, value)
+                is Set<*> -> editor.putStringSet(key, value.filterIsInstance<String>().toSet())
+                else -> return@forEach
+            }
+            copied += key
+        }
+        if (copied.isEmpty()) return
+        editor.apply()
+        val verified = copied.filter { securePrefs.all[it] == prefs.all[it] }
+        if (verified.size == copied.size) {
+            val legacyEditor = prefs.edit()
+            copied.forEach(legacyEditor::remove)
+            legacyEditor.apply()
+        }
     }
 
     /**

@@ -10,6 +10,9 @@ class PasswordHasherTest {
     private fun ByteArray.toHex(): String =
         joinToString("") { byte -> ((byte.toInt() and 0xff) + 0x100).toString(16).substring(1) }
 
+    private fun String.hexToBytesForTest(): ByteArray =
+        chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+
     @Test
     fun sha256_matchesKnownVectors() {
         assertEquals(
@@ -57,6 +60,38 @@ class PasswordHasherTest {
         assertTrue(PasswordHasher.verify("correct horse battery staple", firstSalt, stored))
         assertFalse(PasswordHasher.verify("wrong password", firstSalt, stored))
         assertFalse(PasswordHasher.needsUpgrade(stored))
+    }
+
+    @Test
+    fun minimumPasswordLengthIsEightCharacters() {
+        assertEquals(8, PasswordHasher.MIN_PASSWORD_LENGTH)
+        assertFalse(PasswordHasher.isAcceptablePassword("1234567"))
+        assertTrue(PasswordHasher.isAcceptablePassword("12345678"))
+    }
+
+    @Test
+    fun iterationCountIsStoredAndRecordedHashNeedsNoUpgrade() {
+        val salt = PasswordHasher.newSalt()
+        val stored = PasswordHasher.hash("long-enough-password", salt)
+        val iterations = stored.split('$')[1].toInt()
+        assertEquals(PasswordHasher.ITERATIONS, iterations)
+        assertTrue(iterations >= 310_000)
+        assertFalse(PasswordHasher.needsUpgrade(stored))
+    }
+
+    @Test
+    fun olderIterationRecordsStillVerifyAndNeedUpgrade() {
+        // A record written by the previous build (120k iterations) remains usable.
+        val salt = PasswordHasher.newSalt()
+        val derived = PasswordHasher.pbkdf2(
+            "old-but-valid".encodeToByteArray(),
+            salt.hexToBytesForTest(),
+            120_000,
+            32
+        ).toHex()
+        val legacyCost = "pbkdf2_sha256$120000$$salt$$derived"
+        assertTrue(PasswordHasher.verify("old-but-valid", salt, legacyCost))
+        assertTrue(PasswordHasher.needsUpgrade(legacyCost))
     }
 
     @Test

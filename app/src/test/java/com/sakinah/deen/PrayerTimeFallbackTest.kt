@@ -116,8 +116,21 @@ class PrayerTimeFallbackTest {
 
         assertEquals(0, exploding.calls)
         assertEquals(PrayerTimeSource.CACHE, resolved.source)
-        assertEquals("Qatar Awqaf (Cached)", resolved.label)
+        assertEquals("Qatar Awqaf (Cached Online)", resolved.label)
         assertEquals(LocalTime.of(4, 24), resolved.times[PrayerType.FAJR])
+    }
+
+    @Test
+    fun cachedOfflineRow_keepsItsProvenanceInsteadOfLookingLikeACachedFetch() = runTest {
+        val dao = FakePrayerTimetableDao()
+        dao.upsertAll(listOf(offlineRow()))
+
+        val resolved = repository(dao, engine = ExplodingEngine(), http = offline())
+            .resolveDay(day, doha, Madhhab.SHAFI_HANBALI_MALIKI)
+
+        assertEquals(PrayerTimeSource.CACHE_OFFLINE, resolved.source)
+        assertEquals("Cached Offline Calculation", resolved.label)
+        assertEquals(LocalTime.of(4, 30), resolved.times[PrayerType.FAJR])
     }
 
     @Test
@@ -134,8 +147,9 @@ class PrayerTimeFallbackTest {
             .resolveDay(day, doha, Madhhab.SHAFI_HANBALI_MALIKI)
 
         assertEquals(0, exploding.calls)
-        assertEquals(PrayerTimeSource.OFFLINE_FALLBACK, resolved.source)
-        assertEquals("Offline Calculation", resolved.label)
+        // The persisted row keeps its offline provenance instead of masquerading as online.
+        assertEquals(PrayerTimeSource.CACHE_OFFLINE, resolved.source)
+        assertEquals("Cached Offline Calculation", resolved.label)
     }
 
     @Test
@@ -175,6 +189,23 @@ class PrayerTimeFallbackTest {
             timeZone = KTimeZone.currentSystemDefault(),
             adjustments = PrayerAdjustments()
         ).mapValues { (_, time) -> time.toJavaLocalTime() }
+
+    private fun offlineRow() = PrayerTimetableEntity(
+        cacheKey = cacheKey,
+        dateEpochDay = day.toEpochDay(),
+        fajr = "04:30",
+        sunrise = "05:45",
+        dhuhr = "11:20",
+        asr = "14:32",
+        maghrib = "16:55",
+        isha = "18:25",
+        methodName = "Qatar",
+        methodId = 10,
+        schoolId = 0,
+        timeZone = ZoneId.systemDefault().id,
+        source = PrayerTimeSource.OFFLINE_FALLBACK.name,
+        fetchedAt = FIXED_NOW - 2L * DAY_MS
+    )
 
     private fun onlineRow(fetchedAt: Long) = PrayerTimetableEntity(
         cacheKey = cacheKey,

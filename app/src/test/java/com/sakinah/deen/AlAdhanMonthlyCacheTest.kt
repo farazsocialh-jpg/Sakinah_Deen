@@ -97,7 +97,7 @@ class AlAdhanMonthlyCacheTest {
 
         assertEquals(1, requests)
         assertEquals(PrayerTimeSource.CACHE, nextDay.source)
-        assertEquals("Qatar Awqaf (Cached)", nextDay.label)
+        assertEquals("Qatar Awqaf (Cached Online)", nextDay.label)
         assertEquals(LocalTime.of(4, 13), nextDay.times[PrayerType.FAJR])
     }
 

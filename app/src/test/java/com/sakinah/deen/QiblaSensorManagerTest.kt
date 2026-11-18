@@ -2,6 +2,7 @@ package com.sakinah.deen
 
 import com.sakinah.deen.domain.sensor.QiblaSensorManager
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class QiblaSensorManagerTest {
@@ -40,6 +41,20 @@ class QiblaSensorManagerTest {
     fun vincentyQiblaBearing_makkahItself() {
         val bearing = QiblaSensorManager.calculateQiblaBearing(21.422487, 39.826206)
         assertEquals(0.0, bearing.toDouble(), 0.0001)
+    }
+
+    @Test
+    fun distanceToKaabaIsZeroAtTheKaabaAndPlausibleElsewhere() {
+        assertEquals(
+            QiblaSensorManager.calculateDistanceToKaabaKm(
+                QiblaSensorManager.KAABA_LATITUDE,
+                QiblaSensorManager.KAABA_LONGITUDE
+            ),
+            0.0,
+            0.001
+        )
+        val fromDoha = QiblaSensorManager.calculateDistanceToKaabaKm(25.2854, 51.5310)
+        assertTrue("Doha to Makkah should be roughly 1,000-1,500 km but was $fromDoha", fromDoha in 1_000.0..1_500.0)
     }
 
     @Test

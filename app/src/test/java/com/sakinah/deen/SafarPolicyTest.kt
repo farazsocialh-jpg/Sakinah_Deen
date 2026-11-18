@@ -63,6 +63,46 @@ class SafarPolicyTest {
     }
 
     @Test
+    fun jamIsNeverImpliedByCrossingTheDistanceThreshold() {
+        val settings = SafarPolicy.SafarSettings()
+        assertTrue(SafarPolicy.isTraveler(doha, farAway, settings, currentEpochDay = 0L))
+        assertFalse(SafarPolicy.isJamPermitted(true, settings, currentEpochDay = 0L))
+
+        val optedIn = settings.copy(jamPermittedByUser = true)
+        assertTrue(SafarPolicy.isJamPermitted(true, optedIn, currentEpochDay = 0L))
+        // Jam still requires an actual journey.
+        assertFalse(SafarPolicy.isJamPermitted(false, optedIn, currentEpochDay = 0L))
+    }
+
+    @Test
+    fun stayDurationMethodologyCanEndQasrOnALongStay() {
+        val settings = SafarPolicy.SafarSettings(
+            methodology = SafarPolicy.SafarMethodology.DISTANCE_AND_STAY_DURATION,
+            maxStayDays = 4,
+            travelStartEpochDay = 0L
+        )
+        assertTrue(SafarPolicy.isTraveler(doha, farAway, settings, currentEpochDay = 3L))
+        assertFalse(SafarPolicy.isTraveler(doha, farAway, settings, currentEpochDay = 4L))
+
+        val distanceOnly = settings.copy(methodology = SafarPolicy.SafarMethodology.DISTANCE_ONLY)
+        assertTrue(SafarPolicy.isTraveler(doha, farAway, distanceOnly, currentEpochDay = 30L))
+    }
+
+    @Test
+    fun explanationStatesTheRulingAndDisclaimer() {
+        val settings = SafarPolicy.SafarSettings()
+        val qasr = SafarPolicy.explanation(true, 900.0, true, settings, isJamPermitted = false)
+        assertTrue(qasr.contains("Qasr applies"))
+        assertTrue(qasr.contains("Jam is not automatic"))
+
+        val muqim = SafarPolicy.explanation(true, 10.0, false, settings, isJamPermitted = false)
+        assertTrue(muqim.contains("Qasr does not apply"))
+
+        val noHome = SafarPolicy.explanation(false, 0.0, false, settings, isJamPermitted = false)
+        assertTrue(noHome.contains("No Home location"))
+    }
+
+    @Test
     fun backWithinThreshold_clearsManualTravelMode() {
         val nearHome = Pair(25.30, 51.50) // ~3 km from Doha
 

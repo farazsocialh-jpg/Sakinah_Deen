@@ -76,6 +76,23 @@ class QiblaSensorManager(
         fun qiblaBearing(latitude: Double, longitude: Double): Float =
             calculateQiblaBearing(latitude, longitude)
 
+        /**
+         * Great-circle distance to the Kaaba in kilometres. The single distance helper used
+         * by the Qibla card, so bearing and distance can never disagree about the Kaaba.
+         */
+        fun calculateDistanceToKaabaKm(latitude: Double, longitude: Double): Double {
+            val earthRadiusKm = 6371.0
+            val dLat = Math.toRadians(KAABA_LATITUDE - latitude)
+            val dLon = Math.toRadians(KAABA_LONGITUDE - longitude)
+            val a = (
+                sin(dLat / 2) * sin(dLat / 2) +
+                    cos(Math.toRadians(latitude)) * cos(Math.toRadians(KAABA_LATITUDE)) *
+                    sin(dLon / 2) * sin(dLon / 2)
+                ).coerceIn(0.0, 1.0)
+            val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+            return earthRadiusKm * c
+        }
+
         fun vincentyBearing(latitude: Double, longitude: Double): Float =
             calculateQiblaBearing(latitude, longitude)
 

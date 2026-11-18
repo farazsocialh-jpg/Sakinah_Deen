@@ -94,7 +94,10 @@ val travelModule = module {
         // user far from that city would see 2-rakat Safar without ever setting Home.
         // Read homeCoordinates dynamically so it always reflects the current pref value
         // instead of capturing a snapshot at singleton creation.
-        TravelStatusManager(homeAnchorProvider = { get<SakinahPreferences>().homeCoordinates })
+        TravelStatusManager(
+            homeAnchorProvider = { get<SakinahPreferences>().homeCoordinates },
+            safarSettingsProvider = { get<SakinahPreferences>().safarSettings }
+        )
     }
     single { QiblaSensorManager(androidContext()) }
 }
@@ -192,7 +195,7 @@ val workerModule = module {
  * The previous plain store is migrated once and kept only as a fallback when the platform
  * keystore is unavailable, so a rotated key never locks the user out of the app.
  */
-private fun encryptedAccountSettings(context: android.content.Context): android.content.SharedPreferences {
+private fun encryptedAccountSettings(context: android.content.Context): android.content.SharedPreferences? {
     val legacy = context.getSharedPreferences("sakinah_account_settings", android.content.Context.MODE_PRIVATE)
     val encrypted = runCatching {
         val masterKey = androidx.security.crypto.MasterKey.Builder(context)
@@ -205,32 +208,116 @@ private fun encryptedAccountSettings(context: android.content.Context): android.
             androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
-    }.getOrNull() ?: return legacy
+    }.getOrNull()
+
+    if (encrypted == null) {
+        // Never downgrade account credentials to plaintext: report the failure and keep the
+        // session in memory for this run instead of writing it unencrypted to disk.
+        com.sakinah.deen.data.prefs.SensitivePreferences.reportUnavailable(
+            "Encrypted account storage is unavailable. You may need to sign in again after " +
+                "restarting because credentials will not be written in plaintext."
+        )
+        return null
+    }
 
     if (!encrypted.getBoolean("account_store_migrated", false)) {
-        runCatching {
-            val editor = encrypted.edit()
-            legacy.all.forEach { (key, value) ->
-                when (value) {
-                    is String -> editor.putString(key, value)
-                    is Boolean -> editor.putBoolean(key, value)
-                    is Int -> editor.putInt(key, value)
-                    is Long -> editor.putLong(key, value)
-                    is Float -> editor.putFloat(key, value)
-                    is Set<*> -> editor.putStringSet(key, value.filterIsInstance<String>().toSet())
-                }
+        val editor = encrypted.edit()
+        legacy.all.forEach { (key, value) ->
+            when (value) {
+                is String -> editor.putString(key, value)
+                is Boolean -> editor.putBoolean(key, value)
+                is Int -> editor.putInt(key, value)
+                is Long -> editor.putLong(key, value)
+                is Float -> editor.putFloat(key, value)
+                is Set<*> -> editor.putStringSet(key, value.filterIsInstance<String>().toSet())
             }
-            editor.putBoolean("account_store_migrated", true).apply()
+        }
+        // Not atomic unless committed: only mark complete after the encrypted copy is written.
+        val written = runCatching { editor.commit() }.getOrDefault(false)
+        if (!written) return encrypted
+    }
+
+    // Verify the encrypted copy before the plaintext rows are removed.
+    if (encrypted.getBoolean("account_store_migrated", false)) return encrypted
+    val verified = legacy.all.all { (key, value) -> encrypted.all[key] == value }
+    if (!verified) return encrypted
+
+    encrypted.edit().putBoolean("account_store_migrated", true).commit()
+    legacy.edit().clear().commit()
+    return encrypted
+}
+
+/**
+ * Minimal in-memory [android.content.SharedPreferences] used only when the platform keystore
+ * cannot provide encrypted storage. Nothing is ever written to disk, so a failed keystore
+ * degrades to "sign in again after restart" rather than to plaintext credentials.
+ */
+private class InMemorySharedPreferences : android.content.SharedPreferences {
+
+    private val values = linkedMapOf<String, Any?>()
+
+    override fun getAll(): MutableMap<String, *> = LinkedHashMap(values)
+    override fun getString(key: String?, defValue: String?): String? =
+        values[key] as? String ?: defValue
+    @Suppress("UNCHECKED_CAST")
+    override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? =
+        values[key] as? MutableSet<String> ?: defValues
+    override fun getInt(key: String?, defValue: Int): Int = values[key] as? Int ?: defValue
+    override fun getLong(key: String?, defValue: Long): Long = values[key] as? Long ?: defValue
+    override fun getFloat(key: String?, defValue: Float): Float = values[key] as? Float ?: defValue
+    override fun getBoolean(key: String?, defValue: Boolean): Boolean =
+        values[key] as? Boolean ?: defValue
+    override fun contains(key: String?): Boolean = values.containsKey(key)
+    override fun edit(): android.content.SharedPreferences.Editor = Editor()
+    override fun registerOnSharedPreferenceChangeListener(
+        listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener?
+    ) = Unit
+    override fun unregisterOnSharedPreferenceChangeListener(
+        listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener?
+    ) = Unit
+
+    private inner class Editor : android.content.SharedPreferences.Editor {
+
+        private val pending = linkedMapOf<String, Any?>()
+        private val removals = mutableSetOf<String>()
+        private var clearAll = false
+
+        override fun putString(key: String?, value: String?) = apply { if (key != null) pending[key] = value }
+        override fun putStringSet(key: String?, values: MutableSet<String>?) =
+            apply { if (key != null) pending[key] = values }
+        override fun putInt(key: String?, value: Int) = apply { if (key != null) pending[key] = value }
+        override fun putLong(key: String?, value: Long) = apply { if (key != null) pending[key] = value }
+        override fun putFloat(key: String?, value: Float) = apply { if (key != null) pending[key] = value }
+        override fun putBoolean(key: String?, value: Boolean) =
+            apply { if (key != null) pending[key] = value }
+        override fun remove(key: String?) = apply { if (key != null) removals += key }
+        override fun clear() = apply { clearAll = true }
+
+        override fun commit(): Boolean {
+            if (clearAll) values.clear()
+            removals.forEach(values::remove)
+            values.putAll(pending)
+            pending.clear()
+            removals.clear()
+            clearAll = false
+            return true
+        }
+
+        override fun apply() {
+            commit()
         }
     }
-    return encrypted
 }
 
 val accountModule = module {
     single<com.russhwolf.settings.Settings>(qualifier = org.koin.core.qualifier.named("account_settings")) {
-        com.russhwolf.settings.SharedPreferencesSettings(
-            encryptedAccountSettings(androidContext())
-        )
+        val encrypted = encryptedAccountSettings(androidContext())
+        if (encrypted == null) {
+            // Ephemeral, in-memory store: no account data is written to plaintext storage.
+            com.russhwolf.settings.SharedPreferencesSettings(InMemorySharedPreferences())
+        } else {
+            com.russhwolf.settings.SharedPreferencesSettings(encrypted)
+        }
     }
     single<com.sakinah.deen.auth.AuthRepository> {
         com.sakinah.deen.auth.PersistentAuthRepository(
@@ -271,7 +358,7 @@ val viewModelModule = module {
     viewModel { QuranViewModel(getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull()) }
     viewModel { HadithViewModel(getOrNull(), getOrNull(), getOrNull()) }
     viewModel { TravelViewModel(get(), get(), getOrNull()) }
-    viewModel { WealthViewModel(get(), getOrNull(), getOrNull()) }
+    viewModel { WealthViewModel(get(), getOrNull(), getOrNull(), observeMonthRollover = true) }
     viewModel { AiScholarViewModel(get(), androidContext(), get()) }
 }
 

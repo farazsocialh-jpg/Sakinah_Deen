@@ -95,6 +95,13 @@ fun TravelScreen(
     var showHomeOptions by remember { mutableStateOf(false) }
     var showHomeCityPicker by remember { mutableStateOf(false) }
     var gpsHomeRequested by remember { mutableStateOf(false) }
+    var maxStayDays by remember { mutableStateOf(appPrefs.safarMaxStayDays) }
+    var jamPermitted by remember { mutableStateOf(appPrefs.safarJamPermitted) }
+    var stayLimitEnabled by remember {
+        mutableStateOf(
+            appPrefs.safarMethodology == SafarPolicy.SafarMethodology.DISTANCE_AND_STAY_DURATION
+        )
+    }
 
     // The shared Qibla card owns its own sensors; Travel only supplies the current position.
     var qiblaLatitude by remember { mutableDoubleStateOf(homeCoordinates?.first ?: 21.4225) }
@@ -316,6 +323,76 @@ fun TravelScreen(
                 )
                 Text(
                     text = stringResource(R.string.travel_qasr_note, thresholdKm.toInt()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                // Methodology and stay duration are configurable, and Jam is an explicit
+                // opt-in: distance alone never enables it.
+                Text(
+                    text = stringResource(R.string.travel_safar_methodology),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.travel_stay_limit, maxStayDays),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = {
+                        maxStayDays = (maxStayDays - 1).coerceAtLeast(1)
+                        appPrefs.safarMaxStayDays = maxStayDays
+                    }) { Text("−", fontSize = 16.sp) }
+                    Text("$maxStayDays", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    TextButton(onClick = {
+                        maxStayDays += 1
+                        appPrefs.safarMaxStayDays = maxStayDays
+                    }) { Text("+", fontSize = 16.sp) }
+                    Switch(
+                        checked = stayLimitEnabled,
+                        onCheckedChange = { enabled ->
+                            stayLimitEnabled = enabled
+                            appPrefs.safarMethodology = if (enabled) {
+                                SafarPolicy.SafarMethodology.DISTANCE_AND_STAY_DURATION
+                            } else {
+                                SafarPolicy.SafarMethodology.DISTANCE_ONLY
+                            }
+                        }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.travel_jam_toggle),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = jamPermitted,
+                        onCheckedChange = { enabled ->
+                            jamPermitted = enabled
+                            appPrefs.safarJamPermitted = enabled
+                        }
+                    )
+                }
+                Text(
+                    text = SafarPolicy.explanation(
+                        hadHome = homeCoordinates != null,
+                        distanceKm = distanceKm.toDouble(),
+                        isTraveler = isSafar,
+                        settings = appPrefs.safarSettings,
+                        isJamPermitted = jamPermitted && isSafar
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

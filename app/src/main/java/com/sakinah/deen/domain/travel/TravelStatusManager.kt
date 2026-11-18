@@ -1,6 +1,7 @@
 package com.sakinah.deen.domain.travel
 
 import com.sakinah.deen.data.model.PrayerType
+import java.time.LocalDate
 
 data class TravelState(
     val homeAnchorCoordinates: Pair<Double, Double>?,
@@ -8,15 +9,20 @@ data class TravelState(
     val distanceKm: Double,
     val isTraveler: Boolean,
     val isQasrActive: Boolean,
+    /** Only true when the traveller explicitly enabled Jam; never implied by distance. */
     val isJamPermitted: Boolean,
-    val shortenedRakats: Map<PrayerType, Int>
+    val shortenedRakats: Map<PrayerType, Int>,
+    /** Plain-language ruling including the methodology and the Jam disclaimer. */
+    val explanation: String = ""
 )
 
 class TravelStatusManager(
     /** `null` until the user explicitly saves a Home location; Qasr never activates without one. */
     homeAnchorCoordinates: Pair<Double, Double>? = null,
     /** Optional live source (e.g. preferences) so the anchor is never captured once. */
-    private val homeAnchorProvider: (() -> Pair<Double, Double>?)? = null
+    private val homeAnchorProvider: (() -> Pair<Double, Double>?)? = null,
+    /** Optional live source for the configurable Safar methodology and Jam opt-in. */
+    private val safarSettingsProvider: (() -> SafarPolicy.SafarSettings)? = null
 ) {
     companion object {
         const val TRAVEL_THRESHOLD_KM = SafarPolicy.THRESHOLD_KM
@@ -50,11 +56,21 @@ class TravelStatusManager(
         point2: Pair<Double, Double>
     ): Double = SafarPolicy.distanceKm(point1, point2)
 
-    fun evaluateTravelState(currentCoordinates: Pair<Double, Double>): TravelState {
+    fun evaluateTravelState(
+        currentCoordinates: Pair<Double, Double>,
+        currentEpochDay: Long = LocalDate.now().toEpochDay()
+    ): TravelState {
         val home = currentHomeAnchor()
+        val settings = safarSettingsProvider?.invoke() ?: SafarPolicy.SafarSettings()
         // No saved Home location => always Muqim (never show 2 rakat by default).
         val distance = SafarPolicy.distanceFromHomeKm(home, currentCoordinates)
-        val isTraveler = SafarPolicy.isTraveler(home, currentCoordinates)
+        val isTraveler = SafarPolicy.isTraveler(
+            home = home,
+            current = currentCoordinates,
+            settings = settings,
+            currentEpochDay = currentEpochDay
+        )
+        val jamPermitted = SafarPolicy.isJamPermitted(isTraveler, settings, currentEpochDay)
 
         return TravelState(
             homeAnchorCoordinates = home,
@@ -62,8 +78,16 @@ class TravelStatusManager(
             distanceKm = distance,
             isTraveler = isTraveler,
             isQasrActive = isTraveler,
-            isJamPermitted = isTraveler,
-            shortenedRakats = SafarPolicy.rakats(isTraveler)
+            // Crossing the threshold must never mark Jam as permitted on its own.
+            isJamPermitted = jamPermitted,
+            shortenedRakats = SafarPolicy.rakats(isTraveler),
+            explanation = SafarPolicy.explanation(
+                hadHome = home != null,
+                distanceKm = distance,
+                isTraveler = isTraveler,
+                settings = settings,
+                isJamPermitted = jamPermitted
+            )
         )
     }
 }

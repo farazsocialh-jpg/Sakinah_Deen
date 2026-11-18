@@ -73,6 +73,22 @@ class PrayerAlarmScheduler(
         private const val TEST_WINDOW_MS = 3 * 60_000L
 
         private val PRAYERS_TO_SCHEDULE = AzaanSettings.ALERT_PRAYERS
+
+        /** The five obligatory entries a timetable must contain before alarms are replaced. */
+        private val REQUIRED_PRAYERS = listOf(
+            PrayerType.FAJR,
+            PrayerType.DHUHR,
+            PrayerType.ASR,
+            PrayerType.MAGHRIB,
+            PrayerType.ISHA
+        )
+
+        /**
+         * True only when every obligatory prayer has a time. A partial table (an offline
+         * refresh that only resolved Fajr, for example) must never replace working alarms.
+         */
+        internal fun isCompleteSchedule(times: Map<PrayerType, JLocalTime>?): Boolean =
+            times != null && REQUIRED_PRAYERS.all { times[it] != null }
     }
 
     private val alarmManager: AlarmManager? =
@@ -150,9 +166,15 @@ class PrayerAlarmScheduler(
         todayTimes: Map<PrayerType, JLocalTime>,
         tomorrowTimes: Map<PrayerType, JLocalTime>
     ): AlarmScheduleResult {
-        // Re-register the complete table so a prayer switched to OFF loses its previous
-        // PendingIntent instead of firing an alert the user just disabled.
-        cancelAllAlarms()
+        // Validate the replacement timetable BEFORE cancelling anything. A failed or partial
+        // refresh must leave the alarms that already work untouched.
+        if (!isCompleteSchedule(todayTimes) || !isCompleteSchedule(tomorrowTimes)) {
+            return recordPreservingExistingAlarms(
+                AlarmScheduleResult.Failed(
+                    "Incomplete prayer schedule; existing alarms were left unchanged"
+                )
+            )
+        }
 
         val settings = preferences.azaanSettings
         if (!settings.enabled) {
@@ -162,6 +184,10 @@ class PrayerAlarmScheduler(
             // A reminder that can never be posted must not be reported as pending.
             return AlarmScheduleResult.PermissionMissing
         }
+
+        // Re-register the complete table so a prayer switched to OFF loses its previous
+        // PendingIntent instead of firing an alert the user just disabled.
+        cancelAllAlarms()
 
         val zone = activeZone()
         val nowZoned = ZonedDateTime.now(zone)
@@ -540,6 +566,15 @@ class PrayerAlarmScheduler(
             preferences.nextAlarmAtMillis = 0L
             preferences.nextAlarmPrayer = ""
         }
+        return result
+    }
+
+    /**
+     * Records a refusal without touching the already-armed alarms: next-alarm metadata is
+     * only cleared when cancellation really happened.
+     */
+    private fun recordPreservingExistingAlarms(result: AlarmScheduleResult): AlarmScheduleResult {
+        preferences.lastAlarmScheduleResult = result.code
         return result
     }
 }

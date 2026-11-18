@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.sakinah.deen.domain.sensor.QiblaSensorManager
 import android.view.Surface
 import java.util.Calendar
 import java.util.TimeZone
@@ -34,31 +35,16 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 object QiblaMath {
-    const val KAABA_LAT = 21.4225
-    const val KAABA_LON = 39.8262
-    private const val EARTH_RADIUS_KM = 6371.0
+    const val KAABA_LAT = QiblaSensorManager.KAABA_LATITUDE
+    const val KAABA_LON = QiblaSensorManager.KAABA_LONGITUDE
 
-    fun qiblaBearingDegrees(lat: Double, lon: Double): Float {
-        val phi1 = Math.toRadians(lat)
-        val phi2 = Math.toRadians(KAABA_LAT)
-        val dLambda = Math.toRadians(KAABA_LON - lon)
-        val y = sin(dLambda) * cos(phi2)
-        val x = cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(dLambda)
-        val deg = Math.toDegrees(atan2(y, x))
-        return ((deg + 360.0) % 360.0).toFloat()
-    }
+    /** Delegates to the single tested Qibla calculation in [QiblaSensorManager]. */
+    fun qiblaBearingDegrees(lat: Double, lon: Double): Float =
+        QiblaSensorManager.calculateQiblaBearing(lat, lon)
 
-    fun distanceToKaabaKm(lat: Double, lon: Double): Int {
-        val dLat = Math.toRadians(KAABA_LAT - lat)
-        val dLon = Math.toRadians(KAABA_LON - lon)
-        val a = (
-            sin(dLat / 2) * sin(dLat / 2) +
-                cos(Math.toRadians(lat)) * cos(Math.toRadians(KAABA_LAT)) *
-                sin(dLon / 2) * sin(dLon / 2)
-            ).coerceIn(0.0, 1.0)
-        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        return (EARTH_RADIUS_KM * c).roundToInt()
-    }
+    /** Delegates to the single tested Kaaba distance helper. */
+    fun distanceToKaabaKm(lat: Double, lon: Double): Int =
+        QiblaSensorManager.calculateDistanceToKaabaKm(lat, lon).roundToInt()
 
     fun cardinalDirection(deg: Float): String {
         val dirs = listOf(

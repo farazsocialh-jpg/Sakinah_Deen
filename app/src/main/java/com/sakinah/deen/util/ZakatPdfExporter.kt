@@ -26,7 +26,14 @@ object ZakatPdfExporter {
                 val file = File(exportDir, "sakinah_zakat_summary.pdf")
 
                 val locale = Locale.getDefault()
-                val currency = NumberFormat.getCurrencyInstance(locale)
+                // Never guess a currency from the device locale: the report must use the
+                // currency the user selected for the balance sheet.
+                val amountFormat = NumberFormat.getNumberInstance(locale).apply {
+                    minimumFractionDigits = 2
+                    maximumFractionDigits = 2
+                }
+                val currencyCode = state.currencyCode.trim().uppercase()
+                fun money(value: Number): String = "$currencyCode ${amountFormat.format(value.toDouble())}"
                 val document = PdfDocument()
                 try {
                     val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
@@ -74,7 +81,7 @@ object ZakatPdfExporter {
                     canvas.drawText("Nisab Benchmark: $standard", 48f, y, headingPaint)
                     y += 20f
                     canvas.drawText(
-                        "Threshold Value: ${currency.format(state.nisabThreshold.toDouble())}",
+                        "Threshold Value: ${money(state.nisabThreshold)}",
                         48f,
                         y,
                         bodyPaint
@@ -94,7 +101,7 @@ object ZakatPdfExporter {
                     )
                     rows.forEach { (label, amount) ->
                         canvas.drawText(label, 48f, y, bodyPaint)
-                        canvas.drawText(currency.format(amount.toDouble()), 380f, y, bodyPaint)
+                        canvas.drawText(money(amount), 380f, y, bodyPaint)
                         y += 22f
                     }
 
@@ -103,22 +110,26 @@ object ZakatPdfExporter {
                     y += 28f
 
                     canvas.drawText("Gross Assets", 48f, y, bodyPaint)
-                    canvas.drawText(currency.format(state.grossAssets.toDouble()), 380f, y, headingPaint)
+                    canvas.drawText(money(state.grossAssets), 380f, y, headingPaint)
                     y += 22f
 
                     canvas.drawText("Net Zakatable Wealth", 48f, y, bodyPaint)
-                    canvas.drawText(currency.format(state.netEligible.toDouble()), 380f, y, headingPaint)
+                    canvas.drawText(money(state.netEligible), 380f, y, headingPaint)
                     y += 28f
 
-                    val statusLabel = if (state.isEligible) "Eligible — 2.5% Zakat Due" else "Below Nisab Threshold ($0.00)"
+                    val statusLabel = if (state.isEligible) {
+                        "Eligible — 2.5% Zakat Due"
+                    } else {
+                        "Below Nisab Threshold (${money(state.nisabThreshold)})"
+                    }
                     canvas.drawText(statusLabel, 48f, y, headingPaint)
                     y += 26f
-                    canvas.drawText("Zakat Payable: ${currency.format(state.zakatPayable.toDouble())}", 48f, y, accentPaint)
+                    canvas.drawText("Zakat Payable: ${money(state.zakatPayable)}", 48f, y, accentPaint)
                     y += 40f
 
                     canvas.drawLine(48f, y, 547f, y, dividerPaint)
                     y += 24f
-                    val sadaqahLine = "Monthly Micro-Sadaqah Jar: ${currency.format(state.sadaqahJarCollected.toDouble())} / ${currency.format(state.sadaqahGoal.toDouble())}"
+                    val sadaqahLine = "Monthly Micro-Sadaqah Jar: ${money(state.sadaqahJarCollected)} / ${money(state.sadaqahGoal)}"
                     val maxWidth = 499f
                     if (bodyPaint.measureText(sadaqahLine) <= maxWidth) {
                         canvas.drawText(sadaqahLine, 48f, y, bodyPaint)

@@ -268,6 +268,15 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
+                // Never let a keystore failure silently downgrade sensitive storage.
+                appPrefs.storageSecurityWarning?.let { warning ->
+                    Text(
+                        text = warning,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+
                 when (section) {
                     SettingsSection.PRAYER_LOCATION -> {
                         var calcExpanded by remember { mutableStateOf(false) }

@@ -55,8 +55,8 @@ Salah channel, so the channel itself plays the Adhan even if the app process is 
 | --- | --- | --- |
 | `seed_quran_full.json` | The complete mushaf: 114 surahs / 6,236 ayahs, Uthmani text + Saheeh International. Version 1, 2,509,358 bytes, SHA-256 `cc26751224af1651f7878b26c40f9fb74fef3d765553428aef7043e12a8a8c8c` (pinned in `QuranOfflinePack`) | Quran.com API v4 (`quran/verses/uthmani`, `quran/translations/20`) |
 | `seed_quran_surahs.json` | 114 surah metadata records (names, meaning, revelation place, verse count) | Quran.com API v4 (`/chapters`) |
-| `seed_hadith_nawawi.json` | All 42 hadith of Al-Arba'in an-Nawawiyyah with Arabic, English, grading | fawazahmed0/hadith-api `eng-nawawi` + `ara-nawawi` |
-| `seed_hisn_muslim.json` | ~30 adhkar across 9 daily categories (morning/evening, after salah, sleep, waking, travel, home, eating, distress, illness, masjid) with Arabic, transliteration, translation, reference, grading, repeat count and variant note | Hisn al-Muslim (al-Qahtani) numbering; Quranic passages cross-checked against the Quran.com Uthmani text |
+| `seed_hadith_nawawi.json` | All 42 hadith of Al-Arba'in an-Nawawiyyah with Arabic and English. The `grade` and `gradingScholar` fields ship empty: no scholarly grading has been added, and the UI only shows a grade when one is present. | fawazahmed0/hadith-api `eng-nawawi` + `ara-nawawi` |
+| `seed_hisn_muslim.json` | 39 adhkar across 10 daily categories (morning/evening, after salah, before sleeping, waking, travel, leaving/entering the home, eating, distress, illness, masjid) with Arabic, transliteration, translation, reference, grading, repeat count and variant note. `reviewStatus` is `pending_scholarly_review`. | Hisn al-Muslim (al-Qahtani) numbering; Quranic passages cross-checked against the Quran.com Uthmani text |
 
 These were generated from the live APIs rather than typed by hand. `DatabaseSeeder`
 parses them inside a `RoomDatabase.Callback.onCreate` and upserts into the encrypted

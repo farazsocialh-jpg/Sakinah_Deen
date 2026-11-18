@@ -124,8 +124,12 @@ class PersistentAuthRepository(
         if (!isValidEmail(cleanEmail)) {
             return Result.failure(IllegalArgumentException("Please enter a valid email address."))
         }
-        if (password.length < 6) {
-            return Result.failure(IllegalArgumentException("Password must be at least 6 characters."))
+        if (!PasswordHasher.isAcceptablePassword(password)) {
+            return Result.failure(
+                IllegalArgumentException(
+                    "Password must be at least ${PasswordHasher.MIN_PASSWORD_LENGTH} characters."
+                )
+            )
         }
         if (accounts.containsKey(cleanEmail)) {
             return Result.failure(IllegalStateException("An account with this email already exists."))

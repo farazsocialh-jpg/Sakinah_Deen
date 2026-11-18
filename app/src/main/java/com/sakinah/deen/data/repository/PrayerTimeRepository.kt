@@ -30,8 +30,11 @@ enum class PrayerTimeSource {
     /** Freshly fetched from the AlAdhan calendar endpoint during this resolution. */
     ONLINE,
 
-    /** Served from the encrypted 30-day Room cache. */
+    /** A previously online row served from the encrypted 30-day Room cache. */
     CACHE,
+
+    /** A locally calculated row served from the cache after it restarted offline. */
+    CACHE_OFFLINE,
 
     /** Computed on device because neither the cache nor the network could answer. */
     OFFLINE_FALLBACK
@@ -47,7 +50,8 @@ data class ResolvedPrayerTimes(
     val label: String
         get() = when (source) {
             PrayerTimeSource.ONLINE -> "${authority.displayName} (Online)"
-            PrayerTimeSource.CACHE -> "${authority.displayName} (Cached)"
+            PrayerTimeSource.CACHE -> "${authority.displayName} (Cached Online)"
+            PrayerTimeSource.CACHE_OFFLINE -> "Cached Offline Calculation"
             PrayerTimeSource.OFFLINE_FALLBACK -> "Offline Calculation"
         }
 }
@@ -308,13 +312,17 @@ class PrayerTimeRepositoryImpl(
         val times = row.toTimesOrNull()?.let { applyAdjustments(it, adjustments) }
             ?: return publishEmptyFallback(authority)
         remember(row.cacheKey, row.dateEpochDay, times)
+        // Keep the provenance stored on the row: an offline-calculation row served from the
+        // cache is still an offline calculation, not an authoritative cached fetch.
+        val resolvedSource = when {
+            row.source == PrayerTimeSource.OFFLINE_FALLBACK.name && source == PrayerTimeSource.CACHE ->
+                PrayerTimeSource.CACHE_OFFLINE
+            row.source == PrayerTimeSource.OFFLINE_FALLBACK.name -> PrayerTimeSource.OFFLINE_FALLBACK
+            else -> source
+        }
         return ResolvedPrayerTimes(
             times = times,
-            source = if (row.source == PrayerTimeSource.OFFLINE_FALLBACK.name) {
-                PrayerTimeSource.OFFLINE_FALLBACK
-            } else {
-                source
-            },
+            source = resolvedSource,
             authority = authority,
             fetchedAtEpochMillis = row.fetchedAt
         )

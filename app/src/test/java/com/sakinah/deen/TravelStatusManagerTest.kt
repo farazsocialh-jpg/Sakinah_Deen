@@ -1,6 +1,7 @@
 package com.sakinah.deen
 
 import com.sakinah.deen.data.model.PrayerType
+import com.sakinah.deen.domain.travel.SafarPolicy
 import com.sakinah.deen.domain.travel.TravelStatusManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -56,6 +57,35 @@ class TravelStatusManagerTest {
         assertEquals(2, state.shortenedRakats[PrayerType.ISHA])
         assertEquals(2, state.shortenedRakats[PrayerType.FAJR])
         assertEquals(3, state.shortenedRakats[PrayerType.MAGHRIB])
+    }
+
+    @Test
+    fun qasrActiveDoesNotImplyJamPermitted() {
+        val manager = TravelStatusManager()
+        manager.setHomeAnchor(Pair(25.0, 55.0))
+        val state = manager.evaluateTravelState(Pair(32.0, 35.0), currentEpochDay = 0L)
+
+        assertTrue(state.isQasrActive)
+        assertFalse(state.isJamPermitted)
+        assertTrue(state.explanation.contains("Jam is not automatic"))
+    }
+
+    @Test
+    fun jamRequiresExplicitOptInAndSurvivesTheStayLimit() {
+        val manager = TravelStatusManager(
+            homeAnchorCoordinates = Pair(25.0, 55.0),
+            safarSettingsProvider = {
+                SafarPolicy.SafarSettings(jamPermittedByUser = true, travelStartEpochDay = 0L)
+            }
+        )
+        val state = manager.evaluateTravelState(Pair(32.0, 35.0), currentEpochDay = 2L)
+        assertTrue(state.isQasrActive)
+        assertTrue(state.isJamPermitted)
+
+        // Past the stay limit the traveller is Muqim, so Jam stops too.
+        val later = manager.evaluateTravelState(Pair(32.0, 35.0), currentEpochDay = 10L)
+        assertFalse(later.isQasrActive)
+        assertFalse(later.isJamPermitted)
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.sakinah.deen
 
+import com.sakinah.deen.data.model.NaflType
 import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.domain.travel.TravelStatusManager
@@ -7,6 +8,7 @@ import com.sakinah.deen.fakes.FakeSharedPreferences
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Home Location persistence rules that decide whether Safar may show 2 rakat. */
@@ -63,6 +65,47 @@ class SakinahPreferencesTest {
 
         assertEquals(Pair(25.2854, 51.5310), p.homeCoordinates)
         assertEquals("Doha, Qatar", p.homeCityName)
+    }
+
+    @Test
+    fun savedLocationRecordsTimestampAndSource_andReportsStaleness() {
+        val p = prefs()
+        assertTrue(p.saveGpsLocation(25.2854, 51.5310, "Doha, Qatar", "QA", "Asia/Qatar"))
+
+        assertEquals(SakinahPreferences.LOCATION_SOURCE_GPS, p.locationSource)
+        assertTrue(p.locationTimestampMillis > 0L)
+        assertFalse(p.isLocationStale())
+        assertTrue(p.isLocationStale(nowMillis = p.locationTimestampMillis + 7 * 60 * 60 * 1000L))
+
+        assertTrue(p.saveManualLocation(21.4225, 39.8262, "Makkah", "SA", "Asia/Riyadh"))
+        assertEquals(SakinahPreferences.LOCATION_SOURCE_MANUAL, p.locationSource)
+    }
+
+    @Test
+    fun invalidCoordinatesAreRejectedAtThePersistenceBoundary() {
+        val p = prefs()
+        assertFalse(p.saveGpsLocation(0.0, 0.0, "Null Island", null, null))
+        assertFalse(p.saveManualLocation(Double.NaN, 10.0, "NaN", null, null))
+        assertNull(p.locationCoordinates)
+        assertNull(p.locationTimestampMillis.takeIf { it > 0L })
+    }
+
+    @Test
+    fun naflCompletionPersistsForTheDate_andResetsOnANewDate() {
+        val p = prefs()
+        assertFalse(p.isNaflCompleted(100L, PrayerType.DHUHR, NaflType.SUNNAH_RAWATIB))
+
+        assertTrue(p.toggleNaflCompletion(100L, PrayerType.DHUHR, NaflType.SUNNAH_RAWATIB))
+        assertTrue(p.isNaflCompleted(100L, PrayerType.DHUHR, NaflType.SUNNAH_RAWATIB))
+        // A restored process reads the same day back from storage.
+        assertTrue(p.isNaflCompleted(100L, PrayerType.DHUHR, NaflType.SUNNAH_RAWATIB))
+
+        // The next day starts unchecked.
+        assertFalse(p.isNaflCompleted(101L, PrayerType.DHUHR, NaflType.SUNNAH_RAWATIB))
+        assertTrue(p.toggleNaflCompletion(101L, PrayerType.DHUHR, NaflType.SUNNAH_RAWATIB))
+        assertTrue(p.isNaflCompleted(101L, PrayerType.DHUHR, NaflType.SUNNAH_RAWATIB))
+        // Moving to the new date pruned the previous day's entry.
+        assertTrue(p.naflCompletions(100L).isEmpty())
     }
 
     @Test

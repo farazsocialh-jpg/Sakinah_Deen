@@ -7,11 +7,13 @@ import com.sakinah.deen.data.database.entity.SadaqahLogEntity
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.NisabRateRepository
 import com.sakinah.deen.data.repository.NisabRates
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneId
@@ -24,7 +26,13 @@ data class WealthUiState(
     val silverPricePerGram: Float = 1.15f,
     val nisabLastUpdatedEpochMillis: Long = 0L,
     val rateSource: String = "Offline Fallback Estimate",
+    /** Currency the gold/silver rates are quoted in; never implied by a bare number. */
+    val nisabRateCurrencyCode: String = "USD",
     val isManualNisabOverride: Boolean = false,
+    /** True while the built-in benchmark (not a fetched quote) prices the Nisab. */
+    val isNisabRateFallback: Boolean = true,
+    /** Explains why balances were reset after a currency switch. */
+    val currencyChangeNotice: String? = null,
     val cashInBank: Float = 0f,
     val goldHeld: Float = 0f,
     val silverHeld: Float = 0f,
@@ -60,13 +68,28 @@ sealed class WealthUiIntent {
     data class AddMicroSadaqah(val amount: Float, val note: String? = null) : WealthUiIntent()
     data object RefreshNisabRates : WealthUiIntent()
     data object ResetBalances : WealthUiIntent()
+
+    /** Dismisses the currency-change explanation after the user has read it. */
+    data object DismissCurrencyChangeNotice : WealthUiIntent()
 }
 
 class WealthViewModel(
     private val sadaqahDao: SadaqahDao,
     private val nisabRateRepository: NisabRateRepository? = null,
-    private val preferences: SakinahPreferences? = null
+    private val preferences: SakinahPreferences? = null,
+    /** Production enables the midnight rollover; unit tests keep it off to stay finite. */
+    private val observeMonthRollover: Boolean = false
 ) : ViewModel() {
+
+    companion object {
+        /** Start (inclusive) and end (inclusive) of the calendar month containing [today]. */
+        internal fun monthBounds(today: LocalDate, zone: ZoneId): Pair<Long, Long> {
+            val firstDay = today.withDayOfMonth(1)
+            val start = firstDay.atStartOfDay(zone).toInstant().toEpochMilli()
+            val nextMonth = firstDay.plusMonths(1).atStartOfDay(zone).toInstant().toEpochMilli()
+            return start to (nextMonth - 1L)
+        }
+    }
 
     private val _uiState = MutableStateFlow(WealthUiState())
     val uiState: StateFlow<WealthUiState> = _uiState.asStateFlow()
@@ -114,7 +137,8 @@ class WealthViewModel(
                         goldPricePerGram = rates.goldPricePerGram,
                         silverPricePerGram = rates.silverPricePerGram,
                         nisabLastUpdatedEpochMillis = rates.lastUpdatedEpochMillis,
-                        rateSource = "Live API"
+                        rateSource = "Live API",
+                        isNisabRateFallback = false
                     )
                 }
                 recalculateZakat()
@@ -136,7 +160,8 @@ class WealthViewModel(
                     _uiState.update {
                         it.copy(
                             errorMessage = "Using the built-in Nisab benchmark; live market sync is unavailable.",
-                            rateSource = "Offline Fallback Estimate"
+                            rateSource = "Offline Fallback Estimate",
+                            isNisabRateFallback = true
                         )
                     }
                 }
@@ -162,8 +187,42 @@ class WealthViewModel(
                 persistBalances()
             }
             is WealthUiIntent.SetCurrency -> {
-                _uiState.update { it.copy(currencyCode = intent.code) }
+                val code = intent.code.trim().uppercase()
+                val current = _uiState.value
+                if (code.isBlank() || code == current.currencyCode) return
+                val hasBalances = listOf(
+                    current.cashInBank, current.goldHeld, current.silverHeld,
+                    current.tradeInventory, current.stocksValue, current.shortTermDebts
+                ).any { it > 0f }
+                // No verified FX rate is available offline, so existing amounts must not be
+                // silently relabelled as a different currency. Reset them and say why.
+                _uiState.update {
+                    if (hasBalances) {
+                        it.copy(
+                            currencyCode = code,
+                            cashInBank = 0f,
+                            goldHeld = 0f,
+                            silverHeld = 0f,
+                            tradeInventory = 0f,
+                            stocksValue = 0f,
+                            shortTermDebts = 0f,
+                            sadaqahJarCollected = (it.sadaqahMonthlyTotalsByCurrency[code] ?: 0.0).toFloat(),
+                            currencyChangeNotice =
+                                "Currency changed to $code. Existing balances were cleared " +
+                                    "instead of being reinterpreted without a verified exchange rate."
+                        )
+                    } else {
+                        it.copy(
+                            currencyCode = code,
+                            sadaqahJarCollected = (it.sadaqahMonthlyTotalsByCurrency[code] ?: 0.0).toFloat()
+                        )
+                    }
+                }
+                recalculateZakat()
                 persistBalances()
+            }
+            is WealthUiIntent.DismissCurrencyChangeNotice -> {
+                _uiState.update { it.copy(currencyChangeNotice = null) }
             }
             is WealthUiIntent.ToggleManualNisabOverride -> {
                 _uiState.update {
@@ -259,13 +318,37 @@ class WealthViewModel(
             }
         }
 
+        // Month boundaries are recomputed on every rollover instead of being captured once,
+        // so a long-lived process does not keep showing last month's jar total.
         viewModelScope.launch {
-            val zone = ZoneId.systemDefault()
-            val firstDay = LocalDate.now(zone).withDayOfMonth(1)
-            val startOfMonth = firstDay.atStartOfDay(zone).toInstant().toEpochMilli()
-            val endOfMonth = firstDay.plusMonths(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1L
-            sadaqahDao.observeMonthlyTotal(startOfMonth, endOfMonth).collect { monthlySum ->
-                _uiState.update { it.copy(sadaqahJarCollected = (monthlySum ?: 0.0).toFloat()) }
+            while (isActive) {
+                val zone = ZoneId.systemDefault()
+                val (startOfMonth, endOfMonth) = monthBounds(LocalDate.now(zone), zone)
+                val nextMonthStart = endOfMonth + 1L
+
+                val collector = launch {
+                    // Grouped by currency: QAR + USD must never be summed into one number.
+                    sadaqahDao.observeMonthlyTotalsByCurrency(startOfMonth, endOfMonth)
+                        .collect { totals ->
+                            val byCurrency = totals.associate {
+                                it.currency.trim().uppercase() to it.total
+                            }
+                            _uiState.update { state ->
+                                state.copy(
+                                    sadaqahMonthlyTotalsByCurrency = byCurrency,
+                                    sadaqahJarCollected =
+                                        (byCurrency[state.currencyCode.uppercase()] ?: 0.0).toFloat()
+                                )
+                            }
+                        }
+                }
+                if (!observeMonthRollover) {
+                    collector.join()
+                    return@launch
+                }
+                val waitMillis = (nextMonthStart - System.currentTimeMillis()).coerceAtLeast(1_000L)
+                delay(waitMillis)
+                collector.cancel()
             }
         }
     }
@@ -277,7 +360,7 @@ class WealthViewModel(
                     SadaqahLogEntity(
                         id = UUID.randomUUID().toString(),
                         amount = amount.toDouble(),
-                        currency = "USD",
+                        currency = _uiState.value.currencyCode.uppercase(),
                         note = note ?: "Micro-Sadaqah Daily Jar",
                         timestamp = System.currentTimeMillis()
                     )

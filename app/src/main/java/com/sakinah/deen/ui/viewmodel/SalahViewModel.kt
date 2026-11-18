@@ -113,7 +113,17 @@ data class SalahUiState(
     /** Optional override for the hero title (e.g. "Next: Dhuhr · 11:19 am"). */
     val heroTitleOverride: String? = null,
     /** Start of Tahajjud window in seconds-of-day (-1 when unknown). */
-    val tahajjudStartSecondOfDay: Int = -1
+    val tahajjudStartSecondOfDay: Int = -1,
+    /** How old the saved/current fix is, in minutes, when a timestamp exists. */
+    val locationAgeMinutes: Long = 0L,
+    /** True when the saved fix is too old to read as a current position. */
+    val isLocationStale: Boolean = false,
+    /** Qadha rows skipped because their stored prayer type was corrupted. */
+    val invalidQadhaRecords: Int = 0,
+    /** Jam is an explicit choice, never implied by crossing the travel threshold. */
+    val isJamPermitted: Boolean = false,
+    /** Short user-facing explanation of the current Safar ruling. */
+    val safarExplanation: String = ""
 )
 
 sealed class SalahUiIntent {
@@ -177,7 +187,8 @@ class SalahViewModel(
     private var salahObserverJob: Job? = null
     private var observedEpochDay: Long? = null
     private var completedRecordsByPrayer: Map<PrayerType, SalahRecordEntity> = emptyMap()
-    private val completedNawafilPrayers = mutableSetOf<PrayerType>()
+    /** Nafl completion for the current date, persisted by date+prayer+nafl in preferences. */
+    private var completedNawafilPrayers: Set<PrayerType> = emptySet()
 
     init {
         preferences?.homeCoordinates?.let { travelManager.setHomeAnchor(it) }
@@ -206,6 +217,8 @@ class SalahViewModel(
                     ?: preferences?.highLatitudeRule ?: HighLatitudeRule.MIDDLE_OF_NIGHT,
                 hasHomeLocation = travelManager.hasHomeAnchor,
                 isManualLocation = savedManual,
+                locationAgeMinutes = preferences?.locationAgeMillis()?.let { age -> age / 60_000L } ?: 0L,
+                isLocationStale = preferences?.isLocationStale() == true,
                 userCoordinates = savedCoords ?: it.userCoordinates,
                 locationName = if (savedCoords != null) preferences?.locationLabel ?: it.locationName else it.locationName,
                 timeZoneId = savedZone,
@@ -544,11 +557,14 @@ class SalahViewModel(
                 return@launch
             }
             hasUsableCoordinates = true
+            val ageMinutes = resolved.ageMillis()?.let { it / 60_000L } ?: 0L
             _uiState.update {
                 it.copy(
                     userCoordinates = Pair(resolved.latitude, resolved.longitude),
                     isLocationPending = false,
                     locationName = resolvedLabel,
+                    locationAgeMinutes = ageMinutes,
+                    isLocationStale = resolved.isStale(),
                     timeZoneId = resolvedZone,
                     timeZoneAbbr = TimeZoneResolver.shortAbbreviation(resolvedZone),
                     isManualLocation = false,
@@ -634,6 +650,7 @@ class SalahViewModel(
 
         updateDateLabels(state.timeZoneId)
         observeTodaySalahRecords(today.toEpochDay())
+        refreshNaflForCurrentDate()
 
         renderTimes(
             times = astronomyEngine.getPrayerTimes(
@@ -742,6 +759,8 @@ class SalahViewModel(
                 isTraveler = isSafar,
                 distanceFromHomeKm = travel.distanceKm,
                 hasHomeLocation = travelManager.hasHomeAnchor,
+                isJamPermitted = travel.isJamPermitted,
+                safarExplanation = travel.explanation,
                 sourceLabel = sourceLabel,
                 authorityName = authorityName ?: it.authorityName,
                 timeZoneAbbr = TimeZoneResolver.shortAbbreviation(it.timeZoneId),
@@ -821,7 +840,6 @@ class SalahViewModel(
             type: PrayerType,
             nameEn: String,
             nameAr: String,
-            fallbackTime: String,
             defaultFard: Int,
             sunnahBefore: Int,
             sunnahAfter: Int,
@@ -832,7 +850,9 @@ class SalahViewModel(
                 id = id,
                 nameEnglish = nameEn,
                 nameArabic = nameAr,
-                time = times[type]?.toJavaLocalTime()?.format(timeFormatter) ?: fallbackTime,
+                // A missing time is shown as unavailable. Never substitute a static clock
+                // time: that claimed a resolved timetable when there was none.
+                time = prayerTimeLabel(times[type]),
                 endTime = endTimes[type]?.toJavaLocalTime()?.format(timeFormatter).orEmpty(),
                 fardRakats = rakats[type] ?: defaultFard,
                 sunnahBefore = sunnahBefore,
@@ -845,12 +865,12 @@ class SalahViewModel(
         }
 
         return listOf(
-            model("fajr", PrayerType.FAJR, "Fajr", "الفجر", "05:14 AM", 2, 2, 0),
-            model("sunrise", PrayerType.SUNRISE, "Sunrise", "الشروق", "06:38 AM", 0, 0, 0),
-            model("dhuhr", PrayerType.DHUHR, "Dhuhr", "الظهر", "12:45 PM", 4, 4, 2, "2 Rakat Nafl"),
-            model("asr", PrayerType.ASR, "Asr", "العصر", "03:52 PM", 4, 4, 0),
-            model("maghrib", PrayerType.MAGHRIB, "Maghrib", "المغرب", "06:18 PM", 3, 0, 2, "Awwabin (6 Rakat)"),
-            model("isha", PrayerType.ISHA, "Isha", "العشاء", "07:44 PM", 4, 4, 2, "Tahajjud & Witr")
+            model("fajr", PrayerType.FAJR, "Fajr", "الفجر", 2, 2, 0),
+            model("sunrise", PrayerType.SUNRISE, "Sunrise", "الشروق", 0, 0, 0),
+            model("dhuhr", PrayerType.DHUHR, "Dhuhr", "الظهر", 4, 4, 2, "2 Rakat Nafl"),
+            model("asr", PrayerType.ASR, "Asr", "العصر", 4, 4, 0),
+            model("maghrib", PrayerType.MAGHRIB, "Maghrib", "المغرب", 3, 0, 2, "Awwabin (6 Rakat)"),
+            model("isha", PrayerType.ISHA, "Isha", "العشاء", 4, 4, 2, "Tahajjud & Witr")
         )
     }
 
@@ -863,6 +883,7 @@ class SalahViewModel(
                 completedRecordsByPrayer = entities.mapNotNull { entity ->
                     runCatching { PrayerType.valueOf(entity.prayerType) to entity }.getOrNull()
                 }.toMap()
+                refreshNaflForCurrentDate()
                 _uiState.update { state ->
                     if (state.prayersList.isEmpty()) state
                     else {
@@ -889,15 +910,22 @@ class SalahViewModel(
     private fun observeQadhaLedger() {
         viewModelScope.launch {
             qadhaDao.observeQadhaLedger().collect { entities ->
-                val map = entities.associate {
-                    try {
-                        PrayerType.valueOf(it.prayerType) to it.totalMissed
-                    } catch (e: Exception) {
-                        if (e is kotlinx.coroutines.CancellationException) throw e
-                        PrayerType.FAJR to it.totalMissed
+                var invalid = 0
+                val map = entities.mapNotNull { entity ->
+                    val type = parsePrayerType(entity.prayerType)
+                    if (type == null) {
+                        // Never fold a corrupted row into Fajr: that inflated a real deficit.
+                        invalid++
+                        android.util.Log.w(
+                            "SalahViewModel",
+                            "Skipping Qadha row with unknown prayer type '${entity.prayerType}'"
+                        )
+                        null
+                    } else {
+                        type to entity.totalMissed
                     }
-                }
-                _uiState.update { it.copy(qadhaDeficits = map) }
+                }.toMap()
+                _uiState.update { it.copy(qadhaDeficits = map, invalidQadhaRecords = invalid) }
             }
         }
     }
@@ -957,10 +985,22 @@ class SalahViewModel(
     }
 
     private fun toggleNaflCompletion(prayerType: PrayerType, nafl: NaflType) {
-        if (prayerType in completedNawafilPrayers) {
-            completedNawafilPrayers.remove(prayerType)
+        val epochDay = currentLocationLocalDate(_uiState.value.timeZoneId).toEpochDay()
+        val prefs = preferences
+        if (prefs != null) {
+            prefs.toggleNaflCompletion(epochDay, prayerType, nafl)
+            completedNawafilPrayers = prefs.naflCompletions(epochDay).mapNotNull { entry ->
+                entry.split(':').getOrNull(1)?.let { name ->
+                    runCatching { PrayerType.valueOf(name) }.getOrNull()
+                }
+            }.toSet()
         } else {
-            completedNawafilPrayers.add(prayerType)
+            // No preference store (preview/tests): keep the in-memory toggle consistent.
+            completedNawafilPrayers = if (prayerType in completedNawafilPrayers) {
+                completedNawafilPrayers - prayerType
+            } else {
+                completedNawafilPrayers + prayerType
+            }
         }
         val updated = _uiState.value.prayersList.map { p ->
             if (p.nameEnglish.equals(prayerType.name, ignoreCase = true)) {
@@ -968,6 +1008,17 @@ class SalahViewModel(
             } else p
         }
         _uiState.update { it.copy(prayersList = updated) }
+    }
+
+    /** Reloads date-scoped Nafl completion; a new day starts with nothing checked. */
+    private fun refreshNaflForCurrentDate() {
+        val prefs = preferences ?: return
+        val epochDay = currentLocationLocalDate(_uiState.value.timeZoneId).toEpochDay()
+        completedNawafilPrayers = prefs.naflCompletions(epochDay).mapNotNull { entry ->
+            entry.split(':').getOrNull(1)?.let { name ->
+                runCatching { PrayerType.valueOf(name) }.getOrNull()
+            }
+        }.toSet()
     }
 
     private fun incrementQadha(prayerType: PrayerType) {
@@ -1068,6 +1119,19 @@ class SalahViewModel(
 
     companion object {
         private const val SECONDS_PER_DAY = 86_400L
+
+        /** Shown when a prayer time could not be resolved, instead of a fake clock time. */
+        internal const val UNAVAILABLE_TIME = "--:--"
+
+        private val TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("hh:mm a")
+
+        /** Resolved time, or the explicit unavailable marker. Never a placeholder clock time. */
+        internal fun prayerTimeLabel(time: KLocalTime?): String =
+            time?.toJavaLocalTime()?.format(TIME_FORMATTER) ?: UNAVAILABLE_TIME
+
+        /** Parses a stored prayer type without ever falling back to Fajr. */
+        internal fun parsePrayerType(raw: String?): PrayerType? =
+            raw?.let { runCatching { PrayerType.valueOf(it) }.getOrNull() }
         private val HIJRI_MONTHS = listOf(
             "Muharram", "Safar", "Rabi' al-Awwal", "Rabi' al-Thani",
             "Jumada al-Ula", "Jumada al-Akhirah", "Rajab", "Sha'ban",

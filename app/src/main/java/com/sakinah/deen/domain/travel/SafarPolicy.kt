@@ -18,6 +18,30 @@ object SafarPolicy {
     const val THRESHOLD_KM = 80.0
     private const val EARTH_RADIUS_KM = 6371.0
 
+    /**
+     * Days a traveller may stay before the stay-duration methodology treats them as Muqim.
+     * Four days is the commonly cited Hanbali/Shafi'i position; it is a configurable default,
+     * not a universal ruling — the UI must say which methodology is in force.
+     */
+    const val DEFAULT_MAX_STAY_DAYS = 4
+
+    enum class SafarMethodology {
+        /** Only the 80 km distance applies. */
+        DISTANCE_ONLY,
+
+        /** Distance plus a maximum stay; a longer stay makes the person Muqim. */
+        DISTANCE_AND_STAY_DURATION
+    }
+
+    data class SafarSettings(
+        val methodology: SafarMethodology = SafarMethodology.DISTANCE_AND_STAY_DURATION,
+        val thresholdKm: Double = THRESHOLD_KM,
+        val maxStayDays: Int = DEFAULT_MAX_STAY_DAYS,
+        /** Jam is opt-in: crossing the distance threshold never enables it on its own. */
+        val jamPermittedByUser: Boolean = false,
+        val travelStartEpochDay: Long? = null
+    )
+
     val MUQIM_RAKATS: Map<PrayerType, Int> = mapOf(
         PrayerType.FAJR to 2,
         PrayerType.DHUHR to 4,
@@ -80,6 +104,64 @@ object SafarPolicy {
         val validHome = sanitize(home) ?: return false
         val validCurrent = sanitize(current) ?: return false
         return distanceKm(validHome, validCurrent) >= THRESHOLD_KM
+    }
+
+    /** True while a traveller following the stay-duration methodology is within its limit. */
+    fun isWithinStayLimit(
+        settings: SafarSettings,
+        currentEpochDay: Long
+    ): Boolean {
+        if (settings.methodology == SafarMethodology.DISTANCE_ONLY) return true
+        val start = settings.travelStartEpochDay ?: return true
+        return currentEpochDay - start < settings.maxStayDays.coerceAtLeast(1)
+    }
+
+    fun isTraveler(
+        home: Pair<Double, Double>?,
+        current: Pair<Double, Double>?,
+        settings: SafarSettings,
+        currentEpochDay: Long
+    ): Boolean {
+        if (!isTraveler(home, current)) return false
+        return isWithinStayLimit(settings, currentEpochDay)
+    }
+
+    /**
+     * Jam is permitted only when the traveller is genuinely travelling AND has explicitly
+     * enabled it. Distance alone must never combine two prayers for the user.
+     */
+    fun isJamPermitted(
+        isTraveller: Boolean,
+        settings: SafarSettings,
+        currentEpochDay: Long
+    ): Boolean = isTraveller && settings.jamPermittedByUser &&
+        isWithinStayLimit(settings, currentEpochDay)
+
+    /** Plain-language statement of the current ruling, including its methodology. */
+    fun explanation(
+        hadHome: Boolean,
+        distanceKm: Double,
+        isTraveler: Boolean,
+        settings: SafarSettings,
+        isJamPermitted: Boolean
+    ): String {
+        if (!hadHome) return "No Home location saved, so Qasr is not applied."
+        val distance = "%.0f".format(distanceKm)
+        val threshold = "%.0f".format(settings.thresholdKm)
+        if (!isTraveler) {
+            return "You are $distance km from Home (threshold $threshold km), so Qasr does not apply."
+        }
+        val stayNote = when (settings.methodology) {
+            SafarMethodology.DISTANCE_ONLY -> "Methodology: distance only."
+            SafarMethodology.DISTANCE_AND_STAY_DURATION ->
+                "Methodology: distance plus a stay under ${settings.maxStayDays} days."
+        }
+        val jamNote = if (isJamPermitted) {
+            "Jam is enabled by your explicit choice."
+        } else {
+            "Jam is not automatic; enable it only if your situation permits combining."
+        }
+        return "Qasr applies: $distance km from Home (threshold $threshold km). $stayNote $jamNote"
     }
 
     fun rakats(isTraveler: Boolean): Map<PrayerType, Int> =

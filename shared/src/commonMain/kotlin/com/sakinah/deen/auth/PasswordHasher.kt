@@ -7,12 +7,19 @@ package com.sakinah.deen.auth
  * passwords are hashed with PBKDF2-HMAC-SHA256 over a per-account random salt, and only the
  * encoded hash is persisted.
  *
- * Format: `pbkdf2_sha256$<iterations>$<saltHex>$<hashHex>`.
+ * Format: `pbkdf2_sha256$<iterations>$<saltHex>$<hashHex>`. The iteration count is stored
+ * in every record, so records written with an older cost still verify and are upgraded on the
+ * next successful sign-in instead of being invalidated.
  */
 internal object PasswordHasher {
 
     private const val ALGORITHM = "pbkdf2_sha256"
-    private const val ITERATIONS = 120_000
+
+    /** Raised from 120k; the stored iteration count keeps old accounts verifiable. */
+    internal const val ITERATIONS = 310_000
+
+    /** Shortest accepted password for a new on-device account. */
+    const val MIN_PASSWORD_LENGTH = 8
     private const val KEY_LENGTH_BYTES = 32
     private const val SALT_BYTES = 16
 
@@ -41,6 +48,9 @@ internal object PasswordHasher {
      * Constant-time-ish verification against either the current format or the legacy
      * FNV-1a record, so existing installs keep working and are upgraded on next sign-in.
      */
+    /** True when [password] meets the current minimum length. */
+    fun isAcceptablePassword(password: String): Boolean = password.length >= MIN_PASSWORD_LENGTH
+
     fun verify(password: String, salt: String, storedHash: String): Boolean {
         if (storedHash.startsWith("$ALGORITHM\$")) {
             val parts = storedHash.split('$')
