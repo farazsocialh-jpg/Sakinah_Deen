@@ -37,25 +37,52 @@ class SakinahFirebaseMessagingService : FirebaseMessagingService() {
             ?: message.data["body"]
             ?: message.data["message"].orEmpty()
 
-        val openIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        val contentIntent = PendingIntent.getActivity(
-            this,
-            0,
-            openIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val mainRoute = message.data["route"]
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        fun pendingIntentFor(targetRoute: String?, requestCode: Int): PendingIntent {
+            val openIntent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                if (!targetRoute.isNullOrBlank()) {
+                    putExtra("route", targetRoute)
+                }
+            }
+            return PendingIntent.getActivity(
+                this,
+                requestCode,
+                openIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_app)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
-            .setContentIntent(contentIntent)
-            .build()
+            .setContentIntent(pendingIntentFor(mainRoute, 0))
+
+        val action1Label = message.data["action1_label"]
+        val action1Route = message.data["action1_route"]
+        if (!action1Label.isNullOrBlank() && !action1Route.isNullOrBlank()) {
+            builder.addAction(
+                R.drawable.ic_stat_app,
+                action1Label,
+                pendingIntentFor(action1Route, 1)
+            )
+        }
+        val action2Label = message.data["action2_label"]
+        val action2Route = message.data["action2_route"]
+        if (!action2Label.isNullOrBlank() && !action2Route.isNullOrBlank()) {
+            builder.addAction(
+                R.drawable.ic_stat_app,
+                action2Label,
+                pendingIntentFor(action2Route, 2)
+            )
+        }
+
+        val notification = builder.build()
 
         // Android 13+ requires POST_NOTIFICATIONS at runtime; skip posting if it was denied.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||

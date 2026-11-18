@@ -130,10 +130,13 @@ class MainActivity : ComponentActivity() {
     /**
      * Only the actions this app actually understands are honoured: an exported activity can
      * receive an Intent from any app, and an unknown target must not steer navigation.
+     * Accepts both the legacy `navigate_to` extra and the FCM `route` extra.
      */
     private fun navigationTarget(intent: Intent?): String? {
-        val requested = intent?.getStringExtra(CarBluetoothReceiver.EXTRA_NAVIGATE_TO) ?: return null
-        return requested.takeIf { it == CarBluetoothReceiver.ACTION_OPEN_TRAVEL }
+        val requested = intent?.getStringExtra("route")
+            ?: intent?.getStringExtra(CarBluetoothReceiver.EXTRA_NAVIGATE_TO)
+            ?: return null
+        return requested.takeIf { it in ALLOWED_NOTIFICATION_ROUTES }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
@@ -158,5 +161,19 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
         }
+    }
+
+    companion object {
+        /** Route values an FCM notification is allowed to steer the app to. */
+        val ALLOWED_NOTIFICATION_ROUTES: Set<String> = setOf(
+            "quran",
+            "ai_scholar",
+            "scholar",
+            "hadith",
+            "salah",
+            "prayer",
+            "travel",
+            com.sakinah.deen.receiver.CarBluetoothReceiver.ACTION_OPEN_TRAVEL
+        )
     }
 }

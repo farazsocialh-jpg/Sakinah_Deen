@@ -248,7 +248,7 @@ async function getFcmAccessToken(serviceAccount) {
   return data.access_token;
 }
 
-async function sendFcmNotification(env, { title, body, topic, data }) {
+async function sendFcmNotification(env, { title, body, topic, data, dataOnly }) {
   let serviceAccount;
   try {
     serviceAccount = JSON.parse(env.FCM_SERVICE_ACCOUNT_JSON);
@@ -265,6 +265,23 @@ async function sendFcmNotification(env, { title, body, topic, data }) {
   }
 
   const accessToken = await getFcmAccessToken(serviceAccount);
+  const payloadData = data && typeof data === "object" && !Array.isArray(data) ? data : {};
+  const mergedData = { ...payloadData, title, body };
+  const messageBody = dataOnly === true
+    ? {
+        message: {
+          topic,
+          data: mergedData,
+          android: { priority: "high" },
+        },
+      }
+    : {
+        message: {
+          topic,
+          notification: { title, body },
+          data: payloadData,
+        },
+      };
   const response = await fetch(
     `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(serviceAccount.project_id)}/messages:send`,
     {
@@ -273,13 +290,7 @@ async function sendFcmNotification(env, { title, body, topic, data }) {
         authorization: `Bearer ${accessToken}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({
-        message: {
-          topic,
-          notification: { title, body },
-          data: data && typeof data === "object" && !Array.isArray(data) ? data : {},
-        },
-      }),
+      body: JSON.stringify(messageBody),
     }
   );
   const result = await response.json().catch(() => ({}));
@@ -355,6 +366,10 @@ export default {
         payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)
           ? payload.data
           : {};
+      const dataOnly = payload.dataOnly === true;
+      if (payload.dataOnly !== undefined && typeof payload.dataOnly !== "boolean") {
+        return errorResponse("INVALID_REQUEST", "dataOnly must be a boolean.", env);
+      }
 
       try {
         const result = await sendFcmNotification(env, {
@@ -362,6 +377,7 @@ export default {
           body: payload.body,
           topic,
           data,
+          dataOnly,
         });
         return withHeaders(
           new Response(JSON.stringify(result), {

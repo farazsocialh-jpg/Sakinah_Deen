@@ -281,7 +281,12 @@ fun RootNavHost(
     LaunchedEffect(navigateToExtra) {
         if (navigateToExtra.isNullOrBlank()) return@LaunchedEffect
         val destination = when (navigateToExtra) {
-            com.sakinah.deen.receiver.CarBluetoothReceiver.ACTION_OPEN_TRAVEL -> SakinahScreen.Travel
+            com.sakinah.deen.receiver.CarBluetoothReceiver.ACTION_OPEN_TRAVEL,
+            "travel" -> SakinahScreen.Travel
+            "quran" -> SakinahScreen.Quran
+            "ai_scholar", "scholar" -> SakinahScreen.AiScholar
+            "hadith" -> SakinahScreen.Hadith
+            "salah", "prayer" -> SakinahScreen.DailySalah
             else -> null
         }
         if (destination != null) navigateTo(destination)
