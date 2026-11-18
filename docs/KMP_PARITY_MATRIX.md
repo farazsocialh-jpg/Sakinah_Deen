@@ -12,7 +12,7 @@ reference implementation; iOS builds the same `shared/` module through `AccountB
 | Session restore | `PersistentAuthRepository.loadFromPrefs` | same | ✅ |
 | Password hashing | PBKDF2-HMAC-SHA256, per-account salt | same | ✅ |
 | Prayer logs / Qadha / Hifz | encrypted Room | not implemented | ⚠️ iOS has no local ledger yet |
-| AI Scholar | OkHttp through `worker/` | Ktor Darwin through `worker/` | ⚠️ timeouts configured per client |
+| AI Scholar | OkHttp through `worker/` | Ktor Darwin through `worker/` | ✅ shared `SakinahHttpTimeout` (connect 15s, request/socket 90s) |
 | Offline Quran/Hadith | Room + bundled assets | bundled read-only | ⚠️ no per-surah download on iOS |
 | Notifications | AlarmManager exact alarms | local notifications | 🚫 platform-specific by design |
 
@@ -24,9 +24,9 @@ reference implementation; iOS builds the same `shared/` module through `AccountB
    `SecItemDelete`) and a one-time migration from the plist. This cannot be compiled or tested
    from this environment (no macOS/Xcode), so it stays open rather than shipping untested
    CryptoKit/Keychain code.
-2. **HTTP timeouts.** Android uses OkHttp with explicit timeouts; iOS relies on Ktor's Darwin
-   engine defaults. A shared timeout constant should be applied to both clients so a stalled
-   Scholar request fails at the same point on each platform.
+2. **HTTP timeouts.** Shared `SakinahHttpTimeout` constant (shared/network) is applied to the
+   Android OkHttp client; iOS should apply the same values to its Darwin engine client. (Resolved
+   for Android; iOS wiring pending an Xcode build.)
 3. **Local records on iOS.** Prayer logs, Qadha, Hifz and Zakat are Android-only. Adding them
    means either a SQLDelight schema in `shared/` or a separate iOS store — a design decision
    that should be made before writing code.

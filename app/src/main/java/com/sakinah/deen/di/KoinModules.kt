@@ -120,9 +120,9 @@ val networkModule = module {
             expectSuccess = false
             install(ContentNegotiation) { json(get<Json>()) }
             install(HttpTimeout) {
-                requestTimeoutMillis = 90_000
-                connectTimeoutMillis = 15_000
-                socketTimeoutMillis = 90_000
+                requestTimeoutMillis = com.sakinah.deen.network.SakinahHttpTimeout.REQUEST_TIMEOUT_MS
+                connectTimeoutMillis = com.sakinah.deen.network.SakinahHttpTimeout.CONNECT_TIMEOUT_MS
+                socketTimeoutMillis = com.sakinah.deen.network.SakinahHttpTimeout.SOCKET_TIMEOUT_MS
             }
             install(io.ktor.client.plugins.HttpRequestRetry) {
                 retryOnServerErrors(maxRetries = 3)

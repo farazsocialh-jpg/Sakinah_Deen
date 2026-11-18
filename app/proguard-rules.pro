@@ -49,7 +49,8 @@
     <methods>;
 }
 
--keep class io.ktor.** { *; }
+-keep class io.ktor.client.** { *; }
+-keep class io.ktor.serialization.** { *; }
 -dontwarn io.ktor.**
 
 # Keep RAG DTOs for reflection-free JSON decoding
@@ -58,7 +59,6 @@
 # ------------------------------------------------------------------------------
 # 4. Koin Dependency Injection
 # ------------------------------------------------------------------------------
--keep class org.koin.** { *; }
 -dontwarn org.koin.**
 -keep class com.sakinah.deen.di.** { *; }
 
