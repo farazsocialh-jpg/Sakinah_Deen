@@ -11,6 +11,7 @@ import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.PrayerTimeRepository
 import com.sakinah.deen.di.appModules
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngine
+import com.google.firebase.messaging.FirebaseMessaging
 import com.sakinah.deen.service.NotificationChannels
 import com.sakinah.deen.service.PrayerAlarmScheduler
 import com.sakinah.deen.work.DailyHabitResetWorker
@@ -84,6 +85,11 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
         }
 
         NotificationChannels.createChannels(this)
+
+        // Subscribe this device to the daily reminders topic so server-side pushes reach it.
+        applicationScope.launch(Dispatchers.IO) {
+            runCatching { FirebaseMessaging.getInstance().subscribeToTopic("daily_reminders") }
+        }
 
         // Startup disk reads stay off the main thread: StrictMode is enabled in DEBUG and
         // SharedPreferences/AlarmManager/WorkManager all touch the filesystem.

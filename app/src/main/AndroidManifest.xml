@@ -64,6 +64,18 @@
             </intent-filter>
         </activity>
 
+        <!-- Firebase Cloud Messaging -->
+        <service
+            android:name=".service.SakinahFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="sakinah_fcm_notifications" />
+
         <!-- Adhan Audio Playback Foreground Service (Media3 / ExoPlayer) -->
         <service
             android:name=".service.AdhanPlaybackService"
