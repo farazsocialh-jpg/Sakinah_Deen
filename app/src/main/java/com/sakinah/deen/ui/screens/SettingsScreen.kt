@@ -116,6 +116,9 @@ import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.data.quran.QuranOfflineStatus
 import com.sakinah.deen.ui.components.QuranOfflineStatusBanner
 import com.sakinah.deen.ui.rememberInject
+import com.sakinah.deen.widget.WidgetPrefsStore
+import com.sakinah.deen.widget.WidgetStyle
+import com.sakinah.deen.widget.updateAllWidgets
 import com.sakinah.deen.ui.theme.FontScalePreset
 import com.sakinah.deen.ui.theme.ThemeMode as UiThemeMode
 import kotlinx.coroutines.launch
@@ -654,6 +657,11 @@ fun SettingsScreen(
 
                     SettingsSection.APPEARANCE_READING -> {
                         var themeExpanded by remember { mutableStateOf(true) }
+                        var widgetsExpanded by remember { mutableStateOf(false) }
+                        var widgetDefaultStyle by remember { mutableStateOf(WidgetStyle.FROSTED_GLASS) }
+                        LaunchedEffect(Unit) {
+                            widgetDefaultStyle = WidgetPrefsStore.getDefaultStyle(context)
+                        }
                         var salahExpanded by remember { mutableStateOf(false) }
                         var quranExpanded by remember { mutableStateOf(false) }
                         var hadithExpanded by remember { mutableStateOf(false) }
@@ -697,6 +705,35 @@ fun SettingsScreen(
                                     appearancePrefs.update { it.copy(palette = palette) }
                                 }
                             )
+                        }
+
+                        AppearanceAccordion(
+                            title = "Home Screen Widgets",
+                            summary = "Default style · ${widgetDefaultStyle.label}",
+                            expanded = widgetsExpanded,
+                            onToggle = { widgetsExpanded = !widgetsExpanded }
+                        ) {
+                            Text(
+                                text = "Used by widgets you add from now on. Every placed widget can still be restyled from its own settings.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(WidgetStyle.entries) { style ->
+                                    LayoutChoiceCard(
+                                        title = style.label,
+                                        subtitle = style.description,
+                                        selected = widgetDefaultStyle == style,
+                                        onClick = {
+                                            widgetDefaultStyle = style
+                                            scope.launch {
+                                                WidgetPrefsStore.setDefaultStyle(context, style)
+                                                updateAllWidgets(context)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
                         }
 
                         AppearanceAccordion(

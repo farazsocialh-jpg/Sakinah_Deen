@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string translatable="false" name="widget_config_title">Widget appearance</string>
+    <string translatable="false" name="widget_next_prayer_label">Next Prayer</string>
+    <string translatable="false" name="widget_next_prayer_description">Countdown to the next prayer with its exact time and your city.</string>
+    <string translatable="false" name="widget_prayer_strip_label">Prayer Strip</string>
+    <string translatable="false" name="widget_prayer_strip_description">All five prayers in one row, highlighting the next and ticking off the ones you prayed.</string>
+    <string translatable="false" name="widget_salah_tracker_label">Today’s Salah Tracker</string>
+    <string translatable="false" name="widget_salah_tracker_description">Tap each prayer to mark it prayed without opening the app.</string>
+    <string translatable="false" name="widget_tasbih_label">Tasbih Counter</string>
+    <string translatable="false" name="widget_tasbih_description">A pocket dhikr counter that remembers where you stopped.</string>
+    <string translatable="false" name="widget_adhkar_label">Morning &amp; Evening Adhkar</string>
+    <string translatable="false" name="widget_adhkar_description">The right adhkar for the current window, with your progress.</string>
+    <string translatable="false" name="widget_daily_dua_label">Du’a of the Day</string>
+    <string translatable="false" name="widget_daily_dua_description">A Hisn al-Muslim du’a with its translation and reference.</string>
+    <string translatable="false" name="widget_daily_ayah_label">Ayah of the Day</string>
+    <string translatable="false" name="widget_daily_ayah_description">A daily Qur’an verse with its surah and ayah reference.</string>
+    <string translatable="false" name="widget_daily_hadith_label">Hadith of the Day</string>
+    <string translatable="false" name="widget_daily_hadith_description">A short authentic hadith with its narrator badge and source.</string>
+    <string translatable="false" name="widget_ai_scholar_label">Ask ImanCore Scholar</string>
+    <string translatable="false" name="widget_ai_scholar_description">A one-tap search bar into the sourced Islamic AI Scholar.</string>
+    <string translatable="false" name="widget_quran_streak_label">Qur’an Reading Streak</string>
+    <string translatable="false" name="widget_quran_streak_description">Your consecutive reading days plus a Resume pill for the last ayah.</string>
+    <string translatable="false" name="widget_hijri_date_label">Hijri Date</string>
+    <string translatable="false" name="widget_hijri_date_description">Today’s Hijri date, the Gregorian weekday and Sunnah fast badges.</string>
+    <string translatable="false" name="widget_qibla_label">Qibla Direction</string>
+    <string translatable="false" name="widget_qibla_description">Your Qibla bearing and city from the saved location.</string>
+    <string translatable="false" name="widget_ramadan_label">Ramadan Suhoor &amp; Iftar</string>
+    <string translatable="false" name="widget_ramadan_description">Suhoor and iftar times with live countdowns and the Hijri date.</string>
+    <string translatable="false" name="widget_duha_window_label">Duha Prayer Window</string>
+    <string translatable="false" name="widget_duha_window_description">Sunrise, Ishraq and whether the Duha window is open now.</string>
+    <string translatable="false" name="widget_qiyam_label">Qiyam &amp; Last Third</string>
+    <string translatable="false" name="widget_qiyam_description">When the last third of the night begins and the Fajr cutoff.</string>
+    <string translatable="false" name="widget_sunnah_fast_label">Sunnah Fasting</string>
+    <string translatable="false" name="widget_sunnah_fast_description">The next Monday, Thursday or white-day fast and how far away it is.</string>
+    <string translatable="false" name="widget_islamic_event_label">Islamic Event Countdown</string>
+    <string translatable="false" name="widget_islamic_event_description">Days remaining until Ramadan, Eid, Arafah, Ashura and Laylatul Qadr.</string>
+    <string translatable="false" name="widget_jumuah_label">Jumuah Checklist</string>
+    <string translatable="false" name="widget_jumuah_description">Tick off Ghusl, Al-Kahf, early masjid and Durood on Friday.</string>
+    <string translatable="false" name="widget_nisab_label">Nisab Reminder</string>
+    <string translatable="false" name="widget_nisab_description">Whether your saved assets reach the nisab and the zakat due.</string>
+</resources>

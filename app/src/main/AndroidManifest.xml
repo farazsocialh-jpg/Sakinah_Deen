@@ -64,6 +64,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".widget.WidgetConfigActivity"
+            android:exported="true"
+            android:label="@string/widget_config_title"
+            android:theme="@style/Theme.Sakinah" />
+
         <!-- Firebase Cloud Messaging -->
         <service
             android:name=".service.SakinahFirebaseMessagingService"
@@ -102,10 +108,12 @@
             </intent-filter>
         </receiver>
 
-        <!-- Glance Salah Widget -->
+        <!-- ImanCore Glance widget suite -->
+        <!-- Next Prayer -->
         <receiver
-            android:name=".widget.SalahWidgetReceiver"
-            android:exported="false">
+            android:name=".widget.NextPrayerWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_next_prayer_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
@@ -113,7 +121,277 @@
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/salah_widget_info" />
+                android:resource="@xml/next_prayer_widget_info" />
+        </receiver>
+
+        <!-- Prayer Strip -->
+        <receiver
+            android:name=".widget.PrayerStripWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_prayer_strip_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/prayer_strip_widget_info" />
+        </receiver>
+
+        <!-- Today’s Salah Tracker -->
+        <receiver
+            android:name=".widget.SalahTrackerWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_salah_tracker_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/salah_tracker_widget_info" />
+        </receiver>
+
+        <!-- Tasbih Counter -->
+        <receiver
+            android:name=".widget.TasbihWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_tasbih_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/tasbih_widget_info" />
+        </receiver>
+
+        <!-- Morning & Evening Adhkar -->
+        <receiver
+            android:name=".widget.AdhkarWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_adhkar_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/adhkar_widget_info" />
+        </receiver>
+
+        <!-- Du’a of the Day -->
+        <receiver
+            android:name=".widget.DailyDuaWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_daily_dua_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/daily_dua_widget_info" />
+        </receiver>
+
+        <!-- Ayah of the Day -->
+        <receiver
+            android:name=".widget.DailyAyahWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_daily_ayah_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/daily_ayah_widget_info" />
+        </receiver>
+
+        <!-- Hadith of the Day -->
+        <receiver
+            android:name=".widget.DailyHadithWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_daily_hadith_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/daily_hadith_widget_info" />
+        </receiver>
+
+        <!-- Ask ImanCore Scholar -->
+        <receiver
+            android:name=".widget.AiScholarWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_ai_scholar_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ai_scholar_widget_info" />
+        </receiver>
+
+        <!-- Qur’an Reading Streak -->
+        <receiver
+            android:name=".widget.QuranStreakWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_quran_streak_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/quran_streak_widget_info" />
+        </receiver>
+
+        <!-- Hijri Date -->
+        <receiver
+            android:name=".widget.HijriDateWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_hijri_date_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/hijri_date_widget_info" />
+        </receiver>
+
+        <!-- Qibla Direction -->
+        <receiver
+            android:name=".widget.QiblaWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_qibla_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/qibla_widget_info" />
+        </receiver>
+
+        <!-- Ramadan Suhoor & Iftar -->
+        <receiver
+            android:name=".widget.RamadanWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_ramadan_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ramadan_widget_info" />
+        </receiver>
+
+        <!-- Duha Prayer Window -->
+        <receiver
+            android:name=".widget.DuhaWindowWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_duha_window_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/duha_window_widget_info" />
+        </receiver>
+
+        <!-- Qiyam & Last Third -->
+        <receiver
+            android:name=".widget.QiyamWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_qiyam_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/qiyam_widget_info" />
+        </receiver>
+
+        <!-- Sunnah Fasting -->
+        <receiver
+            android:name=".widget.SunnahFastWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_sunnah_fast_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/sunnah_fast_widget_info" />
+        </receiver>
+
+        <!-- Islamic Event Countdown -->
+        <receiver
+            android:name=".widget.IslamicEventWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_islamic_event_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/islamic_event_widget_info" />
+        </receiver>
+
+        <!-- Jumuah Checklist -->
+        <receiver
+            android:name=".widget.JumuahWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_jumuah_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/jumuah_widget_info" />
+        </receiver>
+
+        <!-- Nisab Reminder -->
+        <receiver
+            android:name=".widget.NisabWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_nisab_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/nisab_widget_info" />
         </receiver>
 
         <!-- Boot / clock / timezone restoration of exact alarms -->

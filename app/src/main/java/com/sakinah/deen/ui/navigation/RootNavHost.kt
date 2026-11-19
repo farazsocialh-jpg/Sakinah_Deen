@@ -287,6 +287,8 @@ fun RootNavHost(
             "ai_scholar", "scholar" -> SakinahScreen.AiScholar
             "hadith" -> SakinahScreen.Hadith
             "salah", "prayer" -> SakinahScreen.DailySalah
+            "tools" -> SakinahScreen.ToolsHub
+            "wealth" -> SakinahScreen.Wealth
             else -> null
         }
         if (destination != null) navigateTo(destination)

@@ -64,6 +64,8 @@ class MainActivity : ComponentActivity() {
                             context = applicationContext,
                             locationProvider = locationProvider
                         )
+                        // New coordinates mean new timings: refresh every widget.
+                        com.sakinah.deen.widget.updateAllWidgets(applicationContext)
                     }
                 }
             }
@@ -80,6 +82,13 @@ class MainActivity : ComponentActivity() {
                     firstLaunchPermissionLauncher.launch(permissions.toTypedArray())
                 }
             }
+            // A theme change must repaint every placed widget, not just the app.
+            LaunchedEffect(appearanceConfig.themeMode, appearanceConfig.palette) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    com.sakinah.deen.widget.updateAllWidgets(applicationContext)
+                }
+            }
+
             val darkTheme = when (appearanceConfig.themeMode) {
                 ThemeMode.DARK -> true
                 ThemeMode.LIGHT -> false
@@ -173,6 +182,8 @@ class MainActivity : ComponentActivity() {
             "salah",
             "prayer",
             "travel",
+            "tools",
+            "wealth",
             com.sakinah.deen.receiver.CarBluetoothReceiver.ACTION_OPEN_TRAVEL
         )
     }

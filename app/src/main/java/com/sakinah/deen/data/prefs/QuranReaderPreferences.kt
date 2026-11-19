@@ -58,6 +58,18 @@ class QuranReaderPreferences internal constructor(
         private const val KEY_LAST_AYAH = "quran_last_read_ayah"
         private const val KEY_LAST_SCROLL_INDEX = "quran_last_read_scroll_index"
         private const val KEY_BOOKMARKS = "quran_ayah_bookmarks"
+        private const val KEY_READING_DAYS = "quran_reading_days"
+
+        /** Consecutive reading days ending today, or yesterday before today's reading. */
+        internal fun streakOf(days: Set<Long>, today: Long): Int {
+            var cursor = if (days.contains(today)) today else today - 1
+            var streak = 0
+            while (days.contains(cursor)) {
+                streak++
+                cursor--
+            }
+            return streak
+        }
 
         const val MIN_SURAH = 1
         const val MAX_SURAH = 114
@@ -89,7 +101,25 @@ class QuranReaderPreferences internal constructor(
             .putInt(KEY_LAST_AYAH, ayahNumber.coerceAtLeast(1))
             .putInt(KEY_LAST_SCROLL_INDEX, scrollIndex.coerceAtLeast(0))
             .apply()
+        recordReadingDay(java.time.LocalDate.now().toEpochDay())
     }
+
+    /** Days on which the reader was used; drives the home-screen streak widget. */
+    val readingDays: Set<Long>
+        get() = prefs.getString(KEY_READING_DAYS, null)
+            ?.split('|')
+            ?.mapNotNull { it.trim().toLongOrNull() }
+            ?.toSet()
+            .orEmpty()
+
+    /** Records today as a reading day, keeping the last ~13 months only. */
+    fun recordReadingDay(epochDay: Long) {
+        val days = (readingDays + epochDay).sorted().takeLast(400).toSet()
+        prefs.edit().putString(KEY_READING_DAYS, days.joinToString("|")).apply()
+    }
+
+    fun currentStreak(today: Long = java.time.LocalDate.now().toEpochDay()): Int =
+        streakOf(readingDays, today)
 
     /** Saved ayahs, newest first. */
     var bookmarks: List<AyahBookmark>
