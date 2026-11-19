@@ -1,6 +1,7 @@
 package com.sakinah.deen.ui.components
 
 import android.Manifest
+import androidx.annotation.Keep
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
@@ -555,6 +556,10 @@ private fun QiblaMapView(
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         webViewHolder.value?.onResume()
+        webViewHolder.value?.evaluateJavascript(
+            "window.invalidateMapSize && window.invalidateMapSize()",
+            null
+        )
     }
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
         webViewHolder.value?.onPause()
@@ -699,6 +704,14 @@ private fun QiblaMapView(
                                 QiblaMapBridge(
                                     onReadyCallback = {
                                         android.util.Log.d("QiblaMap", "Leaflet page ready")
+                                        mainHandler.post {
+                                            loadState = MapLoadState.READY
+                                            failureReason = null
+                                            webViewHolder.value?.evaluateJavascript(
+                                                "window.invalidateMapSize && window.invalidateMapSize()",
+                                                null
+                                            )
+                                        }
                                     },
                                     onTileLoadedCallback = {
                                         mainHandler.post {
@@ -815,27 +828,34 @@ private fun QiblaMapFallback(qiblaBearing: Float, reason: String?, onRetry: () -
 }
 
 /** JS bridge exposed to the bundled map page as `window.QiblaBridge`. */
+@Keep
 private class QiblaMapBridge(
     private val onReadyCallback: () -> Unit,
     private val onTileLoadedCallback: () -> Unit,
     private val onErrorCallback: (String) -> Unit,
     private val onDebugCallback: (String) -> Unit
 ) {
+    @Keep
     @JavascriptInterface
     fun onMapReady() = onReadyCallback()
 
+    @Keep
     @JavascriptInterface
     fun onMapReady(unused: String) = onReadyCallback()
 
+    @Keep
     @JavascriptInterface
     fun onTileLoaded() = onTileLoadedCallback()
 
+    @Keep
     @JavascriptInterface
     fun onTileLoaded(unused: String) = onTileLoadedCallback()
 
+    @Keep
     @JavascriptInterface
     fun onMapError(reason: String) = onErrorCallback(reason)
 
+    @Keep
     @JavascriptInterface
     fun onDebug(message: String) = onDebugCallback(message)
 }
