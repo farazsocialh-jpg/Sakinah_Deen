@@ -46,6 +46,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -137,9 +139,12 @@ private fun HadithBookmarkButton(
     hadith: HadithModel,
     onToggleBookmark: (HadithModel) -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     IconButton(
-        onClick = { onToggleBookmark(hadith) },
-        modifier = Modifier.size(28.dp)
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onToggleBookmark(hadith)
+        }
     ) {
         Icon(
             imageVector = if (hadith.bookmarked) Icons.Default.Bookmark
@@ -157,8 +162,7 @@ private fun HadithShareButton(
     onShare: (HadithModel) -> Unit
 ) {
     IconButton(
-        onClick = { onShare(hadith) },
-        modifier = Modifier.size(28.dp)
+        onClick = { onShare(hadith) }
     ) {
         Icon(
             imageVector = Icons.Default.Share,

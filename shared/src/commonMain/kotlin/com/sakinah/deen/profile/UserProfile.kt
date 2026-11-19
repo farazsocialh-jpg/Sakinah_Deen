@@ -4,6 +4,8 @@ import com.russhwolf.settings.Settings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -149,6 +151,7 @@ class PersistentUserProfileRepository(
         encodeDefaults = true
     }
 
+    private val stateMutex = Mutex()
     private val _profile = MutableStateFlow<UserProfile?>(null)
     override val profile: StateFlow<UserProfile?> = _profile.asStateFlow()
 
@@ -163,33 +166,41 @@ class PersistentUserProfileRepository(
     }
 
     override suspend fun loadForUser(userId: String) {
-        activeKey = normalize(userId)
-        prefs.putString(KEY_ACTIVE_USER, activeKey)
-        _profile.value = readProfile(activeKey) ?: UserProfile(
-            uniqueId = userId.trim(),
-            email = if (activeKey.contains("@")) activeKey else ""
-        )
+        stateMutex.withLock {
+            activeKey = normalize(userId)
+            prefs.putString(KEY_ACTIVE_USER, activeKey)
+            _profile.value = readProfile(activeKey) ?: UserProfile(
+                uniqueId = userId.trim(),
+                email = if (activeKey.contains("@")) activeKey else ""
+            )
+        }
     }
 
     override suspend fun update(profile: UserProfile) {
-        prefs.putString(KEY_ACTIVE_USER, activeKey)
-        prefs.putString(profileKey(activeKey), json.encodeToString(profile))
-        _profile.value = profile
+        stateMutex.withLock {
+            prefs.putString(KEY_ACTIVE_USER, activeKey)
+            prefs.putString(profileKey(activeKey), json.encodeToString(profile))
+            _profile.value = profile
+        }
     }
 
     override suspend fun clear() {
-        prefs.remove(profileKey(activeKey))
-        prefs.remove(KEY_ACTIVE_USER)
-        activeKey = DEFAULT_KEY
-        _profile.value = null
+        stateMutex.withLock {
+            prefs.remove(profileKey(activeKey))
+            prefs.remove(KEY_ACTIVE_USER)
+            activeKey = DEFAULT_KEY
+            _profile.value = null
+        }
     }
 
     override suspend fun clearActiveSession() {
         // Forget which account is active but keep its stored profile: signing out must never
         // wipe gender, date of birth, city or country. Only deleteAccount() does that.
-        prefs.remove(KEY_ACTIVE_USER)
-        activeKey = DEFAULT_KEY
-        _profile.value = null
+        stateMutex.withLock {
+            prefs.remove(KEY_ACTIVE_USER)
+            activeKey = DEFAULT_KEY
+            _profile.value = null
+        }
     }
 
     override suspend fun syncCloud() { /* no-op offline */ }

@@ -11,7 +11,7 @@ val WarmCream = Color(0xFFF9FAF7)
 val CardSurface = Color(0xFFFFFFFF)
 val BorderHairline = Color(0xFFE2E8F0)
 val DarkCharcoal = Color(0xFF1E293B)
-val SubtitleGray = Color(0xFF64748B)
+val SubtitleGray = Color(0xFF526072)
 
 // Night / Tahajjud dark-mode palette
 val NightBackground = Color(0xFF071A14)

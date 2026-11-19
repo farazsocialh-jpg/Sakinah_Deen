@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.glance.appwidget.updateAll
 import androidx.work.Configuration
@@ -171,6 +172,8 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
                 ExistingPeriodicWorkPolicy.KEEP,
                 request
             )
+        }.onFailure { err ->
+            Log.w(TAG, "Failed to schedule SalahGuideReminderWorker", err)
         }
     }
 
@@ -193,6 +196,12 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
                 ExistingPeriodicWorkPolicy.KEEP,
                 request
             )
+        }.onFailure { err ->
+            Log.w(TAG, "Failed to schedule DailyHabitResetWorker", err)
         }
+    }
+
+    private companion object {
+        private const val TAG = "SakinahApp"
     }
 }

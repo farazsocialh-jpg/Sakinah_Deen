@@ -580,7 +580,7 @@ class PrayerAlarmScheduler(
         }.getOrDefault(false)
     }
 
-    private fun canScheduleExactAlarms(): Boolean =
+    fun canScheduleExactAlarms(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager?.canScheduleExactAlarms() == true
 
     private fun notificationsGranted(): Boolean =

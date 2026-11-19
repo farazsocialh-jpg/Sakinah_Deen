@@ -16,10 +16,10 @@ import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.filled.Book
-import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.LibraryBooks
 import androidx.compose.material.icons.filled.Mosque
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -425,13 +425,13 @@ fun RootNavHost(
                     NavigationBarItem(
                         selected = currentScreen == SakinahScreen.Hadith,
                         onClick = { navigateTo(SakinahScreen.Hadith) },
-                        icon = { Icon(Icons.Default.LibraryBooks, contentDescription = hadithLabel) },
+                        icon = { Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = hadithLabel) },
                         label = { Text(hadithLabel, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     )
                     NavigationBarItem(
                         selected = currentScreen == SakinahScreen.AiScholar,
                         onClick = { navigateTo(SakinahScreen.AiScholar) },
-                        icon = { Icon(Icons.Default.Chat, contentDescription = scholarLabel) },
+                        icon = { Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = scholarLabel) },
                         label = { Text(scholarLabel, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     )
                     NavigationBarItem(

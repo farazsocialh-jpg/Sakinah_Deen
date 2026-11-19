@@ -44,6 +44,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -173,10 +175,12 @@ internal fun SalahTopHeader(
                     color = Color.Transparent,
                     modifier = Modifier
                         .minimumInteractiveComponentSize()
-                        .size(36.dp)
                         .clickable(onClick = onOpenNotifications)
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier.size(48.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         androidx.compose.material3.Icon(
                             imageVector = Icons.Outlined.Notifications,
                             contentDescription = "Prayer Notifications",
@@ -191,10 +195,12 @@ internal fun SalahTopHeader(
                     color = Color.Transparent,
                     modifier = Modifier
                         .minimumInteractiveComponentSize()
-                        .size(36.dp)
                         .clickable(enabled = !state.isRefreshing, onClick = onRecalculate)
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier.size(48.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         if (state.isRefreshing) {
                             CircularProgressIndicator(
                                 strokeWidth = 2.dp,
@@ -216,10 +222,12 @@ internal fun SalahTopHeader(
                     color = Color.Transparent,
                     modifier = Modifier
                         .minimumInteractiveComponentSize()
-                        .size(36.dp)
                         .clickable(onClick = onOpenSettings)
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier.size(48.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         androidx.compose.material3.Icon(
                             imageVector = Icons.Outlined.Tune,
                             contentDescription = "Prayer Settings",
@@ -940,11 +948,15 @@ internal fun PrayerGrid(
                                     else MaterialTheme.colorScheme.onSurface
                                 )
                                 if (!isSunrise) {
+                                    val haptic = LocalHapticFeedback.current
                                     Box(
                                         modifier = Modifier
-                                            .size(22.dp)
+                                            .size(48.dp)
                                             .clip(CircleShape)
-                                            .clickable { onTogglePrayer(prayer) },
+                                            .clickable {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                onTogglePrayer(prayer)
+                                            },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         androidx.compose.material3.Icon(

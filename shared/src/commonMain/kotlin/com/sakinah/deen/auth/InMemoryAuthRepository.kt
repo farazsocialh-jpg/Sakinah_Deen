@@ -3,9 +3,12 @@ package com.sakinah.deen.auth
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class InMemoryAuthRepository : AuthRepository {
 
+    private val stateMutex = Mutex()
     private val _authState = MutableStateFlow<AuthState>(AuthState.Guest)
     override val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
@@ -13,29 +16,32 @@ class InMemoryAuthRepository : AuthRepository {
     private val users = mutableMapOf<String, StoredUser>()
     private var current: AuthUser? = null
 
-    override suspend fun signUp(email: String, password: String, displayName: String): Result<AuthUser> {
-        if (users.containsKey(email)) return Result.failure(IllegalStateException("Account already exists"))
-        if (email.isBlank() || password.length < 6) return Result.failure(IllegalArgumentException("Invalid credentials"))
-        users[email] = StoredUser(email, password, displayName)
-        val user = AuthUser(id = email, email = email, displayName = displayName)
-        current = user
-        _authState.value = AuthState.Authenticated(user)
-        return Result.success(user)
-    }
+    override suspend fun signUp(email: String, password: String, displayName: String): Result<AuthUser> =
+        stateMutex.withLock {
+            if (users.containsKey(email)) return@withLock Result.failure(IllegalStateException("Account already exists"))
+            if (email.isBlank() || password.length < 6) return@withLock Result.failure(IllegalArgumentException("Invalid credentials"))
+            users[email] = StoredUser(email, password, displayName)
+            val user = AuthUser(id = email, email = email, displayName = displayName)
+            current = user
+            _authState.value = AuthState.Authenticated(user)
+            Result.success(user)
+        }
 
-    override suspend fun signIn(email: String, password: String): Result<AuthUser> {
-        val stored = users[email] ?: return Result.failure(IllegalStateException("Unknown account"))
-        if (stored.password != password) return Result.failure(IllegalStateException("Invalid password"))
-        val user = AuthUser(id = email, email = email, displayName = stored.displayName)
-        current = user
-        _authState.value = AuthState.Authenticated(user)
-        return Result.success(user)
-    }
+    override suspend fun signIn(email: String, password: String): Result<AuthUser> =
+        stateMutex.withLock {
+            val stored = users[email] ?: return@withLock Result.failure(IllegalStateException("Unknown account"))
+            if (stored.password != password) return@withLock Result.failure(IllegalStateException("Invalid password"))
+            val user = AuthUser(id = email, email = email, displayName = stored.displayName)
+            current = user
+            _authState.value = AuthState.Authenticated(user)
+            Result.success(user)
+        }
 
-    override suspend fun sendPasswordReset(email: String): Result<Unit> {
-        if (!users.containsKey(email)) return Result.failure(IllegalStateException("Unknown account"))
-        return Result.success(Unit)
-    }
+    override suspend fun sendPasswordReset(email: String): Result<Unit> =
+        stateMutex.withLock {
+            if (!users.containsKey(email)) return@withLock Result.failure(IllegalStateException("Unknown account"))
+            Result.success(Unit)
+        }
 
     override suspend fun signInWithGoogle(
         uniqueId: String,
@@ -44,10 +50,10 @@ class InMemoryAuthRepository : AuthRepository {
         givenName: String?,
         familyName: String?,
         photoUrl: String?
-    ): Result<AuthUser> {
+    ): Result<AuthUser> = stateMutex.withLock {
         val cleanId = uniqueId.trim().ifBlank { email.trim() }
         if (cleanId.isBlank()) {
-            return Result.failure(IllegalStateException("Google Sign-In returned no account id"))
+            return@withLock Result.failure(IllegalStateException("Google Sign-In returned no account id"))
         }
         val user = AuthUser(
             id = "google:$cleanId",
@@ -57,44 +63,46 @@ class InMemoryAuthRepository : AuthRepository {
         )
         current = user
         _authState.value = AuthState.Authenticated(user)
-        return Result.success(user)
+        Result.success(user)
     }
 
-    override suspend fun signInWithApple(identityToken: String): Result<AuthUser> {
+    override suspend fun signInWithApple(identityToken: String): Result<AuthUser> = stateMutex.withLock {
         val user = AuthUser(id = "apple:$identityToken", email = "", displayName = "Apple User")
         current = user
         _authState.value = AuthState.Authenticated(user)
-        return Result.success(user)
+        Result.success(user)
     }
 
-    override suspend fun continueAsGuest(): Result<AuthUser> {
+    override suspend fun continueAsGuest(): Result<AuthUser> = stateMutex.withLock {
         val user = AuthUser(id = "guest", email = "", displayName = "Guest", isGuest = true)
         current = user
         _authState.value = AuthState.Guest
-        return Result.success(user)
+        Result.success(user)
     }
 
     override suspend fun signOut() {
-        current = null
-        _authState.value = AuthState.Guest
+        stateMutex.withLock {
+            current = null
+            _authState.value = AuthState.Guest
+        }
     }
 
-    override suspend fun deleteAccount(): Result<Unit> {
-        val c = current ?: return Result.failure(IllegalStateException("Not signed in"))
+    override suspend fun deleteAccount(): Result<Unit> = stateMutex.withLock {
+        val c = current ?: return@withLock Result.failure(IllegalStateException("Not signed in"))
         users.remove(c.email)
         current = null
         _authState.value = AuthState.Guest
-        return Result.success(Unit)
+        Result.success(Unit)
     }
 
-    override suspend fun updateDisplayName(displayName: String): Result<AuthUser> {
-        val c = current ?: return Result.failure(IllegalStateException("Not signed in"))
+    override suspend fun updateDisplayName(displayName: String): Result<AuthUser> = stateMutex.withLock {
+        val c = current ?: return@withLock Result.failure(IllegalStateException("Not signed in"))
         val clean = displayName.trim()
-        if (clean.isBlank()) return Result.failure(IllegalArgumentException("Display name cannot be blank"))
+        if (clean.isBlank()) return@withLock Result.failure(IllegalArgumentException("Display name cannot be blank"))
         val updated = c.copy(displayName = clean)
         current = updated
         users[c.email]?.let { existing -> users[c.email] = existing.copy(displayName = clean) }
         _authState.value = AuthState.Authenticated(updated)
-        return Result.success(updated)
+        Result.success(updated)
     }
 }

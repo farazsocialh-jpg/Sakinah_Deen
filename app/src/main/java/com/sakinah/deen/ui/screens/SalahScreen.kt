@@ -6,12 +6,15 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -160,6 +163,7 @@ fun SalahScreen(
         if (isGranted) viewModel?.onIntent(SalahUiIntent.UseGpsLocation)
     }
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     var gpsPermissionRequested by rememberSaveable { mutableStateOf(false) }
     var showGpsSettingsDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -257,6 +261,46 @@ fun SalahScreen(
                             }
                         }
 
+                        if (!focusMode && state.showExactAlarmWarningBanner) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = SalahAmber.copy(alpha = 0.14f),
+                                border = BorderStroke(1.dp, SalahAmber.copy(alpha = 0.55f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                            val intent = Intent(
+                                                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                                                Uri.parse("package:${context.packageName}")
+                                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            val opened = runCatching { context.startActivity(intent) }.isSuccess
+                                            if (!opened) onOpenNotificationSettings?.invoke()
+                                        } else {
+                                            onOpenNotificationSettings?.invoke()
+                                        }
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = SalahAmber,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = stringResource(R.string.salah_exact_alarm_warning),
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+
                         if (state.isLocationPending) {
                             // Never show another city's solar times against the device clock:
                             // stay pending until a saved location or a GPS fix exists.
@@ -303,6 +347,7 @@ fun SalahScreen(
                                 layout = salahHomeLayout,
                                 state = state,
                                 onToggleCurrent = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     viewModel?.onIntent(SalahUiIntent.ToggleCurrentPrayerCompleted)
                                 }
                             )
@@ -390,35 +435,40 @@ fun SalahScreen(
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
                                     if (!isSunrise) {
-                                        Surface(
-                                            shape = RoundedCornerShape(10.dp),
-                                            color = if (prayer.isFardCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                        Box(
                                             modifier = Modifier
-                                                .size(32.dp)
+                                                .size(48.dp)
                                                 .clickable {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                                     prayerTypeOf(prayer)?.let { prayerType ->
                                                         viewModel?.onIntent(
                                                             SalahUiIntent.ToggleSalahCompletion(prayerType, prayer.isJamaah)
                                                         )
                                                     }
-                                                }
+                                                },
+                                            contentAlignment = Alignment.Center
                                         ) {
-                                            Box(contentAlignment = Alignment.Center) {
-                                                if (prayer.isFardCompleted) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Check,
-                                                        contentDescription = stringResource(R.string.salah_completed_cd),
-                                                        tint = MaterialTheme.colorScheme.onPrimary,
-                                                        modifier = Modifier.size(18.dp)
-                                                    )
+                                            Surface(
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = if (prayer.isFardCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    if (prayer.isFardCompleted) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Check,
+                                                            contentDescription = stringResource(R.string.salah_completed_cd),
+                                                            tint = MaterialTheme.colorScheme.onPrimary,
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
                                     }
                                     if (!focusMode && !isSunrise) {
                                         IconButton(
-                                            onClick = { expandedId = if (isExpanded) null else prayer.id },
-                                            modifier = Modifier.size(28.dp)
+                                            onClick = { expandedId = if (isExpanded) null else prayer.id }
                                         ) {
                                             Icon(
                                                 imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
@@ -856,14 +906,20 @@ fun SalahScreen(
                                 ) {
                                     // Correct a mistaken entry by adding a missed prayer back.
                                     OutlinedButton(
-                                        onClick = { viewModel?.onIntent(SalahUiIntent.IncrementQadha(p)) },
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            viewModel?.onIntent(SalahUiIntent.IncrementQadha(p))
+                                        },
                                         shape = RoundedCornerShape(12.dp),
                                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                                     ) {
                                         Text("+1 Missed", fontWeight = FontWeight.Bold, fontSize = 11.sp)
                                     }
                                     Button(
-                                        onClick = { viewModel?.onIntent(SalahUiIntent.DecrementQadha(p)) },
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            viewModel?.onIntent(SalahUiIntent.DecrementQadha(p))
+                                        },
                                         shape = RoundedCornerShape(12.dp),
                                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                         colors = ButtonDefaults.buttonColors(

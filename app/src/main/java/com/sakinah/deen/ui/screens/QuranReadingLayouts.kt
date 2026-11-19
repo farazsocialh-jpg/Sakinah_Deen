@@ -97,7 +97,7 @@ private fun BookmarkToggle(
 ) {
     IconButton(
         onClick = onClick,
-        modifier = modifier.size(32.dp)
+        modifier = modifier
     ) {
         Icon(
             imageVector = if (bookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,

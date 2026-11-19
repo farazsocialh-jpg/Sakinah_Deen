@@ -30,10 +30,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Refresh
@@ -64,7 +64,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -587,7 +589,7 @@ fun VisualSalahGuideScreen(
                 enabled = canGoBack,
                 modifier = Modifier.weight(1f)
             ) {
-                Icon(Icons.Default.ChevronLeft, contentDescription = null)
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null)
                 Text(stringResource(R.string.guide_previous))
             }
 
@@ -639,7 +641,7 @@ fun VisualSalahGuideScreen(
                     overflow = TextOverflow.Ellipsis
                 )
                 Icon(
-                    imageVector = Icons.Default.ChevronRight,
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimary
                 )
@@ -1113,7 +1115,7 @@ private fun TtsSpeakerButton(
     FilledTonalIconButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.size(40.dp),
+        modifier = modifier,
         colors = IconButtonDefaults.filledTonalIconButtonColors(
             containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
             contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -1154,6 +1156,7 @@ private fun TasbihCounter(
     onIncrement: () -> Unit,
     onReset: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     val phase = when {
         count < 33 -> stringResource(R.string.guide_tasbih_subhanallah)
         count < 66 -> stringResource(R.string.guide_tasbih_alhamdulillah)
@@ -1178,7 +1181,10 @@ private fun TasbihCounter(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                IconButton(onClick = onReset) {
+                IconButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onReset()
+                }) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = stringResource(R.string.guide_tasbih_reset_cd)
@@ -1186,7 +1192,10 @@ private fun TasbihCounter(
                 }
             }
             Button(
-                onClick = onIncrement,
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onIncrement()
+                },
                 enabled = count < 100,
                 modifier = Modifier.fillMaxWidth()
             ) {

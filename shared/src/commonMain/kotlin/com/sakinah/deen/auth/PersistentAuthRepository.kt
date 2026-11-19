@@ -5,6 +5,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -54,6 +56,7 @@ class PersistentAuthRepository(
         encodeDefaults = true
     }
 
+    private val stateMutex = Mutex()
     private val accounts = mutableMapOf<String, StoredAccount>()
     private var current: AuthUser? = null
 
@@ -115,104 +118,107 @@ class PersistentAuthRepository(
         }
     }
 
-    override suspend fun signUp(email: String, password: String, displayName: String): Result<AuthUser> {
-        val cleanEmail = email.trim().lowercase()
-        val cleanName = displayName.trim()
-        if (cleanName.isBlank()) {
-            return Result.failure(IllegalArgumentException("Please enter your full name."))
+    override suspend fun signUp(email: String, password: String, displayName: String): Result<AuthUser> =
+        stateMutex.withLock {
+            val cleanEmail = email.trim().lowercase()
+            val cleanName = displayName.trim()
+            if (cleanName.isBlank()) {
+                return@withLock Result.failure(IllegalArgumentException("Please enter your full name."))
+            }
+            if (!isValidEmail(cleanEmail)) {
+                return@withLock Result.failure(IllegalArgumentException("Please enter a valid email address."))
+            }
+            if (!PasswordHasher.isAcceptablePassword(password)) {
+                return@withLock Result.failure(
+                    IllegalArgumentException(
+                        "Password must be at least ${PasswordHasher.MIN_PASSWORD_LENGTH} characters."
+                    )
+                )
+            }
+            if (accounts.containsKey(cleanEmail)) {
+                return@withLock Result.failure(IllegalStateException("An account with this email already exists."))
+            }
+            // Random per-account salt: a value derived from the email would let an attacker
+            // precompute hashes and reuse them across accounts.
+            val salt = PasswordHasher.newSalt()
+            val stored = StoredAccount(
+                id = cleanEmail,
+                email = cleanEmail,
+                displayName = cleanName,
+                salt = salt,
+                passwordHash = withContext(Dispatchers.Default) {
+                    PasswordHasher.hash(password, salt)
+                },
+            )
+            accounts[cleanEmail] = stored
+            persistAccounts()
+
+            val user = AuthUser(id = cleanEmail, email = cleanEmail, displayName = cleanName)
+            current = user
+            persistCurrentUser(user)
+            _authState.value = AuthState.Authenticated(user)
+            Result.success(user)
         }
-        if (!isValidEmail(cleanEmail)) {
-            return Result.failure(IllegalArgumentException("Please enter a valid email address."))
+
+    override suspend fun signIn(email: String, password: String): Result<AuthUser> =
+        stateMutex.withLock {
+            val cleanEmail = email.trim().lowercase()
+            if (!isValidEmail(cleanEmail)) {
+                return@withLock Result.failure(IllegalArgumentException("Please enter a valid email address."))
+            }
+            if (password.isBlank()) {
+                return@withLock Result.failure(IllegalArgumentException("Please enter your password."))
+            }
+            val stored = accounts[cleanEmail]
+                ?: return@withLock Result.failure(IllegalStateException("No account found for this email. Please sign up first."))
+            if (stored.passwordHash.isBlank()) {
+                return@withLock Result.failure(
+                    IllegalStateException("This account uses Google Sign-In. Continue with Google instead.")
+                )
+            }
+            val verified = withContext(Dispatchers.Default) {
+                PasswordHasher.verify(password, stored.salt, stored.passwordHash)
+            }
+            if (!verified) {
+                return@withLock Result.failure(IllegalStateException("Incorrect password."))
+            }
+            // Accounts created before the KDF change are re-hashed on their next sign-in.
+            if (PasswordHasher.needsUpgrade(stored.passwordHash)) {
+                val newSalt = PasswordHasher.newSalt()
+                val upgraded = stored.copy(
+                    salt = newSalt,
+                    passwordHash = withContext(Dispatchers.Default) {
+                        PasswordHasher.hash(password, newSalt)
+                    }
+                )
+                accounts[cleanEmail] = upgraded
+                persistAccounts()
+            }
+            val user = AuthUser(id = stored.id, email = stored.email, displayName = stored.displayName)
+            current = user
+            persistCurrentUser(user)
+            _authState.value = AuthState.Authenticated(user)
+            Result.success(user)
         }
-        if (!PasswordHasher.isAcceptablePassword(password)) {
-            return Result.failure(
-                IllegalArgumentException(
-                    "Password must be at least ${PasswordHasher.MIN_PASSWORD_LENGTH} characters."
+
+    override suspend fun sendPasswordReset(email: String): Result<Unit> =
+        stateMutex.withLock {
+            val cleanEmail = email.trim().lowercase()
+            if (!isValidEmail(cleanEmail)) {
+                return@withLock Result.failure(IllegalArgumentException("Please enter a valid email address."))
+            }
+            if (!accounts.containsKey(cleanEmail)) {
+                return@withLock Result.failure(IllegalStateException("No local account found for $cleanEmail."))
+            }
+            // Accounts live only on this device and there is no mail server, so claiming a reset
+            // was "sent" would be a lie. Report the real limitation to the caller.
+            Result.failure(
+                IllegalStateException(
+                    "Password reset by email is unavailable for on-device accounts. " +
+                        "Create a new account with a new password, or continue as a guest."
                 )
             )
         }
-        if (accounts.containsKey(cleanEmail)) {
-            return Result.failure(IllegalStateException("An account with this email already exists."))
-        }
-        // Random per-account salt: a value derived from the email would let an attacker
-        // precompute hashes and reuse them across accounts.
-        val salt = PasswordHasher.newSalt()
-        val stored = StoredAccount(
-            id = cleanEmail,
-            email = cleanEmail,
-            displayName = cleanName,
-            salt = salt,
-            passwordHash = withContext(Dispatchers.Default) {
-                PasswordHasher.hash(password, salt)
-            },
-        )
-        accounts[cleanEmail] = stored
-        persistAccounts()
-
-        val user = AuthUser(id = cleanEmail, email = cleanEmail, displayName = cleanName)
-        current = user
-        persistCurrentUser(user)
-        _authState.value = AuthState.Authenticated(user)
-        return Result.success(user)
-    }
-
-    override suspend fun signIn(email: String, password: String): Result<AuthUser> {
-        val cleanEmail = email.trim().lowercase()
-        if (!isValidEmail(cleanEmail)) {
-            return Result.failure(IllegalArgumentException("Please enter a valid email address."))
-        }
-        if (password.isBlank()) {
-            return Result.failure(IllegalArgumentException("Please enter your password."))
-        }
-        val stored = accounts[cleanEmail]
-            ?: return Result.failure(IllegalStateException("No account found for this email. Please sign up first."))
-        if (stored.passwordHash.isBlank()) {
-            return Result.failure(
-                IllegalStateException("This account uses Google Sign-In. Continue with Google instead.")
-            )
-        }
-        val verified = withContext(Dispatchers.Default) {
-            PasswordHasher.verify(password, stored.salt, stored.passwordHash)
-        }
-        if (!verified) {
-            return Result.failure(IllegalStateException("Incorrect password."))
-        }
-        // Accounts created before the KDF change are re-hashed on their next sign-in.
-        if (PasswordHasher.needsUpgrade(stored.passwordHash)) {
-            val newSalt = PasswordHasher.newSalt()
-            val upgraded = stored.copy(
-                salt = newSalt,
-                passwordHash = withContext(Dispatchers.Default) {
-                    PasswordHasher.hash(password, newSalt)
-                }
-            )
-            accounts[cleanEmail] = upgraded
-            persistAccounts()
-        }
-        val user = AuthUser(id = stored.id, email = stored.email, displayName = stored.displayName)
-        current = user
-        persistCurrentUser(user)
-        _authState.value = AuthState.Authenticated(user)
-        return Result.success(user)
-    }
-
-    override suspend fun sendPasswordReset(email: String): Result<Unit> {
-        val cleanEmail = email.trim().lowercase()
-        if (!isValidEmail(cleanEmail)) {
-            return Result.failure(IllegalArgumentException("Please enter a valid email address."))
-        }
-        if (!accounts.containsKey(cleanEmail)) {
-            return Result.failure(IllegalStateException("No local account found for $cleanEmail."))
-        }
-        // Accounts live only on this device and there is no mail server, so claiming a reset
-        // was "sent" would be a lie. Report the real limitation to the caller.
-        return Result.failure(
-            IllegalStateException(
-                "Password reset by email is unavailable for on-device accounts. " +
-                    "Create a new account with a new password, or continue as a guest."
-            )
-        )
-    }
 
     /**
      * Creates or links a Google account. Linking keeps an existing local password hash, so a
@@ -225,11 +231,11 @@ class PersistentAuthRepository(
         givenName: String?,
         familyName: String?,
         photoUrl: String?,
-    ): Result<AuthUser> {
+    ): Result<AuthUser> = stateMutex.withLock {
         val cleanUniqueId = uniqueId.trim()
         val cleanEmail = email.trim().lowercase()
         if (cleanUniqueId.isBlank() && cleanEmail.isBlank()) {
-            return Result.failure(
+            return@withLock Result.failure(
                 IllegalStateException("Google Sign-In did not return an account id. Please try again.")
             )
         }
@@ -269,10 +275,10 @@ class PersistentAuthRepository(
         current = user
         persistCurrentUser(user)
         _authState.value = AuthState.Authenticated(user)
-        return Result.success(user)
+        Result.success(user)
     }
 
-    override suspend fun signInWithApple(identityToken: String): Result<AuthUser> {
+    override suspend fun signInWithApple(identityToken: String): Result<AuthUser> = stateMutex.withLock {
         val clean = identityToken.trim().ifBlank { "local" }
         val user = AuthUser(
             id = "apple:$clean",
@@ -282,30 +288,36 @@ class PersistentAuthRepository(
         current = user
         persistCurrentUser(user)
         _authState.value = AuthState.Authenticated(user)
-        return Result.success(user)
+        Result.success(user)
     }
 
-    override suspend fun continueAsGuest(): Result<AuthUser> {
+    override suspend fun continueAsGuest(): Result<AuthUser> = stateMutex.withLock {
         current = null
         persistCurrentUser(null)
         _authState.value = AuthState.Guest
-        return Result.success(AuthUser(id = "guest", email = "", displayName = "Guest", isGuest = true))
+        Result.success(AuthUser(id = "guest", email = "", displayName = "Guest", isGuest = true))
     }
 
     override suspend fun signOut() {
-        current = null
-        persistCurrentUser(null)
-        _authState.value = AuthState.Guest
+        stateMutex.withLock {
+            current = null
+            persistCurrentUser(null)
+            _authState.value = AuthState.Guest
+        }
         clearPlatformCredentialState()
     }
 
     override suspend fun deleteAccount(): Result<Unit> {
-        val c = current ?: return Result.failure(IllegalStateException("Not signed in"))
-        accounts.remove(c.email.lowercase().ifBlank { c.id })
-        persistAccounts()
-        current = null
-        persistCurrentUser(null)
-        _authState.value = AuthState.Guest
+        val deleted = stateMutex.withLock {
+            val c = current ?: return@withLock false
+            accounts.remove(c.email.lowercase().ifBlank { c.id })
+            persistAccounts()
+            current = null
+            persistCurrentUser(null)
+            _authState.value = AuthState.Guest
+            true
+        }
+        if (!deleted) return Result.failure(IllegalStateException("Not signed in"))
         clearPlatformCredentialState()
         return Result.success(Unit)
     }
@@ -315,11 +327,11 @@ class PersistentAuthRepository(
         runCatching { onSignOut?.invoke() }
     }
 
-    override suspend fun updateDisplayName(displayName: String): Result<AuthUser> {
-        val c = current ?: return Result.failure(IllegalStateException("Not signed in"))
+    override suspend fun updateDisplayName(displayName: String): Result<AuthUser> = stateMutex.withLock {
+        val c = current ?: return@withLock Result.failure(IllegalStateException("Not signed in"))
         val clean = displayName.trim()
         if (clean.isBlank()) {
-            return Result.failure(IllegalArgumentException("Display name cannot be blank."))
+            return@withLock Result.failure(IllegalArgumentException("Display name cannot be blank."))
         }
         val updated = c.copy(displayName = clean)
         current = updated
@@ -330,7 +342,7 @@ class PersistentAuthRepository(
             persistAccounts()
         }
         _authState.value = AuthState.Authenticated(updated)
-        return Result.success(updated)
+        Result.success(updated)
     }
 
     private fun isValidEmail(email: String): Boolean {

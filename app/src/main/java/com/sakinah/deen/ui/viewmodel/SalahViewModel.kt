@@ -77,6 +77,7 @@ data class SalahUiState(
     val locationName: String = "Detecting Location...",
     val isLocationPermissionGranted: Boolean = false,
     val showLocationWarningBanner: Boolean = false,
+    val showExactAlarmWarningBanner: Boolean = false,
     val userCoordinates: Pair<Double, Double> = Pair(21.4225, 39.8262),
     val timeZoneId: String = ZoneId.systemDefault().id,
     val timeZoneAbbr: String = TimeZoneResolver.shortAbbreviation(null),
@@ -229,6 +230,7 @@ class SalahViewModel(
 
         lastKnownPermission = locationProvider?.hasLocationPermission() ?: (preferences?.locationCoordinates != null)
         syncAuthority()
+        syncExactAlarmWarning()
         observeSharedSettings()
         if (savedManual) {
             updateDateLabels(savedZone)
@@ -423,6 +425,7 @@ class SalahViewModel(
                     }
                     SalahRefreshReason.NONE -> Unit
                 }
+                syncExactAlarmWarning()
             }
             is SalahUiIntent.ChangeHighLatitudeRule -> {
                 preferences?.highLatitudeRule = intent.rule
@@ -672,6 +675,7 @@ class SalahViewModel(
             method = preferences?.calculationMethodOverride,
             madhhab = state.madhhab
         )
+        syncExactAlarmWarning()
 
         val repository = prayerTimes ?: return
         viewModelScope.launch {
@@ -702,6 +706,15 @@ class SalahViewModel(
                 sourceLabel = resolved.label,
                 authorityName = resolved.authority.displayName
             )
+        }
+    }
+
+    private fun syncExactAlarmWarning() {
+        val scheduler = alarmScheduler ?: return
+        val alarmsActive = preferences?.alarmsEnabled != false
+        val denied = alarmsActive && hasUsableCoordinates && !scheduler.canScheduleExactAlarms()
+        if (_uiState.value.showExactAlarmWarningBanner != denied) {
+            _uiState.update { it.copy(showExactAlarmWarningBanner = denied) }
         }
     }
 

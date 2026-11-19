@@ -218,7 +218,7 @@ val bundledFonts = listOf(
 )
 
 val bundledAudio = listOf(
-    Quad("adhan_makkah.ogg", "https://archive.org/download/4-9-13MakkahDuhurAdhanSheikhYunusKhoja/4-9-13MakkahDuhurAdhanSheikhYunusKhoja.ogg", 200_000L, "ddb72210022b58f628582bcc41aae5b71749d7b3555b6f63e693289ba380888"),
+    Quad("adhan_makkah.ogg", "https://archive.org/download/4-9-13MakkahDuhurAdhanSheikhYunusKhoja/4-9-13MakkahDuhurAdhanSheikhYunusKhoja.ogg", 200_000L, "ddb722100223b58f628582bcc41aae5b71749d7b3555b6f63e693289ba380888"),
     Quad("adhan_fajr.ogg", "https://archive.org/download/MakkahAdhanAl-fajr5-9-13SheikhYunusKhoja/MakkahAdhanAl-fajr5-9-13SheikhYunusKhoja.ogg", 200_000L, "f2e67ca40fbbf095cbcbc301f8f1e94a5d8c5c46318bf78ea160cec841f6e012"),
     Quad("dua_al_safar.mp3", "https://cdn.islamic.network/quran/audio/128/ar.alafasy/4339.mp3", 20_000L, "f816012396ca986c98e55d8869ce8c53e26d5ddd28fa6814675110bc9a2ef13d")
 )
@@ -235,10 +235,20 @@ fun sha256OfFile(file: java.io.File): String {
     return digest.digest().joinToString("") { "%02x".format(it) }
 }
 
-fun fetchBundledAsset(targetFile: java.io.File, url: String, minBytes: Long, expectedSha256: String, force: Boolean) {
-    if (!force && targetFile.exists() && targetFile.length() >= minBytes &&
-        sha256OfFile(targetFile).equals(expectedSha256, ignoreCase = true)
-    ) {
+fun fetchBundledAsset(
+    targetFile: java.io.File,
+    url: String,
+    minBytes: Long,
+    expectedSha256: String,
+    force: Boolean,
+    offline: Boolean = false
+) {
+    if (!force && targetFile.exists() && targetFile.length() >= minBytes) {
+        if (offline || sha256OfFile(targetFile).equals(expectedSha256, ignoreCase = true)) {
+            return
+        }
+    }
+    if (offline && targetFile.exists() && targetFile.length() >= minBytes) {
         return
     }
     targetFile.parentFile?.mkdirs()
@@ -274,10 +284,11 @@ val downloadFontAssets = tasks.register("downloadFontAssets") {
     group = "sakinah"
     description = "Ensures the bundled Uthmani Hafs and Amiri fonts exist in res/font."
     val force = project.hasProperty("forceDownloadAssets")
+    val offline = gradle.startParameter.isOffline
     val targetDir = project.file("src/main/res/font")
     doLast {
         bundledFonts.forEach { asset ->
-            fetchBundledAsset(File(targetDir, asset.first), asset.second, asset.third, asset.fourth, force)
+            fetchBundledAsset(File(targetDir, asset.first), asset.second, asset.third, asset.fourth, force, offline)
         }
     }
 }
@@ -286,10 +297,11 @@ val downloadAudioAssets = tasks.register("downloadAudioAssets") {
     group = "sakinah"
     description = "Ensures the bundled Adhan and Dua al-Safar audio exist in res/raw."
     val force = project.hasProperty("forceDownloadAssets")
+    val offline = gradle.startParameter.isOffline
     val targetDir = project.file("src/main/res/raw")
     doLast {
         bundledAudio.forEach { asset ->
-            fetchBundledAsset(File(targetDir, asset.first), asset.second, asset.third, asset.fourth, force)
+            fetchBundledAsset(File(targetDir, asset.first), asset.second, asset.third, asset.fourth, force, offline)
         }
     }
 }

@@ -804,7 +804,7 @@ private fun HadithFilterBar(
             filterGrade = state.filterGrade,
             onGradeSelected = onGradeSelected
         )
-        IconButton(onClick = onSearchClick, modifier = Modifier.size(32.dp)) {
+        IconButton(onClick = onSearchClick) {
             Icon(
                 imageVector = Icons.Default.Search,
                 contentDescription = "Search hadith",
@@ -812,7 +812,7 @@ private fun HadithFilterBar(
                 modifier = Modifier.size(18.dp)
             )
         }
-        IconButton(onClick = onSavedClick, modifier = Modifier.size(32.dp)) {
+        IconButton(onClick = onSavedClick) {
             Icon(
                 imageVector = if (savedOnly) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
                 contentDescription = if (savedOnly) "Show all hadiths" else "Show saved hadiths",
@@ -904,11 +904,11 @@ private fun HadithZenPill(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            IconButton(onClick = onLanguageClick, modifier = Modifier.size(30.dp)) {
+            IconButton(onClick = onLanguageClick) {
                 Text(language, fontSize = 9.sp, fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            IconButton(onClick = onSearchClick, modifier = Modifier.size(30.dp)) {
+            IconButton(onClick = onSearchClick) {
                 Icon(Icons.Default.Search, contentDescription = "Search hadith",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
             }
@@ -920,13 +920,12 @@ private fun HadithZenPill(
                         else -> "all"
                     }
                     onGradeSelected(nextGrade)
-                },
-                modifier = Modifier.size(30.dp)
+                }
             ) {
                 Icon(Icons.Default.Tune, contentDescription = "Filter by grade",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
             }
-            IconButton(onClick = onSavedClick, modifier = Modifier.size(30.dp)) {
+            IconButton(onClick = onSavedClick) {
                 Icon(
                     imageVector = if (savedOnly) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
                     contentDescription = if (savedOnly) "Show all hadiths" else "Show saved hadiths",

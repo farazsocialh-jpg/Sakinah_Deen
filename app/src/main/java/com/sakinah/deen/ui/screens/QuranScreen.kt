@@ -73,6 +73,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -290,7 +292,9 @@ fun QuranScreen(
             )
         )
     }
+    val haptic = LocalHapticFeedback.current
     val onToggleBookmark: (AyahModel) -> Unit = { ayah ->
+        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         vm.onIntent(QuranUiIntent.ToggleBookmark(surah.number, ayah.numberInSurah))
     }
     val actionAyah = surah.ayahs.firstOrNull { it.numberInSurah == actionBarAyah }
@@ -1143,8 +1147,7 @@ private fun ReaderPillLayoutMenu(
     var expanded by remember { mutableStateOf(false) }
     Box {
         IconButton(
-            onClick = { expanded = true },
-            modifier = Modifier.size(40.dp)
+            onClick = { expanded = true }
         ) {
             Icon(
                 imageVector = Icons.Default.ViewColumn,
@@ -1185,7 +1188,7 @@ private fun ReaderPillModeButton(
     studyMode: Boolean,
     onClick: () -> Unit
 ) {
-    IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
+    IconButton(onClick = onClick) {
         Icon(
             imageVector = if (studyMode) Icons.Default.ViewAgenda
             else Icons.AutoMirrored.Filled.MenuBook,
@@ -1229,7 +1232,7 @@ private fun AyahActionBar(
                 maxLines = 1,
                 modifier = Modifier.padding(start = 8.dp, end = 2.dp)
             )
-            IconButton(onClick = onBookmark, modifier = Modifier.size(40.dp)) {
+            IconButton(onClick = onBookmark) {
                 Icon(
                     imageVector = if (bookmarked) Icons.Default.Bookmark
                     else Icons.Outlined.BookmarkBorder,
@@ -1240,7 +1243,7 @@ private fun AyahActionBar(
                     modifier = Modifier.size(18.dp)
                 )
             }
-            IconButton(onClick = onCopy, modifier = Modifier.size(40.dp)) {
+            IconButton(onClick = onCopy) {
                 Icon(
                     imageVector = Icons.Default.ContentCopy,
                     contentDescription = stringResource(R.string.quran_action_copy),
@@ -1248,7 +1251,7 @@ private fun AyahActionBar(
                     modifier = Modifier.size(18.dp)
                 )
             }
-            IconButton(onClick = onShare, modifier = Modifier.size(40.dp)) {
+            IconButton(onClick = onShare) {
                 Icon(
                     imageVector = Icons.Default.Share,
                     contentDescription = stringResource(R.string.quran_action_share),
@@ -1256,7 +1259,7 @@ private fun AyahActionBar(
                     modifier = Modifier.size(18.dp)
                 )
             }
-            IconButton(onClick = onTafseer, modifier = Modifier.size(40.dp)) {
+            IconButton(onClick = onTafseer) {
                 Icon(
                     imageVector = Icons.Default.Book,
                     contentDescription = stringResource(R.string.quran_action_tafseer),
@@ -1264,7 +1267,7 @@ private fun AyahActionBar(
                     modifier = Modifier.size(18.dp)
                 )
             }
-            IconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
+            IconButton(onClick = onClose) {
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = stringResource(R.string.quran_action_close),
@@ -1358,7 +1361,7 @@ private fun QuranStudyPill(
 ) {
     Surface(
         modifier = modifier
-            .defaultMinSize(minWidth = 48.dp, minHeight = 40.dp)
+            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(50),
         color = if (isStudyMode) MaterialTheme.colorScheme.primaryContainer
@@ -1386,7 +1389,7 @@ private fun QuranLanguageBadge(
 ) {
     Surface(
         modifier = Modifier
-            .defaultMinSize(minWidth = 48.dp, minHeight = 40.dp)
+            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(50),
         color = MaterialTheme.colorScheme.secondaryContainer
@@ -1413,13 +1416,16 @@ private fun QuranUtilityIcon(
 ) {
     Surface(
         modifier = Modifier
-            .size(32.dp)
+            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(50),
         color = if (active) MaterialTheme.colorScheme.primaryContainer
         else MaterialTheme.colorScheme.surface
     ) {
-        Box(contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier.size(48.dp),
+            contentAlignment = Alignment.Center
+        ) {
             Icon(
                 imageVector = icon,
                 contentDescription = description,
