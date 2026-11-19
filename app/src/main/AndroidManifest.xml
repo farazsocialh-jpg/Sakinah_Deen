@@ -102,6 +102,20 @@
             </intent-filter>
         </receiver>
 
+        <!-- Glance Salah Widget -->
+        <receiver
+            android:name=".widget.SalahWidgetReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_ENABLE" />
+                <action android:name="android.appwidget.action.APPWIDGET_DISABLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/salah_widget_info" />
+        </receiver>
+
         <!-- Boot / clock / timezone restoration of exact alarms -->
         <receiver
             android:name=".service.BootAndAlarmReceiver"
