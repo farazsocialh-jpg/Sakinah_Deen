@@ -95,15 +95,29 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
 
                     alreadyCompleted -> NotificationChannels.cancelPrayerNotification(appContext)
 
-                    alertMode == PrayerAlertMode.FULL_AZAAN -> startAdhanPlayback(
-                        context = appContext,
-                        prayerName = prayerName,
-                        prayerType = prayerType,
-                        windowStart = windowStart,
-                        windowEnd = windowEnd,
-                        alertMode = alertMode,
-                        criticalFajr = criticalFajr
-                    )
+                    alertMode == PrayerAlertMode.FULL_AZAAN -> {
+                        // Post the high-importance reminder card first, independently of the
+                        // (possibly restricted) foreground-service start, so Fajr is visible
+                        // even if the full Athan cannot play.
+                        postPrayerNotification(
+                            context = appContext,
+                            prayerName = prayerName,
+                            prayerType = prayerType,
+                            windowStart = windowStart,
+                            windowEnd = windowEnd,
+                            alertMode = PrayerAlertMode.VIBRATE_ONLY,
+                            criticalFajr = criticalFajr
+                        )
+                        startAdhanPlayback(
+                            context = appContext,
+                            prayerName = prayerName,
+                            prayerType = prayerType,
+                            windowStart = windowStart,
+                            windowEnd = windowEnd,
+                            alertMode = alertMode,
+                            criticalFajr = criticalFajr
+                        )
+                    }
 
                     else -> postPrayerNotification(
                         context = appContext,

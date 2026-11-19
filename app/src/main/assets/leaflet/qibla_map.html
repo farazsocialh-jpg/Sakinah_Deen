@@ -139,7 +139,7 @@
     return [(lat2 * 180) / Math.PI, (lon2 * 180) / Math.PI];
   }
 
-  var tip = destination(lat, lon, qibla, 0.4);
+  var tip = destination(lat, lon, qibla, 2.0);
   L.polyline([[lat, lon], tip], {
     color: "#10B981",
     weight: 4,

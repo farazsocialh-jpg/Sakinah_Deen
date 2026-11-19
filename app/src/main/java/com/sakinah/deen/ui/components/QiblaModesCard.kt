@@ -87,6 +87,7 @@ import com.sakinah.deen.domain.qibla.QiblaPermissionState
 import com.sakinah.deen.domain.qibla.QiblaStatus
 import com.sakinah.deen.domain.qibla.QiblaUiState
 import com.sakinah.deen.domain.qibla.rememberTrueNorthCompassState
+import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.ui.theme.DaifAmber
 import com.sakinah.deen.ui.theme.SahihGreen
 import kotlinx.coroutines.delay
@@ -123,6 +124,27 @@ fun QiblaModesCard(
     // Open on the True-North compass: it works offline and needs no tile downloads.
     var mode by rememberSaveable { mutableStateOf(QiblaMode.COMPASS) }
     val context = LocalContext.current
+
+    // Fall back to the saved Salah city so the Qibla view never hangs on (0, 0) while GPS is
+    // slow or unavailable; the map/compass then use the last known usable coordinates.
+    val effectiveLatitude = remember(latitude, longitude, locationAvailable, context) {
+        if (locationAvailable && isValidCoordinates(latitude, longitude)) {
+            latitude
+        } else {
+            SakinahPreferences(context).locationCoordinates?.first ?: latitude
+        }
+    }
+    val effectiveLongitude = remember(latitude, longitude, locationAvailable, context) {
+        if (locationAvailable && isValidCoordinates(latitude, longitude)) {
+            longitude
+        } else {
+            SakinahPreferences(context).locationCoordinates?.second ?: longitude
+        }
+    }
+
+    // Shadow the incoming coordinates with the resolved, usable ones for the rest of the card.
+    val latitude = effectiveLatitude
+    val longitude = effectiveLongitude
 
     var permission by remember { mutableStateOf(currentPermissionState(context)) }
     var permissionRequestInFlight by remember { mutableStateOf(false) }
@@ -531,6 +553,13 @@ private fun QiblaMapView(
         }
     }
 
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        webViewHolder.value?.onResume()
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
+        webViewHolder.value?.onPause()
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             webViewHolder.value?.let { webView ->
@@ -910,6 +939,10 @@ private fun Context.findActivity(): Activity? {
     }
     return null
 }
+
+private fun isValidCoordinates(latitude: Double, longitude: Double): Boolean =
+    latitude in -90.0..90.0 && longitude in -180.0..180.0 &&
+        !(latitude == 0.0 && longitude == 0.0)
 
 private fun hasLocationPermission(context: Context): Boolean =
     ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==

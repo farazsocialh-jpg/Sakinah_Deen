@@ -24,7 +24,8 @@ class BootAndAlarmReceiver : BroadcastReceiver() {
             action != "com.htc.intent.action.QUICKBOOT_POWERON" &&
             action != Intent.ACTION_TIME_CHANGED &&
             action != Intent.ACTION_TIMEZONE_CHANGED &&
-            action != Intent.ACTION_MY_PACKAGE_REPLACED
+            action != Intent.ACTION_MY_PACKAGE_REPLACED &&
+            action != "android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED"
         ) {
             return
         }
