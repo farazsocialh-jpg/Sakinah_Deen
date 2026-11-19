@@ -9,7 +9,13 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.google.services)
+}
+
+// Firebase config is provided per machine/deployment, not in VCS.
+// The Google Services plugin hard-fails without google-services.json, so only apply it
+// when the file is present (CI builds and fresh clones build fine without it).
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }
 
 // Release credentials are never hardcoded: keystore.properties (git-ignored) or environment variables.
