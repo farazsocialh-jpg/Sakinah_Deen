@@ -89,6 +89,34 @@ class PrayerAlarmScheduler(
          */
         internal fun isCompleteSchedule(times: Map<PrayerType, JLocalTime>?): Boolean =
             times != null && REQUIRED_PRAYERS.all { times[it] != null }
+
+        /**
+         * Pure decision used by [scheduleTable]: whether a prayer whose alert instant today is
+         * [todayTime] (plus [offsetMinutes]) has already passed relative to [now] and must
+         * therefore be taken from tomorrow's table. Exposed for overnight (Fajr) scheduling tests.
+         */
+        internal data class PlannedTrigger(
+            val trigger: ZonedDateTime,
+            val rollsToTomorrow: Boolean
+        )
+
+        internal fun planTrigger(
+            todayTime: JLocalTime,
+            tomorrowTime: JLocalTime,
+            todayDate: JLocalDate,
+            now: ZonedDateTime,
+            zone: ZoneId,
+            offsetMinutes: Long
+        ): PlannedTrigger {
+            val todayAlert = ZonedDateTime.of(todayDate, todayTime, zone).plusMinutes(offsetMinutes)
+            val rolls = !todayAlert.isAfter(now)
+            val triggerZoned = if (!rolls) {
+                todayAlert
+            } else {
+                ZonedDateTime.of(todayDate.plusDays(1), tomorrowTime, zone).plusMinutes(offsetMinutes)
+            }
+            return PlannedTrigger(triggerZoned, rolls)
+        }
     }
 
     private val alarmManager: AlarmManager? =
@@ -206,17 +234,20 @@ class PrayerAlarmScheduler(
             if (mode == PrayerAlertMode.OFF) continue
 
             val todayTime = todayTimes[prayer] ?: continue
+            val tomorrowTime = tomorrowTimes[prayer] ?: todayTime
             val offset = settings.offsetFor(prayer).toLong()
             // Compare full zoned instants: plusMinutes may wrap past midnight, which a
             // LocalTime comparison would treat as "earlier today" and skip or double-schedule.
-            val todayAlert = ZonedDateTime.of(todayJ, todayTime, zone).plusMinutes(offset)
-            val rollsToTomorrow = !todayAlert.isAfter(nowZoned)
-            val triggerZoned = if (!rollsToTomorrow) {
-                todayAlert
-            } else {
-                val tomorrowTime = tomorrowTimes[prayer] ?: todayTime
-                ZonedDateTime.of(todayJ.plusDays(1), tomorrowTime, zone).plusMinutes(offset)
-            }
+            val planned = planTrigger(
+                todayTime = todayTime,
+                tomorrowTime = tomorrowTime,
+                todayDate = todayJ,
+                now = nowZoned,
+                zone = zone,
+                offsetMinutes = offset
+            )
+            val triggerZoned = planned.trigger
+            val rollsToTomorrow = planned.rollsToTomorrow
             // The window a reminder covers always comes from the day it fires on: Fajr ends at
             // sunrise, Dhuhr at Asr, Asr at Maghrib, Maghrib at Isha, Isha at Islamic midnight.
             val triggerDate = triggerZoned.toLocalDate()
