@@ -25,6 +25,7 @@ import java.time.ZoneId
 import java.time.chrono.HijrahDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
@@ -265,6 +266,27 @@ fun minutesUntil(now: LocalTime, target: LocalTime): Long {
     return (seconds / 60).toLong()
 }
 
+/**
+ * How far the current prayer window has run, from the prayer that began last to the one
+ * that comes next. Drives the progress bar on the compact Salah widget.
+ */
+fun prayerProgress(times: Map<PrayerType, LocalTime>, now: LocalTime): Float {
+    val starts = OBLIGATORY_PRAYERS.mapNotNull { times[it.first] }.sorted()
+    if (starts.size < 2) return 0f
+    var start = starts.last()
+    var end = starts.first()
+    starts.forEachIndexed { index, candidate ->
+        if (!now.isBefore(candidate)) {
+            start = candidate
+            end = starts.getOrElse(index + 1) { starts.first() }
+        }
+    }
+    val total = ((end.toSecondOfDay() - start.toSecondOfDay()) + 86_400) % 86_400
+    if (total == 0) return 0f
+    val elapsed = ((now.toSecondOfDay() - start.toSecondOfDay()) + 86_400) % 86_400
+    return (elapsed.toFloat() / total).coerceIn(0f, 1f)
+}
+
 fun countdownLabel(minutes: Long): String {
     val safe = minutes.coerceAtLeast(0)
     val hours = safe / 60
@@ -296,6 +318,11 @@ private val HIJRI_MONTHS = listOf(
     "Ramadan", "Shawwal", "Dhu al-Qi'dah", "Dhu al-Hijjah"
 )
 
+private val HIJRI_SHORT_MONTHS = listOf(
+    "Muharram", "Safar", "Rabi I", "Rabi II", "Jumada I", "Jumada II",
+    "Rajab", "Sha'ban", "Ramadan", "Shawwal", "Dhu al-Qi'dah", "Dhu al-Hijjah"
+)
+
 data class HijriDateInfo(
     val day: Int,
     val month: Int,
@@ -303,6 +330,15 @@ data class HijriDateInfo(
     val monthName: String
 ) {
     val label: String get() = "$day $monthName $year AH"
+
+    /** "Jumada I" — the compact form the widgets set in caps. */
+    val shortMonth: String get() = HIJRI_SHORT_MONTHS.getOrElse(month - 1) { monthName }
+
+    /** "18 JUMADA I 1448" for the 2x1 tile. */
+    val compactLabel: String get() = "$day ${shortMonth.uppercase(Locale.ENGLISH)} $year"
+
+    /** "JUMADA I 1448" under the big day number. */
+    val monthYearLabel: String get() = "${shortMonth.uppercase(Locale.ENGLISH)} $year"
 }
 
 /** Hijri date for a Gregorian day, shifted by the user's moon-sighting offset. */

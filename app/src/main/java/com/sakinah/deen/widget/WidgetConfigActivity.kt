@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sakinah.deen.data.prefs.AppearancePreferences
+import com.sakinah.deen.ui.theme.SakinahPalette
 import com.sakinah.deen.ui.theme.SakinahTheme
 import com.sakinah.deen.ui.theme.UserAppearanceConfig
 import com.sakinah.deen.ui.theme.ThemeMode
@@ -123,13 +124,12 @@ class WidgetConfigActivity : ComponentActivity() {
                             fontWeight = FontWeight.SemiBold
                         )
                         Spacer(Modifier.height(10.dp))
-                        val accent = appearance.palette.widgetAccent(darkTheme)
                         WidgetStyle.entries.forEach { option ->
                             StyleOptionCard(
                                 style = option,
                                 selected = style == option,
                                 isDark = darkTheme,
-                                accent = accent,
+                                palette = appearance.palette,
                                 onClick = { style = option }
                             )
                             Spacer(Modifier.height(8.dp))
@@ -206,13 +206,13 @@ private fun StyleOptionCard(
     style: WidgetStyle,
     selected: Boolean,
     isDark: Boolean,
-    accent: Long,
+    palette: SakinahPalette,
     onClick: () -> Unit
 ) {
     // Compose cannot decode the widgets' XML <shape>/<gradient> drawables (`painterResource`
     // throws IllegalArgumentException), so the swatch paints the same colours with a Brush.
     // `widgetBackgroundDrawable` stays reserved for Glance's ImageProvider.
-    val colors = resolveWidgetColors(style, isDark, PrayerWindow.DHUHR, accent)
+    val colors = resolveWidgetColors(style, isDark, PrayerWindow.DHUHR, palette)
     val surface = Color(colors.background).let { base ->
         // Transparent has no fill of its own; preview it on the panel surface so it still reads.
         if (base.alpha < 0.05f) MaterialTheme.colorScheme.surfaceVariant else base

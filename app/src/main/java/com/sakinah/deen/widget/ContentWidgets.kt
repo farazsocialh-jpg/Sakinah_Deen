@@ -1,10 +1,14 @@
 package com.sakinah.deen.widget
 
 import android.content.Context
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.LocalContext
 import androidx.glance.LocalSize
+import androidx.glance.action.Action
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
@@ -13,8 +17,18 @@ import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.updateAll
+import androidx.glance.background
+import androidx.glance.layout.Alignment
+import androidx.glance.layout.Column
+import androidx.glance.layout.Row
+import androidx.glance.layout.fillMaxWidth
+import androidx.glance.layout.padding
+import androidx.glance.text.FontWeight
+import androidx.glance.text.Text
+import androidx.glance.text.TextStyle
 import java.time.LocalTime
 
 // ---------------------------------------------------------------------------
@@ -41,12 +55,17 @@ class DailyAyahWidget : GlanceAppWidget() {
                         WidgetBody(
                             text = ayah.snippet(),
                             palette = palette,
-                            fontSize = 12,
+                            fontSize = 11,
                             maxLines = 2,
                             modifier = GlanceModifier.defaultWeight()
                         )
                         WidgetInlineGap()
-                        WidgetPill(text = ayah.reference, palette = palette, highlighted = true)
+                        WidgetPill(
+                            text = ayah.reference,
+                            palette = palette,
+                            solid = true,
+                            fontSize = 10
+                        )
                     }
                 }
 
@@ -55,20 +74,56 @@ class DailyAyahWidget : GlanceAppWidget() {
                         WidgetBody(
                             text = ayah.translation,
                             palette = palette,
-                            fontSize = 12,
+                            fontSize = 11,
                             maxLines = 2,
                             modifier = GlanceModifier.defaultWeight()
                         )
                         WidgetInlineGap()
-                        WidgetPill(text = ayah.reference, palette = palette)
+                        WidgetPill(text = ayah.reference, palette = palette, fontSize = 10)
                         WidgetInlineGap()
                         NextAyahPill(palette)
                     }
                 }
 
-                WidgetShape.SQUARE, WidgetShape.EXPANDED -> WidgetShell(palette, openQuran) {
+                WidgetShape.SQUARE -> WidgetShell(palette, openQuran) {
                     WidgetRow {
-                        WidgetCaption(text = "AYAH OF THE DAY", palette = palette, maxLines = 1)
+                        WidgetCaption(
+                            text = "DAILY AYAH",
+                            palette = palette,
+                            maxLines = 1,
+                            fontSize = 9
+                        )
+                        WidgetSpacer()
+                        WidgetPill(text = ayah.reference, palette = palette, fontSize = 9)
+                    }
+                    WidgetGap(4)
+                    WidgetBody(
+                        text = ayah.translation,
+                        palette = palette,
+                        fontSize = 11,
+                        maxLines = 5,
+                        modifier = GlanceModifier.defaultWeight()
+                    )
+                    WidgetRow {
+                        WidgetCaption(
+                            text = ayah.surahName,
+                            palette = palette,
+                            maxLines = 1,
+                            fontSize = 9
+                        )
+                        WidgetSpacer()
+                        NextAyahPill(palette)
+                    }
+                }
+
+                WidgetShape.EXPANDED -> WidgetShell(palette, openQuran) {
+                    WidgetRow {
+                        WidgetCaption(
+                            text = "DAILY AYAH · SURAH ${ayah.reference}",
+                            palette = palette,
+                            maxLines = 1,
+                            fontSize = 10
+                        )
                         WidgetSpacer()
                         NextAyahPill(palette)
                     }
@@ -77,14 +132,26 @@ class DailyAyahWidget : GlanceAppWidget() {
                         text = ayah.translation,
                         palette = palette,
                         fontSize = 13,
-                        maxLines = 5,
+                        maxLines = 4,
                         modifier = GlanceModifier.defaultWeight()
                     )
-                    WidgetGap(4)
+                    WidgetGap(2)
                     WidgetRow {
-                        WidgetCaption(text = ayah.surahLabel(), palette = palette, maxLines = 1)
+                        WidgetPill(
+                            text = "Next Ayah",
+                            palette = palette,
+                            solid = true,
+                            modifier = GlanceModifier.clickable(actionRunCallback<NextAyahAction>())
+                        )
+                        WidgetInlineGap(8)
+                        QuranPill(palette, openQuran)
                         WidgetSpacer()
-                        WidgetCaption(text = "Tap to read", palette = palette, maxLines = 1)
+                        WidgetCaption(
+                            text = ayah.reference,
+                            palette = palette,
+                            maxLines = 1,
+                            fontSize = 9
+                        )
                     }
                 }
             }
@@ -92,13 +159,22 @@ class DailyAyahWidget : GlanceAppWidget() {
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun NextAyahPill(palette: WidgetPalette) {
     WidgetPill(
-        text = "↻ Next",
+        text = "↻",
         palette = palette,
         highlighted = true,
         modifier = GlanceModifier.clickable(actionRunCallback<NextAyahAction>())
+    )
+}
+
+@Composable
+private fun QuranPill(palette: WidgetPalette, openQuran: Action) {
+    WidgetOutlinedPill(
+        text = "Read Surah",
+        palette = palette,
+        modifier = GlanceModifier.clickable(openQuran)
     )
 }
 
@@ -121,7 +197,7 @@ class DailyAyahWidgetReceiver : GlanceAppWidgetReceiver() {
 }
 
 // ---------------------------------------------------------------------------
-// Ask the Scholar (2x1 / 4x1)
+// Ask the Scholar
 // ---------------------------------------------------------------------------
 
 class AiScholarWidget : GlanceAppWidget() {
@@ -138,46 +214,76 @@ class AiScholarWidget : GlanceAppWidget() {
             val openScholar = openAppAction(LocalContext.current, "ai_scholar")
             when (shape) {
                 WidgetShape.COMPACT -> WidgetShell(palette, openScholar) {
-                    WidgetRow {
-                        WidgetPill(text = "Ask Scholar", palette = palette, highlighted = true)
-                        WidgetSpacer()
-                        WidgetAccentValue(text = "→", palette = palette, fontSize = 14)
+                    Column(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        WidgetPill(text = "✦ Ask Scholar", palette = palette, solid = true)
                     }
                 }
 
                 WidgetShape.WIDE -> WidgetShell(palette, openScholar) {
-                    WidgetRow {
-                        WidgetCaption(text = "IMANCORE SCHOLAR", palette = palette, maxLines = 1)
-                        WidgetSpacer()
-                        WidgetPill(
-                            text = "Ask ImanCore Scholar…",
-                            palette = palette,
-                            highlighted = true
-                        )
+                    Column(modifier = GlanceModifier.fillMaxWidth()) {
+                        ScholarSearchBar(palette, fontSize = 11)
                     }
                 }
 
                 WidgetShape.SQUARE, WidgetShape.EXPANDED -> WidgetShell(palette, openScholar) {
-                    WidgetCaption(text = "IMANCORE SCHOLAR", palette = palette, maxLines = 1)
-                    WidgetGap(2)
-                    WidgetTitle(text = "Ask a question", palette = palette)
-                    WidgetVerticalSpacer()
-                    WidgetPill(
-                        text = "Ask ImanCore Scholar…",
+                    WidgetCaption(
+                        text = "IMANCORE SCHOLAR",
                         palette = palette,
-                        highlighted = true
+                        maxLines = 1,
+                        fontSize = 9
+                    )
+                    WidgetVerticalSpacer()
+                    ScholarSearchBar(
+                        palette,
+                        fontSize = if (shape == WidgetShape.EXPANDED) 13 else 12
                     )
                     if (shape == WidgetShape.EXPANDED) {
                         WidgetGap(4)
                         WidgetCaption(
                             text = "Answers grounded in Qur'an, Hadith and fiqh",
                             palette = palette,
-                            maxLines = 1
+                            maxLines = 1,
+                            fontSize = 9
                         )
                     }
                 }
             }
         }
+    }
+}
+
+/** The full-width search-bar pill the Scholar widget shows. */
+@Composable
+private fun ScholarSearchBar(palette: WidgetPalette, fontSize: Int) {
+    Row(
+        modifier = GlanceModifier
+            .fillMaxWidth()
+            .background(palette.pillBackground)
+            .cornerRadius(999.dp)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text = "✦",
+            maxLines = 1,
+            style = TextStyle(
+                color = palette.accent,
+                fontSize = fontSize.sp,
+                fontWeight = FontWeight.Bold
+            )
+        )
+        WidgetInlineGap()
+        Text(
+            text = "Ask ImanCore Scholar…",
+            maxLines = 1,
+            style = TextStyle(
+                color = palette.primaryText,
+                fontSize = fontSize.sp,
+                fontWeight = FontWeight.Medium
+            )
+        )
     }
 }
 

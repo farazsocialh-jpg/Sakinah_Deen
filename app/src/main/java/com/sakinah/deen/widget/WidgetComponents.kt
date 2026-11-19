@@ -16,6 +16,7 @@ import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
+import androidx.glance.appwidget.LinearProgressIndicator
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.updateAll
 import androidx.glance.background
@@ -35,6 +36,7 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import com.sakinah.deen.MainActivity
+import com.sakinah.deen.ui.theme.UserAppearanceConfig
 
 /**
  * The four responsive buckets every widget declares. A widget is composed for the bucket
@@ -59,9 +61,13 @@ fun shapeOf(size: DpSize): WidgetShape = when {
     else -> WidgetShape.COMPACT
 }
 
+/** Corner radius shared by every widget surface. */
+internal val WidgetCorner = 24.dp
+
 /**
- * The shared 24dp container used by every widget. The surface is a real rounded `<shape>`
- * drawable so Living Sky can carry a gradient and Transparent only a hairline.
+ * The shared 24dp container used by every widget. The fill is a palette colour, except for
+ * Living Sky which paints its prayer-window gradient. A skin that asks for a hairline gets a
+ * 1dp outer layer with a 23dp inner surface, because Glance 1.1 has no border modifier.
  */
 @Composable
 fun WidgetShell(
@@ -75,16 +81,38 @@ fun WidgetShell(
     } else {
         GlanceModifier.background(palette.background)
     }
-    Column(
-        modifier = GlanceModifier
-            .fillMaxSize()
-            .then(surface)
-            .cornerRadius(24.dp)
-            .padding(14.dp)
-            .clickable(onClickAction)
-            .then(modifier),
-        content = content
-    )
+    val hairline = palette.hairline
+    if (hairline == null) {
+        Column(
+            modifier = GlanceModifier
+                .fillMaxSize()
+                .then(surface)
+                .cornerRadius(WidgetCorner)
+                .padding(14.dp)
+                .clickable(onClickAction)
+                .then(modifier),
+            content = content
+        )
+    } else {
+        Box(
+            modifier = GlanceModifier
+                .fillMaxSize()
+                .background(hairline)
+                .cornerRadius(WidgetCorner)
+                .clickable(onClickAction)
+                .then(modifier)
+        ) {
+            Column(
+                modifier = GlanceModifier
+                    .fillMaxSize()
+                    .padding(1.dp)
+                    .then(surface)
+                    .cornerRadius(23.dp)
+                    .padding(13.dp),
+                content = content
+            )
+        }
+    }
 }
 
 @Composable
@@ -133,7 +161,8 @@ fun WidgetCaption(
     text: String,
     palette: WidgetPalette,
     modifier: GlanceModifier = GlanceModifier,
-    maxLines: Int = 2
+    maxLines: Int = 2,
+    fontSize: Int = 11
 ) {
     Text(
         text = text,
@@ -141,7 +170,7 @@ fun WidgetCaption(
         maxLines = maxLines,
         style = TextStyle(
             color = palette.secondaryText,
-            fontSize = 11.sp,
+            fontSize = fontSize.sp,
             fontWeight = FontWeight.Normal
         )
     )
@@ -184,20 +213,79 @@ fun WidgetPill(
     text: String,
     palette: WidgetPalette,
     highlighted: Boolean = false,
-    modifier: GlanceModifier = GlanceModifier
+    solid: Boolean = false,
+    modifier: GlanceModifier = GlanceModifier,
+    fontSize: Int = 11
 ) {
+    val background = if (solid) palette.accent else palette.pillBackground
+    val content = when {
+        solid -> palette.onAccent
+        highlighted -> palette.accent
+        else -> palette.primaryText
+    }
     Text(
         text = text,
         modifier = modifier
-            .background(palette.pillBackground)
+            .background(background)
             .cornerRadius(999.dp)
-            .padding(horizontal = 8.dp, vertical = 3.dp),
+            .padding(horizontal = 9.dp, vertical = 3.dp),
         maxLines = 1,
         style = TextStyle(
-            color = if (highlighted) palette.accent else palette.primaryText,
-            fontSize = 11.sp,
-            fontWeight = if (highlighted) FontWeight.Bold else FontWeight.Medium
+            color = content,
+            fontSize = fontSize.sp,
+            fontWeight = if (solid || highlighted) FontWeight.Bold else FontWeight.Medium
         )
+    )
+}
+
+/**
+ * An outlined pill: a hairline ring drawn by a 1dp outer layer, used for secondary actions
+ * such as "Read Surah" and the Scholar search bar.
+ */
+@Composable
+fun WidgetOutlinedPill(
+    text: String,
+    palette: WidgetPalette,
+    modifier: GlanceModifier = GlanceModifier,
+    fontSize: Int = 11
+) {
+    Box(
+        modifier = modifier
+            .background(palette.divider)
+            .cornerRadius(999.dp)
+    ) {
+        Text(
+            text = text,
+            modifier = GlanceModifier
+                .padding(1.dp)
+                .background(palette.pillBackground)
+                .cornerRadius(999.dp)
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+            maxLines = 1,
+            style = TextStyle(
+                color = palette.accent,
+                fontSize = fontSize.sp,
+                fontWeight = FontWeight.Bold
+            )
+        )
+    }
+}
+
+/** The thin accent bar under a countdown or dhikr total. */
+@Composable
+fun WidgetProgress(
+    progress: Float,
+    palette: WidgetPalette,
+    modifier: GlanceModifier = GlanceModifier
+) {
+    LinearProgressIndicator(
+        progress = progress.coerceIn(0f, 1f),
+        modifier = modifier
+            .fillMaxWidth()
+            .height(4.dp)
+            .cornerRadius(999.dp),
+        color = palette.accent,
+        backgroundColor = palette.track
     )
 }
 
@@ -235,7 +323,7 @@ fun WidgetInlineGap(size: Int = 6) {
     Spacer(GlanceModifier.width(size.dp))
 }
 
-/** Resolves the saved style/theme for one placed widget instance. */
+/** Resolves the saved style, theme override and active app palette for one widget instance. */
 suspend fun widgetPaletteFor(
     context: Context,
     appWidgetId: Int,
@@ -245,9 +333,9 @@ suspend fun widgetPaletteFor(
     val mode = WidgetPrefsStore.getThemeMode(context, appWidgetId)
     val systemDark = (context.resources.configuration.uiMode and
         Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-    val isDark = resolveDarkMode(mode, systemDark)
-    val accent = appAppearance(context)?.palette?.widgetAccent(isDark)
-    return resolveWidgetPalette(style, isDark, window, accentOverride = accent)
+    val appearance = appAppearance(context) ?: UserAppearanceConfig()
+    val isDark = resolveDarkMode(mode, appearance.themeMode, systemDark)
+    return resolveWidgetPalette(style, isDark, window, appearance.palette)
 }
 
 object WidgetRouteKey {

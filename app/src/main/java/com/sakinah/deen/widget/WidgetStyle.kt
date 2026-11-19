@@ -10,6 +10,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.glance.unit.ColorProvider
 import com.sakinah.deen.R
 import com.sakinah.deen.ui.theme.SakinahPalette
+import com.sakinah.deen.ui.theme.ThemeMode
+import com.sakinah.deen.ui.theme.buildSakinahColorScheme
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
@@ -40,7 +42,13 @@ data class WidgetColors(
     val secondaryText: Long,
     val accent: Long,
     val pill: Long,
-    val divider: Long
+    val divider: Long,
+    /** Hairline drawn around the 24dp surface; 0 means no border. */
+    val border: Long = 0L,
+    /** Track colour behind progress bars. */
+    val track: Long = 0L,
+    /** Text that sits on top of a solid [accent] fill. */
+    val onAccent: Long = 0xFFFFFFFF
 )
 
 data class WidgetPalette(
@@ -48,118 +56,117 @@ data class WidgetPalette(
     val primaryText: ColorProvider,
     val secondaryText: ColorProvider,
     val accent: ColorProvider,
+    val onAccent: ColorProvider,
     val pillBackground: ColorProvider,
     val divider: ColorProvider,
+    val track: ColorProvider,
     /** Rounded `<shape>` drawable painted behind the widget; 0 means a flat colour. */
-    val backgroundImageRes: Int = 0
+    val backgroundImageRes: Int = 0,
+    /** Hairline border colour, or null for a borderless skin. */
+    val hairline: ColorProvider? = null
 )
 
+/** The settled look of the shape drawables Living Sky still paints per prayer window. */
+internal fun skyBaseColor(window: PrayerWindow): Long = when (window) {
+    PrayerWindow.FAJR -> 0xFF2B4C7E
+    PrayerWindow.DHUHR -> 0xFF1D6FA5
+    PrayerWindow.ASR -> 0xFF9A5B25
+    PrayerWindow.MAGHRIB -> 0xFF4C2A6A
+    PrayerWindow.ISHA -> 0xFF131B3A
+}
+
+internal fun skySecondaryColor(window: PrayerWindow): Long = when (window) {
+    PrayerWindow.FAJR -> 0xFFD6E4F0
+    PrayerWindow.DHUHR -> 0xFFE0F2FE
+    PrayerWindow.ASR -> 0xFFFEF3C7
+    PrayerWindow.MAGHRIB -> 0xFFE9D5FF
+    PrayerWindow.ISHA -> 0xFFC7D2FE
+}
+
+private fun Color.argb(): Long = toArgb().toLong() and 0xFFFFFFFFL
+
+private fun Long.withAlpha(alpha: Float): Long =
+    (this and 0x00FFFFFFL) or
+        ((alpha.coerceIn(0f, 1f) * 255f).toInt().toLong() shl 24)
+
 /**
- * The palette rules for all four skins. `isDark` is already resolved from the widget's
- * theme mode, so a widget can stay dark while the phone is light and vice versa.
+ * The palette rules for all four skins, derived from the user's active [SakinahPalette].
  *
- * [accentOverride] carries the active [SakinahPalette] accent into the two skins that
- * follow the app theme (Frosted Glass and Transparent); Living Sky and Monochrome keep
- * their own fixed accents so their identity survives a palette change.
+ * Every colour comes from [buildSakinahColorScheme], the same scheme the app itself uses,
+ * so a widget can never drift from the theme the user picked. Frosted Glass keeps the
+ * palette's translucent surface, Monochrome stays matte black/white with the palette
+ * primary as its single accent, Transparent drops the surface entirely, and Living Sky
+ * keeps its prayer-window sky but takes a bright palette primary for its pills.
  */
 fun resolveWidgetColors(
     style: WidgetStyle,
     isDark: Boolean,
     window: PrayerWindow,
-    accentOverride: Long? = null
-): WidgetColors = when (style) {
-    WidgetStyle.FROSTED_GLASS -> if (isDark) {
-        WidgetColors(
-            background = 0xCC0F1715,
-            primaryText = 0xFFF1F5F9,
-            secondaryText = 0xFFA7B5B0,
-            accent = accentOverride ?: 0xFF34D399,
-            pill = 0x26FFFFFF,
-            divider = 0x33FFFFFF
+    palette: SakinahPalette = SakinahPalette.EMERALD_SANCTUARY
+): WidgetColors {
+    val scheme = buildSakinahColorScheme(palette, isDark)
+    val primary = scheme.primary.argb()
+    val onPrimary = scheme.onPrimary.argb()
+    val onSurface = scheme.onSurface.argb()
+    val onSurfaceVariant = scheme.onSurfaceVariant.argb()
+    val surface = scheme.surface.argb()
+    val outline = scheme.outline.argb()
+
+    return when (style) {
+        WidgetStyle.FROSTED_GLASS -> WidgetColors(
+            background = surface.withAlpha(0.85f),
+            primaryText = onSurface,
+            secondaryText = onSurfaceVariant,
+            accent = primary,
+            pill = primary.withAlpha(0.12f),
+            divider = outline.withAlpha(0.45f),
+            border = outline.withAlpha(0.55f),
+            track = onSurface.withAlpha(0.14f),
+            onAccent = onPrimary
         )
-    } else {
-        WidgetColors(
-            background = 0xD9F7F9F8,
-            primaryText = 0xFF0B3B2C,
-            secondaryText = 0xFF4B635B,
-            accent = accentOverride ?: 0xFF10B981,
-            pill = 0x140B3B2C,
-            divider = 0x1F0B3B2C
+
+        WidgetStyle.MONOCHROME -> {
+            val ink = if (isDark) 0xFFFFFFFF else 0xFF0C0C0C
+            WidgetColors(
+                background = if (isDark) 0xFF0C0C0C else 0xFFFFFFFF,
+                primaryText = ink,
+                secondaryText = if (isDark) 0xFF9CA3AF else 0xFF525252,
+                accent = primary,
+                pill = primary.withAlpha(0.16f),
+                divider = if (isDark) 0xFF262626 else 0xFFE5E7EB,
+                border = if (isDark) 0xFF262626 else 0xFFE5E7EB,
+                track = ink.withAlpha(0.12f),
+                onAccent = onPrimary
+            )
+        }
+
+        // The sky is always a dark surface, so pills borrow the palette's dark-scheme
+        // primary — the bright variant of the same accent, readable on every window.
+        WidgetStyle.LIVING_SKY -> WidgetColors(
+            background = skyBaseColor(window),
+            primaryText = 0xFFFFFFFF,
+            secondaryText = skySecondaryColor(window),
+            accent = buildSakinahColorScheme(palette, isDark = true).primary.argb(),
+            pill = 0x29FFFFFF,
+            divider = 0x33FFFFFF,
+            border = 0x33FFFFFF,
+            track = 0x33FFFFFF,
+            onAccent = 0xFF101614
+        )
+
+        // No surface at all: only hairlines, pills and palette-derived text on the wallpaper.
+        WidgetStyle.TRANSPARENT -> WidgetColors(
+            background = 0x00000000,
+            primaryText = if (isDark) 0xFFFFFFFF else 0xFF0C0C0C,
+            secondaryText = if (isDark) 0xFFD1D5DB else 0xFF374151,
+            accent = primary,
+            pill = primary.withAlpha(0.18f),
+            divider = if (isDark) 0x40FFFFFF else 0x30000000,
+            border = if (isDark) 0x40FFFFFF else 0x30000000,
+            track = (if (isDark) 0xFFFFFFFF else 0xFF0C0C0C).withAlpha(0.16f),
+            onAccent = onPrimary
         )
     }
-
-    WidgetStyle.MONOCHROME -> if (isDark) {
-        WidgetColors(
-            background = 0xFF0C0C0C,
-            primaryText = 0xFFFFFFFF,
-            secondaryText = 0xFF9CA3AF,
-            accent = 0xFF10B981,
-            pill = 0xFF1A1A1A,
-            divider = 0xFF262626
-        )
-    } else {
-        WidgetColors(
-            background = 0xFFFFFFFF,
-            primaryText = 0xFF0C0C0C,
-            secondaryText = 0xFF525252,
-            accent = 0xFF10B981,
-            pill = 0xFFF3F4F6,
-            divider = 0xFFE5E7EB
-        )
-    }
-
-    WidgetStyle.LIVING_SKY -> when (window) {
-        PrayerWindow.FAJR -> WidgetColors(
-            background = 0xFF2B4C7E,
-            primaryText = 0xFFFFFFFF,
-            secondaryText = 0xFFD6E4F0,
-            accent = 0xFFFDE68A,
-            pill = 0x29FFFFFF,
-            divider = 0x33FFFFFF
-        )
-        PrayerWindow.DHUHR -> WidgetColors(
-            background = 0xFF1D6FA5,
-            primaryText = 0xFFFFFFFF,
-            secondaryText = 0xFFE0F2FE,
-            accent = 0xFFFBBF24,
-            pill = 0x29FFFFFF,
-            divider = 0x33FFFFFF
-        )
-        PrayerWindow.ASR -> WidgetColors(
-            background = 0xFF9A5B25,
-            primaryText = 0xFFFFFFFF,
-            secondaryText = 0xFFFEF3C7,
-            accent = 0xFFFCD34D,
-            pill = 0x29FFFFFF,
-            divider = 0x33FFFFFF
-        )
-        PrayerWindow.MAGHRIB -> WidgetColors(
-            background = 0xFF4C2A6A,
-            primaryText = 0xFFFFFFFF,
-            secondaryText = 0xFFE9D5FF,
-            accent = 0xFFF9A8D4,
-            pill = 0x29FFFFFF,
-            divider = 0x33FFFFFF
-        )
-        PrayerWindow.ISHA -> WidgetColors(
-            background = 0xFF131B3A,
-            primaryText = 0xFFFFFFFF,
-            secondaryText = 0xFFC7D2FE,
-            accent = 0xFF34D399,
-            pill = 0x26FFFFFF,
-            divider = 0x33FFFFFF
-        )
-    }
-
-    // Minimal transparent: no surface, only hairlines and a faint pill highlight.
-    WidgetStyle.TRANSPARENT -> WidgetColors(
-        background = 0x00000000,
-        primaryText = if (isDark) 0xFFFFFFFF else 0xFF0B3B2C,
-        secondaryText = if (isDark) 0xFFD1D5DB else 0xFF374151,
-        accent = accentOverride ?: 0xFF10B981,
-        pill = if (isDark) 0x22FFFFFF else 0x18000000,
-        divider = if (isDark) 0x40FFFFFF else 0x30000000
-    )
 }
 
 /** Rounded, bordered background drawable for a skin; Living Sky uses real gradients. */
@@ -180,28 +187,31 @@ fun widgetBackgroundDrawable(style: WidgetStyle, isDark: Boolean, window: Prayer
         }
     }
 
-/** The active app palette's accent, as the ARGB value a widget palette expects. */
-fun SakinahPalette.widgetAccent(isDark: Boolean): Long {
-    val color = if (isDark) darkPreviewPrimary else lightPreviewAccent
-    return color.toArgb().toLong() and 0xFFFFFFFFL
-}
-
-/** Wraps [resolveWidgetColors] in Glance colour providers. */
+/** Wraps [resolveWidgetColors] in Glance colour providers for the current theme. */
 fun resolveWidgetPalette(
     style: WidgetStyle,
     isDark: Boolean,
     window: PrayerWindow,
-    accentOverride: Long? = null
+    palette: SakinahPalette = SakinahPalette.EMERALD_SANCTUARY
 ): WidgetPalette {
-    val colors = resolveWidgetColors(style, isDark, window, accentOverride)
+    val colors = resolveWidgetColors(style, isDark, window, palette)
     return WidgetPalette(
         background = ColorProvider(Color(colors.background)),
         primaryText = ColorProvider(Color(colors.primaryText)),
         secondaryText = ColorProvider(Color(colors.secondaryText)),
         accent = ColorProvider(Color(colors.accent)),
+        onAccent = ColorProvider(Color(colors.onAccent)),
         pillBackground = ColorProvider(Color(colors.pill)),
         divider = ColorProvider(Color(colors.divider)),
-        backgroundImageRes = widgetBackgroundDrawable(style, isDark, window)
+        track = ColorProvider(Color(colors.track)),
+        // Only Living Sky still ships a painted gradient; the other three skins are
+        // flat palette colours so a palette change repaints them instantly.
+        backgroundImageRes = if (style == WidgetStyle.LIVING_SKY) {
+            widgetBackgroundDrawable(style, isDark, window)
+        } else {
+            0
+        },
+        hairline = colors.border.takeIf { it != 0L }?.let { ColorProvider(Color(it)) }
     )
 }
 
@@ -292,9 +302,20 @@ object WidgetPrefsStore {
     const val TASBIH_MAX = 33
 }
 
-/** Theme mode -> dark flag, honouring the widget's own override. */
-internal fun resolveDarkMode(mode: WidgetThemeMode, systemDark: Boolean): Boolean = when (mode) {
-    WidgetThemeMode.SYSTEM -> systemDark
+/**
+ * Theme mode -> dark flag. A widget set to System follows the app's own [appThemeMode] first,
+ * so forcing the app light while the phone is dark still gives a light widget.
+ */
+internal fun resolveDarkMode(
+    mode: WidgetThemeMode,
+    appThemeMode: ThemeMode = ThemeMode.SYSTEM,
+    systemDark: Boolean
+): Boolean = when (mode) {
+    WidgetThemeMode.SYSTEM -> when (appThemeMode) {
+        ThemeMode.SYSTEM -> systemDark
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
     WidgetThemeMode.LIGHT -> false
     WidgetThemeMode.DARK -> true
 }

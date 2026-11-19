@@ -69,7 +69,11 @@
             android:name=".widget.WidgetConfigActivity"
             android:exported="true"
             android:label="@string/widget_config_title"
-            android:theme="@style/Theme.Sakinah" />
+            android:theme="@style/Theme.Sakinah">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
 
         <!-- Firebase Cloud Messaging -->
         <service

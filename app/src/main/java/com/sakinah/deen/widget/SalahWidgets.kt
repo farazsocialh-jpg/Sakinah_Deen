@@ -2,6 +2,7 @@ package com.sakinah.deen.widget
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
@@ -29,6 +30,7 @@ import androidx.glance.layout.padding
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
+import androidx.glance.unit.ColorProvider
 import com.sakinah.deen.data.model.PrayerType
 import java.time.LocalTime
 
@@ -59,6 +61,9 @@ data class SalahBoardState(
     }
     val completedCount: Int = chips.count { it.isCompleted }
     val hasTimes: Boolean = times.hasTimes
+
+    /** How far the current prayer window has run; feeds the compact progress bar. */
+    val windowProgress: Float = prayerProgress(times.times, now)
 }
 
 suspend fun loadSalahBoard(context: Context): SalahBoardState {
@@ -79,9 +84,18 @@ private fun countdownFor(state: SalahBoardState): String {
     return countdownLabel(minutesUntil(state.now, time))
 }
 
+/** The prayer the compact widget should name: the next one, or Fajr after Isha. */
+private fun nextPrayerName(state: SalahBoardState): String =
+    prayerLabel(state.next ?: PrayerType.FAJR)
+
+private fun nextPrayerTime(state: SalahBoardState): String =
+    state.times.label(state.next ?: PrayerType.FAJR)
+
+private val TRANSPARENT_FILL = ColorProvider(Color(0x00000000))
+
 /**
- * Today's Salah in one widget: the next prayer at 2x1, the full strip at 4x1, and
- * one-tap checkboxes at 4x2 (2x2 gets the same tappable board).
+ * Today's Salah in one widget: the next prayer plus window progress at 2x1, the full
+ * five-prayer strip at 4x1, and a one-tap checklist at 2x2 and 4x2.
  */
 class SalahTrackerWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(WidgetSizes.ALL)
@@ -91,9 +105,6 @@ class SalahTrackerWidget : GlanceAppWidget() {
         val state = loadSalahBoard(context)
         val window = currentPrayerWindow(state.times.times, state.now)
         val palette = widgetPaletteFor(context, appWidgetId, window)
-        val nextType = state.next ?: PrayerType.FAJR
-        val nextName = prayerLabel(nextType)
-        val nextTime = state.times.label(nextType)
 
         provideContent {
             val shape = shapeOf(LocalSize.current)
@@ -101,23 +112,25 @@ class SalahTrackerWidget : GlanceAppWidget() {
             when (shape) {
                 WidgetShape.COMPACT -> WidgetShell(palette, openSalah) {
                     WidgetRow {
-                        Column {
-                            WidgetCaption(text = "NEXT PRAYER", palette = palette, maxLines = 1)
-                            WidgetRow {
-                                WidgetTitle(text = nextName, palette = palette)
-                                WidgetInlineGap()
-                                WidgetAccentValue(text = nextTime, palette = palette)
-                            }
-                        }
+                        WidgetTitle(text = nextPrayerName(state), palette = palette, fontSize = 15)
+                        WidgetInlineGap(5)
+                        WidgetAccentValue(
+                            text = nextPrayerTime(state),
+                            palette = palette,
+                            fontSize = 13
+                        )
                         WidgetSpacer()
                         if (state.hasTimes) {
-                            WidgetPill(
+                            WidgetCaption(
                                 text = countdownFor(state),
                                 palette = palette,
-                                highlighted = true
+                                maxLines = 1,
+                                fontSize = 10
                             )
                         }
                     }
+                    WidgetGap(7)
+                    WidgetProgress(progress = state.windowProgress, palette = palette)
                 }
 
                 WidgetShape.WIDE -> WidgetShell(palette, openSalah) {
@@ -128,7 +141,7 @@ class SalahTrackerWidget : GlanceAppWidget() {
                     } else {
                         Row(modifier = GlanceModifier.fillMaxWidth()) {
                             state.chips.forEach { chip ->
-                                PrayerColumn(
+                                PrayerStripCell(
                                     chip = chip,
                                     palette = palette,
                                     modifier = GlanceModifier.defaultWeight()
@@ -140,48 +153,31 @@ class SalahTrackerWidget : GlanceAppWidget() {
 
                 WidgetShape.SQUARE, WidgetShape.EXPANDED -> WidgetShell(palette, openSalah) {
                     WidgetRow {
-                        WidgetTitle(text = "Today's Salah", palette = palette)
+                        WidgetTitle(
+                            text = "TODAY'S SALAH",
+                            palette = palette,
+                            fontSize = 10
+                        )
                         WidgetSpacer()
-                        WidgetAccentValue(
+                        WidgetPill(
                             text = "${state.completedCount} / 5",
                             palette = palette,
-                            fontSize = 15
+                            solid = true,
+                            fontSize = 10
                         )
                     }
-                    WidgetGap(if (shape == WidgetShape.SQUARE) 6 else 10)
+                    WidgetGap(if (shape == WidgetShape.SQUARE) 5 else 8)
                     if (!state.hasTimes) {
                         WidgetEmptyState("Add your location to see prayer times", palette)
                     } else {
-                        Row(modifier = GlanceModifier.fillMaxWidth()) {
+                        Column(modifier = GlanceModifier.fillMaxWidth()) {
                             state.chips.forEach { chip ->
-                                TrackerChip(
+                                PrayerRow(
                                     chip = chip,
                                     palette = palette,
-                                    compact = shape == WidgetShape.SQUARE,
-                                    modifier = GlanceModifier.defaultWeight()
+                                    dense = shape == WidgetShape.SQUARE
                                 )
-                            }
-                        }
-                    }
-                    if (shape == WidgetShape.EXPANDED) {
-                        WidgetGap(6)
-                        WidgetRow {
-                            WidgetCaption(
-                                text = if (state.completedCount == 5) {
-                                    "All five complete — alhamdulillah"
-                                } else {
-                                    "Tap a prayer to mark it prayed"
-                                },
-                                palette = palette,
-                                maxLines = 1
-                            )
-                            WidgetSpacer()
-                            if (state.hasTimes && state.next != null) {
-                                WidgetPill(
-                                    text = countdownFor(state),
-                                    palette = palette,
-                                    highlighted = true
-                                )
+                                WidgetGap(2)
                             }
                         }
                     }
@@ -191,67 +187,96 @@ class SalahTrackerWidget : GlanceAppWidget() {
     }
 }
 
-/** Non-interactive prayer column used by the 4x1 strip. */
+/** One prayer in the 4x1 strip: label, time and a tick, wrapped in an accent pill when next. */
 @Composable
-private fun PrayerColumn(
+private fun PrayerStripCell(
     chip: PrayerChipUi,
     palette: WidgetPalette,
     modifier: GlanceModifier = GlanceModifier
 ) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        WidgetBody(
-            text = if (chip.isCompleted) "✓ ${chip.label}" else chip.label,
-            palette = palette,
-            fontSize = 11,
-            weight = if (chip.isNext) FontWeight.Bold else FontWeight.Medium,
-            maxLines = 1
+    val fill = if (chip.isNext) palette.accent else TRANSPARENT_FILL
+    val labelColor = if (chip.isNext) palette.onAccent else palette.primaryText
+    val timeColor = if (chip.isNext) palette.onAccent else palette.secondaryText
+    val tickColor = if (chip.isNext) palette.onAccent else palette.accent
+    Column(
+        modifier = modifier
+            .padding(horizontal = 1.dp)
+            .background(fill)
+            .cornerRadius(12.dp)
+            .padding(vertical = 5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = chip.label.uppercase(),
+            maxLines = 1,
+            style = TextStyle(
+                color = labelColor,
+                fontSize = 9.sp,
+                fontWeight = if (chip.isNext) FontWeight.Bold else FontWeight.Medium
+            )
         )
-        WidgetCaption(
+        Text(
             text = chip.time,
-            palette = palette,
-            maxLines = 1
+            maxLines = 1,
+            style = TextStyle(color = timeColor, fontSize = 9.sp, fontWeight = FontWeight.Normal)
+        )
+        Text(
+            text = if (chip.isCompleted) "✓" else " ",
+            maxLines = 1,
+            style = TextStyle(color = tickColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
         )
     }
 }
 
-/** Tappable prayer cell; the accent check mark is the whole affordance. */
+/** A full-width checklist row: `FAJR · 05:12 ✓`, tappable to toggle completion. */
 @Composable
-private fun TrackerChip(
+private fun PrayerRow(
     chip: PrayerChipUi,
     palette: WidgetPalette,
-    compact: Boolean,
-    modifier: GlanceModifier = GlanceModifier
+    dense: Boolean
 ) {
-    Column(
-        modifier = modifier
-            .padding(horizontal = 3.dp, vertical = 6.dp)
-            .background(palette.pillBackground)
-            .cornerRadius(12.dp)
+    Row(
+        modifier = GlanceModifier
+            .fillMaxWidth()
+            .background(if (chip.isNext) palette.pillBackground else TRANSPARENT_FILL)
+            .cornerRadius(10.dp)
+            .padding(horizontal = 9.dp, vertical = if (dense) 1.dp else 2.dp)
             .clickable(
                 actionRunCallback<ToggleSalahAction>(
                     actionParametersOf(SalahActionKeys.PRAYER_KEY to chip.key)
                 )
             ),
-        horizontalAlignment = Alignment.CenterHorizontally
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = if (chip.isCompleted) "✓" else "○",
+            text = chip.label.uppercase(),
+            maxLines = 1,
             style = TextStyle(
-                color = if (chip.isCompleted) palette.accent else palette.secondaryText,
-                fontSize = 14.sp,
+                color = palette.primaryText,
+                fontSize = (if (dense) 9 else 10).sp,
                 fontWeight = FontWeight.Bold
             )
         )
-        WidgetBody(
-            text = chip.label,
-            palette = palette,
-            fontSize = if (compact) 10 else 11,
-            weight = if (chip.isNext) FontWeight.Bold else FontWeight.Medium,
-            maxLines = 1
+        WidgetInlineGap(6)
+        Text(
+            text = "· ${chip.time}",
+            maxLines = 1,
+            style = TextStyle(
+                color = palette.secondaryText,
+                fontSize = (if (dense) 9 else 10).sp,
+                fontWeight = FontWeight.Normal
+            )
         )
-        if (!compact) {
-            WidgetCaption(text = chip.time, palette = palette, maxLines = 1)
-        }
+        WidgetSpacer()
+        Text(
+            text = if (chip.isCompleted) "✓" else "○",
+            maxLines = 1,
+            style = TextStyle(
+                color = if (chip.isCompleted) palette.accent else palette.secondaryText,
+                fontSize = (if (dense) 10 else 12).sp,
+                fontWeight = FontWeight.Bold
+            )
+        )
     }
 }
 

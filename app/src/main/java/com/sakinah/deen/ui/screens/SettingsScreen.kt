@@ -735,6 +735,7 @@ fun SettingsScreen(
                                     WidgetStyleSwatchCard(
                                         style = style,
                                         isDark = widgetIsDark,
+                                        palette = appearanceConfig.palette,
                                         selected = widgetDefaultStyle == style,
                                         onClick = {
                                             widgetDefaultStyle = style
@@ -1571,10 +1572,11 @@ fun AppearanceAccordion(
 private fun WidgetStyleSwatchCard(
     style: WidgetStyle,
     isDark: Boolean,
+    palette: com.sakinah.deen.ui.theme.SakinahPalette,
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    val colors = resolveWidgetColors(style, isDark, PrayerWindow.DHUHR)
+    val colors = resolveWidgetColors(style, isDark, PrayerWindow.DHUHR, palette)
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = Color(colors.background),

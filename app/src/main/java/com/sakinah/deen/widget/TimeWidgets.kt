@@ -1,24 +1,34 @@
 package com.sakinah.deen.widget
 
 import android.content.Context
+import androidx.compose.runtime.Composable
 import androidx.glance.GlanceId
+import androidx.glance.GlanceModifier
 import androidx.glance.LocalContext
 import androidx.glance.LocalSize
+import androidx.glance.action.Action
+import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.provideContent
+import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
+import androidx.glance.layout.fillMaxWidth
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val GREGORIAN_FORMAT: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
+/** "Thu, 19 Nov" for the date lines under the Hijri day. */
+private val WEEKDAY_DATE_FORMAT: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH)
 
-internal fun gregorianShort(date: LocalDate): String = date.format(GREGORIAN_FORMAT)
+internal fun weekdayDate(date: LocalDate): String = date.format(WEEKDAY_DATE_FORMAT)
+
+internal fun shortWeekday(date: LocalDate): String =
+    date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH)
 
 /** "Today", "Tomorrow" or "in N days" for a badge. */
 internal fun relativeDays(days: Int): String = when (days) {
@@ -28,7 +38,7 @@ internal fun relativeDays(days: Int): String = when (days) {
 }
 
 // ---------------------------------------------------------------------------
-// Hijri date (2x1 / 2x2 / 4x1 / 4x2)
+// Hijri date
 // ---------------------------------------------------------------------------
 
 class HijriDateWidget : GlanceAppWidget() {
@@ -43,74 +53,106 @@ class HijriDateWidget : GlanceAppWidget() {
         val hijri = hijriFor(today)
         val fast = nextSunnahFast(today)
         val event = nextIslamicEvent(today)
-        val badge = if (fast.daysAway == 0) "Sunnah fast today" else "${event.name} ${relativeDays(event.daysAway)}"
+        val fastToday = fast.daysAway == 0
+        val badge = if (fastToday) "Sunnah Fast" else "${event.name} ${relativeDays(event.daysAway)}"
+        val dayLine = weekdayDate(today)
 
         provideContent {
             val shape = shapeOf(LocalSize.current)
             val openApp = openAppAction(LocalContext.current)
-            if (shape == WidgetShape.COMPACT) {
-                WidgetShell(palette, openApp) {
-                    WidgetRow {
-                        Column {
-                            WidgetCaption(text = "HIJRI DATE", palette = palette, maxLines = 1)
-                            WidgetTitle(text = hijri.label, palette = palette)
-                        }
-                        WidgetSpacer()
-                        WidgetCaption(text = weekdayName(today), palette = palette, maxLines = 1)
-                    }
+            when (shape) {
+                WidgetShape.COMPACT -> WidgetShell(palette, openApp) {
+                    WidgetTitle(
+                        text = hijri.compactLabel,
+                        palette = palette,
+                        fontSize = 12
+                    )
+                    WidgetGap(2)
+                    WidgetCaption(
+                        text = if (fastToday) "${shortWeekday(today)} · Sunnah Fast" else dayLine,
+                        palette = palette,
+                        maxLines = 1,
+                        fontSize = 10
+                    )
                 }
-            } else {
-                WidgetShell(palette, openApp) {
-                    WidgetRow {
-                        Column {
-                            WidgetCaption(text = "HIJRI DATE", palette = palette, maxLines = 1)
-                            WidgetRow(verticalAlignment = androidx.glance.layout.Alignment.CenterVertically) {
-                                WidgetAccentValue(
-                                    text = hijri.day.toString(),
-                                    palette = palette,
-                                    fontSize = 34
-                                )
-                                WidgetInlineGap()
-                                Column {
-                                    WidgetTitle(
-                                        text = hijri.monthName,
-                                        palette = palette,
-                                        fontSize = 14
-                                    )
-                                    WidgetCaption(
-                                        text = "${hijri.year} AH",
-                                        palette = palette,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-                        }
-                        WidgetSpacer()
-                        Column(horizontalAlignment = androidx.glance.layout.Alignment.CenterHorizontally) {
-                            WidgetBody(
-                                text = weekdayName(today),
-                                palette = palette,
-                                fontSize = 12,
-                                weight = androidx.glance.text.FontWeight.Bold,
-                                maxLines = 1
-                            )
-                            WidgetCaption(
-                                text = gregorianShort(today),
-                                palette = palette,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                    WidgetVerticalSpacer()
-                    WidgetRow {
+
+                WidgetShape.SQUARE -> WidgetShell(palette, openApp) {
+                    Column(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        WidgetAccentValue(
+                            text = hijri.day.toString(),
+                            palette = palette,
+                            fontSize = 36
+                        )
+                        WidgetTitle(
+                            text = hijri.monthYearLabel,
+                            palette = palette,
+                            fontSize = 11
+                        )
+                        WidgetCaption(text = dayLine, palette = palette, maxLines = 1, fontSize = 10)
+                        WidgetVerticalSpacer()
                         WidgetPill(
                             text = badge,
                             palette = palette,
-                            highlighted = fast.daysAway == 0
+                            highlighted = fastToday,
+                            solid = fastToday,
+                            fontSize = 10
                         )
-                        if (shape == WidgetShape.EXPANDED) {
+                    }
+                }
+
+                WidgetShape.WIDE, WidgetShape.EXPANDED -> WidgetShell(palette, openApp) {
+                    WidgetRow {
+                        WidgetAccentValue(
+                            text = hijri.day.toString(),
+                            palette = palette,
+                            fontSize = 32
+                        )
+                        WidgetInlineGap(8)
+                        Column {
+                            WidgetTitle(
+                                text = hijri.monthYearLabel,
+                                palette = palette,
+                                fontSize = 13
+                            )
+                            WidgetCaption(
+                                text = "${hijri.year} AH",
+                                palette = palette,
+                                maxLines = 1,
+                                fontSize = 9
+                            )
+                        }
+                        WidgetSpacer()
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            WidgetTitle(text = dayLine, palette = palette, fontSize = 11)
+                            WidgetGap(3)
+                            WidgetPill(
+                                text = badge,
+                                palette = palette,
+                                highlighted = fastToday,
+                                solid = fastToday,
+                                fontSize = 9
+                            )
+                        }
+                    }
+                    if (shape == WidgetShape.EXPANDED) {
+                        WidgetVerticalSpacer()
+                        WidgetRow {
+                            WidgetCaption(
+                                text = "Mon & Thu · white days 13–15",
+                                palette = palette,
+                                maxLines = 1,
+                                fontSize = 9
+                            )
                             WidgetSpacer()
-                            WidgetCaption(text = "Mon & Thu · white days 13–15", palette = palette, maxLines = 1)
+                            WidgetCaption(
+                                text = hijri.label,
+                                palette = palette,
+                                maxLines = 1,
+                                fontSize = 9
+                            )
                         }
                     }
                 }
@@ -124,7 +166,7 @@ class HijriDateWidgetReceiver : GlanceAppWidgetReceiver() {
 }
 
 // ---------------------------------------------------------------------------
-// Qibla direction (2x1 / 2x2 / 4x1 / 4x2)
+// Qibla direction
 // ---------------------------------------------------------------------------
 
 class QiblaWidget : GlanceAppWidget() {
@@ -140,62 +182,90 @@ class QiblaWidget : GlanceAppWidget() {
         val summary = coordinates?.let {
             qiblaSummary(it.first, it.second, preferences.locationLabel.ifBlank { "Saved location" })
         }
+        val bearing = summary?.let { "${it.bearing}° ${it.cardinal}" }
+        val city = summary?.city ?: "Set your location"
 
         provideContent {
             val shape = shapeOf(LocalSize.current)
             val openQibla = openAppAction(LocalContext.current, "travel")
-            if (shape == WidgetShape.COMPACT) {
-                WidgetShell(palette, openQibla) {
-                    WidgetRow {
-                        WidgetTitle(text = "Qibla", palette = palette)
-                        WidgetSpacer()
-                        if (summary == null) {
-                            WidgetCaption(text = "Set location", palette = palette, maxLines = 1)
-                        } else {
-                            WidgetAccentValue(
-                                text = "${summary.bearing}° ${summary.cardinal}",
-                                palette = palette
-                            )
-                        }
+            when (shape) {
+                WidgetShape.COMPACT -> WidgetShell(palette, openQibla) {
+                    WidgetTitle(
+                        text = bearing?.let { "QIBLA · $it" } ?: "QIBLA",
+                        palette = palette,
+                        fontSize = 12
+                    )
+                    WidgetGap(2)
+                    WidgetCaption(text = city, palette = palette, maxLines = 1, fontSize = 10)
+                }
+
+                WidgetShape.SQUARE -> WidgetShell(palette, openQibla) {
+                    Column(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        WidgetCaption(
+                            text = "QIBLA DIRECTION",
+                            palette = palette,
+                            maxLines = 1,
+                            fontSize = 9
+                        )
+                        WidgetGap(4)
+                        WidgetAccentValue(
+                            text = bearing ?: "--",
+                            palette = palette,
+                            fontSize = 26
+                        )
+                        WidgetCaption(text = city, palette = palette, maxLines = 1, fontSize = 10)
+                        WidgetVerticalSpacer()
+                        MapPill(palette, openQibla)
                     }
                 }
-            } else {
-                WidgetShell(palette, openQibla) {
+
+                WidgetShape.WIDE, WidgetShape.EXPANDED -> WidgetShell(palette, openQibla) {
                     WidgetRow {
-                        WidgetCaption(text = "QIBLA DIRECTION", palette = palette, maxLines = 1)
-                        WidgetSpacer()
-                        WidgetPill(text = "Compass", palette = palette)
-                    }
-                    WidgetGap(4)
-                    if (summary == null) {
-                        WidgetTitle(text = "Set your location", palette = palette)
-                        WidgetCaption(text = "Tap to open the Qibla compass", palette = palette, maxLines = 1)
-                    } else {
-                        WidgetRow(
-                            verticalAlignment = androidx.glance.layout.Alignment.CenterVertically
-                        ) {
-                            WidgetAccentValue(
-                                text = "${summary.bearing}°",
+                        Column {
+                            WidgetCaption(
+                                text = "QIBLA DIRECTION",
                                 palette = palette,
-                                fontSize = if (shape == WidgetShape.SQUARE) 30 else 34
+                                maxLines = 1,
+                                fontSize = 9
                             )
-                            WidgetInlineGap(8)
-                            Column {
-                                WidgetTitle(text = summary.cardinal, palette = palette, fontSize = 14)
-                                WidgetCaption(text = summary.city, palette = palette, maxLines = 1)
-                            }
+                            WidgetGap(2)
+                            WidgetAccentValue(
+                                text = bearing ?: "--",
+                                palette = palette,
+                                fontSize = 26
+                            )
+                            WidgetCaption(text = city, palette = palette, maxLines = 1, fontSize = 10)
                         }
+                        WidgetSpacer()
+                        MapPill(palette, openQibla)
+                    }
+                    if (shape == WidgetShape.EXPANDED) {
                         WidgetVerticalSpacer()
                         WidgetCaption(
-                            text = "Tap to open the Qibla map",
+                            text = "Face the Kaaba — tap to open the compass",
                             palette = palette,
-                            maxLines = 1
+                            maxLines = 1,
+                            fontSize = 9
                         )
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun MapPill(palette: WidgetPalette, openQibla: Action) {
+    WidgetPill(
+        text = "Open Map",
+        palette = palette,
+        solid = true,
+        fontSize = 10,
+        modifier = GlanceModifier.clickable(openQibla)
+    )
 }
 
 class QiblaWidgetReceiver : GlanceAppWidgetReceiver() {
