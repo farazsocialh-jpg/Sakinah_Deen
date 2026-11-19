@@ -28,3 +28,11 @@ app/google-services.json
 
 # macOS
 .DS_Store
+
+# Node tooling for the automated UI/UX audit (QAosMonkey)
+node_modules/
+.qaos-monkey/
+qaos-monkey-report/
+uiux-report/
+uiux-report-output/
+.env.local
