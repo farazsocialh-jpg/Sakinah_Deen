@@ -24,7 +24,7 @@
         android:ellipsize="end"
         android:textSize="16sp"
         android:textStyle="bold"
-        android:textColor="#FF111111"
+        android:textColor="@color/notif_text_primary"
         android:text="@string/notif_prayer_fallback_title" />
 
     <TextView
@@ -34,8 +34,8 @@
         android:layout_marginTop="2dp"
         android:maxLines="1"
         android:ellipsize="end"
-        android:textSize="12sp"
-        android:textColor="#FF5F6B66"
+        android:textSize="13sp"
+        android:textColor="@color/notif_text_secondary"
         android:text="@string/notif_prayer_fallback_window" />
 
     <ProgressBar
@@ -55,10 +55,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
-        android:lineSpacingExtra="3dp"
+        android:lineSpacingExtra="2dp"
         android:textDirection="anyRtl"
-        android:textSize="14sp"
-        android:textColor="#FF111111" />
+        android:textSize="15sp"
+        android:textColor="@color/notif_text_primary" />
 
     <TextView
         android:id="@+id/notif_reminder_text"
@@ -66,8 +66,8 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
         android:lineSpacingExtra="2dp"
-        android:textSize="12sp"
-        android:textColor="#FF48524D" />
+        android:textSize="13sp"
+        android:textColor="@color/notif_text_secondary" />
 
     <TextView
         android:id="@+id/notif_reminder_source"
@@ -76,6 +76,6 @@
         android:layout_marginTop="4dp"
         android:maxLines="2"
         android:textStyle="italic"
-        android:textSize="10sp"
-        android:textColor="#FF6B7571" />
+        android:textSize="11sp"
+        android:textColor="@color/notif_text_secondary" />
 </LinearLayout>

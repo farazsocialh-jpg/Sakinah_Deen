@@ -2,8 +2,10 @@ package com.sakinah.deen.service
 
 import android.content.Context
 import android.content.res.Configuration
+import android.content.res.Resources
 import android.graphics.Color as AndroidColor
 import androidx.compose.ui.graphics.toArgb
+import com.sakinah.deen.R
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.ui.theme.SakinahPalette
 import com.sakinah.deen.ui.theme.ThemeMode
@@ -35,6 +37,17 @@ data class PrayerNotificationTheme(
     val outline: Int
 )
 
+/**
+ * High-contrast text colours for the ongoing prayer card. Unlike [PrayerNotificationTheme]
+ * they are not derived from the app palette: a tinted palette colour can lose contrast on
+ * a dark or translucent shade (One UI), so these come from `values/` and `values-night/`.
+ */
+data class NotificationTextColors(
+    val primary: Int,
+    val secondary: Int,
+    val accent: Int
+)
+
 object NotificationAppearance {
 
     fun resolve(context: Context): PrayerNotificationTheme {
@@ -49,10 +62,31 @@ object NotificationAppearance {
             .getOrElse { fallbackTheme(context) }
     }
 
-    /** Moments when SYSTEM must follow the device's current uiMode rather than a stored value. */
-    fun isSystemDark(context: Context): Boolean =
-        (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
-            Configuration.UI_MODE_NIGHT_YES
+    /**
+     * The notification shade follows the device's night mode, which the app cannot override
+     * with its own AppCompat night mode. Read the system configuration first so text stays
+     * light in the shade even when the app itself is forced to a light theme.
+     */
+    fun isSystemDark(context: Context): Boolean {
+        val uiMode = runCatching { Resources.getSystem().configuration.uiMode }
+            .getOrDefault(context.resources.configuration.uiMode)
+        return (uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+    }
+
+    /** Palette-independent, high-contrast text colours for the prayer notification card. */
+    fun textColors(context: Context): NotificationTextColors {
+        val dark = isSystemDark(context)
+        val config = Configuration(context.resources.configuration).apply {
+            uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                (if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO)
+        }
+        val nightAware = context.createConfigurationContext(config)
+        return NotificationTextColors(
+            primary = nightAware.getColor(R.color.notif_text_primary),
+            secondary = nightAware.getColor(R.color.notif_text_secondary),
+            accent = nightAware.getColor(R.color.notif_text_accent)
+        )
+    }
 
     fun resolveIsDark(context: Context, mode: ThemeMode): Boolean = when (mode) {
         ThemeMode.DARK -> true

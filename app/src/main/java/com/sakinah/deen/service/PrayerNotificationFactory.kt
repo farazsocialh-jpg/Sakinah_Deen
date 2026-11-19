@@ -7,9 +7,14 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -118,7 +123,6 @@ object PrayerNotificationFactory {
 
         val collapsed = collapsedViews(
             context = context,
-            theme = theme,
             title = collapsedTitle,
             subtitle = context.getString(R.string.adhan_body),
             contentIntent = contentIntent
@@ -167,22 +171,30 @@ object PrayerNotificationFactory {
             .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setCustomContentView(collapsed)
             .setCustomBigContentView(expanded)
-            .addAction(R.drawable.ic_stat_app, context.getString(R.string.adhan_action_mute), muteIntent)
-            .addAction(R.drawable.ic_stat_app, context.getString(R.string.notif_action_mark_prayed), markPrayedIntent)
+            .addAction(
+                R.drawable.ic_stat_app,
+                actionLabel(context, context.getString(R.string.adhan_action_mute)),
+                muteIntent
+            )
+            .addAction(
+                R.drawable.ic_stat_app,
+                actionLabel(context, context.getString(R.string.notif_action_mark_prayed)),
+                markPrayedIntent
+            )
             .build()
     }
 
     private fun collapsedViews(
         context: Context,
-        theme: PrayerNotificationTheme,
         title: String,
         subtitle: String,
         contentIntent: PendingIntent
     ): RemoteViews = RemoteViews(context.packageName, R.layout.notification_prayer_collapsed).apply {
+        val text = NotificationAppearance.textColors(context)
         setTextViewText(R.id.notif_collapsed_title, title)
         setTextViewText(R.id.notif_collapsed_window, subtitle)
-        setTextColor(R.id.notif_collapsed_title, theme.onSurface)
-        setTextColor(R.id.notif_collapsed_window, theme.secondaryText)
+        setTextColor(R.id.notif_collapsed_title, text.primary)
+        setTextColor(R.id.notif_collapsed_window, text.secondary)
         setOnClickPendingIntent(R.id.notif_root, contentIntent)
     }
 
@@ -195,16 +207,19 @@ object PrayerNotificationFactory {
         reminder: PrayerReminderContent.Reminder,
         contentIntent: PendingIntent
     ): RemoteViews = RemoteViews(context.packageName, R.layout.notification_prayer_expanded).apply {
+        // Palette-independent high-contrast text so the card stays legible on dark or
+        // translucent shades (Samsung One UI) as well as on plain white cards.
+        val text = NotificationAppearance.textColors(context)
         setTextViewText(R.id.notif_expanded_title, title)
         setTextViewText(R.id.notif_expanded_window, window)
         setTextViewText(R.id.notif_reminder_arabic, reminder.arabic)
         setTextViewText(R.id.notif_reminder_text, reminder.english)
         setTextViewText(R.id.notif_reminder_source, reminder.source)
-        setTextColor(R.id.notif_expanded_title, theme.onSurface)
-        setTextColor(R.id.notif_expanded_window, theme.secondaryText)
-        setTextColor(R.id.notif_reminder_arabic, theme.onSurface)
-        setTextColor(R.id.notif_reminder_text, theme.secondaryText)
-        setTextColor(R.id.notif_reminder_source, theme.secondaryText)
+        setTextColor(R.id.notif_expanded_title, text.primary)
+        setTextColor(R.id.notif_expanded_window, text.secondary)
+        setTextColor(R.id.notif_reminder_arabic, text.primary)
+        setTextColor(R.id.notif_reminder_text, text.secondary)
+        setTextColor(R.id.notif_reminder_source, text.secondary)
         setProgressBar(R.id.notif_progress, 100, percentRemaining, false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             setColorStateList(
@@ -219,6 +234,15 @@ object PrayerNotificationFactory {
             )
         }
         setOnClickPendingIntent(R.id.notif_root, contentIntent)
+    }
+
+    /** Action labels are bold and accent-coloured so they read immediately in the shade. */
+    private fun actionLabel(context: Context, text: String): CharSequence {
+        val accent = NotificationAppearance.textColors(context).accent
+        return SpannableString(text).apply {
+            setSpan(StyleSpan(Typeface.BOLD), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(ForegroundColorSpan(accent), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
     }
 
     private fun broadcastIntent(

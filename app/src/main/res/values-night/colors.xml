@@ -2,4 +2,9 @@
 <resources>
     <color name="notif_progress_tint">#FF8CD4B8</color>
     <color name="notif_progress_track">#44FFFFFF</color>
+
+    <!-- Ongoing prayer notification text: crisp on dark and translucent shades. -->
+    <color name="notif_text_primary">#FFFFFFFF</color>
+    <color name="notif_text_secondary">#FFE2E8F0</color>
+    <color name="notif_text_accent">#FF8CE0C3</color>
 </resources>
