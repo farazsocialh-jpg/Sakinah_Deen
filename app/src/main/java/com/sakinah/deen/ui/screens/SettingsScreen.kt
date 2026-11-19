@@ -66,6 +66,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -116,8 +118,11 @@ import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.data.quran.QuranOfflineStatus
 import com.sakinah.deen.ui.components.QuranOfflineStatusBanner
 import com.sakinah.deen.ui.rememberInject
+import com.sakinah.deen.widget.PrayerWindow
 import com.sakinah.deen.widget.WidgetPrefsStore
 import com.sakinah.deen.widget.WidgetStyle
+import com.sakinah.deen.widget.WidgetThemeMode
+import com.sakinah.deen.widget.resolveWidgetColors
 import com.sakinah.deen.widget.updateAllWidgets
 import com.sakinah.deen.ui.theme.FontScalePreset
 import com.sakinah.deen.ui.theme.ThemeMode as UiThemeMode
@@ -659,8 +664,10 @@ fun SettingsScreen(
                         var themeExpanded by remember { mutableStateOf(true) }
                         var widgetsExpanded by remember { mutableStateOf(false) }
                         var widgetDefaultStyle by remember { mutableStateOf(WidgetStyle.FROSTED_GLASS) }
+                        var widgetDefaultTheme by remember { mutableStateOf(WidgetThemeMode.SYSTEM) }
                         LaunchedEffect(Unit) {
                             widgetDefaultStyle = WidgetPrefsStore.getDefaultStyle(context)
+                            widgetDefaultTheme = WidgetPrefsStore.getDefaultThemeMode(context)
                         }
                         var salahExpanded by remember { mutableStateOf(false) }
                         var quranExpanded by remember { mutableStateOf(false) }
@@ -718,11 +725,16 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            val widgetIsDark = when (appearanceConfig.themeMode) {
+                                UiThemeMode.DARK -> true
+                                UiThemeMode.LIGHT -> false
+                                UiThemeMode.SYSTEM -> isSystemInDarkTheme()
+                            }
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 items(WidgetStyle.entries) { style ->
-                                    LayoutChoiceCard(
-                                        title = style.label,
-                                        subtitle = style.description,
+                                    WidgetStyleSwatchCard(
+                                        style = style,
+                                        isDark = widgetIsDark,
                                         selected = widgetDefaultStyle == style,
                                         onClick = {
                                             widgetDefaultStyle = style
@@ -734,6 +746,23 @@ fun SettingsScreen(
                                     )
                                 }
                             }
+                            Text(
+                                text = "Default theme mode",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            SegmentedPillBar(
+                                options = WidgetThemeMode.entries,
+                                selected = widgetDefaultTheme,
+                                labelProvider = { it.label },
+                                onSelect = { mode ->
+                                    widgetDefaultTheme = mode
+                                    scope.launch {
+                                        WidgetPrefsStore.setDefaultThemeMode(context, mode)
+                                        updateAllWidgets(context)
+                                    }
+                                }
+                            )
                         }
 
                         AppearanceAccordion(
@@ -1537,56 +1566,81 @@ fun AppearanceAccordion(
     }
 }
 
+/** A widget skin shown with its real surface, accent and text swatches. */
 @Composable
-private fun LayoutChoiceCard(
-    title: String,
-    subtitle: String,
+private fun WidgetStyleSwatchCard(
+    style: WidgetStyle,
+    isDark: Boolean,
     selected: Boolean,
     onClick: () -> Unit
 ) {
+    val colors = resolveWidgetColors(style, isDark, PrayerWindow.DHUHR)
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = if (selected) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant
-        },
-        contentColor = if (selected) {
-            MaterialTheme.colorScheme.onPrimaryContainer
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        },
-        border = if (selected) {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-        } else {
-            null
-        },
+        shape = RoundedCornerShape(16.dp),
+        color = Color(colors.background),
+        border = BorderStroke(
+            width = if (selected) 2.dp else 1.dp,
+            color = if (selected) Color(colors.accent) else MaterialTheme.colorScheme.outline
+        ),
         modifier = Modifier
             .width(190.dp)
-            .heightIn(min = 88.dp)
+            .heightIn(min = 104.dp)
             .clickable(onClick = onClick)
     ) {
         Column(
             modifier = Modifier.padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp)
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                text = title,
+                text = style.label,
+                color = Color(colors.primaryText),
                 fontWeight = FontWeight.Bold,
                 fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
+                text = style.description,
+                color = Color(colors.secondaryText),
                 fontSize = 10.sp,
                 lineHeight = 13.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                WidgetSwatchDot(color = Color(colors.background), bordered = true)
+                WidgetSwatchDot(color = Color(colors.accent))
+                WidgetSwatchDot(color = Color(colors.primaryText))
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = if (selected) "●" else "○",
+                    color = Color(colors.accent),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun WidgetSwatchDot(color: Color, bordered: Boolean = false) {
+    Box(
+        modifier = Modifier
+            .size(14.dp)
+            .clip(CircleShape)
+            .background(color)
+            .then(
+                if (bordered) {
+                    Modifier.border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                } else {
+                    Modifier
+                }
+            )
+    )
 }
 
 private fun formatBytes(bytes: Long): String = when {

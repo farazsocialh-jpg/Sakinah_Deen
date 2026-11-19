@@ -8,6 +8,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceModifier
+import androidx.glance.ImageProvider
 import androidx.glance.action.Action
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
@@ -58,7 +59,10 @@ fun shapeOf(size: DpSize): WidgetShape = when {
     else -> WidgetShape.COMPACT
 }
 
-/** The shared 24dp frosted container used by every widget. */
+/**
+ * The shared 24dp container used by every widget. The surface is a real rounded `<shape>`
+ * drawable so Living Sky can carry a gradient and Transparent only a hairline.
+ */
 @Composable
 fun WidgetShell(
     palette: WidgetPalette,
@@ -66,10 +70,15 @@ fun WidgetShell(
     modifier: GlanceModifier = GlanceModifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val surface = if (palette.backgroundImageRes != 0) {
+        GlanceModifier.background(ImageProvider(palette.backgroundImageRes))
+    } else {
+        GlanceModifier.background(palette.background)
+    }
     Column(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(palette.background)
+            .then(surface)
             .cornerRadius(24.dp)
             .padding(14.dp)
             .clickable(onClickAction)
@@ -83,7 +92,8 @@ fun WidgetTitle(
     text: String,
     palette: WidgetPalette,
     modifier: GlanceModifier = GlanceModifier,
-    maxLines: Int = 1
+    maxLines: Int = 1,
+    fontSize: Int = 15
 ) {
     Text(
         text = text,
@@ -91,7 +101,7 @@ fun WidgetTitle(
         maxLines = maxLines,
         style = TextStyle(
             color = palette.primaryText,
-            fontSize = 15.sp,
+            fontSize = fontSize.sp,
             fontWeight = FontWeight.Bold
         )
     )
@@ -168,7 +178,7 @@ fun WidgetDivider(palette: WidgetPalette) {
     ) {}
 }
 
-/** A subtle rounded chip used for badges and inline values. */
+/** A subtle rounded chip used for badges and inline buttons. */
 @Composable
 fun WidgetPill(
     text: String,
@@ -192,20 +202,12 @@ fun WidgetPill(
 }
 
 @Composable
-fun WidgetMetric(
-    label: String,
-    value: String,
-    palette: WidgetPalette,
-    modifier: GlanceModifier = GlanceModifier
-) {
-    Column(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        WidgetAccentValue(text = value, palette = palette, fontSize = 14)
-        WidgetCaption(text = label, palette = palette, maxLines = 1)
-    }
+fun RowScope.WidgetSpacer() {
+    Spacer(GlanceModifier.defaultWeight())
 }
 
 @Composable
-fun RowScope.WidgetSpacer() {
+fun ColumnScope.WidgetVerticalSpacer() {
     Spacer(GlanceModifier.defaultWeight())
 }
 
@@ -218,6 +220,21 @@ fun WidgetRow(
     Row(modifier = modifier, verticalAlignment = verticalAlignment, content = content)
 }
 
+@Composable
+fun WidgetEmptyState(text: String, palette: WidgetPalette) {
+    WidgetCaption(text = text, palette = palette, maxLines = 2)
+}
+
+@Composable
+fun WidgetGap(size: Int = 6) {
+    Spacer(GlanceModifier.height(size.dp))
+}
+
+@Composable
+fun WidgetInlineGap(size: Int = 6) {
+    Spacer(GlanceModifier.width(size.dp))
+}
+
 /** Resolves the saved style/theme for one placed widget instance. */
 suspend fun widgetPaletteFor(
     context: Context,
@@ -228,7 +245,9 @@ suspend fun widgetPaletteFor(
     val mode = WidgetPrefsStore.getThemeMode(context, appWidgetId)
     val systemDark = (context.resources.configuration.uiMode and
         Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-    return resolveWidgetPalette(style, resolveDarkMode(mode, systemDark), window)
+    val isDark = resolveDarkMode(mode, systemDark)
+    val accent = appAppearance(context)?.palette?.widgetAccent(isDark)
+    return resolveWidgetPalette(style, isDark, window, accentOverride = accent)
 }
 
 object WidgetRouteKey {
@@ -248,55 +267,32 @@ fun openAppAction(context: Context, route: String? = null): Action {
     return actionStartActivity(ComponentName(context, MainActivity::class.java), parameters)
 }
 
+/**
+ * The six shipped widgets. Keeping the entries as plain data lets the catalog be asserted
+ * in a JVM unit test without a launcher or a running Glance host.
+ */
+data class WidgetCatalogEntry(
+    val label: String,
+    val receiverClassName: String,
+    val widget: GlanceAppWidget
+)
+
 /** Every widget instance, used by the style picker and the app-wide refresh. */
 object WidgetCatalog {
-    val widgets: List<GlanceAppWidget> by lazy {
-        listOf(
-            NextPrayerWidget(),
-            PrayerStripWidget(),
-            SalahTrackerWidget(),
-            TasbihWidget(),
-            AdhkarWidget(),
-            DailyDuaWidget(),
-            DailyAyahWidget(),
-            DailyHadithWidget(),
-            AiScholarWidget(),
-            QuranStreakWidget(),
-            HijriDateWidget(),
-            QiblaWidget(),
-            RamadanWidget(),
-            DuhaWindowWidget(),
-            QiyamWidget(),
-            SunnahFastWidget(),
-            IslamicEventWidget(),
-            JumuahWidget(),
-            NisabWidget()
-        )
-    }
+    val entries: List<WidgetCatalogEntry> = listOf(
+        WidgetCatalogEntry("Salah Tracker", "SalahTrackerWidgetReceiver", SalahTrackerWidget()),
+        WidgetCatalogEntry("Tasbih Counter", "TasbihWidgetReceiver", TasbihWidget()),
+        WidgetCatalogEntry("Ayah of the Day", "DailyAyahWidgetReceiver", DailyAyahWidget()),
+        WidgetCatalogEntry("Hijri Date", "HijriDateWidgetReceiver", HijriDateWidget()),
+        WidgetCatalogEntry("Qibla Direction", "QiblaWidgetReceiver", QiblaWidget()),
+        WidgetCatalogEntry("Ask ImanCore Scholar", "AiScholarWidgetReceiver", AiScholarWidget())
+    )
+
+    val widgets: List<GlanceAppWidget> get() = entries.map { it.widget }
 
     /** Maps the registered receiver back to its Glance widget after the picker saves. */
-    fun widgetForReceiver(className: String): GlanceAppWidget? = when (className.substringAfterLast('.')) {
-        "NextPrayerWidgetReceiver" -> NextPrayerWidget()
-        "PrayerStripWidgetReceiver" -> PrayerStripWidget()
-        "SalahTrackerWidgetReceiver" -> SalahTrackerWidget()
-        "TasbihWidgetReceiver" -> TasbihWidget()
-        "AdhkarWidgetReceiver" -> AdhkarWidget()
-        "DailyDuaWidgetReceiver" -> DailyDuaWidget()
-        "DailyAyahWidgetReceiver" -> DailyAyahWidget()
-        "DailyHadithWidgetReceiver" -> DailyHadithWidget()
-        "AiScholarWidgetReceiver" -> AiScholarWidget()
-        "QuranStreakWidgetReceiver" -> QuranStreakWidget()
-        "HijriDateWidgetReceiver" -> HijriDateWidget()
-        "QiblaWidgetReceiver" -> QiblaWidget()
-        "RamadanWidgetReceiver" -> RamadanWidget()
-        "DuhaWindowWidgetReceiver" -> DuhaWindowWidget()
-        "QiyamWidgetReceiver" -> QiyamWidget()
-        "SunnahFastWidgetReceiver" -> SunnahFastWidget()
-        "IslamicEventWidgetReceiver" -> IslamicEventWidget()
-        "JumuahWidgetReceiver" -> JumuahWidget()
-        "NisabWidgetReceiver" -> NisabWidget()
-        else -> null
-    }
+    fun widgetForReceiver(className: String): GlanceAppWidget? =
+        entries.firstOrNull { it.receiverClassName == className.substringAfterLast('.') }?.widget
 }
 
 /** Repaints every placed widget, e.g. after a location, prayer log or theme change. */
@@ -312,20 +308,4 @@ suspend fun updateWidget(context: Context, appWidgetId: Int, widget: GlanceAppWi
         GlanceAppWidgetManager(context).getGlanceIdBy(appWidgetId)
     }.getOrNull() ?: return
     runCatching { widget.update(context, glanceId) }
-}
-
-/** Shared empty-state line, e.g. no location configured yet. */
-@Composable
-fun WidgetEmptyState(text: String, palette: WidgetPalette) {
-    WidgetCaption(text = text, palette = palette, maxLines = 2)
-}
-
-@Composable
-fun WidgetGap(size: Int = 6) {
-    Spacer(GlanceModifier.height(size.dp))
-}
-
-@Composable
-fun WidgetInlineGap(size: Int = 6) {
-    Spacer(GlanceModifier.width(size.dp))
 }

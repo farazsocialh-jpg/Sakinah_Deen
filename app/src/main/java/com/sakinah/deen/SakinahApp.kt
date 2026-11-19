@@ -1,6 +1,12 @@
 package com.sakinah.deen
 
 import android.app.Application
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
+import androidx.glance.appwidget.updateAll
 import androidx.work.Configuration
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -15,6 +21,8 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.sakinah.deen.service.NotificationChannels
 import com.sakinah.deen.service.PrayerAlarmScheduler
 import com.sakinah.deen.work.DailyHabitResetWorker
+import com.sakinah.deen.widget.DailyAyahWidget
+import com.sakinah.deen.widget.WidgetPrefsStore
 import com.sakinah.deen.work.KoinWorkerFactory
 import com.sakinah.deen.work.SalahGuideReminderWorker
 import java.time.Duration
@@ -40,6 +48,22 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
 
     /** Outlives the Activity: background refresh of the cached prayer timetable. */
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /**
+     * Every phone unlock advances the Ayah widget's rotation, so the verse on the home
+     * screen changes through the day even when the widget itself never runs.
+     */
+    private val userPresentReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != Intent.ACTION_USER_PRESENT) return
+            applicationScope.launch {
+                runCatching {
+                    WidgetPrefsStore.advanceAyahIndex(context)
+                    DailyAyahWidget().updateAll(context)
+                }
+            }
+        }
+    }
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -82,6 +106,17 @@ class SakinahApp : Application(), Configuration.Provider, KoinComponent {
         applicationScope.launch(Dispatchers.IO) {
             val passphrase = com.sakinah.deen.data.database.DatabasePassphraseProvider.getPassphrase(this@SakinahApp)
             runCatching { SakinahEncryptedDatabase.getInstance(this@SakinahApp, passphrase) }
+        }
+
+        // Registered at runtime rather than in the manifest: an implicit ACTION_USER_PRESENT
+        // broadcast can only be received this way since Android 8.
+        runCatching {
+            ContextCompat.registerReceiver(
+                this,
+                userPresentReceiver,
+                IntentFilter(Intent.ACTION_USER_PRESENT),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
         }
 
         NotificationChannels.createChannels(this)

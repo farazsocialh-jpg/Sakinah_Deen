@@ -32,7 +32,7 @@ import androidx.glance.text.TextStyle
 import com.sakinah.deen.data.model.PrayerType
 import java.time.LocalTime
 
-/** One prayer cell on the strip / tracker. */
+/** One prayer cell on the tracker. */
 data class PrayerChipUi(
     val key: String,
     val label: String,
@@ -41,7 +41,7 @@ data class PrayerChipUi(
     val isNext: Boolean
 )
 
-/** Everything the three Salah widgets paint, resolved once per update. */
+/** Everything the Salah widget paints, resolved once per update. */
 data class SalahBoardState(
     val times: WidgetTimes,
     val now: LocalTime,
@@ -75,169 +75,14 @@ suspend fun loadSalahBoard(context: Context): SalahBoardState {
 
 private fun countdownFor(state: SalahBoardState): String {
     val target = state.next ?: PrayerType.FAJR
-    val time = state.times.times[target] ?: return "No timetable yet"
+    val time = state.times.times[target] ?: return "No timetable"
     return countdownLabel(minutesUntil(state.now, time))
 }
 
-// ---------------------------------------------------------------------------
-// Next prayer (2x1 / 4x1)
-// ---------------------------------------------------------------------------
-
-class NextPrayerWidget : GlanceAppWidget() {
-    override val sizeMode = SizeMode.Responsive(WidgetSizes.ALL)
-
-    override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
-        val state = loadSalahBoard(context)
-        val window = currentPrayerWindow(state.times.times, state.now)
-        val palette = widgetPaletteFor(context, appWidgetId, window)
-        val city = cityLabel(context)
-        val nextType = state.next ?: PrayerType.FAJR
-        val nextName = prayerLabel(nextType)
-        val nextTime = state.times.label(nextType)
-
-        provideContent {
-            val shape = shapeOf(LocalSize.current)
-            WidgetShell(palette, openAppAction(LocalContext.current, "salah")) {
-                WidgetRow {
-                    Column {
-                        WidgetCaption(text = "NEXT PRAYER", palette = palette)
-                        if (shape == WidgetShape.COMPACT || shape == WidgetShape.WIDE) {
-                            WidgetRow {
-                                WidgetTitle(text = nextName, palette = palette)
-                                WidgetInlineGap()
-                                WidgetAccentValue(text = nextTime, palette = palette)
-                            }
-                        }
-                    }
-                    WidgetSpacer()
-                    WidgetPill(text = city, palette = palette)
-                }
-                WidgetGap(4)
-                if (shape == WidgetShape.SQUARE || shape == WidgetShape.EXPANDED) {
-                    WidgetAccentValue(text = nextTime, palette = palette, fontSize = 26)
-                }
-                if (!state.hasTimes) {
-                    WidgetEmptyState("Add your location to see prayer times", palette)
-                } else {
-                    WidgetCaption(
-                        text = countdownFor(state) + " · " + state.completedCount + "/5 today",
-                        palette = palette,
-                        maxLines = 1
-                    )
-                }
-                if (shape == WidgetShape.EXPANDED) {
-                    WidgetGap(8)
-                    WidgetDivider(palette)
-                    WidgetGap(8)
-                    WidgetRow {
-                        state.chips.forEach { chip ->
-                            Column(
-                                modifier = GlanceModifier.defaultWeight(),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                WidgetCaption(
-                                    text = if (chip.isCompleted) "✓ ${chip.label}" else chip.label,
-                                    palette = palette,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-class NextPrayerWidgetReceiver : GlanceAppWidgetReceiver() {
-    override val glanceAppWidget: GlanceAppWidget = NextPrayerWidget()
-}
-
-// ---------------------------------------------------------------------------
-// Prayer strip (4x1 / 4x2)
-// ---------------------------------------------------------------------------
-
-class PrayerStripWidget : GlanceAppWidget() {
-    override val sizeMode = SizeMode.Responsive(WidgetSizes.ALL)
-
-    override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
-        val state = loadSalahBoard(context)
-        val window = currentPrayerWindow(state.times.times, state.now)
-        val palette = widgetPaletteFor(context, appWidgetId, window)
-
-        provideContent {
-            val shape = shapeOf(LocalSize.current)
-            WidgetShell(palette, openAppAction(LocalContext.current, "salah")) {
-                if (shape == WidgetShape.SQUARE || shape == WidgetShape.EXPANDED) {
-                    WidgetRow {
-                        WidgetTitle(text = "Today's Prayers", palette = palette)
-                        WidgetSpacer()
-                        WidgetAccentValue(
-                            text = "${state.completedCount}/5",
-                            palette = palette,
-                            fontSize = 13
-                        )
-                    }
-                    WidgetGap(8)
-                }
-                Row(modifier = GlanceModifier.fillMaxWidth()) {
-                    state.chips.forEach { chip ->
-                        Column(
-                            modifier = GlanceModifier.defaultWeight(),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = if (chip.isCompleted) "✓" else "○",
-                                style = TextStyle(
-                                    color = if (chip.isCompleted) palette.accent else palette.secondaryText,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            )
-                            WidgetBody(
-                                text = chip.label,
-                                palette = palette,
-                                fontSize = 11,
-                                weight = if (chip.isNext) FontWeight.Bold else FontWeight.Normal,
-                                maxLines = 1
-                            )
-                            WidgetCaption(text = chip.time, palette = palette, maxLines = 1)
-                        }
-                    }
-                }
-                if (shape == WidgetShape.EXPANDED) {
-                    WidgetGap(8)
-                    WidgetDivider(palette)
-                    WidgetGap(8)
-                    WidgetRow {
-                        state.chips.filter { it.isNext }.forEach { chip ->
-                            WidgetPill(
-                                text = "${chip.label} in ${countdownFor(state)}",
-                                palette = palette,
-                                highlighted = true
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-class PrayerStripWidgetReceiver : GlanceAppWidgetReceiver() {
-    override val glanceAppWidget: GlanceAppWidget = PrayerStripWidget()
-}
-
-// ---------------------------------------------------------------------------
-// Interactive Salah tracker (4x2 / 4x1)
-// ---------------------------------------------------------------------------
-
-object SalahActionKeys {
-    val PRAYER_KEY = ActionParameters.Key<String>("salah_prayer_key")
-}
-
+/**
+ * Today's Salah in one widget: the next prayer at 2x1, the full strip at 4x1, and
+ * one-tap checkboxes at 4x2 (2x2 gets the same tappable board).
+ */
 class SalahTrackerWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(WidgetSizes.ALL)
 
@@ -246,45 +91,98 @@ class SalahTrackerWidget : GlanceAppWidget() {
         val state = loadSalahBoard(context)
         val window = currentPrayerWindow(state.times.times, state.now)
         val palette = widgetPaletteFor(context, appWidgetId, window)
+        val nextType = state.next ?: PrayerType.FAJR
+        val nextName = prayerLabel(nextType)
+        val nextTime = state.times.label(nextType)
 
         provideContent {
             val shape = shapeOf(LocalSize.current)
-            WidgetShell(palette, openAppAction(LocalContext.current, "salah")) {
-                WidgetRow {
-                    WidgetTitle(text = "Today's Salah", palette = palette)
-                    WidgetSpacer()
-                    WidgetAccentValue(
-                        text = "${state.completedCount} / 5",
-                        palette = palette,
-                        fontSize = 15
-                    )
-                }
-                WidgetGap(if (shape == WidgetShape.COMPACT) 4 else 10)
-                Row(modifier = GlanceModifier.fillMaxWidth()) {
-                    state.chips.forEach { chip ->
-                        TrackerChip(
-                            chip = chip,
-                            palette = palette,
-                            compact = shape == WidgetShape.COMPACT,
-                            modifier = GlanceModifier.defaultWeight()
-                        )
+            val openSalah = openAppAction(LocalContext.current, "salah")
+            when (shape) {
+                WidgetShape.COMPACT -> WidgetShell(palette, openSalah) {
+                    WidgetRow {
+                        Column {
+                            WidgetCaption(text = "NEXT PRAYER", palette = palette, maxLines = 1)
+                            WidgetRow {
+                                WidgetTitle(text = nextName, palette = palette)
+                                WidgetInlineGap()
+                                WidgetAccentValue(text = nextTime, palette = palette)
+                            }
+                        }
+                        WidgetSpacer()
+                        if (state.hasTimes) {
+                            WidgetPill(
+                                text = countdownFor(state),
+                                palette = palette,
+                                highlighted = true
+                            )
+                        }
                     }
                 }
-                if (shape == WidgetShape.EXPANDED) {
-                    WidgetGap(8)
+
+                WidgetShape.WIDE -> WidgetShell(palette, openSalah) {
+                    if (!state.hasTimes) {
+                        WidgetTitle(text = "Today's Salah", palette = palette)
+                        WidgetGap(2)
+                        WidgetEmptyState("Add your location to see prayer times", palette)
+                    } else {
+                        Row(modifier = GlanceModifier.fillMaxWidth()) {
+                            state.chips.forEach { chip ->
+                                PrayerColumn(
+                                    chip = chip,
+                                    palette = palette,
+                                    modifier = GlanceModifier.defaultWeight()
+                                )
+                            }
+                        }
+                    }
+                }
+
+                WidgetShape.SQUARE, WidgetShape.EXPANDED -> WidgetShell(palette, openSalah) {
                     WidgetRow {
-                        WidgetCaption(
-                            text = if (state.completedCount == 5) {
-                                "All five complete — alhamdulillah"
-                            } else {
-                                "Tap a prayer to mark it prayed"
-                            },
-                            palette = palette,
-                            maxLines = 1
-                        )
+                        WidgetTitle(text = "Today's Salah", palette = palette)
                         WidgetSpacer()
-                        if (state.next != null) {
-                            WidgetPill(text = countdownFor(state), palette = palette, highlighted = true)
+                        WidgetAccentValue(
+                            text = "${state.completedCount} / 5",
+                            palette = palette,
+                            fontSize = 15
+                        )
+                    }
+                    WidgetGap(if (shape == WidgetShape.SQUARE) 6 else 10)
+                    if (!state.hasTimes) {
+                        WidgetEmptyState("Add your location to see prayer times", palette)
+                    } else {
+                        Row(modifier = GlanceModifier.fillMaxWidth()) {
+                            state.chips.forEach { chip ->
+                                TrackerChip(
+                                    chip = chip,
+                                    palette = palette,
+                                    compact = shape == WidgetShape.SQUARE,
+                                    modifier = GlanceModifier.defaultWeight()
+                                )
+                            }
+                        }
+                    }
+                    if (shape == WidgetShape.EXPANDED) {
+                        WidgetGap(6)
+                        WidgetRow {
+                            WidgetCaption(
+                                text = if (state.completedCount == 5) {
+                                    "All five complete — alhamdulillah"
+                                } else {
+                                    "Tap a prayer to mark it prayed"
+                                },
+                                palette = palette,
+                                maxLines = 1
+                            )
+                            WidgetSpacer()
+                            if (state.hasTimes && state.next != null) {
+                                WidgetPill(
+                                    text = countdownFor(state),
+                                    palette = palette,
+                                    highlighted = true
+                                )
+                            }
                         }
                     }
                 }
@@ -293,6 +191,30 @@ class SalahTrackerWidget : GlanceAppWidget() {
     }
 }
 
+/** Non-interactive prayer column used by the 4x1 strip. */
+@Composable
+private fun PrayerColumn(
+    chip: PrayerChipUi,
+    palette: WidgetPalette,
+    modifier: GlanceModifier = GlanceModifier
+) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        WidgetBody(
+            text = if (chip.isCompleted) "✓ ${chip.label}" else chip.label,
+            palette = palette,
+            fontSize = 11,
+            weight = if (chip.isNext) FontWeight.Bold else FontWeight.Medium,
+            maxLines = 1
+        )
+        WidgetCaption(
+            text = chip.time,
+            palette = palette,
+            maxLines = 1
+        )
+    }
+}
+
+/** Tappable prayer cell; the accent check mark is the whole affordance. */
 @Composable
 private fun TrackerChip(
     chip: PrayerChipUi,
@@ -333,6 +255,10 @@ private fun TrackerChip(
     }
 }
 
+object SalahActionKeys {
+    val PRAYER_KEY = ActionParameters.Key<String>("salah_prayer_key")
+}
+
 /** Toggles one prayer for today in the app's Salah table, then repaints the widget. */
 class ToggleSalahAction : ActionCallback {
     override suspend fun onAction(
@@ -342,9 +268,7 @@ class ToggleSalahAction : ActionCallback {
     ) {
         val prayerKey = parameters[SalahActionKeys.PRAYER_KEY] ?: return
         togglePrayerForWidget(context, prayerKey)
-        SalahTrackerWidget().update(context, glanceId)
-        PrayerStripWidget().updateAll(context)
-        NextPrayerWidget().updateAll(context)
+        SalahTrackerWidget().updateAll(context)
     }
 }
 

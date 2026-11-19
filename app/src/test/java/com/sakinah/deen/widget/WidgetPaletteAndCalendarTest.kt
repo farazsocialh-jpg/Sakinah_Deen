@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -207,15 +208,82 @@ class WidgetCalendarTest {
     }
 
     @Test
-    fun `every widget id used by the catalog is unique`() {
-        val names = WidgetCatalog.widgets.map { it.javaClass.simpleName }
-        assertEquals(19, names.size)
-        assertEquals(names.size, names.distinct().size)
-        names.forEach { name ->
+    fun `catalog ships exactly the six streamlined widgets`() {
+        val receivers = WidgetCatalog.entries.map { it.receiverClassName }
+        assertEquals(6, receivers.size)
+        assertEquals(receivers.size, receivers.distinct().size)
+        assertEquals(
+            setOf(
+                "SalahTrackerWidgetReceiver",
+                "TasbihWidgetReceiver",
+                "DailyAyahWidgetReceiver",
+                "HijriDateWidgetReceiver",
+                "QiblaWidgetReceiver",
+                "AiScholarWidgetReceiver"
+            ),
+            receivers.toSet()
+        )
+        WidgetCatalog.entries.forEach { entry ->
             assertNotNull(
-                "missing receiver mapping for $name",
-                WidgetCatalog.widgetForReceiver("com.sakinah.deen.widget.${name}Receiver")
+                "missing receiver mapping for ${entry.receiverClassName}",
+                WidgetCatalog.widgetForReceiver("com.sakinah.deen.widget.${entry.receiverClassName}")
             )
         }
+        assertNull(
+            WidgetCatalog.widgetForReceiver("com.sakinah.deen.widget.NextPrayerWidgetReceiver")
+        )
+    }
+
+    @Test
+    fun `every widget declares the four responsive buckets`() {
+        assertEquals(4, WidgetSizes.ALL.size)
+        assertEquals(WidgetShape.COMPACT, shapeOf(WidgetSizes.COMPACT))
+        assertEquals(WidgetShape.WIDE, shapeOf(WidgetSizes.WIDE))
+        assertEquals(WidgetShape.SQUARE, shapeOf(WidgetSizes.SQUARE))
+        assertEquals(WidgetShape.EXPANDED, shapeOf(WidgetSizes.EXPANDED))
+    }
+
+    @Test
+    fun `frosted and transparent accents follow the active app palette`() {
+        val override = 0xFF123456
+        assertEquals(
+            override,
+            resolveWidgetColors(WidgetStyle.FROSTED_GLASS, false, PrayerWindow.DHUHR, override).accent
+        )
+        assertEquals(
+            override,
+            resolveWidgetColors(WidgetStyle.TRANSPARENT, true, PrayerWindow.DHUHR, override).accent
+        )
+        // Living Sky keeps its own per-window accent so the sky identity survives.
+        assertEquals(
+            0xFFFDE68A,
+            resolveWidgetColors(WidgetStyle.LIVING_SKY, false, PrayerWindow.FAJR, override).accent
+        )
+    }
+
+    @Test
+    fun `ayah rotation walks the curated list and wraps both ways`() {
+        assertTrue(curatedAyahCount >= 12)
+        val seen = (0 until curatedAyahCount).map { curatedAyahFor(it) }
+        assertEquals(curatedAyahCount, seen.distinct().size)
+        assertTrue(seen.all { it.reference.contains(":") })
+        assertTrue(seen.all { it.surahName.isNotBlank() })
+        assertNotEquals(curatedAyahFor(0), curatedAyahFor(1))
+        assertEquals(curatedAyahFor(0), curatedAyahFor(curatedAyahCount))
+        assertEquals(curatedAyahFor(curatedAyahCount - 1), curatedAyahFor(-1))
+    }
+
+    @Test
+    fun `compact ayah teaser cuts on a word boundary`() {
+        val long = curatedAyahFor(4)
+        val snippet = long.snippet(maxChars = 30)
+        assertTrue(snippet.endsWith("…"))
+        val body = snippet.removeSuffix("…")
+        assertTrue(long.translation.startsWith(body))
+        assertEquals(' ', long.translation[body.length])
+
+        val short = DailyAyah("1:1", "Al-Fatihah", "In the name of Allah.")
+        assertEquals("In the name of Allah.", short.snippet(maxChars = 40))
+        assertEquals("Al-Fatihah · 1:1", short.surahLabel())
     }
 }

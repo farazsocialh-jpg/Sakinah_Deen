@@ -5,10 +5,13 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,8 +19,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -35,8 +39,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.sakinah.deen.data.prefs.AppearancePreferences
+import com.sakinah.deen.ui.theme.SakinahTheme
+import com.sakinah.deen.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 
 /**
@@ -59,6 +68,15 @@ class WidgetConfigActivity : ComponentActivity() {
         }
 
         setContent {
+            val appearance = remember {
+                AppearancePreferences(this@WidgetConfigActivity).config.value
+            }
+            val systemDark = isSystemInDarkTheme()
+            val darkTheme = when (appearance.themeMode) {
+                ThemeMode.DARK -> true
+                ThemeMode.LIGHT -> false
+                ThemeMode.SYSTEM -> systemDark
+            }
             var style by remember { mutableStateOf<WidgetStyle?>(null) }
             var themeMode by remember { mutableStateOf<WidgetThemeMode?>(null) }
             val scope = rememberCoroutineScope()
@@ -68,7 +86,11 @@ class WidgetConfigActivity : ComponentActivity() {
                 themeMode = WidgetPrefsStore.getThemeMode(this@WidgetConfigActivity, appWidgetId)
             }
 
-            MaterialTheme {
+            SakinahTheme(
+                darkTheme = darkTheme,
+                palette = appearance.palette,
+                fontScaleMultiplier = appearance.fontScale.multiplier
+            ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -98,10 +120,13 @@ class WidgetConfigActivity : ComponentActivity() {
                             fontWeight = FontWeight.SemiBold
                         )
                         Spacer(Modifier.height(10.dp))
+                        val accent = appearance.palette.widgetAccent(darkTheme)
                         WidgetStyle.entries.forEach { option ->
-                            StyleOptionRow(
+                            StyleOptionCard(
                                 style = option,
                                 selected = style == option,
+                                isDark = darkTheme,
+                                accent = accent,
                                 onClick = { style = option }
                             )
                             Spacer(Modifier.height(8.dp))
@@ -167,27 +192,40 @@ class WidgetConfigActivity : ComponentActivity() {
         val widget = provider?.let { WidgetCatalog.widgetForReceiver(it) } ?: return
         updateWidget(this, appWidgetId, widget)
     }
-
 }
 
+/**
+ * A real swatch of the skin: the widget's own background drawable (gradient for Living Sky,
+ * hairline for Transparent) with the resolved text and accent colours on top.
+ */
 @Composable
-private fun StyleOptionRow(style: WidgetStyle, selected: Boolean, onClick: () -> Unit) {
-    val colors = resolveWidgetColors(style, isDark = false, window = PrayerWindow.DHUHR)
-    Row(
+private fun StyleOptionCard(
+    style: WidgetStyle,
+    selected: Boolean,
+    isDark: Boolean,
+    accent: Long,
+    onClick: () -> Unit
+) {
+    val colors = resolveWidgetColors(style, isDark, PrayerWindow.DHUHR, accent)
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(colors.background))
+            .height(112.dp)
+            .clip(RoundedCornerShape(20.dp))
             .border(
                 width = if (selected) 2.dp else 1.dp,
-                color = if (selected) Color(colors.accent) else Color(0x33000000),
-                shape = RoundedCornerShape(16.dp)
+                color = if (selected) Color(colors.accent) else MaterialTheme.colorScheme.outline,
+                shape = RoundedCornerShape(20.dp)
             )
             .clickable(onClick = onClick)
-            .padding(14.dp),
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Image(
+            painter = painterResource(widgetBackgroundDrawable(style, isDark, PrayerWindow.DHUHR)),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.matchParentSize()
+        )
+        Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
             Text(
                 text = style.label,
                 style = MaterialTheme.typography.titleSmall,
@@ -199,14 +237,41 @@ private fun StyleOptionRow(style: WidgetStyle, selected: Boolean, onClick: () ->
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(colors.secondaryText)
             )
+            Spacer(Modifier.weight(1f))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                Swatch(color = Color(colors.background), bordered = true)
+                Swatch(color = Color(colors.accent))
+                Swatch(color = Color(colors.primaryText))
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = if (selected) "Selected" else "Tap to choose",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                    color = Color(colors.accent)
+                )
+            }
         }
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = if (selected) "●" else "○",
-            color = Color(colors.accent),
-            fontWeight = FontWeight.Bold
-        )
     }
+}
+
+@Composable
+private fun Swatch(color: Color, bordered: Boolean = false) {
+    Box(
+        modifier = Modifier
+            .size(18.dp)
+            .clip(CircleShape)
+            .background(color)
+            .then(
+                if (bordered) {
+                    Modifier.border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                } else {
+                    Modifier
+                }
+            )
+    )
 }
 
 @Composable

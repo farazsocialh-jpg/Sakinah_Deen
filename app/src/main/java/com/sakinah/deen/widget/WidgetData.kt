@@ -3,18 +3,16 @@ package com.sakinah.deen.widget
 import android.content.Context
 import com.sakinah.deen.data.database.DatabasePassphraseProvider
 import com.sakinah.deen.data.database.SakinahEncryptedDatabase
-import com.sakinah.deen.data.database.dao.AdhkarDao
-import com.sakinah.deen.data.database.dao.HadithDao
 import com.sakinah.deen.data.database.dao.QuranDao
 import com.sakinah.deen.data.database.dao.SalahDao
 import com.sakinah.deen.data.database.entity.SalahRecordEntity
 import com.sakinah.deen.data.model.PrayerType
+import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.SakinahPreferences
-import com.sakinah.deen.data.repository.NisabRateRepository
-import com.sakinah.deen.data.repository.NisabRates
 import com.sakinah.deen.data.repository.PrayerTimeRepository
 import com.sakinah.deen.domain.qibla.QiblaMath
 import com.sakinah.deen.service.AzaanScheduling
+import com.sakinah.deen.ui.theme.UserAppearanceConfig
 import java.time.DayOfWeek
 import java.time.Duration
 import java.time.LocalDate
@@ -45,9 +43,6 @@ internal object WidgetRepositories : KoinComponent {
     val salahDao: SalahDao by inject()
     val prayerTimes: PrayerTimeRepository by inject()
     val quranDao: QuranDao by inject()
-    val hadithDao: HadithDao by inject()
-    val adhkarDao: AdhkarDao by inject()
-    val nisabRates: NisabRateRepository by inject()
 }
 
 private fun database(context: Context): SakinahEncryptedDatabase? = runCatching {
@@ -64,15 +59,6 @@ internal fun salahDao(context: Context): SalahDao? =
 internal fun quranDao(context: Context): QuranDao? =
     runCatching { WidgetRepositories.quranDao }.getOrNull() ?: database(context)?.quranDao()
 
-internal fun hadithDao(context: Context): HadithDao? =
-    runCatching { WidgetRepositories.hadithDao }.getOrNull() ?: database(context)?.hadithDao()
-
-internal fun adhkarDao(context: Context): AdhkarDao? =
-    runCatching { WidgetRepositories.adhkarDao }.getOrNull() ?: database(context)?.adhkarDao()
-
-internal fun nisabRepository(): NisabRateRepository? =
-    runCatching { WidgetRepositories.nisabRates }.getOrNull()
-
 /** The saved location's zone, so a manually chosen city keeps its own times. */
 internal fun activeZone(context: Context): ZoneId =
     runCatching { AzaanScheduling.activeZoneId(SakinahPreferences(context)) }
@@ -80,6 +66,10 @@ internal fun activeZone(context: Context): ZoneId =
 
 internal fun appPreferences(context: Context): SakinahPreferences? =
     runCatching { SakinahPreferences(context) }.getOrNull()
+
+/** The user's saved app palette/font settings, used to tint widget accents. */
+internal fun appAppearance(context: Context): UserAppearanceConfig? =
+    runCatching { AppearancePreferences(context).config.value }.getOrNull()
 
 internal fun cityLabel(context: Context): String =
     appPreferences(context)?.locationLabel?.takeIf { it.isNotBlank() } ?: "Your location"
@@ -158,33 +148,6 @@ suspend fun loadWidgetTimes(context: Context): WidgetTimes {
     val resolved = WidgetTimes(zone, today, times)
     if (times.isNotEmpty()) WidgetTimesCache.put(key, resolved)
     return resolved
-}
-
-/** Adds tomorrow's Fajr so the night-time windows (Qiyam, Isha) stay correct. */
-suspend fun loadWidgetTimesWithTomorrowFajr(context: Context): WidgetTimes {
-    val today = loadWidgetTimes(context)
-    if (!today.hasTimes) return today
-    val tomorrow = try {
-        val preferences = appPreferences(context) ?: return today
-        val coordinates = preferences.locationCoordinates ?: return today
-        val repository = runCatching { WidgetRepositories.prayerTimes }.getOrNull() ?: return today
-        withTimeoutOrNull(5_000) {
-            repository.resolveDay(
-                date = today.date.plusDays(1),
-                coordinates = coordinates,
-                madhhab = preferences.madhhab,
-                zoneId = today.zone,
-                highLatitudeRule = preferences.highLatitudeRule
-            ).times
-        }
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        null
-    } ?: return today
-
-    val fajr = tomorrow[PrayerType.FAJR] ?: return today
-    return today.copy(times = today.times + (PrayerType.FAJR to fajr))
 }
 
 /** Prayers already marked complete for [epochDay]. */
@@ -419,139 +382,144 @@ fun streakFromDays(days: Set<Long>, today: Long): Int =
     com.sakinah.deen.data.prefs.QuranReaderPreferences.streakOf(days, today)
 
 // ---------------------------------------------------------------------------
-// Nisab
+// Curated rotating Ayat
 // ---------------------------------------------------------------------------
 
-data class NisabStatus(
-    val threshold: Double,
-    val assets: Double,
-    val currency: String,
-    val aboveNisab: Boolean,
-    val zakatDue: Double
-) {
-    val shortfall: Double get() = (threshold - assets).coerceAtLeast(0.0)
-}
-
-/** Silver nisab (595 g) is the lower, safer threshold for most households. */
-fun nisabStatus(preferences: SakinahPreferences, rates: NisabRates): NisabStatus {
-    val silverThreshold = rates.silverPricePerGram.toDouble() * 595.0
-    val goldThreshold = rates.goldPricePerGram.toDouble() * 85.0
-    val threshold = if (silverThreshold > 0 && goldThreshold > 0) {
-        minOf(silverThreshold, goldThreshold)
-    } else {
-        maxOf(silverThreshold, goldThreshold)
-    }
-    val assets = (
-        preferences.zakatCashInBank +
-            preferences.zakatGoldHeld +
-            preferences.zakatSilverHeld +
-            preferences.zakatTradeInventory +
-            preferences.zakatStocksValue -
-            preferences.zakatShortTermDebts
-        ).toDouble().coerceAtLeast(0.0)
-    return NisabStatus(
-        threshold = threshold,
-        assets = assets,
-        currency = preferences.zakatCurrency,
-        aboveNisab = threshold > 0 && assets >= threshold,
-        zakatDue = if (threshold > 0 && assets >= threshold) assets * 0.025 else 0.0
-    )
-}
-
-// ---------------------------------------------------------------------------
-// Daily content (Qur'an, Hadith, Du'a)
-// ---------------------------------------------------------------------------
-
+/**
+ * A hand-picked set of short, uplifting verses. The list ships with the app so the widget
+ * can rotate offline; the Arabic script is filled in from the bundled Qur'an database
+ * whenever that row is available.
+ */
 data class DailyAyah(
     val reference: String,
-    val arabic: String,
-    val translation: String
-)
-
-private val DAILY_AYAH_PICKS = listOf(
-    2 to 152, 94 to 5, 65 to 3, 13 to 28, 3 to 139, 39 to 53, 2 to 286, 55 to 13
-)
-
-private val FALLBACK_AYAH = DailyAyah(
-    reference = "2:152",
-    arabic = "فَاذْكُرُونِي أَذْكُرْكُمْ وَاشْكُرُوا لِي وَلَا تَكْفُرُونِ",
-    translation = "So remember Me; I will remember you. And be grateful to Me and do not deny Me."
-)
-
-suspend fun loadDailyAyah(context: Context): DailyAyah {
-    val (surah, ayah) = DAILY_AYAH_PICKS[
-        (LocalDate.now(activeZone(context)).toEpochDay() % DAILY_AYAH_PICKS.size).toInt()
-    ]
-    val dao = quranDao(context) ?: return FALLBACK_AYAH
-    val row = runCatching { dao.getAyah(surah, ayah) }.getOrNull() ?: return FALLBACK_AYAH
-    return DailyAyah(
-        reference = "$surah:$ayah",
-        arabic = row.textUthmani,
-        translation = row.translation ?: FALLBACK_AYAH.translation
-    )
-}
-
-data class DailyHadith(
-    val text: String,
-    val source: String
-)
-
-private val FALLBACK_HADITH = DailyHadith(
-    text = "Actions are judged by intentions, and every person will have what they intended.",
-    source = "Sahih al-Bukhari 1"
-)
-
-private val HADITH_SOURCES = listOf("bukhari", "muslim", "nawawi")
-
-suspend fun loadDailyHadith(context: Context): DailyHadith {
-    val dao = hadithDao(context) ?: return FALLBACK_HADITH
-    val day = LocalDate.now(activeZone(context)).toEpochDay()
-    val book = HADITH_SOURCES[(day % HADITH_SOURCES.size).toInt()]
-    val number = (day % 40).toInt() + 1
-    val row = runCatching { dao.getHadith(bookKey = book, languageCode = "eng", hadithNumber = number) }
-        .getOrNull()
-        ?: runCatching { dao.getHadith(bookKey = "nawawi", languageCode = "eng", hadithNumber = number) }
-            .getOrNull()
-        ?: return FALLBACK_HADITH
-    return DailyHadith(
-        text = row.englishText.ifBlank { FALLBACK_HADITH.text },
-        source = "${row.bookTitle.ifBlank { book }} ${row.hadithNumber}"
-    )
-}
-
-data class DailyDua(
-    val title: String,
+    val surahName: String,
     val translation: String,
-    val reference: String
-)
+    val arabic: String = ""
+) {
+    /** "Al-Baqarah · 2:152" for the taller layouts. */
+    fun surahLabel(): String = if (surahName.isBlank()) reference else "$surahName · $reference"
 
-private val FALLBACK_DUA = DailyDua(
-    title = "Ayat al-Kursi",
-    translation = "Whoever recites it in the morning is protected until evening.",
-    reference = "Sahih Muslim 810"
-)
-
-suspend fun loadDailyDua(context: Context): DailyDua {
-    val dao = adhkarDao(context) ?: return FALLBACK_DUA
-    val all = runCatching { dao.observeAll().first() }.getOrDefault(emptyList())
-    if (all.isEmpty()) return FALLBACK_DUA
-    val day = LocalDate.now(activeZone(context)).toEpochDay()
-    val row = all[(day % all.size).toInt()]
-    return DailyDua(
-        title = row.title,
-        translation = row.translation,
-        reference = row.reference
-    )
+    /** A one-line teaser that never cuts a word in half. */
+    fun snippet(maxChars: Int = 74): String {
+        if (translation.length <= maxChars) return translation
+        val cut = translation.take(maxChars).substringBeforeLast(' ')
+        return "$cut…"
+    }
 }
 
-/** Number of bundled adhkar in the morning/evening collection. */
-suspend fun adhkarItemCount(context: Context): Int {
-    val dao = adhkarDao(context) ?: return 12
-    return runCatching { dao.countForCategory(ADHKAR_CATEGORY) }.getOrDefault(0)
-        .takeIf { it > 0 } ?: 12
-}
+private val CURATED_AYAHS: List<DailyAyah> = listOf(
+    DailyAyah(
+        reference = "2:152",
+        surahName = "Al-Baqarah",
+        translation = "So remember Me; I will remember you. And be grateful to Me and do not deny Me."
+    ),
+    DailyAyah(
+        reference = "94:5",
+        surahName = "Ash-Sharh",
+        translation = "For indeed, with hardship comes ease."
+    ),
+    DailyAyah(
+        reference = "65:3",
+        surahName = "At-Talaq",
+        translation = "And whoever relies upon Allah, then He is sufficient for him."
+    ),
+    DailyAyah(
+        reference = "13:28",
+        surahName = "Ar-Ra'd",
+        translation = "Verily, in the remembrance of Allah do hearts find rest."
+    ),
+    DailyAyah(
+        reference = "3:139",
+        surahName = "Ali 'Imran",
+        translation = "And do not weaken and do not grieve, and you will be superior if you are true believers."
+    ),
+    DailyAyah(
+        reference = "39:53",
+        surahName = "Az-Zumar",
+        translation = "Do not despair of the mercy of Allah. Indeed, Allah forgives all sins."
+    ),
+    DailyAyah(
+        reference = "2:186",
+        surahName = "Al-Baqarah",
+        translation = "And when My servants ask you concerning Me, indeed I am near."
+    ),
+    DailyAyah(
+        reference = "55:13",
+        surahName = "Ar-Rahman",
+        translation = "So which of the favors of your Lord would you deny?"
+    ),
+    DailyAyah(
+        reference = "2:286",
+        surahName = "Al-Baqarah",
+        translation = "Allah does not burden a soul beyond that it can bear."
+    ),
+    DailyAyah(
+        reference = "67:2",
+        surahName = "Al-Mulk",
+        translation = "He who created death and life to test you as to which of you is best in deed."
+    ),
+    DailyAyah(
+        reference = "49:13",
+        surahName = "Al-Hujurat",
+        translation = "Indeed, the most noble of you in the sight of Allah is the most righteous of you."
+    ),
+    DailyAyah(
+        reference = "16:97",
+        surahName = "An-Nahl",
+        translation = "Whoever does righteousness, whether male or female, while a believer, We will surely give them a good life."
+    ),
+    DailyAyah(
+        reference = "8:46",
+        surahName = "Al-Anfal",
+        translation = "And be patient. Indeed, Allah is with the patient."
+    ),
+    DailyAyah(
+        reference = "29:69",
+        surahName = "Al-'Ankabut",
+        translation = "And those who strive for Us, We will surely guide them to Our ways."
+    ),
+    DailyAyah(
+        reference = "40:60",
+        surahName = "Ghafir",
+        translation = "Call upon Me; I will respond to you."
+    ),
+    DailyAyah(
+        reference = "25:63",
+        surahName = "Al-Furqan",
+        translation = "And the servants of the Most Merciful are those who walk upon the earth easily."
+    ),
+    DailyAyah(
+        reference = "57:4",
+        surahName = "Al-Hadid",
+        translation = "And He is with you wherever you are. And Allah, of what you do, is Seeing."
+    ),
+    DailyAyah(
+        reference = "6:162",
+        surahName = "Al-An'am",
+        translation = "Say, indeed my prayer, my rites of sacrifice, my living and my dying are for Allah."
+    ),
+)
 
-internal const val ADHKAR_CATEGORY = "morning_evening"
+/** How many verses the rotation cycles through. */
+val curatedAyahCount: Int get() = CURATED_AYAHS.size
+
+/** Pure rotation rule: the index wraps in both directions. */
+fun curatedAyahFor(index: Int): DailyAyah =
+    CURATED_AYAHS[Math.floorMod(index, CURATED_AYAHS.size)]
+
+/**
+ * The verse at [index] in the curated rotation, with its Uthmani text when the bundled
+ * Qur'an database has been seeded. The translation always comes from the curated list.
+ */
+suspend fun loadDailyAyah(context: Context, index: Int): DailyAyah {
+    val curated = curatedAyahFor(index)
+    val parts = curated.reference.split(':')
+    val surah = parts.firstOrNull()?.toIntOrNull() ?: return curated
+    val ayah = parts.getOrNull(1)?.toIntOrNull() ?: return curated
+    val dao = quranDao(context) ?: return curated
+    val row = runCatching { dao.getAyah(surah, ayah) }.getOrNull() ?: return curated
+    return curated.copy(arabic = row.textUthmani)
+}
 
 // ---------------------------------------------------------------------------
 // Qibla

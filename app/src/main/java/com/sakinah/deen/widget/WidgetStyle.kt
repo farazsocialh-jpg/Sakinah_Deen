@@ -2,16 +2,17 @@ package com.sakinah.deen.widget
 
 import android.content.Context
 import androidx.compose.ui.graphics.Color
-import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.glance.unit.ColorProvider
+import com.sakinah.deen.R
+import com.sakinah.deen.ui.theme.SakinahPalette
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
-import java.time.temporal.WeekFields
 import java.util.Locale
 
 /** The four selectable widget skins. */
@@ -22,7 +23,7 @@ enum class WidgetStyle(val label: String, val description: String) {
     TRANSPARENT("Minimal Transparent", "Hairlines over your wallpaper")
 }
 
-/** Per-widget light/dark override, falling back to the device setting. */
+/** Per-widget light/dark override, falling back to the app-wide default. */
 enum class WidgetThemeMode(val label: String) {
     SYSTEM("System"),
     LIGHT("Light"),
@@ -48,24 +49,31 @@ data class WidgetPalette(
     val secondaryText: ColorProvider,
     val accent: ColorProvider,
     val pillBackground: ColorProvider,
-    val divider: ColorProvider
+    val divider: ColorProvider,
+    /** Rounded `<shape>` drawable painted behind the widget; 0 means a flat colour. */
+    val backgroundImageRes: Int = 0
 )
 
 /**
  * The palette rules for all four skins. `isDark` is already resolved from the widget's
  * theme mode, so a widget can stay dark while the phone is light and vice versa.
+ *
+ * [accentOverride] carries the active [SakinahPalette] accent into the two skins that
+ * follow the app theme (Frosted Glass and Transparent); Living Sky and Monochrome keep
+ * their own fixed accents so their identity survives a palette change.
  */
 fun resolveWidgetColors(
     style: WidgetStyle,
     isDark: Boolean,
-    window: PrayerWindow
+    window: PrayerWindow,
+    accentOverride: Long? = null
 ): WidgetColors = when (style) {
     WidgetStyle.FROSTED_GLASS -> if (isDark) {
         WidgetColors(
             background = 0xCC0F1715,
             primaryText = 0xFFF1F5F9,
             secondaryText = 0xFFA7B5B0,
-            accent = 0xFF34D399,
+            accent = accentOverride ?: 0xFF34D399,
             pill = 0x26FFFFFF,
             divider = 0x33FFFFFF
         )
@@ -74,7 +82,7 @@ fun resolveWidgetColors(
             background = 0xD9F7F9F8,
             primaryText = 0xFF0B3B2C,
             secondaryText = 0xFF4B635B,
-            accent = 0xFF10B981,
+            accent = accentOverride ?: 0xFF10B981,
             pill = 0x140B3B2C,
             divider = 0x1F0B3B2C
         )
@@ -148,26 +156,52 @@ fun resolveWidgetColors(
         background = 0x00000000,
         primaryText = if (isDark) 0xFFFFFFFF else 0xFF0B3B2C,
         secondaryText = if (isDark) 0xFFD1D5DB else 0xFF374151,
-        accent = 0xFF10B981,
+        accent = accentOverride ?: 0xFF10B981,
         pill = if (isDark) 0x22FFFFFF else 0x18000000,
         divider = if (isDark) 0x40FFFFFF else 0x30000000
     )
+}
+
+/** Rounded, bordered background drawable for a skin; Living Sky uses real gradients. */
+fun widgetBackgroundDrawable(style: WidgetStyle, isDark: Boolean, window: PrayerWindow): Int =
+    when (style) {
+        WidgetStyle.FROSTED_GLASS ->
+            if (isDark) R.drawable.widget_bg_frosted_dark else R.drawable.widget_bg_frosted_light
+        WidgetStyle.MONOCHROME ->
+            if (isDark) R.drawable.widget_bg_monochrome_dark else R.drawable.widget_bg_monochrome_light
+        WidgetStyle.TRANSPARENT ->
+            if (isDark) R.drawable.widget_bg_transparent_dark else R.drawable.widget_bg_transparent_light
+        WidgetStyle.LIVING_SKY -> when (window) {
+            PrayerWindow.FAJR -> R.drawable.widget_bg_sky_fajr
+            PrayerWindow.DHUHR -> R.drawable.widget_bg_sky_dhuhr
+            PrayerWindow.ASR -> R.drawable.widget_bg_sky_asr
+            PrayerWindow.MAGHRIB -> R.drawable.widget_bg_sky_maghrib
+            PrayerWindow.ISHA -> R.drawable.widget_bg_sky_isha
+        }
+    }
+
+/** The active app palette's accent, as the ARGB value a widget palette expects. */
+fun SakinahPalette.widgetAccent(isDark: Boolean): Long {
+    val color = if (isDark) darkPreviewPrimary else lightPreviewAccent
+    return color.toArgb().toLong() and 0xFFFFFFFFL
 }
 
 /** Wraps [resolveWidgetColors] in Glance colour providers. */
 fun resolveWidgetPalette(
     style: WidgetStyle,
     isDark: Boolean,
-    window: PrayerWindow
+    window: PrayerWindow,
+    accentOverride: Long? = null
 ): WidgetPalette {
-    val colors = resolveWidgetColors(style, isDark, window)
+    val colors = resolveWidgetColors(style, isDark, window, accentOverride)
     return WidgetPalette(
         background = ColorProvider(Color(colors.background)),
         primaryText = ColorProvider(Color(colors.primaryText)),
         secondaryText = ColorProvider(Color(colors.secondaryText)),
         accent = ColorProvider(Color(colors.accent)),
         pillBackground = ColorProvider(Color(colors.pill)),
-        divider = ColorProvider(Color(colors.divider))
+        divider = ColorProvider(Color(colors.divider)),
+        backgroundImageRes = widgetBackgroundDrawable(style, isDark, window)
     )
 }
 
@@ -178,15 +212,10 @@ object WidgetPrefsStore {
     private fun styleKey(appWidgetId: Int) = stringPreferencesKey("style_$appWidgetId")
     private fun themeKey(appWidgetId: Int) = stringPreferencesKey("theme_mode_$appWidgetId")
     private val defaultStyleKey = stringPreferencesKey("style_default")
+    private val defaultThemeModeKey = stringPreferencesKey("theme_mode_default")
 
     private val tasbihKey = intPreferencesKey("tasbih_count")
-    private val jumuahWeekKey = stringPreferencesKey("jumuah_week")
-    private val jumuahGhuslKey = booleanPreferencesKey("jumuah_ghusl")
-    private val jumuahKahfKey = booleanPreferencesKey("jumuah_kahf")
-    private val jumuahMasjidKey = booleanPreferencesKey("jumuah_masjid")
-    private val jumuahDuroodKey = booleanPreferencesKey("jumuah_durood")
-    private val adhkarDayKey = intPreferencesKey("adhkar_day")
-    private val adhkarDoneKey = intPreferencesKey("adhkar_done")
+    private val ayahIndexKey = intPreferencesKey("ayah_index")
 
     suspend fun getStyle(context: Context, appWidgetId: Int): WidgetStyle {
         val raw = context.widgetPrefs.data.map { prefs ->
@@ -209,12 +238,23 @@ object WidgetPrefsStore {
     }
 
     suspend fun getThemeMode(context: Context, appWidgetId: Int): WidgetThemeMode {
-        val raw = context.widgetPrefs.data.map { it[themeKey(appWidgetId)] }.first()
+        val raw = context.widgetPrefs.data.map { prefs ->
+            prefs[themeKey(appWidgetId)] ?: prefs[defaultThemeModeKey]
+        }.first()
         return runCatching { WidgetThemeMode.valueOf(raw ?: "") }.getOrDefault(WidgetThemeMode.SYSTEM)
     }
 
     suspend fun setThemeMode(context: Context, appWidgetId: Int, mode: WidgetThemeMode) {
         context.widgetPrefs.edit { prefs -> prefs[themeKey(appWidgetId)] = mode.name }
+    }
+
+    suspend fun getDefaultThemeMode(context: Context): WidgetThemeMode {
+        val raw = context.widgetPrefs.data.map { it[defaultThemeModeKey] }.first()
+        return runCatching { WidgetThemeMode.valueOf(raw ?: "") }.getOrDefault(WidgetThemeMode.SYSTEM)
+    }
+
+    suspend fun setDefaultThemeMode(context: Context, mode: WidgetThemeMode) {
+        context.widgetPrefs.edit { prefs -> prefs[defaultThemeModeKey] = mode.name }
     }
 
     suspend fun tasbihCount(context: Context): Int =
@@ -235,75 +275,21 @@ object WidgetPrefsStore {
         context.widgetPrefs.edit { prefs -> prefs[tasbihKey] = 0 }
     }
 
-    /** Friday checklist state; everything resets automatically when a new week starts. */
-    suspend fun jumuahChecklist(context: Context): List<Boolean> {
-        val week = currentWeekKey()
-        val prefs = context.widgetPrefs.data.first()
-        if (prefs[jumuahWeekKey] != week) return List(4) { false }
-        return listOf(
-            prefs[jumuahGhuslKey] == true,
-            prefs[jumuahKahfKey] == true,
-            prefs[jumuahMasjidKey] == true,
-            prefs[jumuahDuroodKey] == true
-        )
-    }
+    /** Where the rotating Ayah currently sits in the curated list. */
+    suspend fun ayahIndex(context: Context): Int =
+        context.widgetPrefs.data.map { it[ayahIndexKey] ?: 0 }.first().coerceAtLeast(0)
 
-    suspend fun toggleJumuah(context: Context, index: Int): List<Boolean> {
-        val week = currentWeekKey()
-        var updated = List(4) { false }
+    /** Moves to the next verse; called on phone unlock and by the widget's ↻ button. */
+    suspend fun advanceAyahIndex(context: Context): Int {
+        var next = 0
         context.widgetPrefs.edit { prefs ->
-            val sameWeek = prefs[jumuahWeekKey] == week
-            val current = if (sameWeek) {
-                listOf(
-                    prefs[jumuahGhuslKey] == true,
-                    prefs[jumuahKahfKey] == true,
-                    prefs[jumuahMasjidKey] == true,
-                    prefs[jumuahDuroodKey] == true
-                )
-            } else {
-                List(4) { false }
-            }
-            updated = current.toMutableList().also { it[index] = !it[index] }
-            prefs[jumuahWeekKey] = week
-            prefs[jumuahGhuslKey] = updated[0]
-            prefs[jumuahKahfKey] = updated[1]
-            prefs[jumuahMasjidKey] = updated[2]
-            prefs[jumuahDuroodKey] = updated[3]
+            next = (prefs[ayahIndexKey] ?: 0) + 1
+            prefs[ayahIndexKey] = next
         }
-        return updated
-    }
-
-    /** Morning/evening adhkar progress for today, reset when the day rolls over. */
-    suspend fun adhkarProgress(context: Context, epochDay: Long): Int {
-        val prefs = context.widgetPrefs.data.first()
-        return if (prefs[adhkarDayKey] == epochDay.toInt()) (prefs[adhkarDoneKey] ?: 0) else 0
-    }
-
-    suspend fun advanceAdhkar(context: Context, epochDay: Long, total: Int): Int {
-        var done = 0
-        context.widgetPrefs.edit { prefs ->
-            val today = epochDay.toInt()
-            val current = if (prefs[adhkarDayKey] == today) (prefs[adhkarDoneKey] ?: 0) else 0
-            done = if (total <= 0 || current >= total) 0 else current + 1
-            prefs[adhkarDayKey] = today
-            prefs[adhkarDoneKey] = done
-        }
-        return done
-    }
-
-    private fun currentWeekKey(): String {
-        val weekFields = WeekFields.ISO
-        val today = LocalDate.now()
-        return "${today.get(weekFields.weekBasedYear())}-${today.get(weekFields.weekOfWeekBasedYear())}"
+        return next
     }
 
     const val TASBIH_MAX = 33
-}
-
-/** The calendar week key is locale-independent: ISO weeks everywhere. */
-internal fun isoWeekKey(date: LocalDate): String {
-    val weekFields = WeekFields.ISO
-    return "${date.get(weekFields.weekBasedYear())}-${date.get(weekFields.weekOfWeekBasedYear())}"
 }
 
 /** Theme mode -> dark flag, honouring the widget's own override. */
