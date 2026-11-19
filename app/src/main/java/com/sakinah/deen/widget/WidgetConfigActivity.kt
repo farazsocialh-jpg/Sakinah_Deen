@@ -5,7 +5,6 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -38,13 +37,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.ui.theme.SakinahTheme
+import com.sakinah.deen.ui.theme.UserAppearanceConfig
 import com.sakinah.deen.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 
@@ -69,7 +69,10 @@ class WidgetConfigActivity : ComponentActivity() {
 
         setContent {
             val appearance = remember {
-                AppearancePreferences(this@WidgetConfigActivity).config.value
+                // A cold start can hit a locked Keystore or unreadable prefs; fall back to defaults
+                // instead of crashing the config screen the user just tapped.
+                runCatching { AppearancePreferences(this@WidgetConfigActivity).config.value }
+                    .getOrDefault(UserAppearanceConfig())
             }
             val systemDark = isSystemInDarkTheme()
             val darkTheme = when (appearance.themeMode) {
@@ -206,25 +209,31 @@ private fun StyleOptionCard(
     accent: Long,
     onClick: () -> Unit
 ) {
+    // Compose cannot decode the widgets' XML <shape>/<gradient> drawables (`painterResource`
+    // throws IllegalArgumentException), so the swatch paints the same colours with a Brush.
+    // `widgetBackgroundDrawable` stays reserved for Glance's ImageProvider.
     val colors = resolveWidgetColors(style, isDark, PrayerWindow.DHUHR, accent)
+    val surface = Color(colors.background).let { base ->
+        // Transparent has no fill of its own; preview it on the panel surface so it still reads.
+        if (base.alpha < 0.05f) MaterialTheme.colorScheme.surfaceVariant else base
+    }
+    val brush = Brush.verticalGradient(
+        listOf(lerp(surface, Color.White, 0.07f), lerp(surface, Color.Black, 0.07f))
+    )
+    val shape = RoundedCornerShape(20.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(112.dp)
-            .clip(RoundedCornerShape(20.dp))
+            .clip(shape)
+            .background(brush)
             .border(
                 width = if (selected) 2.dp else 1.dp,
                 color = if (selected) Color(colors.accent) else MaterialTheme.colorScheme.outline,
-                shape = RoundedCornerShape(20.dp)
+                shape = shape
             )
             .clickable(onClick = onClick)
     ) {
-        Image(
-            painter = painterResource(widgetBackgroundDrawable(style, isDark, PrayerWindow.DHUHR)),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.matchParentSize()
-        )
         Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
             Text(
                 text = style.label,
