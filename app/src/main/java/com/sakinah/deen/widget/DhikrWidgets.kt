@@ -108,15 +108,19 @@ class TasbihWidget : GlanceAppWidget() {
 
 class IncrementTasbihAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        WidgetPrefsStore.incrementTasbih(context)
-        TasbihWidget().update(context, glanceId)
+        runCatching {
+            WidgetPrefsStore.incrementTasbih(context)
+            TasbihWidget().update(context, glanceId)
+        }
     }
 }
 
 class ResetTasbihAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        WidgetPrefsStore.resetTasbih(context)
-        TasbihWidget().update(context, glanceId)
+        runCatching {
+            WidgetPrefsStore.resetTasbih(context)
+            TasbihWidget().update(context, glanceId)
+        }
     }
 }
 

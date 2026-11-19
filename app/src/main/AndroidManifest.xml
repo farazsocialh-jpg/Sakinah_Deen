@@ -46,6 +46,7 @@
     <application
         android:name=".SakinahApp"
         android:allowBackup="false"
+        android:usesCleartextTraffic="false"
         android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -112,7 +113,7 @@
         <!-- Today’s Salah Tracker -->
         <receiver
             android:name=".widget.SalahTrackerWidgetReceiver"
-            android:exported="false"
+            android:exported="true"
             android:label="@string/widget_salah_tracker_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -127,7 +128,7 @@
         <!-- Tasbih Counter -->
         <receiver
             android:name=".widget.TasbihWidgetReceiver"
-            android:exported="false"
+            android:exported="true"
             android:label="@string/widget_tasbih_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -142,7 +143,7 @@
         <!-- Ayah of the Day -->
         <receiver
             android:name=".widget.DailyAyahWidgetReceiver"
-            android:exported="false"
+            android:exported="true"
             android:label="@string/widget_daily_ayah_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -157,7 +158,7 @@
         <!-- Ask ImanCore Scholar -->
         <receiver
             android:name=".widget.AiScholarWidgetReceiver"
-            android:exported="false"
+            android:exported="true"
             android:label="@string/widget_ai_scholar_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -172,7 +173,7 @@
         <!-- Hijri Date -->
         <receiver
             android:name=".widget.HijriDateWidgetReceiver"
-            android:exported="false"
+            android:exported="true"
             android:label="@string/widget_hijri_date_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -187,7 +188,7 @@
         <!-- Qibla Direction -->
         <receiver
             android:name=".widget.QiblaWidgetReceiver"
-            android:exported="false"
+            android:exported="true"
             android:label="@string/widget_qibla_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -198,6 +199,7 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/qibla_widget_info" />
         </receiver>
+
 
         <!-- Boot / clock / timezone restoration of exact alarms -->
         <receiver
@@ -232,7 +234,8 @@
         <!-- In-Car Bluetooth Handshake Receiver -->
         <receiver
             android:name=".receiver.CarBluetoothReceiver"
-            android:exported="true">
+            android:exported="true"
+            android:permission="android.permission.BLUETOOTH_CONNECT">
             <intent-filter>
                 <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
                 <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />

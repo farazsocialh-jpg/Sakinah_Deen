@@ -515,4 +515,5 @@
     <string name="hadith_cover_cd">حدیث مجموعہ کا سرورق: %1$s</string>
     <string name="hadith_compiled_by">مرتب کردہ: %1$s</string>
     <string name="hadith_chapters_count">%1$d ابواب</string>
+    <string name="salah_exact_alarm_warning">نماز کے درست وقت کے الارم کی اجازت نہیں ہے، اس لیے یاد دہانیوں میں تاخیر ہو سکتی ہے۔ درست الارم کی اجازت دینے کے لیے یہاں ٹیپ کریں۔</string>
 </resources>

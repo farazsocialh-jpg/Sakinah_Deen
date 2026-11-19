@@ -109,8 +109,10 @@ class NextAyahAction : ActionCallback {
         glanceId: GlanceId,
         parameters: ActionParameters
     ) {
-        WidgetPrefsStore.advanceAyahIndex(context)
-        DailyAyahWidget().updateAll(context)
+        runCatching {
+            WidgetPrefsStore.advanceAyahIndex(context)
+            DailyAyahWidget().updateAll(context)
+        }
     }
 }
 

@@ -515,4 +515,5 @@
     <string name="hadith_cover_cd">غلاف مجموعة الحديث: %1$s</string>
     <string name="hadith_compiled_by">جمعها %1$s</string>
     <string name="hadith_chapters_count">%1$d بابًا</string>
+    <string name="salah_exact_alarm_warning">تنبيهات الصلاة الدقيقة غير مسموح بها، لذا قد تتأخر التذكيرات. انقر للسماح بالتنبيهات الدقيقة.</string>
 </resources>

@@ -17,6 +17,10 @@ import java.time.DayOfWeek
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalTime
+import com.sakinah.deen.data.prayer.SunniMethodMapper
+import com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl
+import kotlinx.datetime.toJavaLocalTime
+import org.koin.core.context.GlobalContext
 import java.time.ZoneId
 import java.time.chrono.HijrahDate
 import java.time.format.DateTimeFormatter
@@ -24,8 +28,6 @@ import java.time.temporal.ChronoUnit
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
-import org.koin.core.component.KoinComponent
-import org.koin.core.component.inject
 
 private val TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("h:mm a")
 
@@ -38,11 +40,16 @@ val OBLIGATORY_PRAYERS: List<Pair<PrayerType, String>> = listOf(
     PrayerType.ISHA to "Isha"
 )
 
-/** Koin-backed access to the app's existing repositories and DAOs. */
-internal object WidgetRepositories : KoinComponent {
-    val salahDao: SalahDao by inject()
-    val prayerTimes: PrayerTimeRepository by inject()
-    val quranDao: QuranDao by inject()
+/** Safe Koin-backed access to the app's existing repositories and DAOs. */
+internal object WidgetRepositories {
+    val salahDao: SalahDao?
+        get() = runCatching { GlobalContext.getOrNull()?.getOrNull<SalahDao>() }.getOrNull()
+
+    val prayerTimes: PrayerTimeRepository?
+        get() = runCatching { GlobalContext.getOrNull()?.getOrNull<PrayerTimeRepository>() }.getOrNull()
+
+    val quranDao: QuranDao?
+        get() = runCatching { GlobalContext.getOrNull()?.getOrNull<QuranDao>() }.getOrNull()
 }
 
 private fun database(context: Context): SakinahEncryptedDatabase? = runCatching {
@@ -54,10 +61,10 @@ private fun database(context: Context): SakinahEncryptedDatabase? = runCatching 
 }.getOrNull()
 
 internal fun salahDao(context: Context): SalahDao? =
-    runCatching { WidgetRepositories.salahDao }.getOrNull() ?: database(context)?.salahDao()
+    WidgetRepositories.salahDao ?: database(context)?.salahDao()
 
 internal fun quranDao(context: Context): QuranDao? =
-    runCatching { WidgetRepositories.quranDao }.getOrNull() ?: database(context)?.quranDao()
+    WidgetRepositories.quranDao ?: database(context)?.quranDao()
 
 /** The saved location's zone, so a manually chosen city keeps its own times. */
 internal fun activeZone(context: Context): ZoneId =
@@ -125,28 +132,56 @@ suspend fun loadWidgetTimes(context: Context): WidgetTimes {
     val key = "${today.toEpochDay()}|${coordinates.first}|${coordinates.second}|${zone.id}"
     WidgetTimesCache.get(key)?.let { return it }
 
-    val repository = runCatching { WidgetRepositories.prayerTimes }.getOrNull()
-        ?: return WidgetTimes(zone, today, emptyMap())
-
-    val times = try {
-        // A home-screen refresh must never hang on the network; the Room cache answers instantly.
-        withTimeoutOrNull(8_000) {
-            repository.resolveDay(
-                date = today,
-                coordinates = coordinates,
-                madhhab = preferences.madhhab,
-                zoneId = zone,
-                highLatitudeRule = preferences.highLatitudeRule
-            ).times
-        }.orEmpty()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
+    val repository = WidgetRepositories.prayerTimes
+    val repoTimes = if (repository != null) {
+        try {
+            // A home-screen refresh must never hang on the network; the Room cache answers instantly.
+            withTimeoutOrNull(8_000) {
+                repository.resolveDay(
+                    date = today,
+                    coordinates = coordinates,
+                    madhhab = preferences.madhhab,
+                    zoneId = zone,
+                    highLatitudeRule = preferences.highLatitudeRule
+                ).times
+            }.orEmpty()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyMap()
+        }
+    } else {
         emptyMap()
     }
 
-    val resolved = WidgetTimes(zone, today, times)
-    if (times.isNotEmpty()) WidgetTimesCache.put(key, resolved)
+    val finalTimes = if (repoTimes.isNotEmpty()) {
+        repoTimes
+    } else {
+        // Fallback: calculate using local astronomy engine so widget never shows blank/empty
+        runCatching {
+            val authority = SunniMethodMapper.resolve(
+                countryCode = preferences.locationCountryCode,
+                override = preferences.calculationMethodOverride
+            )
+            val method = preferences.calculationMethodOverride
+                ?: SunniMethodMapper.localCalculationMethod(authority)
+            val kZone = runCatching { kotlinx.datetime.TimeZone.of(zone.id) }
+                .getOrElse { kotlinx.datetime.TimeZone.currentSystemDefault() }
+            val kDate = kotlinx.datetime.LocalDate.parse(today.toString())
+            PrayerCalculationEngineImpl().getPrayerTimes(
+                coordinates = coordinates,
+                date = kDate,
+                method = method,
+                madhhab = preferences.madhhab,
+                timeZone = kZone,
+                adjustments = preferences.prayerAdjustments,
+                highLatitudeRule = preferences.highLatitudeRule
+            ).mapValues { it.value.toJavaLocalTime() }
+        }.getOrDefault(emptyMap())
+    }
+
+    val resolved = WidgetTimes(zone, today, finalTimes)
+    if (finalTimes.isNotEmpty()) WidgetTimesCache.put(key, resolved)
     return resolved
 }
 

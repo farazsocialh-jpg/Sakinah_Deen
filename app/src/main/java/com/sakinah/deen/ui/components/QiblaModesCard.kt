@@ -853,11 +853,11 @@ private class QiblaMapBridge(
 
     @Keep
     @JavascriptInterface
-    fun onMapError(reason: String) = onErrorCallback(reason)
+    fun onMapError(reason: String?) = onErrorCallback(reason?.take(100).orEmpty())
 
     @Keep
     @JavascriptInterface
-    fun onDebug(message: String) = onDebugCallback(message)
+    fun onDebug(message: String?) = onDebugCallback(message?.take(200).orEmpty())
 }
 
 /* ---------------------------------------------------------------------------------------- */

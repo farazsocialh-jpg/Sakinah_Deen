@@ -267,8 +267,10 @@ class ToggleSalahAction : ActionCallback {
         parameters: ActionParameters
     ) {
         val prayerKey = parameters[SalahActionKeys.PRAYER_KEY] ?: return
-        togglePrayerForWidget(context, prayerKey)
-        SalahTrackerWidget().updateAll(context)
+        runCatching {
+            togglePrayerForWidget(context, prayerKey)
+            SalahTrackerWidget().updateAll(context)
+        }
     }
 }
 
