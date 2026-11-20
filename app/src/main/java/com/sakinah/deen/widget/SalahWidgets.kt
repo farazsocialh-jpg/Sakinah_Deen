@@ -58,7 +58,8 @@ data class SalahBoardState(
     val travelMode: Boolean = false,
     val isRamadan: Boolean = false,
     val missedToday: Int = 0,
-    val streakCount: Int = 0
+    val streakCount: Int = 0,
+    val nearestMasjid: NearestMasjid? = null
 ) {
     val chips: List<PrayerChipUi> = OBLIGATORY_PRAYERS.map { (type, label) ->
         PrayerChipUi(
@@ -98,6 +99,14 @@ suspend fun loadSalahBoard(context: Context): SalahBoardState {
     val leaveBuffer = WidgetPrefsStore.leaveBufferMinutes(context)
     val travelMode = WidgetPrefsStore.travelMode(context)
     val isRamadan = hijriFor(times.date).month == 9
+    val coords = appPreferences(context)?.locationCoordinates
+    val masjid = if (coords != null) {
+        runCatching {
+            kotlinx.coroutines.withTimeoutOrNull(6_000) {
+                loadNearestMasjid(context, coords.first, coords.second)
+            }
+        }.getOrNull()
+    } else null
     return SalahBoardState(
         times = times,
         now = now,
@@ -109,7 +118,8 @@ suspend fun loadSalahBoard(context: Context): SalahBoardState {
         travelMode = travelMode,
         isRamadan = isRamadan,
         missedToday = missedToday,
-        streakCount = streak
+        streakCount = streak,
+        nearestMasjid = masjid
     )
 }
 
@@ -230,6 +240,15 @@ class SalahTrackerWidget : GlanceAppWidget() {
                     if (state.times.isEstimated) {
                         WidgetGap(2)
                         WidgetCaption(text = "Estimated times (offline)", palette = palette, maxLines = 1, fontSize = 11)
+                    }
+                    state.nearestMasjid?.let { m ->
+                        WidgetGap(2)
+                        WidgetCaption(
+                            text = "Masjid: ${m.name} · ${m.distanceLabel} · ${m.walkingLabel}",
+                            palette = palette,
+                            maxLines = 1,
+                            fontSize = 11
+                        )
                     }
                     WidgetGap(if (shape == WidgetShape.SQUARE) 5 else 8)
                     if (!state.hasTimes) {
