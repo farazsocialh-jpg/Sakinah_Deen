@@ -32,6 +32,7 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.sakinah.deen.data.model.PrayerType
+import java.time.DayOfWeek
 import java.time.LocalTime
 
 /** One prayer cell on the tracker. */
@@ -40,7 +41,8 @@ data class PrayerChipUi(
     val label: String,
     val time: String,
     val isCompleted: Boolean,
-    val isNext: Boolean
+    val isNext: Boolean,
+    val isCurrent: Boolean = false
 )
 
 /** Everything the Salah widget paints, resolved once per update. */
@@ -48,15 +50,21 @@ data class SalahBoardState(
     val times: WidgetTimes,
     val now: LocalTime,
     val next: PrayerType?,
+    val current: PrayerType? = null,
     val completed: Set<String>
 ) {
     val chips: List<PrayerChipUi> = OBLIGATORY_PRAYERS.map { (type, label) ->
         PrayerChipUi(
             key = type.name,
-            label = label,
+            label = if (times.date.dayOfWeek == DayOfWeek.FRIDAY && type == PrayerType.DHUHR) {
+                "Jumuah"
+            } else {
+                label
+            },
             time = times.label(type),
             isCompleted = completed.contains(type.name),
-            isNext = type == next
+            isNext = type == next,
+            isCurrent = type == current
         )
     }
     val completedCount: Int = chips.count { it.isCompleted }
@@ -74,6 +82,7 @@ suspend fun loadSalahBoard(context: Context): SalahBoardState {
         times = times,
         now = now,
         next = times.nextToday(now),
+        current = currentPrayer(times, now),
         completed = completed
     )
 }
@@ -85,8 +94,13 @@ private fun countdownFor(state: SalahBoardState): String {
 }
 
 /** The prayer the compact widget should name: the next one, or Fajr after Isha. */
-private fun nextPrayerName(state: SalahBoardState): String =
-    prayerLabel(state.next ?: PrayerType.FAJR)
+private fun nextPrayerName(state: SalahBoardState): String {
+    val next = state.next ?: PrayerType.FAJR
+    if (state.times.date.dayOfWeek == DayOfWeek.FRIDAY && next == PrayerType.DHUHR) {
+        return "Jumu'ah"
+    }
+    return prayerLabel(next)
+}
 
 private fun nextPrayerTime(state: SalahBoardState): String =
     state.times.label(state.next ?: PrayerType.FAJR)
@@ -112,20 +126,20 @@ class SalahTrackerWidget : GlanceAppWidget() {
             when (shape) {
                 WidgetShape.COMPACT -> WidgetShell(palette, openSalah) {
                     WidgetRow {
-                        WidgetTitle(text = nextPrayerName(state), palette = palette, fontSize = 15)
+                        WidgetTitle(text = nextPrayerName(state), palette = palette, fontSize = 17)
                         WidgetInlineGap(5)
                         WidgetAccentValue(
                             text = nextPrayerTime(state),
                             palette = palette,
-                            fontSize = 13
+                            fontSize = 15
                         )
                         WidgetSpacer()
                         if (state.hasTimes) {
-                            WidgetCaption(
+                                                            WidgetCaption(
                                 text = countdownFor(state),
                                 palette = palette,
                                 maxLines = 1,
-                                fontSize = 10
+                                fontSize = 15
                             )
                         }
                     }
@@ -156,14 +170,14 @@ class SalahTrackerWidget : GlanceAppWidget() {
                         WidgetTitle(
                             text = "TODAY'S SALAH",
                             palette = palette,
-                            fontSize = 10
+                            fontSize = 14
                         )
                         WidgetSpacer()
                         WidgetPill(
                             text = "${state.completedCount} / 5",
                             palette = palette,
                             solid = true,
-                            fontSize = 10
+                            fontSize = 15
                         )
                     }
                     WidgetGap(if (shape == WidgetShape.SQUARE) 5 else 8)
@@ -177,7 +191,7 @@ class SalahTrackerWidget : GlanceAppWidget() {
                                     palette = palette,
                                     dense = shape == WidgetShape.SQUARE
                                 )
-                                WidgetGap(2)
+                                WidgetGap(6)
                             }
                         }
                     }
@@ -187,23 +201,22 @@ class SalahTrackerWidget : GlanceAppWidget() {
     }
 }
 
-/** One prayer in the 4x1 strip: label, time and a tick, wrapped in an accent pill when next. */
+/** One prayer in the 4x1 strip: a clean 1-line name + 1-line time, highlighted pill when current. */
 @Composable
 private fun PrayerStripCell(
     chip: PrayerChipUi,
     palette: WidgetPalette,
     modifier: GlanceModifier = GlanceModifier
 ) {
-    val fill = if (chip.isNext) palette.accent else TRANSPARENT_FILL
-    val labelColor = if (chip.isNext) palette.onAccent else palette.primaryText
-    val timeColor = if (chip.isNext) palette.onAccent else palette.secondaryText
-    val tickColor = if (chip.isNext) palette.onAccent else palette.accent
+    val fill = if (chip.isCurrent) palette.accent else TRANSPARENT_FILL
+    val labelColor = if (chip.isCurrent) palette.onAccent else palette.primaryText
+    val timeColor = if (chip.isCurrent) palette.onAccent else palette.secondaryText
     Column(
         modifier = modifier
-            .padding(horizontal = 1.dp)
+            .padding(horizontal = 2.dp)
             .background(fill)
             .cornerRadius(12.dp)
-            .padding(vertical = 5.dp),
+            .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
@@ -211,19 +224,14 @@ private fun PrayerStripCell(
             maxLines = 1,
             style = TextStyle(
                 color = labelColor,
-                fontSize = 9.sp,
-                fontWeight = if (chip.isNext) FontWeight.Bold else FontWeight.Medium
+                fontSize = 14.sp,
+                fontWeight = if (chip.isCurrent) FontWeight.Bold else FontWeight.Medium
             )
         )
         Text(
             text = chip.time,
             maxLines = 1,
-            style = TextStyle(color = timeColor, fontSize = 9.sp, fontWeight = FontWeight.Normal)
-        )
-        Text(
-            text = if (chip.isCompleted) "✓" else " ",
-            maxLines = 1,
-            style = TextStyle(color = tickColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            style = TextStyle(color = timeColor, fontSize = 15.sp, fontWeight = FontWeight.Normal)
         )
     }
 }
@@ -238,9 +246,9 @@ private fun PrayerRow(
     Row(
         modifier = GlanceModifier
             .fillMaxWidth()
-            .background(if (chip.isNext) palette.pillBackground else TRANSPARENT_FILL)
+            .background(if (chip.isCurrent) palette.pillBackground else TRANSPARENT_FILL)
             .cornerRadius(10.dp)
-            .padding(horizontal = 9.dp, vertical = if (dense) 1.dp else 2.dp)
+            .padding(horizontal = 12.dp, vertical = if (dense) 2.dp else 4.dp)
             .clickable(
                 actionRunCallback<ToggleSalahAction>(
                     actionParametersOf(SalahActionKeys.PRAYER_KEY to chip.key)
@@ -253,7 +261,7 @@ private fun PrayerRow(
             maxLines = 1,
             style = TextStyle(
                 color = palette.primaryText,
-                fontSize = (if (dense) 9 else 10).sp,
+                fontSize = (if (dense) 13 else 14).sp,
                 fontWeight = FontWeight.Bold
             )
         )
@@ -263,7 +271,7 @@ private fun PrayerRow(
             maxLines = 1,
             style = TextStyle(
                 color = palette.secondaryText,
-                fontSize = (if (dense) 9 else 10).sp,
+                fontSize = (if (dense) 13 else 14).sp,
                 fontWeight = FontWeight.Normal
             )
         )
@@ -273,7 +281,7 @@ private fun PrayerRow(
             maxLines = 1,
             style = TextStyle(
                 color = if (chip.isCompleted) palette.accent else palette.secondaryText,
-                fontSize = (if (dense) 10 else 12).sp,
+                fontSize = (if (dense) 14 else 15).sp,
                 fontWeight = FontWeight.Bold
             )
         )

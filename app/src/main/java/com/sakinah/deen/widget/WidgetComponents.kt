@@ -88,7 +88,7 @@ fun WidgetShell(
                 .fillMaxSize()
                 .then(surface)
                 .cornerRadius(WidgetCorner)
-                .padding(14.dp)
+                .padding(16.dp)
                 .clickable(onClickAction)
                 .then(modifier),
             content = content
@@ -108,7 +108,7 @@ fun WidgetShell(
                     .padding(1.dp)
                     .then(surface)
                     .cornerRadius(23.dp)
-                    .padding(13.dp),
+                    .padding(15.dp),
                 content = content
             )
         }
@@ -121,7 +121,7 @@ fun WidgetTitle(
     palette: WidgetPalette,
     modifier: GlanceModifier = GlanceModifier,
     maxLines: Int = 1,
-    fontSize: Int = 15
+    fontSize: Int = 17
 ) {
     Text(
         text = text,
@@ -140,7 +140,7 @@ fun WidgetBody(
     text: String,
     palette: WidgetPalette,
     modifier: GlanceModifier = GlanceModifier,
-    fontSize: Int = 13,
+    fontSize: Int = 14,
     weight: FontWeight = FontWeight.Normal,
     maxLines: Int = 3
 ) {
@@ -162,7 +162,7 @@ fun WidgetCaption(
     palette: WidgetPalette,
     modifier: GlanceModifier = GlanceModifier,
     maxLines: Int = 2,
-    fontSize: Int = 11
+    fontSize: Int = 13
 ) {
     Text(
         text = text,
@@ -181,7 +181,7 @@ fun WidgetAccentValue(
     text: String,
     palette: WidgetPalette,
     modifier: GlanceModifier = GlanceModifier,
-    fontSize: Int = 15,
+    fontSize: Int = 17,
     maxLines: Int = 1
 ) {
     Text(
@@ -215,7 +215,7 @@ fun WidgetPill(
     highlighted: Boolean = false,
     solid: Boolean = false,
     modifier: GlanceModifier = GlanceModifier,
-    fontSize: Int = 11
+    fontSize: Int = 13
 ) {
     val background = if (solid) palette.accent else palette.pillBackground
     val content = when {
@@ -247,7 +247,7 @@ fun WidgetOutlinedPill(
     text: String,
     palette: WidgetPalette,
     modifier: GlanceModifier = GlanceModifier,
-    fontSize: Int = 11
+    fontSize: Int = 13
 ) {
     Box(
         modifier = modifier

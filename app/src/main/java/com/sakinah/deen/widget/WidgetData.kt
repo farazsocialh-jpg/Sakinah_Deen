@@ -250,6 +250,18 @@ internal fun PrayerType.toPrayerWindow(): PrayerWindow = when (this) {
     PrayerType.ISHA -> PrayerWindow.ISHA
 }
 
+/** The prayer whose window is currently active at [now] (last prayer that has begun). */
+fun currentPrayer(times: WidgetTimes, now: LocalTime): PrayerType? {
+    if (!times.hasTimes) return null
+    return when (currentPrayerWindow(times.times, now)) {
+        PrayerWindow.FAJR -> PrayerType.FAJR
+        PrayerWindow.DHUHR -> PrayerType.DHUHR
+        PrayerWindow.ASR -> PrayerType.ASR
+        PrayerWindow.MAGHRIB -> PrayerType.MAGHRIB
+        PrayerWindow.ISHA -> PrayerType.ISHA
+    }
+}
+
 /** The window the sky should currently show: the last prayer that has begun. */
 fun currentPrayerWindow(times: Map<PrayerType, LocalTime>, now: LocalTime): PrayerWindow {
     var window = PrayerWindow.ISHA // before Fajr the sky is still the night sky
