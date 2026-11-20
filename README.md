@@ -11,8 +11,18 @@ Android (Jetpack Compose) and iOS (SwiftUI) apps.
   binaries).
 - `app/` — Android application. Jetpack Compose, Room + SQLCipher, WorkManager,
   Adhan playback service, car Bluetooth receiver, R8 minification.
-- `ios/Sakinah/` — SwiftUI application consuming the `:shared` framework.
-- `docs/` — resource provenance, signing, etc.
+- `ios/Sakinah/` — SwiftUI application consuming the `:shared` framework. The Xcode project is
+  generated from `ios/project.yml` with [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+  (`brew install xcodegen && cd ios && xcodegen generate`); it includes the `SakinahUITests`
+  UI-test target used by CI.
+- `worker/` — Cloudflare Worker that proxies the AI Scholar (see `worker/README.md`).
+- `docs/` — resource provenance, signing, naming, etc.
+
+## Naming
+
+**ImanCore** is the product name. The `Sakinah` / `sakinah_deen` identifiers are legacy codenames
+retained in package names, the iOS module, the Worker and the signing identity; see
+[docs/branding.md](docs/branding.md) before renaming anything.
 
 ## Build
 
@@ -37,5 +47,5 @@ iOS (macOS only):
 ## Setup
 
 - JDK 17, Android SDK 35.
-- Optionally copy `.env.example` to `.env` and set `AI_PROXY_URL` to override the AI Scholar proxy. Without it, the app uses the deployed Cloudflare Worker.
+- Optionally copy `.env.example` to `.env` and set `AI_PROXY_URL` to the deployed AI Scholar proxy. There is no built-in default: without it, the AI Scholar screen shows its "not configured" state.
 - Never commit keystores or API keys; signing uses repository secrets.

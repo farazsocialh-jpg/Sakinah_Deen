@@ -16,6 +16,29 @@ custom_domain = true
 [vars]
 GEMINI_MODEL = "gemini-2.0-flash"
 
+# CORS allowlist: comma-separated browser origins. Unset means no browser origin is allowed.
+# Native mobile clients send no Origin header, so they are unaffected. Never use "*".
+# ALLOWED_ORIGIN = "https://app.example.com"
+
+# Cloudflare native rate limiting (counters live in Cloudflare, not in isolate memory).
+# Limits are approximate per Cloudflare location; period must be 10 or 60 seconds.
+# namespace_id must be an integer unique to this account.
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
+[[ratelimits]]
+name = "NOTIFY_RATE_LIMITER"
+namespace_id = "1002"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
 # Example: future scheduled daily pushes (uncomment to enable).
 # [triggers]
 # crons = ["0 8 * * *"]

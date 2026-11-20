@@ -7,13 +7,18 @@
  * (`GEMINI_API_KEY` secret), so no key is ever compiled into the mobile binaries.
  *
  * Security posture
- *  - Optional shared client token (`CLIENT_TOKEN` secret) — constant-time compared.
+ *  - Optional shared client token (`CLIENT_TOKEN` secret), compared in constant time over
+ *    HMAC-SHA-256 digests so neither content nor length is leaked by timing.
  *  - Request body, prompt and output-token caps so one client cannot drain the quota.
- *  - Per-client (IP + token) sliding-window rate limit. This is per-isolate, best effort:
- *    put Cloudflare Rate Limiting / WAF rules in front of it for a hard global guarantee.
+ *  - Rate limiting uses Cloudflare's native Rate Limiting bindings (`RATE_LIMITER` for the
+ *    proxy, `NOTIFY_RATE_LIMITER` for /notify). Counters are kept by Cloudflare, not in
+ *    isolate memory, so limits hold across isolates. Limits are approximate per Cloudflare
+ *    location and are configured in wrangler.toml.
+ *  - CORS is closed by default: only origins listed in `ALLOWED_ORIGIN` (comma separated)
+ *    receive CORS headers. With it unset no browser origin is allowed at all; native
+ *    mobile clients send no Origin header and are unaffected. `*` is never emitted.
  *  - Structured `{ error: { code, message, retryAfter? } }` responses only. Upstream error
  *    bodies and stack traces are never relayed to the client.
- *  - CORS origin is locked to `ALLOWED_ORIGIN` when that variable is set.
  *
  * Deploy:
  *   cd worker
@@ -26,18 +31,16 @@
  */
 
 const MAX_BODY_BYTES = 256 * 1024;
+const MAX_NOTIFY_BODY_BYTES = 16 * 1024;
 const MAX_PROMPT_CHARS = 16_000;
 const MAX_CONTENTS = 40;
 const MAX_OUTPUT_TOKENS = 2048;
 const DEFAULT_MODEL = "gemini-2.0-flash";
-const DEFAULT_RATE_LIMIT_PER_MINUTE = 20;
-const RATE_WINDOW_MS = 60_000;
-
-/** clientKey -> { count, resetAt } — per isolate, reset on eviction. */
-const rateBuckets = new Map();
+const RATE_LIMIT_WINDOW_SECONDS = 60;
 
 const ERROR_STATUS = {
   METHOD_NOT_ALLOWED: 405,
+  ORIGIN_NOT_ALLOWED: 403,
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
   NOT_CONFIGURED: 503,
@@ -54,21 +57,48 @@ const ERROR_STATUS = {
   FCM_ERROR: 502,
 };
 
-function corsHeaders(env) {
-  const allowed = env && env.ALLOWED_ORIGIN ? env.ALLOWED_ORIGIN : "*";
-  return {
-    "access-control-allow-origin": allowed,
-    "access-control-allow-methods": "POST, OPTIONS",
-    "access-control-allow-headers": "content-type, x-sakinah-client, x-admin-token",
-    "access-control-max-age": "86400",
-    vary: "origin",
-  };
+/* ------------------------------------------------------------------ */
+/* CORS — explicit allowlist, no wildcard                              */
+/* ------------------------------------------------------------------ */
+
+/** `ALLOWED_ORIGIN` is a comma-separated allowlist; unset means "no browser origins". */
+function allowedOrigins(env) {
+  const raw = env && typeof env.ALLOWED_ORIGIN === "string" ? env.ALLOWED_ORIGIN : "";
+  return raw
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin !== "" && origin !== "*");
 }
 
-function withHeaders(response, env) {
+/** Native mobile clients send no Origin header; browsers always do. */
+function isOriginAllowed(origin, env) {
+  if (!origin) return true;
+  return allowedOrigins(env).includes(origin);
+}
+
+/**
+ * CORS headers for one request. The ACAO value is only ever the exact, allowlisted request
+ * origin — never `*`, and never a value supplied by the caller when it is not allowlisted.
+ */
+function corsHeaders(env, origin) {
+  const headers = {
+    vary: "origin",
+    "access-control-allow-methods": "POST, OPTIONS",
+    "access-control-allow-headers": "content-type, x-sakinah-client, x-admin-token",
+    "access-control-max-age": "600",
+  };
+  if (origin && isOriginAllowed(origin, env)) {
+    headers["access-control-allow-origin"] = origin;
+  }
+  return headers;
+}
+
+function withHeaders(response, env, origin) {
   const headers = new Headers(response.headers);
-  for (const [key, value] of Object.entries(corsHeaders(env))) headers.set(key, value);
+  for (const [key, value] of Object.entries(corsHeaders(env, origin))) headers.set(key, value);
   headers.set("x-content-type-options", "nosniff");
+  headers.set("referrer-policy", "no-referrer");
+  headers.set("x-frame-options", "DENY");
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -76,60 +106,114 @@ function withHeaders(response, env) {
   });
 }
 
-/** Structured, stable error envelope. Never includes upstream detail or a stack trace. */
-function errorResponse(code, message, env, extraHeaders) {
-  const status = ERROR_STATUS[code] || 400;
-  const headers = {
-    "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store",
-    ...(extraHeaders || {}),
-  };
-  return withHeaders(
-    new Response(JSON.stringify({ error: { code, message } }), { status, headers }),
-    env
-  );
+function jsonResponse(body, status) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
 }
 
-/** Constant-time-ish comparison so token checks do not leak prefix matches. */
-function tokensMatch(provided, expected) {
-  if (typeof provided !== "string" || typeof expected !== "string") return false;
-  if (provided.length !== expected.length) return false;
+/** Structured, stable error envelope. Never includes upstream detail or a stack trace. */
+function errorResponse(code, message, extraHeaders) {
+  const status = ERROR_STATUS[code] || 400;
+  const response = jsonResponse({ error: { code, message } }, status);
+  if (extraHeaders) {
+    const headers = new Headers(response.headers);
+    for (const [key, value] of Object.entries(extraHeaders)) headers.set(key, value);
+    return new Response(response.body, { status, headers });
+  }
+  return response;
+}
+
+/* ------------------------------------------------------------------ */
+/* Constant-time secret comparison                                     */
+/* ------------------------------------------------------------------ */
+
+let hmacKeyPromise;
+
+/**
+ * Per-isolate random HMAC key. Both sides of a comparison are digested with it, so equal
+ * inputs always compare equal while the digests reveal nothing about the secret. The compare
+ * loop then always runs over a fixed 32 bytes, independent of input length or content.
+ */
+function hmacKey() {
+  if (!hmacKeyPromise) {
+    hmacKeyPromise = crypto.subtle.importKey(
+      "raw",
+      crypto.getRandomValues(new Uint8Array(32)),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+  }
+  return hmacKeyPromise;
+}
+
+async function digest(value) {
+  const key = await hmacKey();
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value));
+  return new Uint8Array(signature);
+}
+
+/** Constant-time comparison: no early exit, no length-dependent loop bounds. */
+async function tokensMatch(provided, expected) {
+  if (typeof provided !== "string" || typeof expected !== "string" || expected === "") {
+    return false;
+  }
+  const [a, b] = await Promise.all([digest(provided), digest(expected)]);
   let diff = 0;
-  for (let i = 0; i < provided.length; i += 1) {
-    diff |= provided.charCodeAt(i) ^ expected.charCodeAt(i);
+  for (let i = 0; i < a.length; i += 1) {
+    diff |= a[i] ^ b[i];
   }
   return diff === 0;
 }
 
-function clientKey(request) {
-  const ip =
+/* ------------------------------------------------------------------ */
+/* Rate limiting — Cloudflare native bindings                          */
+/* ------------------------------------------------------------------ */
+
+function clientIp(request) {
+  return (
     request.headers.get("cf-connecting-ip") ||
     request.headers.get("x-forwarded-for") ||
-    "unknown";
-  const token = request.headers.get("x-sakinah-client") || "";
-  return `${ip}|${token.slice(0, 12)}`;
+    "unknown"
+  );
 }
 
-/** Returns { allowed, retryAfter } for the current minute window. */
-function checkRateLimit(request, env, now) {
-  const limit = Number(env.RATE_LIMIT_PER_MINUTE) || DEFAULT_RATE_LIMIT_PER_MINUTE;
-  const key = clientKey(request);
-  const bucket = rateBuckets.get(key);
-  if (!bucket || bucket.resetAt <= now) {
-    rateBuckets.set(key, { count: 1, resetAt: now + RATE_WINDOW_MS });
-    // Opportunistic cleanup so the map cannot grow without bound in a long-lived isolate.
-    if (rateBuckets.size > 5000) {
-      for (const [k, v] of rateBuckets) {
-        if (v.resetAt <= now) rateBuckets.delete(k);
-      }
-    }
-    return { allowed: true, retryAfter: 0 };
+/** Anonymous proxy: IP plus a short token fingerprint keeps one device from exhausting a shared IP. */
+function clientKey(request) {
+  const token = request.headers.get("x-sakinah-client") || "";
+  return `${clientIp(request)}|${token.slice(0, 12)}`;
+}
+
+/**
+ * Calls a Cloudflare Rate Limiting binding. A missing or failing binding fails open so a
+ * binding problem cannot take the app offline; the binding itself is declared in wrangler.toml
+ * and every deploy attaches it.
+ */
+async function hitRateLimit(binding, key) {
+  if (!binding || typeof binding.limit !== "function") return true;
+  try {
+    const { success } = await binding.limit({ key });
+    return success !== false;
+  } catch {
+    return true;
   }
-  if (bucket.count >= limit) {
-    return { allowed: false, retryAfter: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)) };
-  }
-  bucket.count += 1;
-  return { allowed: true, retryAfter: 0 };
+}
+
+/** Returns { allowed, retryAfter } for the proxy route. */
+async function checkRateLimit(request, env) {
+  const allowed = await hitRateLimit(env.RATE_LIMITER, `proxy:${clientKey(request)}`);
+  return { allowed, retryAfter: allowed ? 0 : RATE_LIMIT_WINDOW_SECONDS };
+}
+
+/** Returns { allowed, retryAfter } for the admin push route. */
+async function checkNotifyRateLimit(request, env) {
+  const allowed = await hitRateLimit(env.NOTIFY_RATE_LIMITER, `notify:${clientIp(request)}`);
+  return { allowed, retryAfter: allowed ? 0 : RATE_LIMIT_WINDOW_SECONDS };
 }
 
 /** Validates and normalises the Gemini-shaped payload; returns an error code or null. */
@@ -301,201 +385,231 @@ async function sendFcmNotification(env, { title, body, topic, data, dataOnly }) 
   return { ok: true, messageId };
 }
 
+/* ------------------------------------------------------------------ */
+/* Routes                                                              */
+/* ------------------------------------------------------------------ */
+
+async function handleNotify(request, env) {
+  if (env.ADMIN_NOTIFY_TOKEN === undefined || env.ADMIN_NOTIFY_TOKEN === "") {
+    return errorResponse(
+      "ADMIN_NOT_CONFIGURED",
+      "The notify endpoint is not configured (missing ADMIN_NOTIFY_TOKEN)."
+    );
+  }
+  if (!env.FCM_SERVICE_ACCOUNT_JSON) {
+    return errorResponse(
+      "FCM_NOT_CONFIGURED",
+      "The notify endpoint is not configured (missing FCM_SERVICE_ACCOUNT_JSON)."
+    );
+  }
+
+  // Rate limited before the token is compared so the endpoint cannot be used as a
+  // token-guessing oracle at full request rate.
+  const rate = await checkNotifyRateLimit(request, env);
+  if (!rate.allowed) {
+    return errorResponse("RATE_LIMITED", "Too many requests. Please retry shortly.", {
+      "retry-after": String(rate.retryAfter),
+    });
+  }
+
+  const providedToken = request.headers.get("x-admin-token");
+  if (!providedToken) {
+    return errorResponse("UNAUTHORIZED", "An admin token is required.");
+  }
+  if (!(await tokensMatch(providedToken, env.ADMIN_NOTIFY_TOKEN))) {
+    return errorResponse("FORBIDDEN", "Invalid admin token.");
+  }
+
+  const declaredLength = Number(request.headers.get("content-length") || "0");
+  if (declaredLength > MAX_NOTIFY_BODY_BYTES) {
+    return errorResponse("BODY_TOO_LARGE", "Request body is too large.");
+  }
+
+  let bodyText;
+  try {
+    bodyText = await request.text();
+  } catch {
+    return errorResponse("INVALID_JSON", "Request body must be JSON.");
+  }
+  if (bodyText.length > MAX_NOTIFY_BODY_BYTES) {
+    return errorResponse("BODY_TOO_LARGE", "Request body is too large.");
+  }
+  let payload;
+  try {
+    payload = JSON.parse(bodyText);
+  } catch {
+    return errorResponse("INVALID_JSON", "Request body must be JSON.");
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return errorResponse("INVALID_REQUEST", "Request body must be a JSON object.");
+  }
+  if (typeof payload.title !== "string" || payload.title.trim() === "") {
+    return errorResponse("INVALID_REQUEST", "title must be a non-empty string.");
+  }
+  if (typeof payload.body !== "string" || payload.body.trim() === "") {
+    return errorResponse("INVALID_REQUEST", "body must be a non-empty string.");
+  }
+  const topic =
+    typeof payload.topic === "string" && payload.topic.trim() !== ""
+      ? payload.topic.trim()
+      : "daily_reminders";
+  const data =
+    payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)
+      ? payload.data
+      : {};
+  const dataOnly = payload.dataOnly === true;
+  if (payload.dataOnly !== undefined && typeof payload.dataOnly !== "boolean") {
+    return errorResponse("INVALID_REQUEST", "dataOnly must be a boolean.");
+  }
+
+  try {
+    const result = await sendFcmNotification(env, {
+      title: payload.title,
+      body: payload.body,
+      topic,
+      data,
+      dataOnly,
+    });
+    return jsonResponse(result, 200);
+  } catch {
+    return errorResponse("FCM_ERROR", "Failed to send notification.");
+  }
+}
+
+async function handleScholarProxy(request, env) {
+  if (env.CLIENT_TOKEN && !(await tokensMatch(request.headers.get("x-sakinah-client"), env.CLIENT_TOKEN))) {
+    return errorResponse("UNAUTHORIZED", "A valid client token is required.");
+  }
+  if (!env.GEMINI_API_KEY) {
+    return errorResponse(
+      "NOT_CONFIGURED",
+      "The proxy is not configured (missing GEMINI_API_KEY)."
+    );
+  }
+
+  const rate = await checkRateLimit(request, env);
+  if (!rate.allowed) {
+    return errorResponse("RATE_LIMITED", "Too many requests. Please retry shortly.", {
+      "retry-after": String(rate.retryAfter),
+    });
+  }
+
+  // Reject oversized bodies before buffering them.
+  const declaredLength = Number(request.headers.get("content-length") || "0");
+  if (declaredLength > MAX_BODY_BYTES) {
+    return errorResponse("BODY_TOO_LARGE", "Request body is too large.");
+  }
+  const body = await request.text();
+  if (body.length > MAX_BODY_BYTES) {
+    return errorResponse("BODY_TOO_LARGE", "Request body is too large.");
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    return errorResponse("INVALID_JSON", "Request body must be JSON.");
+  }
+
+  const invalid = validatePayload(payload);
+  if (invalid === "INVALID_REQUEST") {
+    return errorResponse(
+      invalid,
+      "Request body must contain Gemini 'contents' with text parts."
+    );
+  }
+  if (invalid === "PROMPT_TOO_LARGE") {
+    return errorResponse(
+      invalid,
+      `Prompt is too long (limit ${MAX_PROMPT_CHARS} characters or ${MAX_CONTENTS} turns).`
+    );
+  }
+
+  const model = env.GEMINI_MODEL || DEFAULT_MODEL;
+  const upstreamUrl =
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}` +
+    ":streamGenerateContent?alt=sse";
+
+  let upstream;
+  try {
+    upstream = await fetch(upstreamUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        // Sent as a header rather than a query parameter so the key never lands in logs.
+        "x-goog-api-key": env.GEMINI_API_KEY,
+      },
+      body: JSON.stringify(clampGenerationConfig(payload)),
+    });
+  } catch {
+    return errorResponse("UPSTREAM_UNAVAILABLE", "The model provider could not be reached.");
+  }
+
+  if (!upstream.ok) {
+    // Log only the status: the provider body can contain prompt fragments or key hints.
+    const retryAfter = upstream.headers.get("retry-after");
+    const code = upstream.status === 429 ? "UPSTREAM_RATE_LIMITED" : "UPSTREAM_ERROR";
+    return errorResponse(
+      code,
+      "The model provider rejected the request.",
+      retryAfter ? { "retry-after": retryAfter } : undefined
+    );
+  }
+
+  return new Response(upstream.body, {
+    status: 200,
+    headers: {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
+}
+
+async function route(request, env) {
+  const url = new URL(request.url);
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204 });
+  }
+  if (request.method !== "POST") {
+    return errorResponse("METHOD_NOT_ALLOWED", "Only POST is supported.");
+  }
+  if (url.pathname === "/notify") {
+    return handleNotify(request, env);
+  }
+  if (url.pathname !== "/" && url.pathname !== "") {
+    return errorResponse("INVALID_REQUEST", "Unknown endpoint.");
+  }
+  return handleScholarProxy(request, env);
+}
+
 export default {
   async fetch(request, env) {
-    const now = Date.now();
-    const url = new URL(request.url);
+    const origin = request.headers.get("origin");
 
-    if (request.method === "OPTIONS") {
-      return withHeaders(new Response(null, { status: 204 }), env);
-    }
-    if (request.method !== "POST") {
-      return errorResponse("METHOD_NOT_ALLOWED", "Only POST is supported.", env);
-    }
-
-    // Protected push-notification endpoint.
-    if (url.pathname === "/notify") {
-      if (!env.ADMIN_NOTIFY_TOKEN) {
-        return errorResponse(
-          "ADMIN_NOT_CONFIGURED",
-          "The notify endpoint is not configured (missing ADMIN_NOTIFY_TOKEN).",
-          env
-        );
-      }
-      const providedToken = request.headers.get("x-admin-token");
-      if (!providedToken) {
-        return errorResponse("UNAUTHORIZED", "An admin token is required.", env);
-      }
-      if (!tokensMatch(providedToken, env.ADMIN_NOTIFY_TOKEN)) {
-        return errorResponse("FORBIDDEN", "Invalid admin token.", env);
-      }
-      if (!env.FCM_SERVICE_ACCOUNT_JSON) {
-        return errorResponse(
-          "FCM_NOT_CONFIGURED",
-          "The notify endpoint is not configured (missing FCM_SERVICE_ACCOUNT_JSON).",
-          env
-        );
-      }
-
-      let bodyText;
-      try {
-        bodyText = await request.text();
-      } catch {
-        return errorResponse("INVALID_JSON", "Request body must be JSON.", env);
-      }
-      let payload;
-      try {
-        payload = JSON.parse(bodyText);
-      } catch {
-        return errorResponse("INVALID_JSON", "Request body must be JSON.", env);
-      }
-      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-        return errorResponse("INVALID_REQUEST", "Request body must be a JSON object.", env);
-      }
-      if (typeof payload.title !== "string" || payload.title.trim() === "") {
-        return errorResponse("INVALID_REQUEST", "title must be a non-empty string.", env);
-      }
-      if (typeof payload.body !== "string" || payload.body.trim() === "") {
-        return errorResponse("INVALID_REQUEST", "body must be a non-empty string.", env);
-      }
-      const topic =
-        typeof payload.topic === "string" && payload.topic.trim() !== ""
-          ? payload.topic.trim()
-          : "daily_reminders";
-      const data =
-        payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)
-          ? payload.data
-          : {};
-      const dataOnly = payload.dataOnly === true;
-      if (payload.dataOnly !== undefined && typeof payload.dataOnly !== "boolean") {
-        return errorResponse("INVALID_REQUEST", "dataOnly must be a boolean.", env);
-      }
-
-      try {
-        const result = await sendFcmNotification(env, {
-          title: payload.title,
-          body: payload.body,
-          topic,
-          data,
-          dataOnly,
-        });
-        return withHeaders(
-          new Response(JSON.stringify(result), {
-            status: 200,
-            headers: {
-              "content-type": "application/json; charset=utf-8",
-              "cache-control": "no-store",
-            },
-          }),
-          env
-        );
-      } catch {
-        return errorResponse("FCM_ERROR", "Failed to send notification.", env);
-      }
-    }
-
-    if (url.pathname !== "/" && url.pathname !== "") {
-      return errorResponse("INVALID_REQUEST", "Unknown endpoint.", env);
-    }
-
-    if (env.CLIENT_TOKEN && !tokensMatch(request.headers.get("x-sakinah-client"), env.CLIENT_TOKEN)) {
-      return errorResponse("UNAUTHORIZED", "A valid client token is required.", env);
-    }
-    if (!env.GEMINI_API_KEY) {
-      return errorResponse(
-        "NOT_CONFIGURED",
-        "The proxy is not configured (missing GEMINI_API_KEY).",
-        env
-      );
-    }
-
-    const rate = checkRateLimit(request, env, now);
-    if (!rate.allowed) {
-      return errorResponse(
-        "RATE_LIMITED",
-        "Too many requests. Please retry shortly.",
+    // A browser origin that is not allowlisted never reaches a handler: no CORS headers are
+    // attached to the rejection, so the browser also cannot read the response.
+    if (!isOriginAllowed(origin, env)) {
+      return withHeaders(
+        errorResponse("ORIGIN_NOT_ALLOWED", "Origin not allowed."),
         env,
-        { "retry-after": String(rate.retryAfter) }
+        origin
       );
     }
 
-    // Reject oversized bodies before buffering them.
-    const declaredLength = Number(request.headers.get("content-length") || "0");
-    if (declaredLength > MAX_BODY_BYTES) {
-      return errorResponse("BODY_TOO_LARGE", "Request body is too large.", env);
-    }
-    const body = await request.text();
-    if (body.length > MAX_BODY_BYTES) {
-      return errorResponse("BODY_TOO_LARGE", "Request body is too large.", env);
-    }
-
-    let payload;
-    try {
-      payload = JSON.parse(body);
-    } catch {
-      return errorResponse("INVALID_JSON", "Request body must be JSON.", env);
-    }
-
-    const invalid = validatePayload(payload);
-    if (invalid === "INVALID_REQUEST") {
-      return errorResponse(
-        invalid,
-        "Request body must contain Gemini 'contents' with text parts.",
-        env
-      );
-    }
-    if (invalid === "PROMPT_TOO_LARGE") {
-      return errorResponse(
-        invalid,
-        `Prompt is too long (limit ${MAX_PROMPT_CHARS} characters or ${MAX_CONTENTS} turns).`,
-        env
-      );
-    }
-
-    const model = env.GEMINI_MODEL || DEFAULT_MODEL;
-    const upstreamUrl =
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}` +
-      ":streamGenerateContent?alt=sse";
-
-    let upstream;
-    try {
-      upstream = await fetch(upstreamUrl, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          // Sent as a header rather than a query parameter so the key never lands in logs.
-          "x-goog-api-key": env.GEMINI_API_KEY,
-        },
-        body: JSON.stringify(clampGenerationConfig(payload)),
-      });
-    } catch {
-      return errorResponse("UPSTREAM_UNAVAILABLE", "The model provider could not be reached.", env);
-    }
-
-    if (!upstream.ok) {
-      // Log only the status: the provider body can contain prompt fragments or key hints.
-      const retryAfter = upstream.headers.get("retry-after");
-      const code = upstream.status === 429 ? "UPSTREAM_RATE_LIMITED" : "UPSTREAM_ERROR";
-      return errorResponse(
-        code,
-        "The model provider rejected the request.",
-        env,
-        retryAfter ? { "retry-after": retryAfter } : undefined
-      );
-    }
-
-    return withHeaders(
-      new Response(upstream.body, {
-        status: 200,
-        headers: {
-          "content-type": "text/event-stream; charset=utf-8",
-          "cache-control": "no-store",
-        },
-      }),
-      env
-    );
+    const response = await route(request, env);
+    return withHeaders(response, env, origin);
   },
 };
 
 // Exported for the Node-based smoke test in worker/test/proxy.test.mjs.
-export { checkRateLimit, validatePayload, clampGenerationConfig, tokensMatch, MAX_PROMPT_CHARS };
+export {
+  allowedOrigins,
+  checkNotifyRateLimit,
+  checkRateLimit,
+  clampGenerationConfig,
+  isOriginAllowed,
+  tokensMatch,
+  validatePayload,
+  MAX_PROMPT_CHARS,
+};

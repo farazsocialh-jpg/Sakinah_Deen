@@ -2,18 +2,19 @@ name: iOS
 
 on:
   push:
-    branches: [ main ]
   pull_request:
-    branches: [ main ]
   workflow_dispatch:
 
 concurrency:
   group: ios-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   build-shared-and-ios:
-    name: Build shared framework and iOS app
+    name: Build shared framework, iOS app and UI tests
     runs-on: macos-latest
     timeout-minutes: 60
 
@@ -28,6 +29,9 @@ jobs:
           java-version: '17'
           cache: gradle
 
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
@@ -37,10 +41,55 @@ jobs:
       - name: Run shared KMP tests
         run: ./gradlew :shared:allTests --stacktrace --no-daemon
 
-      - name: Build iOS app (if Xcode project present)
+      - name: Generate the Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build the iOS app (simulator)
         run: |
-          if ls ios/**/*.xcodeproj >/dev/null 2>&1; then
-            xcodebuild -project ios/Sakinah.xcodeproj -scheme Sakinah -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 15' build
-          else
-            echo "No Xcode project checked in yet; shared framework build verified above."
-          fi
+          xcodebuild \
+            -project ios/Sakinah.xcodeproj \
+            -scheme Sakinah \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Resolve a bootable iPhone simulator
+        id: simulator
+        run: |
+          UDID=$(xcrun simctl list devices available --json \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for runtime in sorted(d) for x in d[runtime] if x["name"].startswith("iPhone")))')
+          echo "Using simulator $UDID"
+          xcrun simctl boot "$UDID" || true
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      - name: Run iOS UI tests
+        run: |
+          xcodebuild test \
+            -project ios/Sakinah.xcodeproj \
+            -scheme Sakinah \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -only-testing:SakinahUITests \
+            -resultBundlePath "$RUNNER_TEMP/SakinahUITests.xcresult" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload UI test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ui-test-results
+          path: ${{ runner.temp }}/SakinahUITests.xcresult
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Xcode build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-logs
+          path: ${{ runner.temp }}/DerivedData/Logs/**
+          if-no-files-found: ignore
+          retention-days: 7
