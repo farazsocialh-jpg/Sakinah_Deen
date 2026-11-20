@@ -54,6 +54,14 @@ jobs:
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
 
+      # Without KVM the x86_64 emulator cannot boot within the runner timeout.
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTION+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Explore app and write the UI/UX report
         uses: reactivecircus/android-emulator-runner@v2
         env:
