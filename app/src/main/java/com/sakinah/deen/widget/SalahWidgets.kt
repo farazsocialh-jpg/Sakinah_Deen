@@ -43,7 +43,8 @@ data class PrayerChipUi(
     val isCompleted: Boolean,
     val isNext: Boolean,
     val isCurrent: Boolean = false,
-    val isJamaah: Boolean = false
+    val isJamaah: Boolean = false,
+    val isMuted: Boolean = false
 )
 
 /** Everything the Salah widget paints, resolved once per update. */
@@ -59,7 +60,12 @@ data class SalahBoardState(
     val isRamadan: Boolean = false,
     val missedToday: Int = 0,
     val streakCount: Int = 0,
-    val nearestMasjid: NearestMasjid? = null
+    val longestStreakCount: Int = 0,
+    val nearestMasjid: NearestMasjid? = null,
+    val mutedPrayers: Set<String> = emptySet(),
+    val calculationMethodLabel: String = "",
+    val qiblaBearingLabel: String = "",
+    val nextEventLabel: String = ""
 ) {
     val chips: List<PrayerChipUi> = OBLIGATORY_PRAYERS.map { (type, label) ->
         PrayerChipUi(
@@ -73,7 +79,8 @@ data class SalahBoardState(
             isCompleted = completed.contains(type.name),
             isNext = type == next,
             isCurrent = type == current,
-            isJamaah = jamaah.contains(type.name)
+            isJamaah = jamaah.contains(type.name),
+            isMuted = mutedPrayers.contains(type.name)
         )
     }
     val completedCount: Int = chips.count { it.isCompleted }
@@ -96,10 +103,12 @@ suspend fun loadSalahBoard(context: Context): SalahBoardState {
     val allComplete = completed.size >= 5
     WidgetPrefsStore.bumpStreakIfComplete(context, allComplete)
     val streak = WidgetPrefsStore.streakCount(context)
+    val longestStreak = WidgetPrefsStore.longestStreakCount(context)
     val leaveBuffer = WidgetPrefsStore.leaveBufferMinutes(context)
     val travelMode = WidgetPrefsStore.travelMode(context)
     val isRamadan = hijriFor(times.date).month == 9
-    val coords = appPreferences(context)?.locationCoordinates
+    val prefs = appPreferences(context)
+    val coords = prefs?.locationCoordinates
     val masjid = if (coords != null) {
         runCatching {
             kotlinx.coroutines.withTimeoutOrNull(6_000) {
@@ -107,6 +116,10 @@ suspend fun loadSalahBoard(context: Context): SalahBoardState {
             }
         }.getOrNull()
     } else null
+    val muted = prefs?.azaanSettings?.modes?.filterValues { it == com.sakinah.deen.data.model.PrayerAlertMode.OFF }?.keys?.map { it.name }?.toSet() ?: emptySet()
+    val methodLabel = prefs?.calculationMethodOverride?.name ?: "Auto"
+    val qiblaLabel = coords?.let { qiblaSummary(it.first, it.second, prefs?.locationLabel ?: "").let { q -> "${q.bearing}° ${q.cardinal}" } } ?: ""
+    val nextEvent = runCatching { nextIslamicEvent(times.date) }.getOrNull()?.let { "${it.name} ${relativeDays(it.daysAway)}" } ?: ""
     return SalahBoardState(
         times = times,
         now = now,
@@ -119,7 +132,12 @@ suspend fun loadSalahBoard(context: Context): SalahBoardState {
         isRamadan = isRamadan,
         missedToday = missedToday,
         streakCount = streak,
-        nearestMasjid = masjid
+        longestStreakCount = longestStreak,
+        nearestMasjid = masjid,
+        mutedPrayers = muted,
+        calculationMethodLabel = methodLabel,
+        qiblaBearingLabel = qiblaLabel,
+        nextEventLabel = nextEvent
     )
 }
 
@@ -223,7 +241,7 @@ class SalahTrackerWidget : GlanceAppWidget() {
                         )
                         WidgetSpacer()
                         if (state.streakCount > 0) {
-                            WidgetPill(text = "🔥 ${state.streakCount}", palette = palette, fontSize = 11)
+                            WidgetPill(text = "🔥 ${state.streakCount}" + if (state.longestStreakCount > state.streakCount) " (best ${state.longestStreakCount})" else "", palette = palette, fontSize = 11)
                             WidgetInlineGap(4)
                         }
                         if (state.missedToday > 0) {
@@ -249,6 +267,36 @@ class SalahTrackerWidget : GlanceAppWidget() {
                             maxLines = 1,
                             fontSize = 11
                         )
+                    }
+                    if (state.calculationMethodLabel.isNotBlank()) {
+                        WidgetGap(2)
+                        WidgetCaption(
+                            text = "Method: ${state.calculationMethodLabel} · Qibla ${state.qiblaBearingLabel}",
+                            palette = palette,
+                            maxLines = 1,
+                            fontSize = 11
+                        )
+                    }
+                    if (state.nextEventLabel.isNotBlank()) {
+                        WidgetGap(2)
+                        WidgetCaption(
+                            text = "Next: ${state.nextEventLabel}",
+                            palette = palette,
+                            maxLines = 1,
+                            fontSize = 11
+                        )
+                    }
+                    if (state.missedToday > 0) {
+                        WidgetGap(2)
+                        WidgetCaption(
+                            text = "Recovery: +1 prayer/day to clear ${state.missedToday} missed",
+                            palette = palette,
+                            maxLines = 1,
+                            fontSize = 11
+                        )
+                    }
+                    if (state.leaveBufferMinutes > 0 && state.next != null) {
+                        // smart hint already in countdown; nothing extra
                     }
                     WidgetGap(if (shape == WidgetShape.SQUARE) 5 else 8)
                     if (!state.hasTimes) {
@@ -346,6 +394,21 @@ private fun PrayerRow(
             )
         )
         WidgetSpacer()
+        Text(
+            text = if (chip.isMuted) "🔇" else "🔊",
+            maxLines = 1,
+            modifier = GlanceModifier.clickable(
+                actionRunCallback<MutePrayerAction>(
+                    actionParametersOf(SalahActionKeys.PRAYER_KEY to chip.key)
+                )
+            ),
+            style = TextStyle(
+                color = if (chip.isMuted) palette.secondaryText else palette.accent,
+                fontSize = (if (dense) 12 else 13).sp,
+                fontWeight = FontWeight.Normal
+            )
+        )
+        WidgetInlineGap(4)
         if (chip.isCompleted) {
             Text(
                 text = if (chip.isJamaah) "JJ" else "J",
@@ -429,6 +492,34 @@ class ToggleTravelModeAction : ActionCallback {
     ) {
         runCatching {
             WidgetPrefsStore.setTravelMode(context, !WidgetPrefsStore.travelMode(context))
+            SalahTrackerWidget().updateAll(context)
+        }
+    }
+}
+
+/** Toggles per-prayer adhan mute, then repaints and reschedules alarms. */
+class MutePrayerAction : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        val prayerKey = parameters[SalahActionKeys.PRAYER_KEY] ?: return
+        val prayerType = runCatching { com.sakinah.deen.data.model.PrayerType.valueOf(prayerKey) }.getOrNull() ?: return
+        runCatching {
+            val prefs = appPreferences(context) ?: return@runCatching
+            val current = prefs.azaanSettings
+            val currentlyOff = current.modeFor(prayerType) == com.sakinah.deen.data.model.PrayerAlertMode.OFF
+            val newMode = if (currentlyOff) com.sakinah.deen.data.model.PrayerAlertMode.FULL_AZAAN else com.sakinah.deen.data.model.PrayerAlertMode.OFF
+            prefs.azaanSettings = current.copy(modes = current.modes + (prayerType to newMode))
+            // Reschedule alarms so the muted prayer loses (or regains) its PendingIntent.
+            runCatching {
+                val scheduler = com.sakinah.deen.service.PrayerAlarmScheduler(
+                    context,
+                    com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl()
+                )
+                scheduler.scheduleAllDailyAlarmsRefreshed()
+            }
             SalahTrackerWidget().updateAll(context)
         }
     }

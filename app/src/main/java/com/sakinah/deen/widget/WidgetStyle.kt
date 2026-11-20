@@ -235,6 +235,7 @@ object WidgetPrefsStore {
     private val travelModeKey = booleanPreferencesKey("travel_mode")
     private val streakCountKey = intPreferencesKey("streak_count")
     private val streakDateKey = intPreferencesKey("streak_date")
+    private val longestStreakKey = intPreferencesKey("longest_streak")
 
     suspend fun getStyle(context: Context, appWidgetId: Int): WidgetStyle {
         val raw = context.widgetPrefs.data.map { prefs ->
@@ -338,13 +339,18 @@ object WidgetPrefsStore {
     suspend fun streakCount(context: Context): Int =
         context.widgetPrefs.data.map { it[streakCountKey] ?: 0 }.first()
 
+    suspend fun longestStreakCount(context: Context): Int =
+        context.widgetPrefs.data.map { it[longestStreakKey] ?: 0 }.first()
+
     /** Bumps the streak when all five prayers are done today, once per day. */
     suspend fun bumpStreakIfComplete(context: Context, allComplete: Boolean) {
         if (!allComplete) return
         val today = LocalDate.now(activeZone(context)).toEpochDay().toInt()
         context.widgetPrefs.edit { prefs ->
             if (prefs[streakDateKey] != today) {
-                prefs[streakCountKey] = (prefs[streakCountKey] ?: 0) + 1
+                val next = (prefs[streakCountKey] ?: 0) + 1
+                prefs[streakCountKey] = next
+                if (next > (prefs[longestStreakKey] ?: 0)) prefs[longestStreakKey] = next
                 prefs[streakDateKey] = today
             }
         }

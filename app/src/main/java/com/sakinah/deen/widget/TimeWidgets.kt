@@ -48,12 +48,18 @@ class HijriDateWidget : GlanceAppWidget() {
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
         val times = loadWidgetTimes(context)
         val today = LocalDate.now(times.zone)
-        val window = currentPrayerWindow(times.times, LocalTime.now(times.zone))
+        val now = LocalTime.now(times.zone)
+        val window = currentPrayerWindow(times.times, now)
         val palette = widgetPaletteFor(context, appWidgetId, window)
         val hijri = hijriFor(today)
         val fast = nextSunnahFast(today)
         val event = nextIslamicEvent(today)
         val fastToday = fast.daysAway == 0
+        val isRamadan = hijri.month == 9
+        val suhoor = times.times[com.sakinah.deen.data.model.PrayerType.FAJR]
+        val iftar = times.times[com.sakinah.deen.data.model.PrayerType.MAGHRIB]
+        val suhoorMins = suhoor?.let { minutesUntil(now, it) }
+        val iftarMins = iftar?.let { minutesUntil(now, it) }
         val badge = if (fastToday) "Sunnah Fast" else "${event.name} ${relativeDays(event.daysAway)}"
         val dayLine = weekdayDate(today)
 
@@ -149,6 +155,22 @@ class HijriDateWidget : GlanceAppWidget() {
                             WidgetSpacer()
                             WidgetCaption(
                                 text = hijri.label,
+                                palette = palette,
+                                maxLines = 1,
+                                fontSize = 13
+                            )
+                        }
+                        if (isRamadan || fastToday) {
+                            WidgetGap(2)
+                            WidgetCaption(
+                                text = buildString {
+                                    if (isRamadan) {
+                                        suhoorMins?.let { append("Suhoor in ${durationLabel(it)} · ") }
+                                        iftarMins?.let { append("Iftar in ${durationLabel(it)}") }
+                                    } else {
+                                        append("Fast: ${fast.title}")
+                                    }
+                                },
                                 palette = palette,
                                 maxLines = 1,
                                 fontSize = 13
