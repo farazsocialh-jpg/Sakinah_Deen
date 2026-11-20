@@ -86,7 +86,8 @@ internal fun cityLabel(context: Context): String =
 data class WidgetTimes(
     val zone: ZoneId,
     val date: LocalDate,
-    val times: Map<PrayerType, LocalTime>
+    val times: Map<PrayerType, LocalTime>,
+    val isEstimated: Boolean = false
 ) {
     val hasTimes: Boolean get() = times.isNotEmpty()
 
@@ -181,7 +182,8 @@ suspend fun loadWidgetTimes(context: Context): WidgetTimes {
         }.getOrDefault(emptyMap())
     }
 
-    val resolved = WidgetTimes(zone, today, finalTimes)
+    val estimated = repoTimes.isEmpty() && finalTimes.isNotEmpty()
+    val resolved = WidgetTimes(zone, today, finalTimes, isEstimated = estimated)
     if (finalTimes.isNotEmpty()) WidgetTimesCache.put(key, resolved)
     return resolved
 }
@@ -192,6 +194,17 @@ suspend fun loadCompletedPrayers(context: Context, epochDay: Long): Set<String> 
     return runCatching {
         dao.observeTodaySalah(epochDay).first()
             .filter { it.isCompleted }
+            .map { it.prayerType }
+            .toSet()
+    }.getOrDefault(emptySet())
+}
+
+/** Prayers marked as prayed in congregation for [epochDay]. */
+suspend fun loadJamaahPrayers(context: Context, epochDay: Long): Set<String> {
+    val dao = salahDao(context) ?: return emptySet()
+    return runCatching {
+        dao.observeTodaySalah(epochDay).first()
+            .filter { it.isCompleted && it.isJamaah }
             .map { it.prayerType }
             .toSet()
     }.getOrDefault(emptySet())

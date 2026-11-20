@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -230,6 +231,10 @@ object WidgetPrefsStore {
 
     private val tasbihKey = intPreferencesKey("tasbih_count")
     private val ayahIndexKey = intPreferencesKey("ayah_index")
+    private val leaveBufferKey = intPreferencesKey("leave_buffer_minutes")
+    private val travelModeKey = booleanPreferencesKey("travel_mode")
+    private val streakCountKey = intPreferencesKey("streak_count")
+    private val streakDateKey = intPreferencesKey("streak_date")
 
     suspend fun getStyle(context: Context, appWidgetId: Int): WidgetStyle {
         val raw = context.widgetPrefs.data.map { prefs ->
@@ -314,6 +319,42 @@ object WidgetPrefsStore {
             prefs[ayahIndexKey] = next
         }
         return next
+    }
+
+    suspend fun leaveBufferMinutes(context: Context): Int =
+        context.widgetPrefs.data.map { it[leaveBufferKey] ?: 10 }.first().coerceIn(0, 60)
+
+    suspend fun setLeaveBufferMinutes(context: Context, minutes: Int) {
+        context.widgetPrefs.edit { it[leaveBufferKey] = minutes.coerceIn(0, 60) }
+    }
+
+    suspend fun travelMode(context: Context): Boolean =
+        context.widgetPrefs.data.map { it[travelModeKey] ?: false }.first()
+
+    suspend fun setTravelMode(context: Context, enabled: Boolean) {
+        context.widgetPrefs.edit { it[travelModeKey] = enabled }
+    }
+
+    suspend fun streakCount(context: Context): Int =
+        context.widgetPrefs.data.map { it[streakCountKey] ?: 0 }.first()
+
+    /** Bumps the streak when all five prayers are done today, once per day. */
+    suspend fun bumpStreakIfComplete(context: Context, allComplete: Boolean) {
+        if (!allComplete) return
+        val today = LocalDate.now(activeZone(context)).toEpochDay().toInt()
+        context.widgetPrefs.edit { prefs ->
+            if (prefs[streakDateKey] != today) {
+                prefs[streakCountKey] = (prefs[streakCountKey] ?: 0) + 1
+                prefs[streakDateKey] = today
+            }
+        }
+    }
+
+    suspend fun toggleJamaahForWidget(context: Context, prayerKey: String) {
+        val dao = salahDao(context) ?: return
+        val epochDay = LocalDate.now(activeZone(context)).toEpochDay()
+        val existing = dao.getSalahRecord(epochDay, prayerKey) ?: return
+        dao.updateSalahRecord(existing.copy(isJamaah = !existing.isJamaah))
     }
 
     const val TASBIH_MAX = 33
