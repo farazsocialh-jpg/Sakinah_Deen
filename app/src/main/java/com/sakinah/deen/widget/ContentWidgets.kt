@@ -55,7 +55,7 @@ class DailyAyahWidget : GlanceAppWidget() {
                         WidgetBody(
                             text = ayah.snippet(),
                             palette = palette,
-                            fontSize = 11,
+                            fontSize = 14,
                             maxLines = 2,
                             modifier = GlanceModifier.defaultWeight()
                         )
@@ -64,7 +64,7 @@ class DailyAyahWidget : GlanceAppWidget() {
                             text = ayah.reference,
                             palette = palette,
                             solid = true,
-                            fontSize = 10
+                            fontSize = 13
                         )
                     }
                 }
@@ -74,12 +74,12 @@ class DailyAyahWidget : GlanceAppWidget() {
                         WidgetBody(
                             text = ayah.translation,
                             palette = palette,
-                            fontSize = 11,
+                            fontSize = 14,
                             maxLines = 2,
                             modifier = GlanceModifier.defaultWeight()
                         )
                         WidgetInlineGap()
-                        WidgetPill(text = ayah.reference, palette = palette, fontSize = 10)
+                        WidgetPill(text = ayah.reference, palette = palette, fontSize = 13)
                         WidgetInlineGap()
                         NextAyahPill(palette)
                     }
@@ -91,16 +91,16 @@ class DailyAyahWidget : GlanceAppWidget() {
                             text = "DAILY AYAH",
                             palette = palette,
                             maxLines = 1,
-                            fontSize = 9
+                            fontSize = 13
                         )
                         WidgetSpacer()
-                        WidgetPill(text = ayah.reference, palette = palette, fontSize = 9)
+                        WidgetPill(text = ayah.reference, palette = palette, fontSize = 13)
                     }
                     WidgetGap(4)
                     WidgetBody(
                         text = ayah.translation,
                         palette = palette,
-                        fontSize = 11,
+                        fontSize = 14,
                         maxLines = 5,
                         modifier = GlanceModifier.defaultWeight()
                     )
@@ -109,7 +109,7 @@ class DailyAyahWidget : GlanceAppWidget() {
                             text = ayah.surahName,
                             palette = palette,
                             maxLines = 1,
-                            fontSize = 9
+                            fontSize = 13
                         )
                         WidgetSpacer()
                         NextAyahPill(palette)
@@ -122,7 +122,7 @@ class DailyAyahWidget : GlanceAppWidget() {
                             text = "DAILY AYAH · SURAH ${ayah.reference}",
                             palette = palette,
                             maxLines = 1,
-                            fontSize = 10
+                            fontSize = 13
                         )
                         WidgetSpacer()
                         NextAyahPill(palette)
@@ -131,7 +131,7 @@ class DailyAyahWidget : GlanceAppWidget() {
                     WidgetBody(
                         text = ayah.translation,
                         palette = palette,
-                        fontSize = 13,
+                        fontSize = 15,
                         maxLines = 4,
                         modifier = GlanceModifier.defaultWeight()
                     )
@@ -150,7 +150,7 @@ class DailyAyahWidget : GlanceAppWidget() {
                             text = ayah.reference,
                             palette = palette,
                             maxLines = 1,
-                            fontSize = 9
+                            fontSize = 13
                         )
                     }
                 }
@@ -224,7 +224,7 @@ class AiScholarWidget : GlanceAppWidget() {
 
                 WidgetShape.WIDE -> WidgetShell(palette, openScholar) {
                     Column(modifier = GlanceModifier.fillMaxWidth()) {
-                        ScholarSearchBar(palette, fontSize = 11)
+                        ScholarSearchBar(palette, fontSize = 14)
                     }
                 }
 
@@ -233,7 +233,7 @@ class AiScholarWidget : GlanceAppWidget() {
                         text = "IMANCORE SCHOLAR",
                         palette = palette,
                         maxLines = 1,
-                        fontSize = 9
+                        fontSize = 13
                     )
                     WidgetVerticalSpacer()
                     ScholarSearchBar(
@@ -246,7 +246,7 @@ class AiScholarWidget : GlanceAppWidget() {
                             text = "Answers grounded in Qur'an, Hadith and fiqh",
                             palette = palette,
                             maxLines = 1,
-                            fontSize = 9
+                            fontSize = 13
                         )
                     }
                 }

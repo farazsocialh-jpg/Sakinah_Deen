@@ -204,14 +204,18 @@ fun resolveWidgetPalette(
         pillBackground = ColorProvider(Color(colors.pill)),
         divider = ColorProvider(Color(colors.divider)),
         track = ColorProvider(Color(colors.track)),
-        // Only Living Sky still ships a painted gradient; the other three skins are
-        // flat palette colours so a palette change repaints them instantly.
-        backgroundImageRes = if (style == WidgetStyle.LIVING_SKY) {
-            widgetBackgroundDrawable(style, isDark, window)
-        } else {
+        // Frosted Glass, Monochrome and Living Sky paint their bordered shape drawable;
+        // Transparent stays a flat transparent surface with only a hairline border.
+        backgroundImageRes = if (style == WidgetStyle.TRANSPARENT) {
             0
+        } else {
+            widgetBackgroundDrawable(style, isDark, window)
         },
-        hairline = colors.border.takeIf { it != 0L }?.let { ColorProvider(Color(it)) }
+        hairline = if (style == WidgetStyle.TRANSPARENT) {
+            colors.border.takeIf { it != 0L }?.let { ColorProvider(Color(it)) }
+        } else {
+            null
+        }
     )
 }
 
@@ -244,7 +248,14 @@ object WidgetPrefsStore {
     }
 
     suspend fun setDefaultStyle(context: Context, style: WidgetStyle) {
-        context.widgetPrefs.edit { prefs -> prefs[defaultStyleKey] = style.name }
+        context.widgetPrefs.edit { prefs ->
+            prefs[defaultStyleKey] = style.name
+            // Push the new default to every placed widget so Settings changes apply immediately.
+            prefs.asMap().keys.filter { it.name.startsWith("style_") }.forEach { key ->
+                @Suppress("UNCHECKED_CAST")
+                prefs[key as androidx.datastore.preferences.core.Preferences.Key<String>] = style.name
+            }
+        }
     }
 
     suspend fun getThemeMode(context: Context, appWidgetId: Int): WidgetThemeMode {
@@ -264,7 +275,13 @@ object WidgetPrefsStore {
     }
 
     suspend fun setDefaultThemeMode(context: Context, mode: WidgetThemeMode) {
-        context.widgetPrefs.edit { prefs -> prefs[defaultThemeModeKey] = mode.name }
+        context.widgetPrefs.edit { prefs ->
+            prefs[defaultThemeModeKey] = mode.name
+            prefs.asMap().keys.filter { it.name.startsWith("theme_mode_") }.forEach { key ->
+                @Suppress("UNCHECKED_CAST")
+                prefs[key as androidx.datastore.preferences.core.Preferences.Key<String>] = mode.name
+            }
+        }
     }
 
     suspend fun tasbihCount(context: Context): Int =

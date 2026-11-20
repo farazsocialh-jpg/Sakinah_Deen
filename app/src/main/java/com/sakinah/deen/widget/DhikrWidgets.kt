@@ -52,7 +52,7 @@ class TasbihWidget : GlanceAppWidget() {
                                 maxLines = 1,
                                 style = TextStyle(
                                     color = palette.primaryText,
-                                    fontSize = 15.sp,
+                                    fontSize = 17.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             )
@@ -69,7 +69,7 @@ class TasbihWidget : GlanceAppWidget() {
                             maxLines = 1,
                             style = TextStyle(
                                 color = palette.primaryText,
-                                fontSize = 12.sp,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -121,7 +121,7 @@ private fun DhikrCaption(palette: WidgetPalette) {
         maxLines = 1,
         style = TextStyle(
             color = palette.secondaryText,
-            fontSize = 9.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.Medium
         )
     )

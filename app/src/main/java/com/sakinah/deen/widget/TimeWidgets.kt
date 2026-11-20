@@ -65,14 +65,14 @@ class HijriDateWidget : GlanceAppWidget() {
                     WidgetTitle(
                         text = hijri.compactLabel,
                         palette = palette,
-                        fontSize = 12
+                        fontSize = 14
                     )
                     WidgetGap(2)
                     WidgetCaption(
                         text = if (fastToday) "${shortWeekday(today)} · Sunnah Fast" else dayLine,
                         palette = palette,
                         maxLines = 1,
-                        fontSize = 10
+                        fontSize = 13
                     )
                 }
 
@@ -89,16 +89,16 @@ class HijriDateWidget : GlanceAppWidget() {
                         WidgetTitle(
                             text = hijri.monthYearLabel,
                             palette = palette,
-                            fontSize = 11
+                            fontSize = 14
                         )
-                        WidgetCaption(text = dayLine, palette = palette, maxLines = 1, fontSize = 10)
+                        WidgetCaption(text = dayLine, palette = palette, maxLines = 1, fontSize = 13)
                         WidgetVerticalSpacer()
                         WidgetPill(
                             text = badge,
                             palette = palette,
                             highlighted = fastToday,
                             solid = fastToday,
-                            fontSize = 10
+                            fontSize = 13
                         )
                     }
                 }
@@ -115,25 +115,25 @@ class HijriDateWidget : GlanceAppWidget() {
                             WidgetTitle(
                                 text = hijri.monthYearLabel,
                                 palette = palette,
-                                fontSize = 13
+                                fontSize = 15
                             )
                             WidgetCaption(
                                 text = "${hijri.year} AH",
                                 palette = palette,
                                 maxLines = 1,
-                                fontSize = 9
+                                fontSize = 13
                             )
                         }
                         WidgetSpacer()
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            WidgetTitle(text = dayLine, palette = palette, fontSize = 11)
+                            WidgetTitle(text = dayLine, palette = palette, fontSize = 14)
                             WidgetGap(3)
                             WidgetPill(
                                 text = badge,
                                 palette = palette,
                                 highlighted = fastToday,
                                 solid = fastToday,
-                                fontSize = 9
+                                fontSize = 13
                             )
                         }
                     }
@@ -144,14 +144,14 @@ class HijriDateWidget : GlanceAppWidget() {
                                 text = "Mon & Thu · white days 13–15",
                                 palette = palette,
                                 maxLines = 1,
-                                fontSize = 9
+                                fontSize = 13
                             )
                             WidgetSpacer()
                             WidgetCaption(
                                 text = hijri.label,
                                 palette = palette,
                                 maxLines = 1,
-                                fontSize = 9
+                                fontSize = 13
                             )
                         }
                     }
@@ -193,10 +193,10 @@ class QiblaWidget : GlanceAppWidget() {
                     WidgetTitle(
                         text = bearing?.let { "QIBLA · $it" } ?: "QIBLA",
                         palette = palette,
-                        fontSize = 12
+                        fontSize = 14
                     )
                     WidgetGap(2)
-                    WidgetCaption(text = city, palette = palette, maxLines = 1, fontSize = 10)
+                    WidgetCaption(text = city, palette = palette, maxLines = 1, fontSize = 13)
                 }
 
                 WidgetShape.SQUARE -> WidgetShell(palette, openQibla) {
@@ -208,7 +208,7 @@ class QiblaWidget : GlanceAppWidget() {
                             text = "QIBLA DIRECTION",
                             palette = palette,
                             maxLines = 1,
-                            fontSize = 9
+                            fontSize = 13
                         )
                         WidgetGap(4)
                         WidgetAccentValue(
@@ -216,7 +216,7 @@ class QiblaWidget : GlanceAppWidget() {
                             palette = palette,
                             fontSize = 26
                         )
-                        WidgetCaption(text = city, palette = palette, maxLines = 1, fontSize = 10)
+                        WidgetCaption(text = city, palette = palette, maxLines = 1, fontSize = 13)
                         WidgetVerticalSpacer()
                         MapPill(palette, openQibla)
                     }
@@ -229,7 +229,7 @@ class QiblaWidget : GlanceAppWidget() {
                                 text = "QIBLA DIRECTION",
                                 palette = palette,
                                 maxLines = 1,
-                                fontSize = 9
+                                fontSize = 13
                             )
                             WidgetGap(2)
                             WidgetAccentValue(
@@ -237,7 +237,7 @@ class QiblaWidget : GlanceAppWidget() {
                                 palette = palette,
                                 fontSize = 26
                             )
-                            WidgetCaption(text = city, palette = palette, maxLines = 1, fontSize = 10)
+                            WidgetCaption(text = city, palette = palette, maxLines = 1, fontSize = 13)
                         }
                         WidgetSpacer()
                         MapPill(palette, openQibla)
@@ -248,7 +248,7 @@ class QiblaWidget : GlanceAppWidget() {
                             text = "Face the Kaaba — tap to open the compass",
                             palette = palette,
                             maxLines = 1,
-                            fontSize = 9
+                            fontSize = 13
                         )
                     }
                 }
@@ -263,7 +263,7 @@ private fun MapPill(palette: WidgetPalette, openQibla: Action) {
         text = "Open Map",
         palette = palette,
         solid = true,
-        fontSize = 10,
+        fontSize = 13,
         modifier = GlanceModifier.clickable(openQibla)
     )
 }

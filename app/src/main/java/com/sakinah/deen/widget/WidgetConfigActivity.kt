@@ -161,6 +161,7 @@ class WidgetConfigActivity : ComponentActivity() {
                                     WidgetPrefsStore.setStyle(this@WidgetConfigActivity, appWidgetId, chosenStyle)
                                     WidgetPrefsStore.setThemeMode(this@WidgetConfigActivity, appWidgetId, chosenMode)
                                     refreshPlacedWidget(appWidgetId)
+                                    updateAllWidgets(this@WidgetConfigActivity)
                                     setResult(
                                         RESULT_OK,
                                         Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
