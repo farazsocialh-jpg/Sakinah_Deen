@@ -41,16 +41,17 @@ internal class AdhanForegroundGate(
 
     /** Returns false when notifications are blocked, so callers can skip extra work. */
     fun postReminderNotification(notification: Notification): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        val notifications = NotificationManagerCompat.from(context)
+        // The runtime permission is cached per process, so a freshly revoked permission can still
+        // read as GRANTED while the app-op behind it already drops every notification. Ask both.
+        val granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.POST_NOTIFICATIONS
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            return false
-        }
+            ) == PackageManager.PERMISSION_GRANTED
+        if (!granted || !notifications.areNotificationsEnabled()) return false
         return runCatching {
-            NotificationManagerCompat.from(context).notify(notificationId, notification)
+            notifications.notify(notificationId, notification)
         }.isSuccess
     }
 }
