@@ -463,8 +463,11 @@ jobs:
 
   # -------------------------------------------------------- release verification
   # (real signed APK verification; requires secrets not committed to repo)
+  # Runs only when the signing secrets are configured; otherwise it is skipped so a
+  # missing keystore does not turn a green CI run red (see docs/release-signing.md).
   release:
     name: Release APK (verification)
+    if: ${{ secrets.KEYSTORE_BASE64 != '' }}
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -483,24 +486,43 @@ jobs:
           packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
-      - name: Build signed release APK
+      - name: Validate signing secrets
         env:
-          KEYSTORE_PATH: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo ${{ secrets.KEYSTORE_BASE64 }} | base64 -d > "$RUNNER_TEMP/release-keystore.jks"
+          missing=0
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing repository secret: $name (see docs/release-signing.md)"
+              missing=1
+            fi
+          done
+          exit "$missing"
+      - name: Decode release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > "$RUNNER_TEMP/release-keystore.jks"
+          test -s "$RUNNER_TEMP/release-keystore.jks"
+      - name: Verify keystore
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
           keytool -verify -keystore "$RUNNER_TEMP/release-keystore.jks" \
-            -storepass ${{ secrets.KEYSTORE_PASSWORD }} \
-            -alias ${{ secrets.KEY_ALIAS }} >/dev/null 2>&1
-          ./gradlew :app:assembleRelease --stacktrace --no-daemon
-      - name: Verify APK signature
+            -storepass "$KEYSTORE_PASSWORD" \
+            -alias "$KEY_ALIAS" >/dev/null 2>&1
+      - name: Build signed release APK
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/release-keystore.jks
-          KEYSTORE_PASSWORD: android
-          KEY_ALIAS: ci
-          KEY_PASSWORD: android
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease --stacktrace --no-daemon
+      - name: Verify APK signature
         run: |
           apksigner verify --verbose \
             -certs app/build/outputs/apk/release/*.apk
