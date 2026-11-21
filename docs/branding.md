@@ -27,7 +27,6 @@ rename never breaks installed data, signing or the backend.
 | Room database file, SharedPreferences names, notification channel ids, DataStore keys | `sakinah*` | **Never rename.** Existing installs would lose their data. |
 | Repository / Gradle root project name | `ImanCore` (`settings.gradle.kts`) | Cosmetic. |
 | `worker/package.json` name | `sakinah-ai-proxy` | Cosmetic, private package. |
-| `qaos-monkey.config.ts` app name | `Sakinah Deen` | Cosmetic label shown in UI/UX audit reports. |
 
 ## Rules of thumb
 

@@ -1,9 +1,8 @@
 name: "Automated UI/UX Audit"
 
-# Boots an Android emulator, installs the debug APK and lets QAosMonkey explore the app on its
-# own (no hand-written tests). The run produces a Markdown report plus screenshots, uploaded as
-# the `uiux-audit-report` artifact. Requires the OPENAI_API_KEY repository secret; without it the
-# workflow still goes green and prints a notice, so pushes are never blocked by a missing key.
+# Boots an Android emulator, installs the debug APK and lets Android's own monkey explore it
+# (no hand-written tests, no model credentials). The run uploads screenshots, logcat and a
+# Markdown summary as the `uiux-audit-report` artifact and fails if the app crashed or ANR'd.
 
 on:
   push:
@@ -34,12 +33,6 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -47,9 +40,6 @@ jobs:
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
-
-      - name: Install audit tooling
-        run: npm ci
 
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
@@ -74,8 +64,6 @@ jobs:
 
       - name: Explore app and write the UI/UX report
         uses: reactivecircus/android-emulator-runner@v2
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         with:
           api-level: 34
           target: google_apis
@@ -91,9 +79,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: uiux-audit-report
-          path: |
-            .qaos-monkey/runs/
-            qaos-monkey-report/
-            uiux-report/
+          path: uiux-report/
           if-no-files-found: warn
           retention-days: 30
