@@ -1,15 +1,15 @@
 [versions]
 agp = "9.1.1"
-kotlin = "2.3.20"
-ksp = "2.3.12"
+kotlin = "2.4.21"
+ksp = "2.3.14"
 coreKtx = "1.15.0"
 splashscreen = "1.0.1"
 lifecycleRuntimeKtx = "2.8.7"
 activityCompose = "1.9.3"
 # Compose 1.8 is the first stable line with public autofill ContentType semantics.
 composeBom = "2025.05.00"
-coroutines = "1.9.0"
-kotlinxDatetime = "0.6.1"
+coroutines = "1.11.0"
+kotlinxDatetime = "0.8.0"
 room = "2.8.4"
 sqlcipher = "4.20.0"
 datastore = "1.1.1"
@@ -21,7 +21,7 @@ ktor = "3.0.1"
 # Room 2.8's migration bundle is compiled against serialization 1.8+, whose
 # GeneratedSerializer gained typeParametersSerializers(); older runtimes throw
 # AbstractMethodError in MigrationTestHelper (see SakinahMigrationTest).
-kotlinxSerialization = "1.9.0"
+kotlinxSerialization = "1.13.0"
 playServicesLocation = "21.3.0"
 multiplatformSettings = "1.1.1"
 securityCrypto = "1.1.0-alpha06"
