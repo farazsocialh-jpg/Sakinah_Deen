@@ -79,7 +79,7 @@ class PersistentAuthRepository(
     }
 
     /** True when the account is in lockout and should reject new attempts. */
-    private fun isInLockout: Boolean = loginFailures >= LOCKOUT_AFTER
+    private val isInLockout: Boolean get() = loginFailures >= LOCKOUT_AFTER
 
     /** Clear lockout after reset period. Called on successful auth flows. */
     private fun clearLoginLockout() {
