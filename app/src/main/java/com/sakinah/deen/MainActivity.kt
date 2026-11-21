@@ -43,6 +43,7 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         pendingNavigation.value = navigationTarget(intent)
         setContent {
             val appearancePrefs = rememberInject<AppearancePreferences>()
@@ -109,8 +110,6 @@ class MainActivity : ComponentActivity() {
                         SystemBarStyle.light(transparent, transparent)
                     }
                 )
-                val activityWindow = (window ?: return@LaunchedEffect)
-                activityWindow.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
             }
 
             SakinahTheme(

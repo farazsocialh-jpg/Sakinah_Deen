@@ -47,9 +47,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.IsReducedMotionEnabled
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.isReducedMotionEnabled
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -299,8 +297,7 @@ fun RootNavHost(
 
     val startScreen = startScreenForObjective(appearanceConfig.objective)
     BackHandler(
-        enabled = backStack.isNotEmpty() || currentScreen != startScreen,
-        predictiveBack = true
+        enabled = backStack.isNotEmpty() || currentScreen != startScreen
     ) {
         navigateBack()
     }
@@ -407,7 +404,6 @@ fun RootNavHost(
             }
         },
         bottomBar = {
-            val reducedMotion = isReducedMotionEnabled()
             AnimatedVisibility(
                 visible = currentScreen.showBottomBar && (!autoHideBars || !bottomBarHidden) && !imeVisible,
                 enter = { slideInVertically(initialOffsetY = { it }) + fadeIn() },

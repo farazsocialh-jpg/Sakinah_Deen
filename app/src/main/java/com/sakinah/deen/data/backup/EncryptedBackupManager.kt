@@ -78,7 +78,7 @@ object EncryptedBackupManager {
         passphrase: String
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            const val MAX_BACKUP_SIZE = 50L * 1024 * 1024 // 50 MB
+            val MAX_BACKUP_SIZE = 50L * 1024 * 1024 // 50 MB
             val input = context.contentResolver.openInputStream(uri) ?: error("Could not open input stream")
             val buffer = java.io.ByteArrayOutputStream()
             val copyBuffer = ByteArray(1024 * 1024) // 1 MB copy buffer

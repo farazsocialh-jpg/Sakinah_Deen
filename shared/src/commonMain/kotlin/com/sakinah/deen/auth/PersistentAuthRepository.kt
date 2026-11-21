@@ -65,7 +65,7 @@ class PersistentAuthRepository(
     // --- Rate-limiting state ---
     private val LOGIN_FAILURES_KEY = "sakinah_auth_login_failures_v1"
     private val LOCKOUT_RESET_MS = 300000L // 5 minutes
-    private const val LOCKOUT_AFTER = 5
+    private val LOCKOUT_AFTER = 5
 
     private var loginFailures: Int
         get() = prefs.getIntOrNull(LOGIN_FAILURES_KEY) ?: 0
