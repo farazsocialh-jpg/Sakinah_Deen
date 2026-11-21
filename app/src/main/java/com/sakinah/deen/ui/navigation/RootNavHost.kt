@@ -282,12 +282,12 @@ fun RootNavHost(
         if (navigateToExtra.isNullOrBlank()) return@LaunchedEffect
         val destination = when (navigateToExtra) {
             com.sakinah.deen.receiver.CarBluetoothReceiver.ACTION_OPEN_TRAVEL,
-            "travel" -> SakinahScreen.Travel,
-            "quran" -> SakinahScreen.Quran,
-            "ai_scholar", "scholar" -> SakinahScreen.AiScholar,
-            "hadith" -> SakinahScreen.Hadith,
-            "salah", "prayer" -> SakinahScreen.DailySalah,
-            "tools" -> SakinahScreen.ToolsHub,
+            "travel" -> SakinahScreen.Travel
+            "quran" -> SakinahScreen.Quran
+            "ai_scholar", "scholar" -> SakinahScreen.AiScholar
+            "hadith" -> SakinahScreen.Hadith
+            "salah", "prayer" -> SakinahScreen.DailySalah
+            "tools" -> SakinahScreen.ToolsHub
             "wealth" -> SakinahScreen.Wealth
             else -> null
         }
@@ -406,9 +406,9 @@ fun RootNavHost(
         bottomBar = {
             AnimatedVisibility(
                 visible = currentScreen.showBottomBar && (!autoHideBars || !bottomBarHidden) && !imeVisible,
-                enter = { slideInVertically(initialOffsetY = { it }) + fadeIn() },
-                exit = { slideOutVertically(targetOffsetY = { it }) + fadeOut() }
-            ) { innerPadding ->
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+            ) {
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.surface
                 ) {
