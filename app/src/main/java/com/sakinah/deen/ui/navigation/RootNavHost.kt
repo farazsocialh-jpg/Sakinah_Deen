@@ -296,7 +296,9 @@ fun RootNavHost(
     }
 
     val startScreen = startScreenForObjective(appearanceConfig.objective)
-    BackHandler(enabled = backStack.isNotEmpty() || currentScreen != startScreen) {
+    BackHandler(
+        enabled = backStack.isNotEmpty() || currentScreen != startScreen
+    ) {
         navigateBack()
     }
 

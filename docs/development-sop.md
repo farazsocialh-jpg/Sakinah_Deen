@@ -18,6 +18,13 @@ Four workflows, no overlap. Each responsibility lives in exactly one place.
 APK `quality` built), `device` (one emulator boot: tests, then accessibility, then UI/UX monkey)
 → `report` (one `AUDIT.md`).
 
+### CI verification of release APK
+
+If repository secrets `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` are
+configured, the new `release` job in `ci.yml` will build and signature-verify a release APK using
+the real signing key. This is **not** the production release workflow — that remains `release.yml`
+triggered on `v*` tags. The CI release job is for verification only.
+
 A signed release is *never* produced on a feature or `main` push. Signing material is used by CI
 only to verify that R8 can build; that keystore is ephemeral.
 
@@ -85,6 +92,21 @@ reason in the PR description. Silencing a check is a code change and is reviewed
 ### Device legs
 
 One emulator runs three phases ([`scripts/run-device-audit.sh`](../.github/scripts/run-device-audit.sh)):
+
+### Deep audit checks (new)
+
+The expanded checklist now covers:
+
+| Area | Checks | Gate |
+| --- | --- | --- |
+| **Security/Privacy** | `backup_disabled`, `cleartext_disabled`, `network_security_config`, `data_extraction_rules`, `hardcoded_secrets`, `exported_components`, `dangerous_permissions`, `flag_secure`, `encrypted_prefs` | Block (S1/S2) or advise (S3/S4) |
+| **Performance** | `baseline_profile`, `macrobenchmark`, `network_timeouts`, `http_cache`, `startup_measurement` | Advise |
+| **Compatibility** | `target_sdk`, `min_sdk`, `rtl`, `optional_features`, `predictive_back`, `dark_mode`, `dpi_configuration` | Block or advise |
+| **Observability** | `crash_reporting`, `analytics`, `log_stripping`, `pii_in_logs` | Block (S3) or advise |
+| **Release readiness** | `signing_fail_closed`, `no_baked_config`, `account_deletion`, `store_assets`, `privacy_copy`, `release_notes_versioned` | Block (S2/S3) |
+| **E2E flow** | `e2e_onboarding`, `e2e_auth`, `e2e_prayer`, `e2e_quran`, `e2e_settings`, `e2e_profile` | Advise |
+
+
 
 - **Instrumented tests** — gate the job.
 - **Accessibility** — report-only: 48 dp targets and unlabelled clickables are measured and
