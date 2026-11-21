@@ -82,17 +82,9 @@ jobs:
           arch: x86_64
           profile: pixel_5
           disable-animations: true
-          script: |
-            set -e
-            adb install -r app/build/outputs/apk/debug/app-debug.apk
-
-            if [ -z "${OPENAI_API_KEY:-}" ]; then
-              echo "::notice::OPENAI_API_KEY is not set, so the exploratory audit was skipped. Add the secret to enable it."
-              exit 0
-            fi
-
-            # stdin is closed so a human-in-the-loop prompt cannot hang the emulator step.
-            npx qaosmonkey run --config qaos-monkey.config.ts < /dev/null
+          # The action runs each line of this input as its own `sh -c`, so the logic lives in a
+          # script file rather than inline.
+          script: bash .github/scripts/run-uiux-audit.sh
 
       - name: Upload UI/UX report
         if: always()
