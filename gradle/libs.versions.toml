@@ -17,7 +17,7 @@ work = "2.10.0"
 media3 = "1.5.1"
 koin = "4.0.0"
 adhan = "1.2.1"
-ktor = "3.0.1"
+ktor = "3.6.1"
 # Room 2.8's migration bundle is compiled against serialization 1.8+, whose
 # GeneratedSerializer gained typeParametersSerializers(); older runtimes throw
 # AbstractMethodError in MigrationTestHelper (see SakinahMigrationTest).
