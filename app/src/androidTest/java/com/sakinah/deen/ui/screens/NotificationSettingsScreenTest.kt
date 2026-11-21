@@ -14,6 +14,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.testing.TestLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.sakinah.deen.R
 import com.sakinah.deen.data.model.AzaanSettings
 import com.sakinah.deen.data.model.Muezzin
 import com.sakinah.deen.data.prefs.SakinahPreferences
@@ -135,6 +136,13 @@ class NotificationSettingsScreenTest {
                 }
             }
         }
+        composeRule.waitForIdle()
+        // The voice picker sits in a collapsed accordion, so its "Preview" chips do not exist
+        // until the section is opened; showing the screen for these tests includes that tap.
+        composeRule
+            .onNodeWithText(context.getString(R.string.notif_muezzin_voice))
+            .performScrollTo()
+            .performClick()
         composeRule.waitForIdle()
     }
 
