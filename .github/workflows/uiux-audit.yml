@@ -58,12 +58,19 @@ jobs:
       # registers with adb) inside the timeout.
       - name: Enable KVM group perms
         run: |
-          # The attribute is OPTIONS (plural); a misspelt key makes udev drop the rule.
+          # The attribute is OPTIONS (plural); a misspelt key makes udev drop the rule. The
+          # explicit chmod covers runners where the trigger does not re-apply the mode to the
+          # existing /dev/kvm node.
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-          test -r /dev/kvm && test -w /dev/kvm
+          sudo chmod 666 /dev/kvm 2>/dev/null || true
+          ls -l /dev/kvm || true
+          if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
+            echo "::error::/dev/kvm is not accessible, so the emulator cannot be hardware accelerated."
+            exit 1
+          fi
 
       - name: Explore app and write the UI/UX report
         uses: reactivecircus/android-emulator-runner@v2
