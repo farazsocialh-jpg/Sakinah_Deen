@@ -15,7 +15,7 @@ sqlcipher = "4.20.0"
 datastore = "1.1.1"
 work = "2.10.0"
 media3 = "1.5.1"
-koin = "4.0.0"
+koin = "4.2.2"
 adhan = "1.2.1"
 ktor = "3.0.1"
 # Room 2.8's migration bundle is compiled against serialization 1.8+, whose
