@@ -123,6 +123,11 @@ android {
         // Fonts and audio are already compressed formats; do not store them twice.
         noCompress += listOf("ogg", "mp3", "ttf")
     }
+    sourceSets {
+        // Room's MigrationTestHelper reads the exported schemas from the instrumentation assets;
+        // without this the migration tests fail with "Cannot find schema file".
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
 }
 
 kotlin {
