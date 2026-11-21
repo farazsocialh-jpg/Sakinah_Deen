@@ -11,7 +11,7 @@ Four workflows, no overlap. Each responsibility lives in exactly one place.
 | --- | --- | --- |
 | [`ci.yml`](../.github/workflows/ci.yml) | push to `main`, every PR, weekly (Mon 04:00), manual | Build, unit tests, Android Lint, R8 release check, audit checklist, mobsfscan, Gitleaks, CodeQL, MobSF APK scan, instrumented tests, accessibility, UI/UX audit, merged report |
 | [`release.yml`](../.github/workflows/release.yml) | `v*` tag, manual | The **only** signed AAB + APK |
-| [`ios.yml`](../.github/workflows/ios.yml) | push to `main`, PR, manual | Shared framework + iOS build and UI tests |
+| [`ios.yml`](../.github/workflows/ios.yml) | push to `main`, manual | Shared framework + iOS build and UI tests |
 | [`worker.yml`](../.github/workflows/worker.yml) | push, PR, manual | AI Scholar proxy: syntax, tests, Wrangler bundle |
 
 `ci.yml` jobs: `quality` (the merge gate) → `static-audit`, `codeql`, `apk-security` (reuses the
@@ -29,7 +29,8 @@ only to verify that R8 can build; that keystore is ephemeral.
    ./gradlew :shared:allTests :app:testDebugUnitTest :app:lintDebug
    python3 .github/scripts/audit-checklist.py        # add --strict to see every known gap
    ```
-3. Open a PR. `ci.yml` + `ios.yml` + `worker.yml` must be green before merge.
+3. Open a PR. `ci.yml` + `worker.yml` must be green before merge; `ios.yml` runs on `main`
+   (and manually) because it pins a macOS runner for the whole iOS toolchain.
 4. Squash-merge to `main`. Never push release commits straight to `main`.
 
 ### Pre-PR checklist

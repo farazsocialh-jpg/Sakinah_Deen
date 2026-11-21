@@ -72,17 +72,13 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build shared KMP module
-        run: ./gradlew :shared:build --stacktrace --no-daemon
-
-      - name: Run shared KMP tests
-        run: ./gradlew :shared:allTests --stacktrace --no-daemon
-
-      - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
-
-      - name: Run unit tests
-        run: ./gradlew :app:testDebugUnitTest --stacktrace --no-daemon
+      # One invocation instead of four daemon-less Gradle startups (~1.5 min per run).
+      # `:shared:allTests` is named explicitly even though `:shared:build` reaches it through
+      # `check`, so the shared tests stay a declared task; Gradle de-duplicates the work.
+      - name: Build shared KMP module, debug APK and unit tests
+        run: >
+          ./gradlew :shared:build :shared:allTests :app:assembleDebug :app:testDebugUnitTest
+          --stacktrace --no-daemon
 
       # Official Android Lint: security, correctness, accessibility, i18n and performance.
       - name: Android Lint
@@ -122,14 +118,6 @@ jobs:
           KEY_ALIAS: ci
           KEY_PASSWORD: android
         run: ./gradlew :app:assembleRelease --stacktrace --no-daemon
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-          retention-days: 14
 
       - name: Upload release APK for the security scan
         uses: actions/upload-artifact@v4
@@ -236,13 +224,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: java-kotlin
-          build-mode: manual
-          queries: security-and-quality
-
+      # The java-kotlin extractor needs the JDK present when it initializes, otherwise it can
+      # start without instrumentation and the analysis then processes no Kotlin/Java code.
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -254,6 +237,13 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java-kotlin
+          build-mode: manual
+          queries: security-and-quality
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
@@ -366,9 +356,8 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
-
+      # No separate assembleDebug here: connectedDebugAndroidTest builds the app and its test
+      # APK itself, so a build step would just compile everything a second time.
       - name: Enable KVM group perms
         run: |
           # The attribute is OPTIONS (plural); a misspelt key makes udev drop the rule. The

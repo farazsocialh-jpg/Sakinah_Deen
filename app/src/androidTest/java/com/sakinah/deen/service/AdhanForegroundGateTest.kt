@@ -6,12 +6,10 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.sakinah.deen.R
@@ -42,7 +40,12 @@ class AdhanForegroundGateTest {
 
     @Before
     fun setUp() {
-        grantNotificationPermission()
+        // Notification permission is process-global state: the revocation test below toggles it,
+        // so every test starts from a verified, freshly granted state instead of assuming one.
+        assumeTrue(
+            "the emulator could not enable notifications for the app under test",
+            grantNotificationPermission()
+        )
         notificationManager = context.getSystemService(NotificationManager::class.java)
         notificationManager.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "Azaan test", NotificationManager.IMPORTANCE_HIGH)
@@ -103,9 +106,17 @@ class AdhanForegroundGateTest {
             "POST_NOTIFICATIONS exists from Android 13",
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
         )
-        instrumentation.uiAutomation.revokeRuntimePermission(
-            context.packageName,
-            Manifest.permission.POST_NOTIFICATIONS
+        // Revocation is applied asynchronously to the running process, so gate on the observed
+        // state instead of trusting the call to have taken effect immediately.
+        val revoked = runCatching {
+            instrumentation.uiAutomation.revokeRuntimePermission(
+                context.packageName,
+                Manifest.permission.POST_NOTIFICATIONS
+            )
+        }.isSuccess
+        assumeTrue(
+            "the emulator did not apply the notification revocation",
+            revoked && awaitNotificationsBlocked()
         )
         try {
             assertFalse(
@@ -148,34 +159,45 @@ class AdhanForegroundGateTest {
         }
     }.getOrDefault(false)
 
-    private fun awaitReminder(timeoutMs: Long = 3_000L): Boolean {
+    private fun awaitReminder(timeoutMs: Long = 3_000L): Boolean =
+        await(timeoutMs) { isReminderPosted() }
+
+    private fun await(timeoutMs: Long, condition: () -> Boolean): Boolean {
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
         while (SystemClock.elapsedRealtime() < deadline) {
-            if (isReminderPosted()) return true
+            if (condition()) return true
             Thread.sleep(50)
         }
-        return isReminderPosted()
+        return condition()
     }
+
+    private fun notificationsEnabled(): Boolean =
+        NotificationManagerCompat.from(context).areNotificationsEnabled()
+
+    private fun awaitNotificationsEnabled(timeoutMs: Long = 5_000L): Boolean =
+        await(timeoutMs) { notificationsEnabled() }
+
+    private fun awaitNotificationsBlocked(timeoutMs: Long = 5_000L): Boolean =
+        await(timeoutMs) { !notificationsEnabled() }
 
     private fun clearNotifications() {
         runCatching { NotificationManagerCompat.from(context).cancelAll() }
     }
 
-    private fun grantNotificationPermission() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        if (ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            return
-        }
+    /**
+     * Grants POST_NOTIFICATIONS and waits until the app actually reports notifications as
+     * enabled: the runtime permission and the app-op behind it are updated asynchronously, and a
+     * notification posted in between is dropped without an error.
+     */
+    private fun grantNotificationPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
         runCatching {
             instrumentation.uiAutomation.grantRuntimePermission(
                 context.packageName,
                 Manifest.permission.POST_NOTIFICATIONS
             )
         }
+        return awaitNotificationsEnabled()
     }
 
     private companion object {

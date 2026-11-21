@@ -1,9 +1,10 @@
 name: iOS
 
+# Manual + main only: this job pins a macOS runner for the whole iOS toolchain and is slow,
+# so it does not run on every pull request.
 on:
   push:
     branches: [ main ]
-  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -36,11 +37,10 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build shared KMP framework (iOS targets)
-        run: ./gradlew :shared:build --stacktrace --no-daemon
-
-      - name: Run shared KMP tests
-        run: ./gradlew :shared:allTests --stacktrace --no-daemon
+      # One invocation: `:shared:build` compiles the iOS frameworks and `:shared:allTests` runs the
+      # shared tests explicitly (Gradle de-duplicates the work `check` already covers).
+      - name: Build shared KMP framework and run shared tests
+        run: ./gradlew :shared:build :shared:allTests --stacktrace --no-daemon
 
       - name: Generate the Xcode project
         working-directory: ios
