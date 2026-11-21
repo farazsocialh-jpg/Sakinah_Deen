@@ -109,6 +109,8 @@ class MainActivity : ComponentActivity() {
                         SystemBarStyle.light(transparent, transparent)
                     }
                 )
+                val activityWindow = (window ?: return@LaunchedEffect)
+                activityWindow.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
             }
 
             SakinahTheme(

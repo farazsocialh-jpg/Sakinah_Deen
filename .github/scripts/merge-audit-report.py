@@ -16,6 +16,7 @@ ORDER = [
     "a11y.md",
     "uiux.md",
     "apk.md",
+    "checklist_deep.md",
 ]
 
 

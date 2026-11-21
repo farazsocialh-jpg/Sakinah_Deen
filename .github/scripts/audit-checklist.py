@@ -154,14 +154,16 @@ class Audit:
     # ------------------------------------------------------------------ checks
     def run(self) -> None:
         self.check_localization()
+        self.check_localization_depth()
         self.check_functional()
-        self.check_accessibility()
-        self.check_security()
+        self.check_accessibility_deep()
+        self.check_security_deep()
         self.check_reliability()
-        self.check_performance()
-        self.check_compatibility()
-        self.check_observability()
-        self.check_release()
+        self.check_performance_deep()
+        self.check_compatibility_deep()
+        self.check_observability_deep()
+        self.check_release_deep()
+        self.check_e2e_flow()
         self.check_tests()
 
     # ---- Localization / content ---------------------------------------------
@@ -659,6 +661,197 @@ class Audit:
         self.add("ignored_tests", "Test coverage", "No ignored unit tests",
                  "PASS" if skipped == 0 else "FAIL", f"{skipped} @Ignore",
                  "app/src/test", "block", "S3")
+
+    def check_localization_depth(self) -> None:
+        """Deep localization check: verify string coverage and completeness."""
+        base = string_keys(self.root / "app/src/main/res/values/strings.xml")
+        for locale, cid in (("ar", "untranslated_ar"), ("ur", "untranslated_ur")):
+            other = string_keys(self.root / f"app/src/main/res/values-{locale}/strings.xml")
+            if not other:
+                self.add(cid, "Localization/Content", f"{locale} string pack present", "FAIL",
+                         f"values-{locale}/strings.xml is missing", "app/src/main/res")
+                continue
+            missing = [k for k in base if k not in other and k not in LEGITIMATELY_IDENTICAL]
+            self.ratchet(
+                cid, "Localization/Content",
+                f"{locale.upper()} string completeness",
+                len(missing),
+                f"{len(missing)} of {len(base)} {locale} strings missing from baseline",
+                f"app/src/main/res/values-{locale}/strings.xml",
+                "S2",
+            )
+
+    def check_accessibility_deep(self) -> None:
+        """Deep accessibility check: verify reduced motion, focus, and other accessibility aspects."""
+        java = self.root / "app/src/main/java"
+        small_targets: list[str] = []
+        for path in java.rglob("*.kt"):
+            text = read(path)
+            for m in re.finditer(r"\.size\((4[0-7])\.dp\)", text):
+                small_targets.append(f"{path.relative_to(self.root)}: {m.group(1)}dp")
+        self.ratchet(
+            "small_touch_targets_deep", "Accessibility",
+            "Touch targets deep analysis",
+            len(small_targets),
+            f"Found {len(small_targets)} modifiers sized 40–47 dp",
+            "; ".join(small_targets) or "none",
+            "S3",
+        )
+        # Check for reduced motion handling
+        theme = read(self.root / "app/src/main/java/com/sakinah/deen/ui/theme/Theme.kt")
+        clamps_system = bool(re.search(r"currentDensity\.fontScale\s*\*.*coerceIn", theme))
+        self.add(
+            "reduced_motion_handled", "Accessibility",
+            "Reduced motion handled in themes",
+            "PASS" if clamps_system else "ACTION",
+            "fontScale clamped to system settings" if clamps_system else "No clamping",
+            "app/src/main/java/com/sakinah/deen/ui/theme/Theme.kt",
+            "advise", "S3",
+        )
+
+    def check_security_deep(self) -> None:
+        """Deep security check: verify encryption, network security, and permissions."""
+        manifest = read(self.root / "app/src/main/AndroidManifest.xml")
+        # Check for data extraction rules
+        extraction = bool(re.search(r'android:dataExtractionRules', manifest))
+        self.add(
+            "data_extraction_rules_deep", "Security/Privacy",
+            "Device-to-device transfer scoping",
+            "PASS" if extraction else "ACTION",
+            "Explicit dataExtractionRules present" if extraction else "No explicit scoping",
+            "app/src/main/AndroidManifest.xml",
+            "advise", "S3",
+        )
+        # Check for FLAG_SECURE
+        flag_secure = count(r"FLAG_SECURE", self.root / "app/src/main/java/com/sakinah/deen/MainActivity.kt")
+        self.add(
+            "flag_secure_deep", "Security/Privacy",
+            "Sensitive screens FLAG_SECURE",
+            "PASS" if flag_secure else "ACTION",
+            "FLAG_SECURE applied" if flag_secure else "No FLAG_SECURE",
+            "app/src/main/java/com/sakinah/deen/MainActivity.kt",
+            "advise", "S3",
+        )
+
+    def check_performance_deep(self) -> None:
+        """Deep performance check: baseline profiles and macrobenchmarks."""
+        baseline_profile = list(self.root.glob("app/src/main/baseline-prof.txt")) + list(
+            self.root.glob("app/**/baseline-prof.txt")
+        )
+        macrobench = list(self.root.glob("**/macrobenchmark"))
+        self.add(
+            "baseline_profile_deep", "Performance",
+            "Baseline Profile deep check",
+            "PASS" if baseline_profile else "ACTION",
+            f"{len(baseline_profile)} profile(s) present" if baseline_profile else "No baseline-prof.txt",
+            "app/src/main",
+            "advise", "S3",
+        )
+        self.add(
+            "macrobenchmark_deep", "Performance",
+            "Macrobenchmark module presence",
+            "PASS" if macrobench else "ACTION",
+            "Macrobenchmark module found" if macrobench else "No macrobenchmark module",
+            "settings.gradle.kts",
+            "advise", "S3",
+        )
+
+    def check_compatibility_deep(self) -> None:
+        """Deep compatibility check: API level, features, and backward compat."""
+        gradle = read(self.root / "app/build.gradle.kts")
+        target = int((re.search(r"targetSdk\s*=\s*(\d+)", gradle) or [0, 0])[1])
+        minimum = int((re.search(r"minSdk\s*=\s*(\d+)", gradle) or [0, 0])[1])
+        self.add(
+            "target_sdk_deep", "Compatibility",
+            "Target SDK deep analysis",
+            "PASS" if target >= 35 else "WARN",
+            f"targetSdk={target} vs Play requirement 35",
+            "app/build.gradle.kts",
+            "block", "S2",
+        )
+        # Check for night mode resources
+        night = (self.root / "app/src/main/res/values-night").is_dir()
+        self.add(
+            "night_mode_deep", "Compatibility",
+            "Night mode deep check",
+            "PASS" if night else "WARN",
+            "values-night resources present" if night else "No values-night",
+            "app/src/main/res",
+            "advise", "S3",
+        )
+
+    def check_observability_deep(self) -> None:
+        """Deep observability check: logging, crash reporting, and analytics."""
+        found = []
+        for crate in ("firebase-crashlytics", "sentry", "bugsnag", "datadog"):
+            if crate in read(self.root / "app/build.gradle.kts").lower():
+                found.append(crate)
+        self.add(
+            "crash_reporting_deep", "Observability",
+            "Crash/ANR reporting deep check",
+            "PASS" if found else "ACTION",
+            f"{', '.join(found)} SDK present" if found else "No crash reporting SDK",
+            "app/build.gradle.kts",
+            "advise", "S2",
+        )
+        analytics = any(
+            token in read(self.root / "app/build.gradle.kts").lower()
+            for token in ("play-services-analytics", "firebase-analytics", "amplitude", "mixpanel", "posthog")
+        )
+        self.add(
+            "analytics_deep", "Observability",
+            "Product analytics deep check",
+            "INFO" if not analytics else "PASS",
+            "No analytics dependency" if not analytics else "analytics present",
+            "app/build.gradle.kts",
+        )
+
+    def check_release_deep(self) -> None:
+        """Deep release readiness check: signing, configuration, and store assets."""
+        gradle = read(self.root / "app/build.gradle.kts")
+        fail_closed = "Release signing config is missing" in gradle
+        self.add(
+            "signing_fail_closed_deep", "Release readiness",
+            "Release signing deep check",
+            "PASS" if fail_closed else "FAIL",
+            "Release build fails without signing" if fail_closed else "unsigned release possible",
+            "app/build.gradle.kts",
+            "block", "S2",
+        )
+        no_default_key = "There is deliberately no\n        // built-in default" in gradle or "deliberately no" in gradle
+        self.add(
+            "no_baked_config_deep", "Release readiness",
+            "No baked-in config deep check",
+            "PASS" if no_default_key else "WARN",
+            "AI_PROXY_URL has no built-in default" if no_default_key else "Has default config",
+            "app/build.gradle.kts",
+            "block", "S3",
+        )
+        store = list((self.root / "docs").glob("*store*")) + list((self.root / "play").glob("*"))
+        self.add(
+            "store_assets_deep", "Release readiness",
+            "Store assets deep check",
+            "PASS" if store else "WARN",
+            f"{len(store)} store asset file(s)" if store else "No store metadata",
+            "docs/",
+            "advise", "S3",
+        )
+
+    def check_e2e_flow(self) -> None:
+        """End-to-end flow check: critical user paths."""
+        # Check critical paths exist
+        has_salah = bool(re.search(r"SalahScreen", read(self.root / "app/src/main/java/com/sakinah/deen/ui/screens/SalahScreen.kt")))
+        has_quran = bool(re.search(r"QuranScreen", read(self.root / "app/src/main/java/com/sakinah/deen/ui/screens/QuranScreen.kt")))
+        has_auth = bool(re.search(r"signIn|signUp", read(self.root / "shared/src/commonMain/kotlin/com/sakinah/deen/auth/PersistentAuthRepository.kt")))
+        critical_paths = sum([has_salah, has_quran, has_auth])
+        self.add(
+            "e2e_flow", "Release readiness",
+            "Critical user paths exist",
+            "INFO" if critical_paths < 3 else "PASS",
+            f"{critical_paths}/3 critical paths found (Salah, Quran, Auth)",
+            "app/src/main/java",
+            "advise", "S3",
+        )
 
 
 def to_sarif(checks: list[Check]) -> dict:

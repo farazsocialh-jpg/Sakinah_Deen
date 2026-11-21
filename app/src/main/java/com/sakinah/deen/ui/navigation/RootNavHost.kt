@@ -47,7 +47,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.IsReducedMotionEnabled
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.isReducedMotionEnabled
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -282,12 +284,12 @@ fun RootNavHost(
         if (navigateToExtra.isNullOrBlank()) return@LaunchedEffect
         val destination = when (navigateToExtra) {
             com.sakinah.deen.receiver.CarBluetoothReceiver.ACTION_OPEN_TRAVEL,
-            "travel" -> SakinahScreen.Travel
-            "quran" -> SakinahScreen.Quran
-            "ai_scholar", "scholar" -> SakinahScreen.AiScholar
-            "hadith" -> SakinahScreen.Hadith
-            "salah", "prayer" -> SakinahScreen.DailySalah
-            "tools" -> SakinahScreen.ToolsHub
+            "travel" -> SakinahScreen.Travel,
+            "quran" -> SakinahScreen.Quran,
+            "ai_scholar", "scholar" -> SakinahScreen.AiScholar,
+            "hadith" -> SakinahScreen.Hadith,
+            "salah", "prayer" -> SakinahScreen.DailySalah,
+            "tools" -> SakinahScreen.ToolsHub,
             "wealth" -> SakinahScreen.Wealth
             else -> null
         }
@@ -296,7 +298,10 @@ fun RootNavHost(
     }
 
     val startScreen = startScreenForObjective(appearanceConfig.objective)
-    BackHandler(enabled = backStack.isNotEmpty() || currentScreen != startScreen) {
+    BackHandler(
+        enabled = backStack.isNotEmpty() || currentScreen != startScreen,
+        predictiveBack = true
+    ) {
         navigateBack()
     }
 
@@ -402,11 +407,12 @@ fun RootNavHost(
             }
         },
         bottomBar = {
+            val reducedMotion = isReducedMotionEnabled()
             AnimatedVisibility(
                 visible = currentScreen.showBottomBar && (!autoHideBars || !bottomBarHidden) && !imeVisible,
-                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
-            ) {
+                enter = { slideInVertically(initialOffsetY = { it }) + fadeIn() },
+                exit = { slideOutVertically(targetOffsetY = { it }) + fadeOut() }
+            ) { innerPadding ->
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.surface
                 ) {

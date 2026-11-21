@@ -78,8 +78,21 @@ object EncryptedBackupManager {
         passphrase: String
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                ?: error("Could not open input stream")
+            const val MAX_BACKUP_SIZE = 50L * 1024 * 1024 // 50 MB
+            val input = context.contentResolver.openInputStream(uri) ?: error("Could not open input stream")
+            val buffer = java.io.ByteArrayOutputStream()
+            val copyBuffer = ByteArray(1024 * 1024) // 1 MB copy buffer
+            var totalRead = 0L
+            var bytes: ByteArray
+            do {
+                val count = input.read(copyBuffer)
+                if (count > 0) {
+                    buffer.write(copyBuffer, 0, count)
+                    totalRead += count
+                    if (totalRead > MAX_BACKUP_SIZE) error("Backup file exceeds maximum size of 50 MB")
+                }
+            } while (count > 0)
+            bytes = buffer.toByteArray()
             if (!bytes.startsWith(MAGIC.toByteArray(Charsets.US_ASCII))) error("Not a Sakinah backup file")
             val encrypted = bytes.copyOfRange(MAGIC.length, bytes.size)
             val decrypted = decrypt(encrypted, passphrase)

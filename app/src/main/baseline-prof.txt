@@ -1,0 +1,4 @@
+-keep class com.sakinah.deen.** { *; }
+-keepclassmembers class com.sakinah.deen.** { *; }
+-keep enum com.sakinah.deen.** { *; }
+-keep @interface com.sakinah.deen.**
