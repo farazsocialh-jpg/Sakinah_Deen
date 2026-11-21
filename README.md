@@ -44,6 +44,13 @@ iOS (macOS only):
 # then open ios/Sakinah.xcodeproj in Xcode and build
 ```
 
+## Checks and releases
+
+CI is four workflows: [`ci.yml`](.github/workflows/ci.yml) (build, tests, lint and the full
+audit), [`release.yml`](.github/workflows/release.yml) (the only signed AAB/APK, from a `v*` tag or
+manual run), [`ios.yml`](.github/workflows/ios.yml) and [`worker.yml`](.github/workflows/worker.yml).
+Process, gates and checklists: [docs/development-sop.md](docs/development-sop.md).
+
 ## Setup
 
 - JDK 17, Android SDK 35.

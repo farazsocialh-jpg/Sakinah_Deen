@@ -85,14 +85,14 @@ gh secret set KEY_PASSWORD --body "sakinah_deen_aqmirza"
 
 ## 3. Run the release build
 
-The workflows are `.github/workflows/release.yml` (AAB + APK) and `.github/workflows/signed-release-apk.yml` (signed APK), and support two triggers:
+The release workflow is `.github/workflows/release.yml` (signed AAB + APK) and supports two triggers. It is the only place a signed artifact is built; CI itself only signs a throwaway build to verify R8.
 
 - **Tag push** — build a versioned release:
   ```bash
   git tag v1.2.0
   git push origin v1.2.0
   ```
-- **Manual** — Actions → *Release* (or *Signed Release APK*) → *Run workflow*. Optionally pass a version name;
+- **Manual** — Actions → *Release* → *Run workflow*. Optionally pass a version name;
   otherwise the tag (minus `v`) or `1.0.0` is used. `versionCode` comes from the
   workflow run number, so it always increases.
 
