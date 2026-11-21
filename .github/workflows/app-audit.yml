@@ -67,7 +67,7 @@ jobs:
 
       - name: Upload checklist report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: audit-checklist
           path: audit-report/
@@ -157,7 +157,7 @@ jobs:
 
       - name: Upload static analysis report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: audit-static
           path: |
@@ -295,7 +295,7 @@ jobs:
 
       - name: Upload APK audit artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: audit-apk
           path: audit-report/
@@ -357,7 +357,7 @@ jobs:
 
       - name: Upload accessibility report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: audit-a11y
           path: a11y-report/
@@ -388,7 +388,7 @@ jobs:
 
       - name: Upload the merged report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: app-audit-report
           path: audit-report/AUDIT.md
