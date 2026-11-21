@@ -32,8 +32,14 @@ for path in files:
         for failure in list(case.iter("failure")) + list(case.iter("error")):
             failed += 1
             name = f"{case.get('classname')}.{case.get('name')}"
-            detail = (failure.get("message") or failure.text or "failed").strip()
-            print(f"::error title={name}::{detail.splitlines()[0]}"[:1000])
+            # Assertion message first, then the stack: the annotation is the only part of a
+            # failing device run that is readable without an admin GitHub token.
+            message = " ".join((failure.get("message") or "").split())
+            trace = " ".join((failure.text or "").split())
+            detail = message or "failed"
+            if trace and trace not in message:
+                detail = f"{detail} | {trace}"
+            print(f"::error title={name}::{detail[:600]}")
 print(f"{len(files)} result file(s), {failed} failing test(s)")
 PY
 

@@ -7,6 +7,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -40,8 +41,10 @@ class AdhanForegroundGateTest {
 
     @Before
     fun setUp() {
-        // Notification permission is process-global state: the revocation test below toggles it,
-        // so every test starts from a verified, freshly granted state instead of assuming one.
+        // Notification permission and its app-op are process-global state that the blocked-
+        // notifications test toggles, so every test restores and verifies them instead of
+        // assuming the previous test left the app alone.
+        setNotificationsAppOp("allow")
         assumeTrue(
             "the emulator could not enable notifications for the app under test",
             grantNotificationPermission()
@@ -106,17 +109,13 @@ class AdhanForegroundGateTest {
             "POST_NOTIFICATIONS exists from Android 13",
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
         )
-        // Revocation is applied asynchronously to the running process, so gate on the observed
-        // state instead of trusting the call to have taken effect immediately.
-        val revoked = runCatching {
-            instrumentation.uiAutomation.revokeRuntimePermission(
-                context.packageName,
-                Manifest.permission.POST_NOTIFICATIONS
-            )
-        }.isSuccess
+        // Switch notifications off the way the Settings toggle does: the app-op behind the
+        // permission. Revoking POST_NOTIFICATIONS instead changes the process-cached permission
+        // and does not reliably reach the running app, and the state change is asynchronous, so
+        // gate on the observed result rather than on the command being accepted.
         assumeTrue(
-            "the emulator did not apply the notification revocation",
-            revoked && awaitNotificationsBlocked()
+            "the emulator did not switch notifications off",
+            setNotificationsAppOp("ignore") && awaitNotificationsBlocked()
         )
         try {
             assertFalse(
@@ -129,6 +128,7 @@ class AdhanForegroundGateTest {
             assertFalse(promoted)
             assertFalse(isReminderPosted())
         } finally {
+            setNotificationsAppOp("allow")
             grantNotificationPermission()
         }
     }
@@ -183,6 +183,14 @@ class AdhanForegroundGateTest {
     private fun clearNotifications() {
         runCatching { NotificationManagerCompat.from(context).cancelAll() }
     }
+
+    /** Sets the notification app-op (`allow` / `ignore`) with the shell user's privileges. */
+    private fun setNotificationsAppOp(mode: String): Boolean = runCatching {
+        val command = "appops set ${context.packageName} POST_NOTIFICATION $mode"
+        ParcelFileDescriptor.AutoCloseInputStream(
+            instrumentation.uiAutomation.executeShellCommand(command)
+        ).use { it.readBytes() }
+    }.isSuccess
 
     /**
      * Grants POST_NOTIFICATIONS and waits until the app actually reports notifications as
