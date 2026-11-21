@@ -41,6 +41,12 @@ python3 .github/scripts/a11y-audit.py --out "$OUT"
 STATUS=$?
 set -e
 
+# Publish the findings where they are readable without downloading an artifact.
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -s "$OUT/a11y.md" ]; then
+  cat "$OUT/a11y.md" >> "$GITHUB_STEP_SUMMARY"
+fi
+echo "Accessibility audit exit status: $STATUS (non-zero means it reports findings; the workflow does not fail on it unless a11y_gate is enabled)"
+
 # Keep a screenshot and the hierarchy of the final screen for the report artifact.
 adb exec-out screencap -p > "$OUT/final-screen.png" 2>/dev/null || true
 adb shell uiautomator dump /sdcard/final.xml >/dev/null 2>&1 || true

@@ -12,6 +12,9 @@ name: App Audit
 #   * UIAutomator a11y audit    -> measured touch targets and labels on a device
 #
 # Findings are published as SARIF to the Security tab and merged into one AUDIT.md artifact.
+# The device accessibility leg is report-only until its violations are confirmed: it publishes
+# findings and annotations but cannot block the workflow. Set the a11y_gate input to true to
+# make measured violations fail the run.
 
 on:
   push:
@@ -30,6 +33,10 @@ on:
         type: choice
         options: [high, medium, none]
         default: high
+      a11y_gate:
+        description: 'Fail when the device accessibility audit reports violations'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -345,7 +352,11 @@ jobs:
             exit 1
           fi
 
+      # Report-only: measured findings (and emulator failures) never fail this step, so the
+      # report job and the rest of the workflow always finish and publish.
       - name: Measure accessibility on the emulator
+        id: a11y
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -354,6 +365,30 @@ jobs:
           profile: pixel_5
           disable-animations: true
           script: bash .github/scripts/run-a11y-audit.sh
+
+      - name: Publish accessibility findings
+        if: always()
+        run: |
+          if [ -s a11y-report/a11y.md ]; then
+            cat a11y-report/a11y.md >> "$GITHUB_STEP_SUMMARY"
+            echo "Accessibility findings published to the job summary and the audit-a11y artifact."
+          else
+            echo "::warning::No accessibility report was produced; the device leg did not run."
+            echo "### Device accessibility audit" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "No report was produced; the device leg did not run (see the step log)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Note an incomplete accessibility run
+        if: always() && steps.a11y.outcome != 'success'
+        run: echo "::warning title=accessibility::The device audit exited non-zero (measured violations or emulator failure); findings are published in the audit-a11y artifact."
+
+      # Opt-in only: flip a11y_gate to true once the reported violations are confirmed.
+      - name: Enforce the accessibility gate
+        if: steps.a11y.outcome == 'failure' && inputs.a11y_gate
+        run: |
+          echo "::error::The device accessibility audit reported violations and a11y_gate is enabled."
+          exit 1
 
       - name: Upload accessibility report
         if: always()

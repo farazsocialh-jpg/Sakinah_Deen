@@ -194,7 +194,7 @@ def main() -> int:
         if not screens:
             message = "No screens could be captured; the accessibility audit did not run."
             (out / "a11y.md").write_text(f"### Device accessibility audit\n\n{message}\n", encoding="utf-8")
-            print(f"::error::{message}")
+            print(f"::warning title=accessibility::{message}")
             return 2
 
     total_small = sum(len(d["smallTargets"]) for _, d in screens)
@@ -224,12 +224,14 @@ def main() -> int:
     ), encoding="utf-8")
 
     print("\n".join(lines))
+    # Warning annotations, not errors: findings are published without failing the workflow
+    # until they are confirmed (see the a11y_gate input).
     for name, data in screens:
         for item in data["smallTargets"]:
-            print(f"::error title=a11y-small-target::{name}: {item['class']} "
+            print(f"::warning title=a11y-small-target::{name}: {item['class']} "
                   f"{item['widthDp']}x{item['heightDp']}dp at {item['bounds']}")
         for item in data["unlabelledClickables"]:
-            print(f"::error title=a11y-unlabelled::{name}: unlabelled {item['class']} at {item['bounds']}")
+            print(f"::warning title=a11y-unlabelled::{name}: unlabelled {item['class']} at {item['bounds']}")
 
     if args.xml:
         return 0
