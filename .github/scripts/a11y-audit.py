@@ -54,6 +54,16 @@ def dump_xml(destination: Path) -> Path:
     return destination
 
 
+def focused_package() -> str:
+    """Package currently owning input focus, so we never audit the launcher by mistake."""
+    try:
+        window = adb("shell", "dumpsys", "window")
+    except Exception:
+        return ""
+    match = re.search(r"mCurrentFocus=.*?([A-Za-z0-9_.]+)/", window)
+    return match.group(1) if match else ""
+
+
 def parse_bounds(value: str) -> tuple[int, int, int, int]:
     numbers = [int(n) for n in re.findall(r"-?\d+", value or "")]
     if len(numbers) != 4:
@@ -155,8 +165,20 @@ def main() -> int:
         stable = 0
         visited: set[str] = set()
         for step in range(args.max_screens):
-            dump = dump_xml(out / f"screen-{step}.xml")
-            data = analyse(dump, dpi)
+            if focused_package() not in ("com.imancore.app", ""):
+                # A dialog or the launcher took focus: bring the app forward and re-check once.
+                subprocess.run(
+                    ["adb", "shell", "am", "start", "-n",
+                     "com.imancore.app/com.sakinah.deen.MainActivity"],
+                    check=False, capture_output=True,
+                )
+                subprocess.run(["sleep", "3"], check=False)
+            try:
+                dump = dump_xml(out / f"screen-{step}.xml")
+                data = analyse(dump, dpi)
+            except Exception as exc:  # an unreadable hierarchy is a tooling gap, not a pass
+                print(f"::warning::could not capture screen {step}: {exc}")
+                break
             fingerprint = f"{data['nodes']}:{len(data['smallTargets'])}:{len(data['unlabelledClickables'])}"
             label = tap_label(dump, NAV_LABELS)
             screens.append((f"screen-{step} ({label or 'no navigation target'})", data))
@@ -168,6 +190,12 @@ def main() -> int:
             if not label:
                 break
             subprocess.run(["sleep", "2"], check=False)
+
+        if not screens:
+            message = "No screens could be captured; the accessibility audit did not run."
+            (out / "a11y.md").write_text(f"### Device accessibility audit\n\n{message}\n", encoding="utf-8")
+            print(f"::error::{message}")
+            return 2
 
     total_small = sum(len(d["smallTargets"]) for _, d in screens)
     total_unlabelled = sum(len(d["unlabelledClickables"]) for _, d in screens)

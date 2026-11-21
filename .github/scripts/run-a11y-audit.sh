@@ -25,10 +25,16 @@ adb shell pm grant "$PACKAGE" android.permission.ACCESS_COARSE_LOCATION >/dev/nu
 adb shell pm grant "$PACKAGE" android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
 
 adb shell am start -W -n "$ACTIVITY" | tail -5
-sleep 5
 
-# Accept a first-run dialog if one is still up (best effort, never fatal).
-adb shell input keyevent 4 >/dev/null 2>&1 || true
+# Wait for the app (not the launcher or a system dialog) to own focus. A stray BACK keypress
+# here could finish the activity and silently audit the launcher instead.
+for _ in $(seq 1 20); do
+  if adb shell dumpsys window 2>/dev/null | grep -q 'mCurrentFocus=.*com.imancore.app'; then
+    break
+  fi
+  sleep 2
+ done
+sleep 2
 
 set +e
 python3 .github/scripts/a11y-audit.py --out "$OUT"
