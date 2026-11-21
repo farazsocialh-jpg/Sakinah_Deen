@@ -1,0 +1,26 @@
+# Gitleaks configuration for the CI audit.
+# Extends the built-in rules and allow-lists only test fixtures, docs and example files,
+# where placeholder credentials are intentional and shipped in the repository.
+title = "ImanCore secrets policy"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Repository fixtures, docs, examples and public client identifiers"
+paths = [
+  '''(^|/)app/src/test/''',
+  '''(^|/)app/src/androidTest/''',
+  '''(^|/)shared/src/commonTest/''',
+  '''(^|/)docs/''',
+  '''(^|/)ios/.*Tests?/''',
+  '''\.example$''',
+  '''(^|/)gradle/wrapper/''',
+]
+regexes = [
+  '''android:label=''',
+  '''com\.google\.android\.gms''',
+  '''AI_PROXY_URL''',
+  '''GOOGLE_WEB_CLIENT_ID''',
+  '''ci-release\.jks''',
+]

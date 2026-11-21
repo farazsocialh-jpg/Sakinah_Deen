@@ -1,0 +1,396 @@
+name: App Audit
+
+# Automated, evidence-based release audit. Replaces manual code review with the standard
+# Android toolchain plus an executable version of docs/audit-checklist:
+#
+#   * embedded audit checklist  -> .github/scripts/audit-checklist.py (ratcheted baseline)
+#   * Android Lint (official)   -> security, correctness, a11y, i18n, performance checks
+#   * CodeQL (GitHub SAST)      -> data-flow security analysis of Kotlin/Java
+#   * mobsfscan (OWASP MASVS)   -> mobile-specific static analysis
+#   * Gitleaks                  -> committed secrets
+#   * MobSF                     -> APK-level security assessment
+#   * UIAutomator a11y audit    -> measured touch targets and labels on a device
+#
+# Findings are published as SARIF to the Security tab and merged into one AUDIT.md artifact.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  schedule:
+    - cron: '0 4 * * 1'   # weekly drift check: new CVEs, new lint rules, new permissions
+  workflow_dispatch:
+    inputs:
+      strict:
+        description: 'Fail on every known gap, not only on regressions'
+        type: boolean
+        default: false
+      mobsf_gate:
+        description: 'MobSF severity that fails the build'
+        type: choice
+        options: [high, medium, none]
+        default: high
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: app-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MOBSF_API_KEY: ci-audit-key
+
+jobs:
+  # ---------------------------------------------------------------- fast gate
+  audit-checklist:
+    name: Audit checklist (embedded)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run the audit checklist
+        env:
+          STRICT: ${{ inputs.strict && '--strict' || '' }}
+        run: python3 .github/scripts/audit-checklist.py $STRICT
+
+      - name: Upload checklist SARIF
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: audit-report/checklist.sarif
+          category: audit-checklist
+
+      - name: Upload checklist report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-checklist
+          path: audit-report/
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ------------------------------------------------------- static app analysis
+  static-analysis:
+    name: Android Lint, mobsfscan, secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Android Lint
+        id: lint
+        continue-on-error: true
+        run: ./gradlew :app:lintDebug --stacktrace --no-daemon
+
+      - name: Convert Android Lint to SARIF
+        if: always()
+        run: |
+          mkdir -p audit-report
+          python3 .github/scripts/lint-to-sarif.py \
+            app/build/reports/lint-results-debug.xml \
+            --out audit-report/lint.sarif \
+            --summary audit-report/lint.md
+
+      - name: mobsfscan (OWASP mobile static analysis)
+        run: |
+          mkdir -p audit-report
+          # An isolated venv avoids PEP 668 / system-site permission failures on runners.
+          python3 -m venv "$RUNNER_TEMP/mobsfscan-venv"
+          "$RUNNER_TEMP/mobsfscan-venv/bin/pip" install --quiet --disable-pip-version-check mobsfscan
+          # Findings are reported through SARIF; the checklist decides what blocks a merge.
+          "$RUNNER_TEMP/mobsfscan-venv/bin/mobsfscan" \
+            --sarif -o audit-report/mobsfscan.sarif app/src shared/src || true
+          python3 - <<'PY'
+          import json, pathlib
+          report = pathlib.Path("audit-report/mobsfscan.sarif")
+          rows, counts = [], {}
+          if report.is_file():
+              data = json.loads(report.read_text())
+              for run in data.get("runs", []):
+                  for result in run.get("results", []):
+                      rule = result.get("ruleId", "mobsfscan")
+                      counts[rule] = counts.get(rule, 0) + 1
+                      rows.append(f"| `{rule}` | {result.get('message', {}).get('text', '')[:160]} |")
+          lines = ["### mobsfscan", "", f"{len(rows)} finding(s)", ""]
+          if rows:
+              lines += ["| Rule | Message |", "|---|---|"] + rows[:40]
+          pathlib.Path("audit-report/mobsfscan.md").write_text("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          PY
+
+      - name: Gitleaks (committed secrets)
+        run: |
+          mkdir -p audit-report
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
+            detect --source=/repo --config=/repo/.gitleaks.toml \
+            --report-format=sarif --report-path=/repo/audit-report/gitleaks.sarif \
+            --no-banner --redact --exit-code 0
+
+      - name: Upload SARIF findings
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: audit-report
+          category: static-analysis
+
+      - name: Upload static analysis report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-static
+          path: |
+            audit-report/
+            app/build/reports/lint-results-debug.html
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Fail when Android Lint reports errors
+        if: steps.lint.outcome == 'failure'
+        run: |
+          echo "::error::Android Lint reported errors. See the lint-results artifact and the Security tab."
+          exit 1
+
+  # ------------------------------------------------------------------- CodeQL
+  codeql:
+    name: CodeQL (data-flow security analysis)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java-kotlin
+          build-mode: manual
+          queries: security-and-quality
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Build for CodeQL
+        run: ./gradlew :app:assembleDebug :shared:build --stacktrace --no-daemon
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: codeql-app
+
+  # -------------------------------------------------------------- APK analysis
+  apk-security:
+    name: APK security (MobSF)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Generate ephemeral release keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/ci-release.jks" \
+            -storepass android -keypass android \
+            -alias ci -keyalg RSA -keysize 2048 -validity 365 \
+            -dname "CN=ImanCore CI" >/dev/null 2>&1
+          test -s "$RUNNER_TEMP/ci-release.jks"
+
+      - name: Build release APK
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/ci-release.jks
+          KEYSTORE_PASSWORD: android
+          KEY_ALIAS: ci
+          KEY_PASSWORD: android
+        run: ./gradlew :app:assembleRelease --stacktrace --no-daemon
+
+      - name: APK inventory (manifest, permissions, size)
+        run: |
+          mkdir -p audit-report
+          APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          echo "Scanning $APK"
+          {
+            echo "### APK inventory"
+            echo
+            echo '```'
+            "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump badging "$APK" 2>/dev/null \
+              | grep -E '^(package|sdkVersion|targetSdkVersion|uses-permission|application-label|native-code)' || true
+            echo '```'
+            echo
+            echo "Size: $(du -h "$APK" | cut -f1)"
+          } > audit-report/apk.md
+          cat audit-report/apk.md
+
+      - name: Start MobSF
+        run: |
+          docker run -d --name mobsf -p 8000:8000 \
+            -e MOBSF_API_KEY="$MOBSF_API_KEY" \
+            opensecurity/mobile-security-framework-mobsf:latest
+
+      - name: MobSF APK scan
+        run: |
+          APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          python3 .github/scripts/mobsf-scan.py \
+            --apk "$APK" \
+            --url http://localhost:8000 \
+            --key "$MOBSF_API_KEY" \
+            --out-dir audit-report \
+            --gate "${{ inputs.mobsf_gate || 'high' }}"
+
+      - name: Upload MobSF SARIF
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: audit-report/mobsf.sarif
+          category: mobsf
+
+      - name: Upload APK audit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-apk
+          path: audit-report/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Stop MobSF
+        if: always()
+        run: docker rm -f mobsf >/dev/null 2>&1 || true
+
+  # ------------------------------------------------- accessibility on a device
+  accessibility:
+    name: Accessibility (measured on device)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Enable KVM group perms
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo chmod 666 /dev/kvm 2>/dev/null || true
+          if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
+            echo "::error::/dev/kvm is not accessible, so the emulator cannot be hardware accelerated."
+            exit 1
+          fi
+
+      - name: Measure accessibility on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          disable-animations: true
+          script: bash .github/scripts/run-a11y-audit.sh
+
+      - name: Upload accessibility report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-a11y
+          path: a11y-report/
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ------------------------------------------------------------ single report
+  report:
+    name: Merge audit report
+    needs: [ audit-checklist, static-analysis, apk-security, accessibility ]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download audit artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          path: audit-download
+          pattern: audit-*
+          merge-multiple: true
+
+      - name: Merge into one report
+        run: python3 .github/scripts/merge-audit-report.py --input audit-download --out audit-report/AUDIT.md
+
+      - name: Upload the merged report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-audit-report
+          path: audit-report/AUDIT.md
+          if-no-files-found: warn
+          retention-days: 30
