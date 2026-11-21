@@ -126,6 +126,9 @@ abstract class SakinahEncryptedDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE `quran_ayahs` ADD COLUMN `isBookmarked` INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE `quran_ayahs` ADD COLUMN `lastReadAt` INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE `sadaqah_logs` ADD COLUMN `category` TEXT NOT NULL DEFAULT ''")
+                // Added to the schema in version 8; without it an upgraded database no longer
+                // matches the exported schema and Room treats it as corrupt.
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_hifz_mistakes_surahNumber` ON `hifz_mistakes` (`surahNumber`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_quran_ayahs_juzNumber` ON `quran_ayahs` (`juzNumber`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_quran_ayahs_isBookmarked` ON `quran_ayahs` (`isBookmarked`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_quran_ayahs_lastReadAt` ON `quran_ayahs` (`lastReadAt`)")
