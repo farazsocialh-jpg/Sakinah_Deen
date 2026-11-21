@@ -460,8 +460,10 @@ fun NotificationSettingsScreen(
                                 previewPlayer.stop()
                                 previewingMuezzin = null
                             } else {
-                                // Only ever one preview: stop the current recording before the next.
-                                previewPlayer.stop()
+                                // Only ever one preview: stop the current recording before the next,
+                                // but only when something is actually previewing, so a first tap
+                                // does not record a spurious stop.
+                                if (previewingMuezzin != null) previewPlayer.stop()
                                 previewingMuezzin = if (previewPlayer.play(muezzin)) muezzin else null
                             }
                         },
