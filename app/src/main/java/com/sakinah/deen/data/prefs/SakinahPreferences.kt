@@ -1,9 +1,8 @@
 package com.sakinah.deen.data.prefs
 
-import androidx.core.content.edit
-
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import com.sakinah.deen.data.model.AzaanSettings
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab

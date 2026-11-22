@@ -1,9 +1,8 @@
 package com.sakinah.deen.data.prefs
 
-import androidx.core.content.edit
-
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 
 /**
  * Which presentation the Quran reader renders: verse-by-verse study pages or the flowing

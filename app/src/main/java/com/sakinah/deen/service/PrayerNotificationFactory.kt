@@ -1,9 +1,5 @@
 package com.sakinah.deen.service
 
-import androidx.core.graphics.createBitmap
-
-import androidx.core.net.toUri
-
 import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
@@ -22,6 +18,8 @@ import android.text.style.StyleSpan
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.createBitmap
+import androidx.core.net.toUri
 import com.sakinah.deen.MainActivity
 import com.sakinah.deen.R
 import com.sakinah.deen.data.model.PrayerAlertMode

@@ -1,7 +1,6 @@
 package com.sakinah.deen.network
 
 import androidx.core.content.edit
-
 import com.sakinah.deen.data.database.OfflineContentSeeder
 import com.sakinah.deen.data.database.dao.HadithDao
 import com.sakinah.deen.data.database.dao.QuranDao

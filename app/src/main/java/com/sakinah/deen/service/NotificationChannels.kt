@@ -1,7 +1,5 @@
 package com.sakinah.deen.service
 
-import androidx.core.net.toUri
-
 import android.app.NotificationChannel
 import android.app.NotificationChannelGroup
 import android.app.NotificationManager
@@ -11,6 +9,7 @@ import android.media.RingtoneManager
 import android.net.Uri
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.net.toUri
 import com.sakinah.deen.R
 import com.sakinah.deen.data.model.PrayerAlertMode
 import com.sakinah.deen.data.model.PrayerType

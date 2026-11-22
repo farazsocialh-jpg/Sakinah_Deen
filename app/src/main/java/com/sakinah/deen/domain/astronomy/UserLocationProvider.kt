@@ -1,7 +1,5 @@
 package com.sakinah.deen.domain.astronomy
 
-import androidx.core.content.edit
-
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
@@ -10,6 +8,7 @@ import android.location.Geocoder
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource

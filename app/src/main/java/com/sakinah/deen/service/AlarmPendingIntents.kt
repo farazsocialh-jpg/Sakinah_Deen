@@ -1,13 +1,11 @@
 package com.sakinah.deen.service
 
-import androidx.core.net.toUri
-
-import androidx.core.content.edit
-
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.core.content.edit
+import androidx.core.net.toUri
 
 /**
  * Single factory for every prayer-alarm [PendingIntent].

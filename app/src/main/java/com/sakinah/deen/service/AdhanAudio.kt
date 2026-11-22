@@ -1,11 +1,10 @@
 package com.sakinah.deen.service
 
-import androidx.core.net.toUri
-
 import android.content.Context
 import android.media.RingtoneManager
 import android.net.Uri
 import android.provider.Settings
+import androidx.core.net.toUri
 import com.sakinah.deen.R
 import com.sakinah.deen.data.model.Muezzin
 

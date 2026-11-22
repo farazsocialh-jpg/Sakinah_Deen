@@ -1,7 +1,5 @@
 package com.sakinah.deen.service
 
-import androidx.core.net.toUri
-
 import android.Manifest
 import android.app.AlarmManager
 import android.app.NotificationChannel
@@ -14,6 +12,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import java.time.Instant
 import java.time.ZoneId

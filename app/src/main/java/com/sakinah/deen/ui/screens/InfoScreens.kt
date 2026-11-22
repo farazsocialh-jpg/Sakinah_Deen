@@ -1,7 +1,5 @@
 package com.sakinah.deen.ui.screens
 
-import androidx.core.net.toUri
-
 import com.sakinah.deen.R
 
 import android.content.ActivityNotFoundException
@@ -49,6 +47,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import com.sakinah.deen.BuildConfig
 import kotlinx.coroutines.launch
 

@@ -1,7 +1,5 @@
 package com.sakinah.deen.service
 
-import androidx.core.net.toUri
-
 import android.annotation.SuppressLint
 
 import android.app.Notification
@@ -21,6 +19,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem

@@ -1,9 +1,8 @@
 package com.sakinah.deen.data.prefs
 
-import androidx.core.content.edit
-
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

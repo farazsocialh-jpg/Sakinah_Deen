@@ -1,7 +1,5 @@
 package com.sakinah.deen.ui.screens
 
-import androidx.core.net.toUri
-
 import com.sakinah.deen.R
 
 import android.Manifest
@@ -12,6 +10,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType

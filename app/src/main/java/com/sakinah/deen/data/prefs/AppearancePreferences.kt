@@ -1,9 +1,8 @@
 package com.sakinah.deen.data.prefs
 
-import androidx.core.content.edit
-
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import com.sakinah.deen.ui.theme.FontScalePreset
 import com.sakinah.deen.ui.theme.PrayerGuideGender
 import com.sakinah.deen.ui.theme.SakinahPalette

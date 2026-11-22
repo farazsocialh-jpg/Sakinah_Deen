@@ -1,7 +1,5 @@
 package com.sakinah.deen.ui.screens
 
-import androidx.core.net.toUri
-
 import com.sakinah.deen.R
 
 import android.Manifest
@@ -57,6 +55,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
