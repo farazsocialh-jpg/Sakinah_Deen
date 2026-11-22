@@ -3,6 +3,7 @@ package com.sakinah.deen.ui.screens
 import com.sakinah.deen.R
 
 import android.Manifest
+import android.content.Context
 import android.media.MediaPlayer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -76,6 +77,10 @@ import com.sakinah.deen.ui.components.StatusBadge
 import com.sakinah.deen.ui.rememberInject
 
 import kotlinx.coroutines.launch
+
+/** Resolves a bundled raw recording by name, or 0 when the asset is not packaged. */
+private fun rawAudioResId(context: Context, name: String): Int =
+    context.resources.getIdentifier(name, "raw", context.packageName)
 
 @Composable
 fun TravelScreen(
@@ -454,7 +459,7 @@ fun TravelScreen(
                             duaPlayer = null
                             isDuaPlaying = false
                         } else {
-                            val resId = context.resources.getIdentifier("dua_al_safar", "raw", context.packageName)
+                            val resId = rawAudioResId(context, "dua_al_safar")
                             if (resId != 0) {
                                 runCatching {
                                     duaPlayer?.release()
