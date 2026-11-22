@@ -665,7 +665,7 @@ class Audit:
     def check_localization_depth(self) -> None:
         """Deep localization check: verify string coverage and completeness."""
         base = string_keys(self.root / "app/src/main/res/values/strings.xml")
-        for locale, cid in (("ar", "untranslated_ar"), ("ur", "untranslated_ur")):
+        for locale, cid in (("ar", "missing_ar"), ("ur", "missing_ur")):
             other = string_keys(self.root / f"app/src/main/res/values-{locale}/strings.xml")
             if not other:
                 self.add(cid, "Localization/Content", f"{locale} string pack present", "FAIL",

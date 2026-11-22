@@ -17,6 +17,7 @@ import json
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
@@ -44,10 +45,9 @@ def wait_ready(base: str, key: str) -> bool:
         try:
             request(f"{base}/api/v1/scans", key, timeout=10)
             return True
-        except urllib.error.HTTPError as exc:
-            # 401 still proves the server is up and answering.
-            if exc.code in (401, 403):
-                return True
+        except urllib.error.HTTPError:
+            # Any HTTP response proves the server is up and answering.
+            return True
         except Exception:
             pass
         time.sleep(5)
@@ -93,7 +93,14 @@ def scan(base: str, key: str, uploaded: dict) -> None:
 
 
 def fetch_report(base: str, key: str, file_hash: str) -> dict:
-    raw = request(f"{base}/api/v1/report_json?hash={file_hash}", key, timeout=300)
+    form = urllib.parse.urlencode({"hash": file_hash}).encode()
+    raw = request(
+        f"{base}/api/v1/report_json",
+        key,
+        data=form,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        timeout=300,
+    )
     return json.loads(raw)
 
 
