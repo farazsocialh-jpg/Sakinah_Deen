@@ -12,6 +12,7 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.util.Log
 import android.net.Uri
+import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
@@ -278,13 +279,24 @@ class AdhanPlaybackService : Service() {
      * FGS/media permission). In that case post the reminder as a normal notification and
      * stop instead of letting the exception crash the process.
      */
+    /**
+     * The media-playback foreground-service type. The constant only exists from API 29; on
+     * API 28 ServiceCompat drops the argument anyway, so 0 keeps that path unchanged.
+     */
+    private fun mediaPlaybackForegroundType(): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+        } else {
+            0
+        }
+
     private fun startPlaybackForeground(notification: Notification): Boolean {
         val promoted = foregroundGate.enter(notification) {
             ServiceCompat.startForeground(
                 this,
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                mediaPlaybackForegroundType(),
             )
         }
         if (!promoted) {
@@ -464,7 +476,7 @@ class AdhanPlaybackService : Service() {
                 this,
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                mediaPlaybackForegroundType(),
             )
         }
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
