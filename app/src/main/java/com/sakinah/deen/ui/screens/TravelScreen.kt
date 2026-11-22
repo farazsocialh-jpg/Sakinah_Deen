@@ -46,6 +46,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -95,7 +96,7 @@ fun TravelScreen(
     var showHomeOptions by remember { mutableStateOf(false) }
     var showHomeCityPicker by remember { mutableStateOf(false) }
     var gpsHomeRequested by remember { mutableStateOf(false) }
-    var maxStayDays by remember { mutableStateOf(appPrefs.safarMaxStayDays) }
+    var maxStayDays by remember { mutableIntStateOf(appPrefs.safarMaxStayDays) }
     var jamPermitted by remember { mutableStateOf(appPrefs.safarJamPermitted) }
     var stayLimitEnabled by remember {
         mutableStateOf(
