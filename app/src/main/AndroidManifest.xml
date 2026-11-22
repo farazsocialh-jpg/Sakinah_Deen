@@ -67,12 +67,15 @@
             </intent-filter>
         </activity>
 
+        <!-- An activity-level android:permission gates the *caller*, so requiring
+             BLUETOOTH_CONNECT made the launcher (which does not hold it) unable to open the
+             configuration screen. The activity validates its appWidgetId and writes only that
+             widget's own preferences, so no caller permission is needed. -->
         <activity
             android:name=".widget.WidgetConfigActivity"
             android:exported="true"
             android:label="@string/widget_config_title"
-            android:theme="@style/Theme.Sakinah"
-            android:permission="android.permission.BLUETOOTH_CONNECT">
+            android:theme="@style/Theme.Sakinah">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
             </intent-filter>
