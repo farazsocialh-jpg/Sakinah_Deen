@@ -31,6 +31,7 @@ import com.sakinah.deen.service.PrayerAlertSilencer
 import com.sakinah.deen.ui.navigation.RootNavHost
 import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.SakinahTheme
+import com.sakinah.deen.util.enableTapjackingProtection
 import com.sakinah.deen.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 
@@ -44,6 +45,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        // An overlay must not be able to aim a tap at a destructive or financial control.
+        enableTapjackingProtection()
         pendingNavigation.value = navigationTarget(intent)
         setContent {
             val appearancePrefs = rememberInject<AppearancePreferences>()

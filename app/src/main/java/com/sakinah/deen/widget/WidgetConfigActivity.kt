@@ -47,6 +47,7 @@ import com.sakinah.deen.ui.theme.SakinahPalette
 import com.sakinah.deen.ui.theme.SakinahTheme
 import com.sakinah.deen.ui.theme.UserAppearanceConfig
 import com.sakinah.deen.ui.theme.ThemeMode
+import com.sakinah.deen.util.enableTapjackingProtection
 import kotlinx.coroutines.launch
 
 /**
@@ -57,6 +58,8 @@ class WidgetConfigActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Saving here rewrites a placed widget, so obscured taps must not reach it.
+        enableTapjackingProtection()
         val appWidgetId = intent?.extras?.getInt(
             AppWidgetManager.EXTRA_APPWIDGET_ID,
             AppWidgetManager.INVALID_APPWIDGET_ID
