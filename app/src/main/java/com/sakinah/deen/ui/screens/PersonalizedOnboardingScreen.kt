@@ -413,7 +413,7 @@ fun PersonalizedOnboardingScreen(
                                             } else {
                                                 MaterialTheme.colorScheme.primaryContainer
                                             },
-                                            modifier = Modifier.size(40.dp)
+                                            modifier = Modifier.size(48.dp)
                                         ) {
                                             Box(contentAlignment = Alignment.Center) {
                                                 Icon(
