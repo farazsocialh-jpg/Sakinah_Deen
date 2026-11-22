@@ -107,24 +107,109 @@ def fetch_report(base: str, key: str, file_hash: str) -> dict:
 SEVERITY_ORDER = {"high": 3, "medium": 2, "warning": 2, "low": 1, "info": 0, "secure": 0}
 
 
+def _coerce_str(item) -> str:
+    if isinstance(item, str):
+        return item
+    if isinstance(item, (list, tuple)):
+        return " ".join(str(v) for v in item)
+    if isinstance(item, dict):
+        for key in ("title", "name", "rule", "description", "stat", "desc"):
+            v = item.get(key)
+            if isinstance(v, str) and v.strip():
+                return v
+        return "Application security issue"
+    return str(item)
+
+
+def _coerce_severity(item, fallback: str) -> str:
+    if isinstance(item, dict):
+        sev = item.get("severity") or item.get("level") or item.get("status")
+        if isinstance(sev, str) and sev.strip():
+            return sev.lower()
+    if isinstance(item, (list, tuple)) and item:
+        first = item[0]
+        if isinstance(first, str) and first.lower() in SEVERITY_ORDER:
+            return first.lower()
+    if fallback and fallback.lower() in SEVERITY_ORDER:
+        return fallback.lower()
+    return "info"
+
+
 def normalise(report: dict) -> list[dict]:
     findings: list[dict] = []
-    for item in report.get("appsec", []) or []:
-        findings.append({
-            "source": "appsec",
-            "title": item.get("title") or item.get("description") or "Application security issue",
-            "detail": (item.get("description") or "").strip(),
-            "severity": (item.get("severity") or "info").lower(),
-            "section": item.get("section") or "appsec",
-        })
-    for item in report.get("manifest_analysis", []) or []:
+
+    # appsec: may be a dict with severity buckets (high/warning/info/secure/hotspot)
+    # or, in some versions, a list of finding dicts/strings.
+    appsec = report.get("appsec")
+    if isinstance(appsec, dict):
+        for key, val in appsec.items():
+            if not isinstance(val, list):
+                continue
+            bucket_sev = key.lower() if key.lower() in SEVERITY_ORDER else None
+            for item in val:
+                findings.append({
+                    "source": "appsec",
+                    "title": _coerce_str(item),
+                    "detail": (
+                        item.get("description", "") if isinstance(item, dict) else _coerce_str(item)
+                    ).strip() if isinstance(item, dict) else _coerce_str(item).strip(),
+                    "severity": _coerce_severity(item, bucket_sev or "info"),
+                    "section": (
+                        item.get("section", "appsec") if isinstance(item, dict) else "appsec"
+                    ),
+                })
+    elif isinstance(appsec, list):
+        for item in appsec:
+            findings.append({
+                "source": "appsec",
+                "title": _coerce_str(item),
+                "detail": (
+                    item.get("description", "") if isinstance(item, dict) else _coerce_str(item)
+                ).strip() if isinstance(item, dict) else _coerce_str(item).strip(),
+                "severity": _coerce_severity(item, "info"),
+                "section": (
+                    item.get("section", "appsec") if isinstance(item, dict) else "appsec"
+                ),
+            })
+
+    # manifest_analysis: bare list, or dict with manifest_anal/manifest_findings, or
+    # severity buckets (high/warning/info).
+    manifest = report.get("manifest_analysis")
+    manifest_items: list = []
+    manifest_bucket: str | None = None
+    if isinstance(manifest, list):
+        manifest_items = manifest
+    elif isinstance(manifest, dict):
+        for key in ("manifest_anal", "manifest_findings", "manifest_analysis", "findings"):
+            if key in manifest and isinstance(manifest[key], list):
+                manifest_items = manifest[key]
+                break
+        if not manifest_items:
+            # severity buckets
+            for sev in ("high", "warning", "medium", "low", "info"):
+                for item in manifest.get(sev) or []:
+                    findings.append({
+                        "source": "manifest",
+                        "title": _coerce_str(item),
+                        "detail": (
+                            item.get("description", "") or item.get("stat", "")
+                            if isinstance(item, dict) else _coerce_str(item)
+                        ).strip() if isinstance(item, dict) else _coerce_str(item).strip(),
+                        "severity": _coerce_severity(item, sev),
+                        "section": "manifest",
+                    })
+            manifest_items = []  # already handled
+    for item in manifest_items:
         findings.append({
             "source": "manifest",
-            "title": item.get("title") or item.get("name") or "Manifest issue",
-            "detail": (item.get("description") or item.get("stat") or "").strip(),
-            "severity": (item.get("severity") or "info").lower(),
+            "title": _coerce_str(item),
+            "detail": (
+                (item.get("description") or item.get("stat") or "") if isinstance(item, dict) else _coerce_str(item)
+            ).strip(),
+            "severity": _coerce_severity(item, "info"),
             "section": "manifest",
         })
+
     return findings
 
 
