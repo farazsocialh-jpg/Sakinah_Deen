@@ -1,5 +1,6 @@
 package com.sakinah.deen.di
 
+import androidx.core.content.edit
 import com.sakinah.deen.data.database.DatabaseSeeder
 import com.sakinah.deen.data.database.OfflineContentSeeder
 import com.sakinah.deen.data.database.SakinahEncryptedDatabase
@@ -245,8 +246,8 @@ private fun encryptedAccountSettings(context: android.content.Context): android.
     val verified = legacy.all.all { (key, value) -> encrypted.all[key] == value }
     if (!verified) return encrypted
 
-    encrypted.edit().putBoolean("account_store_migrated", true).commit()
-    legacy.edit().clear().commit()
+    encrypted.edit(commit = true) { putBoolean("account_store_migrated", true) }
+    legacy.edit(commit = true) { clear() }
     return encrypted
 }
 
