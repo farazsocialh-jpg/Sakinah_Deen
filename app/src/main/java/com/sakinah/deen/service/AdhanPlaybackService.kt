@@ -1,5 +1,7 @@
 package com.sakinah.deen.service
 
+import androidx.core.net.toUri
+
 import android.annotation.SuppressLint
 
 import android.app.Notification
@@ -261,7 +263,7 @@ class AdhanPlaybackService : Service() {
     }
 
     private fun selectedAdhanUri(): Uri {
-        preferences.adhanSoundUri?.takeIf { it.isNotBlank() }?.let { return Uri.parse(it) }
+        preferences.adhanSoundUri?.takeIf { it.isNotBlank() }?.let { return it.toUri() }
         return AdhanAudio.muezzinUri(
             context = this,
             muezzin = currentMuezzin,
@@ -271,8 +273,8 @@ class AdhanPlaybackService : Service() {
     }
 
     private fun resolveDuaSafarUri(): Uri =
-        preferences.duaSafarSoundUri?.takeIf { it.isNotBlank() }?.let(Uri::parse)
-            ?: Uri.parse("android.resource://$packageName/${R.raw.dua_al_safar}")
+        preferences.duaSafarSoundUri?.takeIf { it.isNotBlank() }?.let { it.toUri() }
+            ?: "android.resource://$packageName/${R.raw.dua_al_safar}".toUri()
 
     /**
      * Entering the foreground can be refused (Android 14+ background-start rules, revoked

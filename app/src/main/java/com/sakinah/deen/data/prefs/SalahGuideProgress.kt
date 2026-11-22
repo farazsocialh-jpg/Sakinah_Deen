@@ -1,5 +1,7 @@
 package com.sakinah.deen.data.prefs
 
+import androidx.core.content.edit
+
 import android.content.Context
 import android.content.SharedPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -97,12 +99,12 @@ class SalahGuideProgressStore internal constructor(private val prefs: SharedPref
         val next = transform(_progress.value)
         if (next == _progress.value) return
         _progress.value = next
-        prefs.edit().apply {
+        prefs.edit {
             putStringSet(KEY_LEARNED_STEPS, next.learnedStepKeys)
             putStringSet(KEY_FAVORITE_STEPS, next.favoriteStepKeys)
             putStringSet(KEY_FAVORITE_ADHKAR, next.favoriteAdhkarIds)
             putBoolean(KEY_PRACTICE_REMINDER, next.practiceReminderEnabled)
-        }.apply()
+        }
     }
 
     private fun load(): SalahGuideProgress = SalahGuideProgress(

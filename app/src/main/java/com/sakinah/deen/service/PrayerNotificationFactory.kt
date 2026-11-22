@@ -1,5 +1,9 @@
 package com.sakinah.deen.service
 
+import androidx.core.graphics.createBitmap
+
+import androidx.core.net.toUri
+
 import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
@@ -263,9 +267,7 @@ object PrayerNotificationFactory {
             this.action = action
             // The data URI keeps PendingIntents distinct per prayer and per day, so a stale
             // "Mark as Prayed" can never complete a different prayer or a previous date.
-            data = Uri.parse(
-                "sakinah://prayer_action/$kind/${prayerType.name}/${if (includeDate) epochDay else "current"}"
-            )
+            data = "sakinah://prayer_action/$kind/${prayerType.name}/${if (includeDate) epochDay else "current"}".toUri()
             putExtra(PrayerNotificationActionReceiver.EXTRA_PRAYER_TYPE, prayerType.name)
             putExtra(PrayerNotificationActionReceiver.EXTRA_PRAYER_DATE, epochDay)
         }
@@ -290,7 +292,7 @@ object PrayerNotificationFactory {
         val size = context.resources.getDimensionPixelSize(
             android.R.dimen.notification_large_icon_width
         ).coerceAtLeast(192)
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         drawable.setBounds(0, 0, size, size)
         drawable.draw(canvas)

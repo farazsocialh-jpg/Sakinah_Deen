@@ -1,5 +1,7 @@
 package com.sakinah.deen.data.prefs
 
+import androidx.core.content.edit
+
 import android.content.Context
 import android.content.SharedPreferences
 
@@ -79,7 +81,7 @@ class QuranReaderPreferences internal constructor(
     var readingMode: QuranReadingMode
         get() = QuranReadingMode.fromStoredName(prefs.getString(KEY_READING_MODE, null))
             ?: QuranReadingMode.STUDY
-        set(value) = prefs.edit().putString(KEY_READING_MODE, value.name).apply()
+        set(value) = prefs.edit { putString(KEY_READING_MODE, value.name) }
 
     /** Null only on the first-ever launch, so the reader can fall back to 1:1. */
     val lastReadPosition: QuranReadingPosition?
@@ -96,11 +98,11 @@ class QuranReaderPreferences internal constructor(
 
     fun saveReadingPosition(surahNumber: Int, ayahNumber: Int, scrollIndex: Int) {
         if (surahNumber !in MIN_SURAH..MAX_SURAH) return
-        prefs.edit()
-            .putInt(KEY_LAST_SURAH, surahNumber)
-            .putInt(KEY_LAST_AYAH, ayahNumber.coerceAtLeast(1))
-            .putInt(KEY_LAST_SCROLL_INDEX, scrollIndex.coerceAtLeast(0))
-            .apply()
+        prefs.edit {
+            putInt(KEY_LAST_SURAH, surahNumber)
+            putInt(KEY_LAST_AYAH, ayahNumber.coerceAtLeast(1))
+            putInt(KEY_LAST_SCROLL_INDEX, scrollIndex.coerceAtLeast(0))
+        }
         recordReadingDay(java.time.LocalDate.now().toEpochDay())
     }
 
@@ -115,7 +117,7 @@ class QuranReaderPreferences internal constructor(
     /** Records today as a reading day, keeping the last ~13 months only. */
     fun recordReadingDay(epochDay: Long) {
         val days = (readingDays + epochDay).sorted().takeLast(400).toSet()
-        prefs.edit().putString(KEY_READING_DAYS, days.joinToString("|")).apply()
+        prefs.edit { putString(KEY_READING_DAYS, days.joinToString("|")) }
     }
 
     fun currentStreak(today: Long = java.time.LocalDate.now().toEpochDay()): Int =
@@ -134,9 +136,9 @@ class QuranReaderPreferences internal constructor(
                 )
                 .joinToString("|") { "${it.surahNumber}:${it.ayahNumber}:${it.savedAtMillis}" }
             if (encoded.isBlank()) {
-                prefs.edit().remove(KEY_BOOKMARKS).apply()
+                prefs.edit { remove(KEY_BOOKMARKS) }
             } else {
-                prefs.edit().putString(KEY_BOOKMARKS, encoded).apply()
+                prefs.edit { putString(KEY_BOOKMARKS, encoded) }
             }
         }
 

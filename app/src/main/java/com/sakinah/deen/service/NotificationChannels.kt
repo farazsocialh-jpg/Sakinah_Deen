@@ -1,5 +1,7 @@
 package com.sakinah.deen.service
 
+import androidx.core.net.toUri
+
 import android.app.NotificationChannel
 import android.app.NotificationChannelGroup
 import android.app.NotificationManager
@@ -54,13 +56,13 @@ object NotificationChannels {
 
     /** Bundled Adhan URI, playable even when the app process was killed. */
     fun adhanSoundUri(context: Context): Uri =
-        Uri.parse("android.resource://${context.packageName}/${R.raw.adhan_makkah}")
+        "android.resource://${context.packageName}/${R.raw.adhan_makkah}".toUri()
 
     fun fajrAdhanSoundUri(context: Context): Uri =
-        Uri.parse("android.resource://${context.packageName}/${R.raw.adhan_fajr}")
+        "android.resource://${context.packageName}/${R.raw.adhan_fajr}".toUri()
 
     fun duaSafarSoundUri(context: Context): Uri =
-        Uri.parse("android.resource://${context.packageName}/${R.raw.dua_al_safar}")
+        "android.resource://${context.packageName}/${R.raw.dua_al_safar}".toUri()
 
     /**
      * Channel for one alert mode. Full Azaan posts on the vibrate channel on purpose: its

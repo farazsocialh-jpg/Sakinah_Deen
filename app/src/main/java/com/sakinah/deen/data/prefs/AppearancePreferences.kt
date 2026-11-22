@@ -1,5 +1,7 @@
 package com.sakinah.deen.data.prefs
 
+import androidx.core.content.edit
+
 import android.content.Context
 import android.content.SharedPreferences
 import com.sakinah.deen.ui.theme.FontScalePreset
@@ -185,21 +187,21 @@ class AppearancePreferences internal constructor(
     }
 
     private fun persist(value: UserAppearanceConfig) {
-        prefs.edit()
-            .putString(KEY_USER_NAME, value.userName.trim())
-            .putString(KEY_EXPERIENCE_LEVEL, value.experienceLevel)
-            .putString(KEY_OBJECTIVE, value.objective.name)
-            .putString(KEY_THEME_MODE, value.themeMode.name)
-            .putString(KEY_PALETTE, value.palette.name)
-            .putString(KEY_FONT_SCALE, value.fontScale.name)
-            .putBoolean(KEY_FOCUS_MODE, value.focusModeHideDistractions)
-            .putBoolean(KEY_AUTO_HIDE_BARS, value.autoHideBarsOnScroll)
-            .putString(KEY_PRAYER_GUIDE_GENDER, value.prayerGuideGender.name)
-            .putString(KEY_SALAH_HOME_LAYOUT, value.salahHomeLayout.name)
-            .putString(KEY_QURAN_READING_LAYOUT, value.quranReadingLayout.name)
-            .putString(KEY_HADITH_READING_LAYOUT, value.hadithReadingLayout.name)
-            .putBoolean(KEY_ONBOARDING_COMPLETED, value.onboardingCompleted)
-            .apply()
+        prefs.edit {
+            putString(KEY_USER_NAME, value.userName.trim())
+            putString(KEY_EXPERIENCE_LEVEL, value.experienceLevel)
+            putString(KEY_OBJECTIVE, value.objective.name)
+            putString(KEY_THEME_MODE, value.themeMode.name)
+            putString(KEY_PALETTE, value.palette.name)
+            putString(KEY_FONT_SCALE, value.fontScale.name)
+            putBoolean(KEY_FOCUS_MODE, value.focusModeHideDistractions)
+            putBoolean(KEY_AUTO_HIDE_BARS, value.autoHideBarsOnScroll)
+            putString(KEY_PRAYER_GUIDE_GENDER, value.prayerGuideGender.name)
+            putString(KEY_SALAH_HOME_LAYOUT, value.salahHomeLayout.name)
+            putString(KEY_QURAN_READING_LAYOUT, value.quranReadingLayout.name)
+            putString(KEY_HADITH_READING_LAYOUT, value.hadithReadingLayout.name)
+            putBoolean(KEY_ONBOARDING_COMPLETED, value.onboardingCompleted)
+        }
     }
 
     private inline fun <reified T : Enum<T>> safeEnum(key: String, default: T): T {

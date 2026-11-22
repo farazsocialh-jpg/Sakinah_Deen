@@ -1,5 +1,7 @@
 package com.sakinah.deen.service
 
+import androidx.core.net.toUri
+
 import android.Manifest
 import android.app.AlarmManager
 import android.app.NotificationChannel
@@ -343,7 +345,7 @@ object NotificationSelfTest {
             SelfTestAction.REQUEST_EXACT_ALARMS -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 Intent(
                     Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                    Uri.parse("package:${appContext.packageName}")
+                    "package:${appContext.packageName}".toUri()
                 ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             } else {
                 null

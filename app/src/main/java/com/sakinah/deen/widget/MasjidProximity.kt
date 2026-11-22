@@ -1,5 +1,7 @@
 package com.sakinah.deen.widget
 
+import androidx.core.content.edit
+
 import android.content.Context
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -80,21 +82,21 @@ private fun readCache(context: Context, lat: Double, lon: Double): NearestMasjid
 }
 
 private fun writeCache(context: Context, lat: Double, lon: Double, found: NearestMasjid?) {
-    val p = prefs(context).edit()
-    p.putFloat(KEY_LAT, lat.toFloat())
-    p.putFloat(KEY_LON, lon.toFloat())
-    p.putLong(KEY_FETCHED, System.currentTimeMillis())
-    if (found == null) {
-        p.putBoolean(KEY_FOUND, false)
-    } else {
-        p.putBoolean(KEY_FOUND, true)
-        p.putString(KEY_NAME, found.name)
-        p.putFloat(KEY_MLAT, found.latitude.toFloat())
-        p.putFloat(KEY_MLON, found.longitude.toFloat())
-        p.putInt(KEY_DIST, found.distanceMeters)
-        p.putInt(KEY_WALK, found.walkingMinutes)
+    prefs(context).edit {
+        putFloat(KEY_LAT, lat.toFloat())
+        putFloat(KEY_LON, lon.toFloat())
+        putLong(KEY_FETCHED, System.currentTimeMillis())
+        if (found == null) {
+            putBoolean(KEY_FOUND, false)
+        } else {
+            putBoolean(KEY_FOUND, true)
+            putString(KEY_NAME, found.name)
+            putFloat(KEY_MLAT, found.latitude.toFloat())
+            putFloat(KEY_MLON, found.longitude.toFloat())
+            putInt(KEY_DIST, found.distanceMeters)
+            putInt(KEY_WALK, found.walkingMinutes)
+        }
     }
-    p.apply()
 }
 
 private fun fetchNearest(lat: Double, lon: Double): NearestMasjid? {

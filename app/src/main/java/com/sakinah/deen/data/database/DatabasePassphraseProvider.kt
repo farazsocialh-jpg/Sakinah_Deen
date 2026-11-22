@@ -1,5 +1,7 @@
 package com.sakinah.deen.data.database
 
+import androidx.core.content.edit
+
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -80,16 +82,19 @@ object DatabasePassphraseProvider {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, secretKey)
         val ciphertext = cipher.doFinal(random)
-        prefs.edit()
-            .putString(CIPHERTEXT_KEY, Base64.encodeToString(ciphertext, Base64.NO_WRAP))
-            .putString(IV_KEY, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
-            .apply()
+        prefs.edit {
+            putString(CIPHERTEXT_KEY, Base64.encodeToString(ciphertext, Base64.NO_WRAP))
+            putString(IV_KEY, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+        }
         return random
     }
 
     private fun recover(appContext: Context) {
         val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().remove(CIPHERTEXT_KEY).remove(IV_KEY).apply()
+        prefs.edit {
+            remove(CIPHERTEXT_KEY)
+            remove(IV_KEY)
+        }
         runCatching {
             val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
             if (keyStore.containsAlias(KEYSTORE_ALIAS)) keyStore.deleteEntry(KEYSTORE_ALIAS)

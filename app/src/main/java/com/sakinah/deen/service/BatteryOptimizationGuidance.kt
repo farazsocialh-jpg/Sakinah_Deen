@@ -1,5 +1,7 @@
 package com.sakinah.deen.service
 
+import androidx.core.net.toUri
+
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -154,7 +156,7 @@ object BatteryOptimizationGuidance {
     fun appDetailsIntent(context: Context): Intent =
         Intent(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-            Uri.parse("package:${context.packageName}")
+            "package:${context.packageName}".toUri()
         ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
     /** Vendor auto-start screens this build can actually resolve on this device. */

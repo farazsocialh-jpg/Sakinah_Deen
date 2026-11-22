@@ -1,5 +1,7 @@
 package com.sakinah.deen.ui.screens
 
+import androidx.core.net.toUri
+
 import com.sakinah.deen.R
 
 import android.Manifest
@@ -272,7 +274,7 @@ fun SalahScreen(
                                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                                             val intent = Intent(
                                                 Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                                                Uri.parse("package:${context.packageName}")
+                                                "package:${context.packageName}".toUri()
                                             ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                             val opened = runCatching { context.startActivity(intent) }.isSuccess
                                             if (!opened) onOpenNotificationSettings?.invoke()

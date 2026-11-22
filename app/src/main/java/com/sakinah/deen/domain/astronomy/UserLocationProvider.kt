@@ -1,5 +1,7 @@
 package com.sakinah.deen.domain.astronomy
 
+import androidx.core.content.edit
+
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
@@ -251,15 +253,15 @@ class UserLocationProvider(private val context: Context) {
     fun saveCachedLocation(location: ResolvedLocation): Boolean {
         val sane = LocationValidator.sanitize(location.latitude, location.longitude) ?: return false
         val stamp = location.timestampMillis.takeIf { it > 0L } ?: System.currentTimeMillis()
-        prefs.edit()
-            .putLong(KEY_LAT_BITS, sane.first.toRawBits())
-            .putLong(KEY_LON_BITS, sane.second.toRawBits())
-            .putString(KEY_CITY, location.cityName)
-            .putString(KEY_COUNTRY, location.countryName)
-            .putString(KEY_COUNTRY_CODE, location.countryCode)
-            .putLong(KEY_TIMESTAMP, stamp)
-            .putString(KEY_SOURCE, location.source.ifBlank { if (location.isFromGps) "gps" else "cached" })
-            .apply()
+        prefs.edit {
+            putLong(KEY_LAT_BITS, sane.first.toRawBits())
+            putLong(KEY_LON_BITS, sane.second.toRawBits())
+            putString(KEY_CITY, location.cityName)
+            putString(KEY_COUNTRY, location.countryName)
+            putString(KEY_COUNTRY_CODE, location.countryCode)
+            putLong(KEY_TIMESTAMP, stamp)
+            putString(KEY_SOURCE, location.source.ifBlank { if (location.isFromGps) "gps" else "cached" })
+        }
         return true
     }
 }

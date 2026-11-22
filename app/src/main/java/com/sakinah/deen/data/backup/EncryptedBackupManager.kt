@@ -1,5 +1,7 @@
 package com.sakinah.deen.data.backup
 
+import androidx.core.content.edit
+
 import android.content.Context
 import android.content.Context.MODE_PRIVATE
 import android.net.Uri
@@ -132,18 +134,18 @@ object EncryptedBackupManager {
             }
 
             // Restore prefs
-            val prefs = context.getSharedPreferences("sakinah_preferences", Context.MODE_PRIVATE).edit()
-            envelope.data.prefs.forEach { e ->
-                when (e.type) {
-                    "string" -> prefs.putString(e.key, e.value)
-                    "int" -> prefs.putInt(e.key, e.value.toIntOrNull() ?: 0)
-                    "long" -> prefs.putLong(e.key, e.value.toLongOrNull() ?: 0L)
-                    "float" -> prefs.putFloat(e.key, e.value.toFloatOrNull() ?: 0f)
-                    "boolean" -> prefs.putBoolean(e.key, e.value.toBooleanStrictOrNull() ?: false)
-                    "stringset" -> prefs.putStringSet(e.key, e.value.split("|").filter { it.isNotBlank() }.toSet())
+            context.getSharedPreferences("sakinah_preferences", Context.MODE_PRIVATE).edit {
+                envelope.data.prefs.forEach { e ->
+                    when (e.type) {
+                        "string" -> putString(e.key, e.value)
+                        "int" -> putInt(e.key, e.value.toIntOrNull() ?: 0)
+                        "long" -> putLong(e.key, e.value.toLongOrNull() ?: 0L)
+                        "float" -> putFloat(e.key, e.value.toFloatOrNull() ?: 0f)
+                        "boolean" -> putBoolean(e.key, e.value.toBooleanStrictOrNull() ?: false)
+                        "stringset" -> putStringSet(e.key, e.value.split("|").filter { it.isNotBlank() }.toSet())
+                    }
                 }
             }
-            prefs.apply()
         }
     }
 
