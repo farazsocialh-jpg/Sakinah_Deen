@@ -51,8 +51,9 @@ data class SelfTestRow(
  */
 object NotificationSelfTest {
 
-    private val ALARM_TIME_FORMAT: DateTimeFormatter =
-        DateTimeFormatter.ofPattern("EEE d MMM · h:mm a", Locale.getDefault())
+    // Resolved per use so a language change in Settings is reflected without a restart.
+    private val ALARM_TIME_FORMAT: DateTimeFormatter
+        get() = DateTimeFormatter.ofPattern("EEE d MMM · h:mm a", Locale.getDefault())
 
     fun rows(
         context: Context,

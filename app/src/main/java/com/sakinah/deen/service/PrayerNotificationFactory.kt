@@ -60,7 +60,9 @@ object PrayerNotificationFactory {
 
     private const val FALLBACK_WINDOW_MS = 10 * 60_000L
 
-    private val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())
+    // Resolved per use so a language change in Settings is reflected without a restart.
+    private val TIME_FORMAT: DateTimeFormatter
+        get() = DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())
 
     fun build(context: Context, spec: Spec): Notification {
         val theme = NotificationAppearance.resolve(context)
