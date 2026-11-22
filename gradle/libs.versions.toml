@@ -4,7 +4,7 @@ kotlin = "2.3.20"
 ksp = "2.3.12"
 coreKtx = "1.18.0"
 splashscreen = "1.2.0"
-lifecycleRuntimeKtx = "2.8.7"
+lifecycleRuntimeKtx = "2.10.0"
 activityCompose = "1.12.0"
 # Compose 1.8 is the first stable line with public autofill ContentType semantics.
 composeBom = "2025.05.00"
