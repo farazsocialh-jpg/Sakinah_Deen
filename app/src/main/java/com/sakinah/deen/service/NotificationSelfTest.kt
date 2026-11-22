@@ -130,14 +130,6 @@ object NotificationSelfTest {
     }
 
     private fun channelRow(context: Context, criticalFajr: Boolean): SelfTestRow {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return SelfTestRow(
-                id = "channel",
-                title = "Prayer channel",
-                status = SelfTestStatus.INFO,
-                detail = "Channels are not used on this Android version; the sound follows the notification stream."
-            )
-        }
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         if (manager == null) {
             return SelfTestRow(

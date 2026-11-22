@@ -7,7 +7,6 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.net.Uri
-import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import com.sakinah.deen.R
@@ -98,7 +97,6 @@ object NotificationChannels {
 
     /** True when the user silenced every prayer channel in Android settings. */
     fun prayerChannelBlocked(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
             ?: return false
         // Only the three core channels count: the optional Fajr channel may legitimately be
@@ -128,8 +126,6 @@ object NotificationChannels {
             ?: Settings.System.DEFAULT_NOTIFICATION_URI
 
     fun createChannels(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 

@@ -140,7 +140,6 @@ object BatteryOptimizationGuidance {
 
     /** True when the app is still subject to Android's own battery optimisation. */
     fun isBatteryOptimizationActive(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
         val power = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
         return runCatching { !power.isIgnoringBatteryOptimizations(context.packageName) }
             .getOrDefault(false)

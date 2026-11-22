@@ -718,7 +718,6 @@ private fun isAzaanChannelBlocked(context: Context): Boolean =
     NotificationChannels.prayerChannelBlocked(context)
 
 private fun isBatteryOptimizationActive(context: Context): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
     val power = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
     return !power.isIgnoringBatteryOptimizations(context.packageName)
 }
