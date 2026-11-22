@@ -123,12 +123,12 @@ import org.koin.androidx.compose.koinViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuranScreen(
+    modifier: Modifier = Modifier,
     initialSurahNumber: Int = 1,
     initialAyahNumber: Int = 1,
     deepLinkNonce: Int = 0,
     focusMode: Boolean = false,
-    viewModel: QuranViewModel? = null,
-    modifier: Modifier = Modifier
+    viewModel: QuranViewModel? = null
 ) {
     val vm: QuranViewModel = viewModel ?: koinViewModel()
     val state by vm.uiState.collectAsStateWithLifecycle()

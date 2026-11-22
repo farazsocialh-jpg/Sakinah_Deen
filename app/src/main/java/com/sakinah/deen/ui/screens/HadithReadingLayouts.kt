@@ -176,8 +176,8 @@ private fun HadithShareButton(
 @Composable
 private fun HadithArabic(
     hadith: HadithModel,
-    fontSizeSp: Int = 20,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    fontSizeSp: Int = 20
 ) {
     if (hadith.arabicText.isBlank()) return
     ArabicVerseBlock(
@@ -192,8 +192,8 @@ private fun HadithArabic(
 @Composable
 private fun HadithEnglish(
     hadith: HadithModel,
-    fontSizeSp: Int = 12,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    fontSizeSp: Int = 12
 ) {
     if (hadith.matnTranslation.isBlank()) return
     Text(
@@ -221,13 +221,13 @@ private fun NarratorText(hadith: HadithModel) {
 }
 
 @Composable
-private fun HighlightModifier(
+private fun Modifier.highlightBorder(
     highlighted: Boolean,
     shape: RoundedCornerShape = RoundedCornerShape(12.dp)
 ): Modifier = if (highlighted) {
-    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape)
+    border(2.dp, MaterialTheme.colorScheme.primary, shape)
 } else {
-    Modifier
+    this
 }
 
 @Composable
@@ -297,7 +297,7 @@ private fun EnglishFirstTapLayout(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .then(HighlightModifier(highlightedHadithId == hadith.id)),
+                    .then(Modifier.highlightBorder(highlightedHadithId == hadith.id)),
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
@@ -476,7 +476,7 @@ private fun LanguageTabbedLayout(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .then(HighlightModifier(highlightedHadithId == hadith.id)),
+                        .then(Modifier.highlightBorder(highlightedHadithId == hadith.id)),
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
@@ -524,7 +524,7 @@ private fun SingleBarCardsLayout(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .then(HighlightModifier(highlightedHadithId == hadith.id)),
+                    .then(Modifier.highlightBorder(highlightedHadithId == hadith.id)),
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.42f))
@@ -766,7 +766,7 @@ private fun SanadMatnStudyLayout(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .then(HighlightModifier(highlightedHadithId == hadith.id)),
+                    .then(Modifier.highlightBorder(highlightedHadithId == hadith.id)),
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))

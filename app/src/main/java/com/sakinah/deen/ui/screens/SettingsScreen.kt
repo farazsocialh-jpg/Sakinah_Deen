@@ -161,8 +161,8 @@ enum class SettingsSection(val title: String, val subtitle: String) {
 @Composable
 fun SettingsScreen(
     section: SettingsSection,
-    onRerunOnboarding: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRerunOnboarding: () -> Unit = {}
 ) {
     val repo = rememberInject<SettingsRepository>()
     val settings by repo.settings.collectAsStateWithLifecycle()

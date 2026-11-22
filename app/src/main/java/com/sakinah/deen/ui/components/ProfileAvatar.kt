@@ -36,8 +36,8 @@ import java.net.URL
 fun ProfileAvatar(
     photoUrl: String?,
     displayName: String,
-    size: Dp = 72.dp,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    size: Dp = 72.dp
 ) {
     val image by produceState<ImageBitmap?>(initialValue = null, photoUrl) {
         val url = photoUrl?.takeIf { it.isNotBlank() } ?: return@produceState

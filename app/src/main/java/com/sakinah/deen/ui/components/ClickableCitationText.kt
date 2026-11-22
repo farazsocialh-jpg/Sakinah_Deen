@@ -143,10 +143,10 @@ private fun parseMarkdown(raw: String, blockquoteColor: Color): ParsedMarkdown {
 @Composable
 fun ClickableCitationText(
     text: String,
+    modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.bodyMedium,
     onQuranClick: (surah: Int, ayah: Int) -> Unit,
-    onHadithClick: (bookKey: String, number: Int, sectionHint: String?) -> Unit,
-    modifier: Modifier = Modifier
+    onHadithClick: (bookKey: String, number: Int, sectionHint: String?) -> Unit
 ) {
     val linkColor = MaterialTheme.colorScheme.primary
     val currentOnQuranClick by rememberUpdatedState(onQuranClick)

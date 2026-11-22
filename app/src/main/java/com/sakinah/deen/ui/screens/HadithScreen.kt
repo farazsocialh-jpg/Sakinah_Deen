@@ -85,13 +85,13 @@ import org.koin.androidx.compose.koinViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HadithScreen(
+    modifier: Modifier = Modifier,
     initialBookKey: String = "all",
     initialHadithNumber: Int = 0,
     initialSectionHint: String = "",
     initialSearchQuery: String = "",
     deepLinkNonce: Int = 0,
-    viewModel: HadithViewModel? = null,
-    modifier: Modifier = Modifier
+    viewModel: HadithViewModel? = null
 ) {
     val vm: HadithViewModel = viewModel ?: koinViewModel()
     val state by vm.uiState.collectAsStateWithLifecycle()

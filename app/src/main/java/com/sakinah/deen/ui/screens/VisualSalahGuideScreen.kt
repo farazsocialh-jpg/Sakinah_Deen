@@ -139,9 +139,9 @@ private fun stepsForTab(tab: GuideTab, rakat: Int, totalRakats: Int): List<Guide
 @Composable
 fun VisualSalahGuideScreen(
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
     totalRakats: Int = 2,
-    prayerTitle: String = "Prayer",
-    modifier: Modifier = Modifier
+    prayerTitle: String = "Prayer"
 ) {
     val safeTotalRakats = totalRakats.coerceIn(1, 4)
 

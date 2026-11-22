@@ -106,13 +106,13 @@ private val STARTER_PROMPTS = listOf(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AiChatScreen(
+    modifier: Modifier = Modifier,
     onNavigateToQuran: () -> Unit = {},
     onNavigateToHadith: () -> Unit = {},
     onNavigateToQuranDetail: ((surah: Int, ayah: Int) -> Unit)? = null,
     onNavigateToHadithDetail: ((book: String, number: Int, sectionHint: String?) -> Unit)? = null,
     viewModel: AiScholarViewModel? = null,
-    contentPadding: PaddingValues = PaddingValues(0.dp),
-    modifier: Modifier = Modifier
+    contentPadding: PaddingValues = PaddingValues(0.dp)
 ) {
     val vm: AiScholarViewModel = viewModel ?: koinViewModel()
     val state by vm.uiState.collectAsStateWithLifecycle()

@@ -122,12 +122,12 @@ import com.sakinah.deen.ui.viewmodel.SalahViewModel
 @Composable
 fun SalahScreen(
     onOpenGuide: () -> Unit,
+    modifier: Modifier = Modifier,
     onOpenPrayerGuide: ((String, Int) -> Unit)? = null,
     focusMode: Boolean = false,
     onOpenNotificationSettings: (() -> Unit)? = null,
     onOpenPrayerSettings: (() -> Unit)? = null,
-    viewModel: SalahViewModel? = null,
-    modifier: Modifier = Modifier
+    viewModel: SalahViewModel? = null
 ) {
     val vmState = viewModel?.uiState?.collectAsStateWithLifecycle()?.value
     val state = vmState ?: remember {
