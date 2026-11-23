@@ -53,6 +53,6 @@ Process, gates and checklists: [docs/development-sop.md](docs/development-sop.md
 
 ## Setup
 
-- JDK 17, Android SDK 35.
+- JDK 17, Android SDK 36 (`compileSdk`/`targetSdk` 36, `minSdk` 28).
 - Optionally copy `.env.example` to `.env` and set `AI_PROXY_URL` to the deployed AI Scholar proxy. There is no built-in default: without it, the AI Scholar screen shows its "not configured" state.
 - Never commit keystores or API keys; signing uses repository secrets.

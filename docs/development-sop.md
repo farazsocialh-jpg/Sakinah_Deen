@@ -91,11 +91,17 @@ reason in the PR description. Silencing a check is a code change and is reviewed
 
 ### Device legs
 
-One emulator runs three phases ([`scripts/run-device-audit.sh`](../.github/scripts/run-device-audit.sh)):
+One emulator runs three phases (`.github/scripts/run-device-audit.sh`):
 
-### Deep audit checks (new)
+- **Instrumented tests** — gate the job.
+- **Accessibility** — report-only: 48 dp targets and unlabelled clickables are measured and
+  published (job summary, annotations, `audit-device` artifact). Once the reported violations are
+  confirmed as real, run the workflow with `a11y_gate=true` to make them block.
+- **UI/UX monkey** — gates on a crash or ANR; screenshots and logcat in `audit-device`.
 
-The expanded checklist now covers:
+### Deep audit checks
+
+The checklist also covers:
 
 | Area | Checks | Gate |
 | --- | --- | --- |
@@ -105,14 +111,6 @@ The expanded checklist now covers:
 | **Observability** | `crash_reporting`, `analytics`, `log_stripping`, `pii_in_logs` | Block (S3) or advise |
 | **Release readiness** | `signing_fail_closed`, `no_baked_config`, `account_deletion`, `store_assets`, `privacy_copy`, `release_notes_versioned` | Block (S2/S3) |
 | **E2E flow** | `e2e_onboarding`, `e2e_auth`, `e2e_prayer`, `e2e_quran`, `e2e_settings`, `e2e_profile` | Advise |
-
-
-
-- **Instrumented tests** — gate the job.
-- **Accessibility** — report-only: 48 dp targets and unlabelled clickables are measured and
-  published (job summary, annotations, `audit-device` artifact). Once the reported violations are
-  confirmed as real, run the workflow with `a11y_gate=true` to make them block.
-- **UI/UX monkey** — gates on a crash or ANR; screenshots and logcat in `audit-device`.
 
 ### Weekly triage (15 minutes)
 

@@ -33,7 +33,7 @@ reference implementation; iOS builds the same `shared/` module through `AccountB
 
 ## Rules that keep parity
 
-- Anything in `shared/` must compile for `androidTarget` and `iosArm64`/`iosX64`; run
+- Anything in `shared/` must compile for `androidTarget` and `iosArm64`/`iosSimulatorArm64`; run
   `:shared:testAndroidHostTest` for the common tests.
 - Platform-only behaviour (alarms, database encryption, WebView) belongs in `app/` or
   `ios/Sakinah/`, never in `shared/`.

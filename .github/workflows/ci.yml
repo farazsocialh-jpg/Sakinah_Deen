@@ -418,7 +418,7 @@ jobs:
             exit 1
           fi
 
-      # One boot, three legs (scripts/run-device-audit.sh): instrumented tests gate the job,
+      # One boot, three legs (.github/scripts/run-device-audit.sh): instrumented tests gate the job,
       # the UI/UX monkey gates on crashes, the accessibility leg is report-only.
       - name: Run the device legs
         id: device
