@@ -11,19 +11,10 @@
     <string name="nav_guide">الدليل</string>
     <string name="nav_tools">الأدوات</string>
 
-    <string name="prayer_fajr">الفجر</string>
-    <string name="prayer_dhuhr">الظهر</string>
-    <string name="prayer_asr">العصر</string>
-    <string name="prayer_maghrib">المغرب</string>
-    <string name="prayer_isha">العشاء</string>
 
     <string name="channel_group_prayer">تنبيهات الصلاة والأذان</string>
     <string name="channel_group_travel">السفر والتنقل</string>
     <string name="channel_group_habit">الأذكار والسنن</string>
-    <string name="channel_adhan_name">الأذان ونداء الصلاة</string>
-    <string name="channel_adhan_desc">تنبيهات الأذان عالية الأولوية عند دخول وقت الصلاة</string>
-    <string name="channel_salah_silent_name">العد التنازلي للصلاة</string>
-    <string name="channel_salah_silent_desc">عد تنازلي هادئ للصلاة القادمة</string>
     <string name="channel_prayer_sound_name">تنبيهات الصلاة — صوت</string>
     <string name="channel_prayer_sound_desc">تنبيهات صلاة بارزة مع نغمة إشعار قياسية واهتزاز</string>
     <string name="channel_prayer_vibrate_name">تنبيهات الصلاة — اهتزاز فقط</string>
@@ -37,46 +28,25 @@
     <string name="channel_habit_name">أذكار وسنن يومية</string>
     <string name="channel_habit_desc">أذكار الصباح والمساء وسورة الكهف والصيام</string>
 
-    <string name="adhan_title">الأذان: حان وقت صلاة %1$s</string>
     <string name="adhan_body">حي على الصلاة ، حي على الفلاح</string>
     <string name="adhan_action_stop">إيقاف</string>
     <string name="adhan_action_mute">كتم</string>
-    <string name="adhan_action_snooze">تأجيل ١٠ دقائق</string>
-    <string name="adhan_fallback_title">الأذان: %1$s · %2$s</string>
     <string name="notif_action_mark_prayed">تسجيل الصلاة</string>
     <string name="notif_prayer_fallback_title">الصلاة</string>
     <string name="notif_prayer_fallback_window">وقت الصلاة</string>
 
     <string name="safar_title">السفر: دعاء السفر</string>
     <string name="safar_dua_arabic">سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَٰذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ</string>
-    <string name="safar_connected_title">تم الاتصال بـ %1$s</string>
-    <string name="safar_enter_prompt">دخلت وضع السفر. هل تريد قراءة دعاء السفر وتفعيل بوصلة القبلة؟</string>
-    <string name="safar_play_dua">تشغيل دعاء السفر</string>
-    <string name="safar_open_qibla">فتح قبلة الطريق</string>
-    <string name="safar_qasr_active">المسافة تتجاوز %1$d كم — القصر (ركعتان) مفعّل.</string>
-    <string name="safar_qasr_inactive">تبعد %1$d كم عن المنزل — القصر غير لازم بعد.</string>
-    <string name="safar_location_needed">اسمح بالموقع لحساب أحكام القصر.</string>
 
-    <string name="zakat_nisab">النصاب</string>
-    <string name="zakat_gold">الذهب</string>
-    <string name="zakat_silver">الفضة</string>
 
-    <string name="action_retry">إعادة المحاولة</string>
-    <string name="action_close">إغلاق</string>
-    <string name="action_download">تنزيل</string>
-    <string name="action_play">تشغيل</string>
-    <string name="offline_seed_note">محتوى مضمّن دون اتصال</string>
     <string name="city_picker_title">اختيار مدينة المنزل</string>
     <string name="city_picker_subtitle">تُقاس مسافة السفر (القصر) من المنزل.</string>
     <string name="city_picker_search">ابحث عن مدينة</string>
     <string name="city_picker_no_match">لا توجد مدينة مطابقة.</string>
     <string name="city_picker_use_gps">استخدام GPS الجهاز</string>
     <string name="action_cancel">إلغاء</string>
-    <string name="salah_home_layout_title">تخطيط الصفحة الرئيسية للصلاة</string>
     <string name="salah_home_layout_caption">اختر طريقة عرض الصلاة الحالية وجدول الصلوات في الصفحة الرئيسية.</string>
-    <string name="quran_reading_layout_title">تخطيط قراءة القرآن</string>
     <string name="quran_reading_layout_caption">اختر طريقة عرض آيات القرآن في القارئ.</string>
-    <string name="hadith_reading_layout_title">تخطيط قراءة الحديث</string>
     <string name="hadith_reading_layout_caption">اختر طريقة عرض نص الحديث في القارئ.</string>
 
     <!-- Visual Salah Guide -->
@@ -172,7 +142,6 @@
     <string name="profile_backup_import_action">Import</string>
     <string name="profile_sign_out_failed">Could not sign out.</string>
     <string name="profile_cancel">Cancel</string>
-    <string name="profile_provider_google">Google account</string>
     <string name="info_data_sources_title">Islamic Data Sources &amp; Attribution</string>
     <string name="info_help_title">Help, Feedback &amp; Bug Report</string>
     <string name="info_help_contact">Contact support and report issues to support@imancore.app.</string>
@@ -346,13 +315,6 @@
     <string name="wealth_sadaqah_collected">%1$s collected</string>
     <string name="wealth_sadaqah_progress">%1$d%% of the monthly charity target</string>
     <string name="wealth_sadaqah_add">+%1$s</string>
-    <string name="wealth_amount_negative">Amount cannot be negative</string>
-    <string name="wealth_amount_decimal">Use at most one decimal point</string>
-    <string name="wealth_amount_too_large">Amount is too large</string>
-    <string name="wealth_amount_invalid">Enter a valid amount</string>
-    <string name="wealth_amount_cap">Amount must be 1 trillion or less</string>
-    <string name="wealth_nisab_rates_estimate">Nisab rates: built-in estimate · update when online</string>
-    <string name="wealth_nisab_rates_updated">Nisab rates last updated: %1$s</string>
     <string name="travel_saved_location">Saved Location</string>
     <string name="travel_current_location">Current location</string>
     <string name="travel_home_anchor">Home Anchor: %1$s</string>
@@ -417,11 +379,6 @@
     <string name="notif_self_test_desc">Checked live against Android, not from saved settings.</string>
     <string name="notif_refresh">Refresh</string>
     <string name="notif_test_prayer">Test Prayer Notification (5s)</string>
-    <string name="notif_test_scheduled">Scheduled and armed with Android — it should fire in about 5 seconds.</string>
-    <string name="notif_test_inexact">Armed, but without exact-alarm permission, so Android may delay it. Allow exact alarms for on-time reminders.</string>
-    <string name="notif_test_blocked">Not scheduled: notifications are blocked. Allow notifications, then try again.</string>
-    <string name="notif_test_failed">Not scheduled: %1$s.</string>
-    <string name="notif_test_unsupported">Not scheduled: this device exposes no alarm service.</string>
     <string name="settings_calculation_method">Calculation method</string>
     <string name="settings_calculation_automatic">Automatic uses your country\'s Islamic authority.</string>
     <string name="settings_calculation_automatic_option">Automatic (by country)</string>

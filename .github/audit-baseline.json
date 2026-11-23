@@ -1,8 +1,8 @@
 {
   "_comment": "Counted audit defects; lower is better. Regenerate with --update-baseline.",
-  "untranslated_ar": 294,
+  "untranslated_ar": 281,
   "missing_ar": 0,
-  "untranslated_ur": 294,
+  "untranslated_ur": 281,
   "missing_ur": 0,
   "hardcoded_nav_strings": 19,
   "hardcoded_compose_strings": 84,
