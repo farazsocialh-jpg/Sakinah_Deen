@@ -1,0 +1,139 @@
+name: Workflow validation
+
+# Validates the pipeline configuration itself, not the application. This job is deliberately
+# cheap (one Ubuntu runner, network only for `git ls-remote`) so a change to a workflow file
+# never boots an Android emulator or a macOS runner just to learn that a YAML file is broken.
+#
+#   actionlint                 schema, expressions and shell of every workflow
+#   self-test                  proves the validator below actually detects broken workflows
+#   validate-workflows.py      YAML, job/step structure, local actions, pinned images,
+#                              and (--resolve-refs) that every `owner/repo@ref` exists upstream
+
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+      - '.github/scripts/validate-workflows.py'
+      - '.github/workflows/workflow-validation.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+      - '.github/scripts/validate-workflows.py'
+      - '.github/workflows/workflow-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-validation-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  validate:
+    name: actionlint and workflow schema
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Pinned release with a checksum: a validation job that silently stops validating is
+      # worse than no validation job.
+      - name: Install actionlint 1.7.7
+        run: |
+          set -euo pipefail
+          VERSION=1.7.7
+          ARCHIVE="actionlint_${VERSION}_linux_amd64.tar.gz"
+          curl -sSfL -o "/tmp/${ARCHIVE}" \
+            "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/${ARCHIVE}"
+          echo "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757  /tmp/${ARCHIVE}" \
+            | sha256sum -c -
+          tar -xzf "/tmp/${ARCHIVE}" -C /usr/local/bin actionlint
+          actionlint --version
+
+      # The file list is collected explicitly and counted first: an empty or partial glob must
+      # fail the job instead of making actionlint exit 0 on nothing.
+      - name: Run actionlint on every workflow
+        run: |
+          set -euo pipefail
+          mapfile -t FILES < <(find .github/workflows -maxdepth 1 \
+            \( -name '*.yml' -o -name '*.yaml' \) -print | sort)
+          COUNT=${#FILES[@]}
+          echo "Validating ${COUNT} workflow file(s):"
+          printf '  %s\n' "${FILES[@]}"
+          if [ "$COUNT" -lt 5 ]; then
+            echo "::error::expected at least the five repository workflows, found ${COUNT}"
+            exit 1
+          fi
+          actionlint -color "${FILES[@]}"
+
+      - name: Self-test the validator
+        run: python3 .github/scripts/validate-workflows.py --self-test
+
+      - name: Validate YAML, action references and job structure
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/validate-workflows.py \
+            --dir .github/workflows \
+            --resolve-refs \
+            --expected ci.yml ios.yml release.yml security.yml worker.yml \
+            --report "$RUNNER_TEMP/workflow-validation.json"
+
+      # Runs even after a failure, and fails on its own when the validation steps never ran, so
+      # a skipped or silently short-circuited validation cannot be mistaken for a pass.
+      - name: Confirm validation covered every workflow
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, sys
+
+          report = pathlib.Path(os.environ["RUNNER_TEMP"]) / "workflow-validation.json"
+          if not report.is_file():
+              sys.exit(
+                  "::error::workflow validation produced no report; the validation steps did "
+                  "not run, so this job cannot report success."
+              )
+          data = json.loads(report.read_text())
+          print(
+              f"files checked: {data['files_checked']} "
+              f"(expected at least {data['expected_count']}), "
+              f"action references checked: {data['action_references_checked']}, "
+              f"upstream refs resolved: {len(data['resolved_refs'])}"
+          )
+          problems = []
+          if data["expected_missing"]:
+              problems.append(f"missing workflows: {', '.join(data['expected_missing'])}")
+          if data["files_checked"] < data["expected_count"]:
+              problems.append(
+                  f"only {data['files_checked']} of {data['expected_count']} expected "
+                  "workflows were validated"
+              )
+          if data["action_references_checked"] == 0:
+              problems.append("no action references were validated")
+          if data["errors"]:
+              problems.append(f"{len(data['errors'])} validation error(s) recorded")
+          for problem in problems:
+              print(f"::error::{problem}")
+          if problems:
+              sys.exit(1)
+          PY
+
+      - name: Publish the validation report
+        if: always()
+        run: |
+          {
+            echo "### Workflow validation"
+            echo
+            if [ -f "$RUNNER_TEMP/workflow-validation.json" ]; then
+              echo '```json'
+              cat "$RUNNER_TEMP/workflow-validation.json"
+              echo '```'
+            else
+              echo "**No validation report was produced — treat this run as UNVERIFIED.**"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
