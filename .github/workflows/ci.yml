@@ -56,17 +56,17 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
           cache: gradle
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
 
@@ -121,7 +121,7 @@ jobs:
         run: ./gradlew :app:assembleRelease --stacktrace --no-daemon
 
       - name: Upload release APK for the security scan
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-apk
           path: app/build/outputs/apk/release/*.apk
@@ -130,7 +130,7 @@ jobs:
 
       - name: Upload Lint report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: audit-lint
           path: |
@@ -141,7 +141,7 @@ jobs:
 
       - name: Upload build reports on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-reports
           path: |
@@ -157,7 +157,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Run the embedded audit checklist
         env:
@@ -209,7 +209,7 @@ jobs:
 
       - name: Upload audit artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: audit-static
           path: audit-report/
@@ -223,19 +223,19 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # The java-kotlin extractor needs the JDK present when it initializes, otherwise it can
       # start without instrumentation and the analysis then processes no Kotlin/Java code.
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
           cache: gradle
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
 
@@ -274,10 +274,10 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
@@ -286,7 +286,7 @@ jobs:
       # The resolve task configures every module, and an Android module fails configuration
       # (recording nothing) when the SDK is absent.
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
 
@@ -308,16 +308,16 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download the release APK built by quality
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-apk
           path: apk
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           packages: 'build-tools;36.0.0 platform-tools'
 
@@ -365,7 +365,7 @@ jobs:
 
       - name: Upload APK audit artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: audit-apk
           path: audit-report/
@@ -383,17 +383,17 @@ jobs:
     timeout-minutes: 75
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
           cache: gradle
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
 
@@ -434,7 +434,7 @@ jobs:
 
       - name: Upload device reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: audit-device
           path: |
@@ -483,11 +483,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download audit artifacts
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: audit-download
           pattern: audit-*
@@ -498,7 +498,7 @@ jobs:
 
       - name: Upload the merged report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: app-audit-report
           path: audit-report/AUDIT.md
@@ -541,17 +541,17 @@ jobs:
           fi
       - name: Checkout
         if: steps.secrets.outputs.has_secrets == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up JDK 17
         if: steps.secrets.outputs.has_secrets == 'true'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
           cache: gradle
       - name: Set up Android SDK
         if: steps.secrets.outputs.has_secrets == 'true'
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
       - name: Make Gradle wrapper executable
@@ -588,7 +588,7 @@ jobs:
             -certs app/build/outputs/apk/release/*.apk
       - name: Upload verified release APK
         if: steps.secrets.outputs.has_secrets == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: verified-release-apk
           path: app/build/outputs/apk/release/*.apk
