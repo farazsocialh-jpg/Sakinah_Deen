@@ -26,7 +26,6 @@ keystore.properties
 *.keystore
 keystore/
 app/release/
-app/google-services.json
 
 # macOS
 .DS_Store
