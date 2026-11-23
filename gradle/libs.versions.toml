@@ -23,7 +23,12 @@ ktor = "3.5.0"
 # Room 2.8's migration bundle is compiled against serialization 1.8+, whose
 # GeneratedSerializer gained typeParametersSerializers(); older runtimes throw
 # AbstractMethodError in MigrationTestHelper (see SakinahMigrationTest).
-kotlinxSerialization = "1.13.0"
+#
+# Ceiling while Kotlin is 2.3.20: 1.13.0 is published with Kotlin 2.4.10, whose klib
+# ABI (2.4.0) this compiler cannot read, so :shared:compileKotlinIosArm64 fails with
+# "incompatible ABI version" and takes the whole build down. Bump this only together
+# with Kotlin, never on its own.
+kotlinxSerialization = "1.9.0"
 playServicesLocation = "21.4.0"
 multiplatformSettings = "1.3.0"
 securityCrypto = "1.1.0"
