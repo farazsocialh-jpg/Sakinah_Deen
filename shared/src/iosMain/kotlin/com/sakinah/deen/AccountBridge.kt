@@ -42,8 +42,18 @@ object SharedDependencies {
 }
 
 class AccountBridge(
-    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val scope: CoroutineScope
 ) {
+    /**
+     * No-argument initializer for Swift.
+     *
+     * Kotlin default parameter values are not exported to Objective-C: with the default on the
+     * primary constructor the generated framework header declares only `initWithScope:`, so
+     * `AccountBridge()` does not exist on the Swift side. An explicit secondary constructor
+     * exports both `init()` and `initWithScope:`.
+     */
+    constructor() : this(CoroutineScope(SupervisorJob() + Dispatchers.Main))
+
     private val auth: AuthRepository = SharedDependencies.authRepository
     private val profiles: UserProfileRepository = SharedDependencies.userProfileRepository
     private val settings: SettingsRepository = SharedDependencies.settingsRepository

@@ -16,6 +16,9 @@ final class AccountStore: ObservableObject {
     @Published var journeyTrack: String = "SEEKER"
     @Published var errorMessage: String?
 
+    // `AccountBridge()` is the exported no-argument initializer declared in AccountBridge.kt.
+    // Every Kotlin `suspend fun` is exported with a completion handler carrying `NSError`, so
+    // Swift imports them as `async throws` — hence `try await` at each call site below.
     private let bridge = AccountBridge()
 
     var cacheSizeLabel: String { bridge.cacheSizeLabel() }
@@ -46,39 +49,39 @@ final class AccountStore: ObservableObject {
     }
 
     func signIn(email: String, password: String) {
-        Task { await finish(bridge.signIn(email: email, password: password)) }
+        Task { await finish(try await bridge.signIn(email: email, password: password)) }
     }
 
     func createAccount(email: String, password: String, displayName: String) {
-        Task { await finish(bridge.signUp(email: email, password: password, displayName: displayName)) }
+        Task { await finish(try await bridge.signUp(email: email, password: password, displayName: displayName)) }
     }
 
     func resetPassword(email: String) {
-        Task { await finish(bridge.resetPassword(email: email)) }
+        Task { await finish(try await bridge.resetPassword(email: email)) }
     }
 
     func signInWithGoogle() {
-        Task { await finish(bridge.signInWithGoogle(idToken: "google-placeholder")) }
+        Task { await finish(try await bridge.signInWithGoogle(idToken: "google-placeholder")) }
     }
 
     func signInWithApple() {
-        Task { await finish(bridge.signInWithApple(identityToken: "apple-placeholder")) }
+        Task { await finish(try await bridge.signInWithApple(identityToken: "apple-placeholder")) }
     }
 
     func continueAsGuest() {
-        Task { await finish(bridge.continueAsGuest()) }
+        Task { await finish(try await bridge.continueAsGuest()) }
     }
 
     func signOut() {
         Task {
-            await bridge.signOut()
+            try await bridge.signOut()
             mode = .guest
         }
     }
 
     func deleteAccount() {
         Task {
-            _ = await bridge.deleteAccount()
+            _ = try await bridge.deleteAccount()
             mode = .guest
         }
     }
@@ -86,7 +89,7 @@ final class AccountStore: ObservableObject {
     func saveProfile() {
         Task {
             await finish(
-                bridge.updateProfile(
+                try await bridge.updateProfile(
                     displayName: displayName,
                     defaultCity: defaultCity,
                     madhhab: madhhab,
@@ -98,7 +101,7 @@ final class AccountStore: ObservableObject {
 
     func savePrayer(calculationMethod: String, asrMethod: String, highLatitudeRule: String, hijriOffset: Int32) {
         Task {
-            await bridge.updatePrayerSettings(
+            try await bridge.updatePrayerSettings(
                 calculationMethod: calculationMethod,
                 asrMethod: asrMethod,
                 highLatitudeRule: highLatitudeRule,
@@ -117,7 +120,7 @@ final class AccountStore: ObservableObject {
         isha: Bool
     ) {
         Task {
-            await bridge.updateAdhanSettings(
+            try await bridge.updateAdhanSettings(
                 adhanChoice: choice,
                 carBluetoothAutoPlay: carBluetoothAutoPlay,
                 fajrEnabled: fajr,
@@ -131,7 +134,7 @@ final class AccountStore: ObservableObject {
 
     func saveAppearance(theme: String, arabicFontSize: Int32, language: String) {
         Task {
-            await bridge.updateAppearanceSettings(
+            try await bridge.updateAppearanceSettings(
                 theme: theme,
                 arabicFontSize: arabicFontSize,
                 language: language
@@ -140,7 +143,7 @@ final class AccountStore: ObservableObject {
     }
 
     func clearCache() {
-        Task { await bridge.clearCache() }
+        Task { try await bridge.clearCache() }
     }
 
     private func finish(_ error: String?) async {
