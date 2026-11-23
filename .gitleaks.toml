@@ -9,6 +9,13 @@ useDefault = true
 [allowlist]
 description = "Repository fixtures, docs, examples and public client identifiers"
 paths = [
+  # Firebase publishes google-services.json as *client* configuration: the GCP API key in it
+  # identifies the project, is not a server credential, and ships inside every APK. The rule's
+  # allowlist cannot be scoped per rule on top of `useDefault`, so the path is allowed here.
+  # Trade-off (documented in docs/SECURITY_SCANNING.md): other rules no longer scan this one
+  # file, so a private key pasted into it would not be caught by Gitleaks. The audit checklist
+  # check `hardcoded_secrets` still scans application sources for key-shaped literals.
+  '''google-services\.json$''',
   '''(^|/)app/src/test/''',
   '''(^|/)app/src/androidTest/''',
   '''(^|/)shared/src/commonTest/''',

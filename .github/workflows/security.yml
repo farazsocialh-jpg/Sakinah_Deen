@@ -7,6 +7,10 @@ name: Security
 #   dependency-submission  resolved Gradle graph (transitive CVEs reach Dependabot)
 #   report                 merged SECURITY_AUDIT.md for this workflow
 #
+# Scanner results are handled by `.github/scripts/security-scan-gate.py`: a scanner that did not
+# really run is reported as a scanner failure, never as a clean scan, and the blocking/advisory
+# policy is documented in docs/SECURITY_SCANNING.md.
+#
 # This workflow is separate from ci.yml so that a change that cannot affect the Android build
 # (iOS sources, Worker sources) still gets secret scanning and CodeQL, while a docs-only change
 # gets nothing. The APK security scan needs the APK, so it stays in ci.yml next to the job that
@@ -31,6 +35,7 @@ on:
       - '.github/workflows/security.yml'
       - '.github/scripts/**'
       - '.github/audit-baseline.json'
+      - '.github/security-scan-baseline.json'
   pull_request:
     paths:
       - 'app/**'
@@ -48,6 +53,7 @@ on:
       - '.github/workflows/security.yml'
       - '.github/scripts/**'
       - '.github/audit-baseline.json'
+      - '.github/security-scan-baseline.json'
   schedule:
     - cron: '0 4 * * 1'   # weekly drift check: new CVEs, new lint rules, new permissions
   workflow_dispatch:
@@ -88,38 +94,53 @@ jobs:
           # An isolated venv avoids PEP 668 / system-site permission failures on runners.
           python3 -m venv "$RUNNER_TEMP/mobsfscan-venv"
           "$RUNNER_TEMP/mobsfscan-venv/bin/pip" install --quiet --disable-pip-version-check mobsfscan
-          # Findings are reported through SARIF; the checklist decides what blocks a merge.
+          # mobsfscan exits 1 when it has findings and 0 when it does not, and it also exits 0
+          # when its targets do not exist — the exit code alone cannot tell a finding from a
+          # scanner that scanned nothing. The gate proves execution from the report before it
+          # applies the documented blocking/advisory policy.
+          set +e
           "$RUNNER_TEMP/mobsfscan-venv/bin/mobsfscan" \
-            --sarif -o audit-report/mobsfscan.sarif app/src shared/src || true
-          python3 - <<'PY'
-          import json, pathlib
-          report = pathlib.Path("audit-report/mobsfscan.sarif")
-          rows, counts = [], {}
-          if report.is_file():
-              data = json.loads(report.read_text())
-              for run in data.get("runs", []):
-                  for result in run.get("results", []):
-                      rule = result.get("ruleId", "mobsfscan")
-                      counts[rule] = counts.get(rule, 0) + 1
-                      rows.append(f"| `{rule}` | {result.get('message', {}).get('text', '')[:160]} |")
-          lines = ["### mobsfscan", "", f"{len(rows)} finding(s)", ""]
-          if rows:
-              lines += ["| Rule | Message |", "|---|---|"] + rows[:40]
-          pathlib.Path("audit-report/mobsfscan.md").write_text("\n".join(lines) + "\n")
-          print("\n".join(lines))
-          PY
+            --sarif -o audit-report/mobsfscan.sarif app/src shared/src
+          rc=$?
+          set -e
+          echo "mobsfscan exit code: $rc"
+          if [ "$rc" -gt 1 ]; then
+            echo "::error::mobsfscan failed to execute (exit $rc); this run has no scan result."
+            exit 1
+          fi
+          python3 .github/scripts/security-scan-gate.py \
+            --tool mobsfscan \
+            --sarif audit-report/mobsfscan.sarif \
+            --report audit-report/mobsfscan.md \
+            --target app/src --target shared/src
 
       - name: Gitleaks (committed secrets)
         run: |
           mkdir -p audit-report
+          # --exit-code 1 makes a detected secret fail the scan instead of only being written
+          # to the report. docker's own failures (125/126/127) are still distinguishable from
+          # findings (1), and the gate rejects a missing or unreadable report.
+          set +e
           docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
             detect --source=/repo --config=/repo/.gitleaks.toml \
             --report-format=sarif --report-path=/repo/audit-report/gitleaks.sarif \
-            --no-banner --redact --exit-code 0
+            --no-banner --redact --exit-code 1
+          rc=$?
+          set -e
+          echo "gitleaks exit code: $rc"
+          if [ "$rc" -gt 1 ]; then
+            echo "::error::Gitleaks failed to execute (exit $rc); this run has no scan result."
+            exit 1
+          fi
+          python3 .github/scripts/security-scan-gate.py \
+            --tool gitleaks \
+            --sarif audit-report/gitleaks.sarif \
+            --report audit-report/gitleaks.md
 
+      # Only runs where the token may write security events: a fork PR gets a read-only token
+      # and would fail here for a permission reason, not because of a finding.
       - name: Upload SARIF findings
-        if: always()
-        continue-on-error: true
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: audit-report
@@ -283,8 +304,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # No continue-on-error: if the artifacts are missing the merged report cannot represent
+      # this run, and saying so is more useful than producing an empty green report.
       - name: Download audit artifacts
-        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           path: audit-download

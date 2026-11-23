@@ -1,0 +1,7 @@
+{
+  "_comment": "Accepted blocking scanner findings, per tool and rule. A new blocking finding fails the build; fix one and lower the number. Policy: docs/SECURITY_SCANNING.md.",
+  "mobsfscan": {
+    "android_task_hijacking2": 1
+  },
+  "gitleaks": {}
+}
