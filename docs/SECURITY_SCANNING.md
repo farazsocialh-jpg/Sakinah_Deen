@@ -80,7 +80,8 @@ checklist check `hardcoded_secrets` still scans application sources for key-shap
 
 ```bash
 # Gitleaks (same version as CI; see the pinned image in security.yml)
-docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
+docker run --rm -v "$PWD:/repo" \
+  zricethezav/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
   detect --source=/repo --config=/repo/.gitleaks.toml \
   --report-format=sarif --report-path=/repo/audit-report/gitleaks.sarif \
   --no-banner --redact --exit-code 1

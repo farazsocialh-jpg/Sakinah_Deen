@@ -60,7 +60,10 @@ jobs:
       - name: Run unit tests
         run: npm test
 
+      # Wrangler is pinned to an exact version: `wrangler@4` floated onto new minors, so the
+      # bundle validation could change without any change in this repository. 4.166.0 builds
+      # this Worker's bindings and bundle successfully. See docs/CI_TOOLING.md.
       - name: Validate the Wrangler configuration and bundle
-        run: npx --yes wrangler@4 deploy --dry-run --outdir "$RUNNER_TEMP/worker-dist"
+        run: npx --yes wrangler@4.166.0 deploy --dry-run --outdir "$RUNNER_TEMP/worker-dist"
         env:
           WRANGLER_SEND_METRICS: 'false'

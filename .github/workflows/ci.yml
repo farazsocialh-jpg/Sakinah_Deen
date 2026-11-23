@@ -261,9 +261,13 @@ jobs:
 
       - name: Start MobSF
         run: |
+          # Pinned by digest: this is the exact image the previous `:latest` resolved to
+          # (index sha256:815bb96…), so pinning changed no behaviour. Bump it deliberately and
+          # re-run the APK scan before merging, because the MobSF REST API has changed between
+          # releases. Registry: opensecurity/mobile-security-framework-mobsf.
           docker run -d --name mobsf -p 8000:8000 \
             -e MOBSF_API_KEY="$MOBSF_API_KEY" \
-            opensecurity/mobile-security-framework-mobsf:latest
+            opensecurity/mobile-security-framework-mobsf@sha256:815bb96de3c78a22e0a0996c667c164a227239c9d8a4aba80f188d247b928954
 
       - name: MobSF APK scan
         run: |
