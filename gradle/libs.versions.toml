@@ -1,5 +1,5 @@
 [versions]
-agp = "9.1.1"
+agp = "9.5.2"
 kotlin = "2.3.20"
 ksp = "2.3.12"
 coreKtx = "1.18.0"
@@ -19,7 +19,7 @@ work = "2.12.0"
 media3 = "1.11.1"
 koin = "4.1.1"
 adhan = "1.2.1"
-ktor = "3.5.0"
+ktor = "3.5.2"
 # Room 2.8's migration bundle is compiled against serialization 1.8+, whose
 # GeneratedSerializer gained typeParametersSerializers(); older runtimes throw
 # AbstractMethodError in MigrationTestHelper (see SakinahMigrationTest).
