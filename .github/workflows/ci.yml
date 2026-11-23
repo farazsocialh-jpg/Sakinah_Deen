@@ -104,6 +104,7 @@ jobs:
       # `:shared:allTests` is named explicitly even though `:shared:build` reaches it through
       # `check`, so the shared tests stay a declared task; Gradle de-duplicates the work.
       - name: Build shared KMP module, debug APK and unit tests
+        id: build
         run: >
           ./gradlew :shared:build :shared:allTests :app:assembleDebug :app:testDebugUnitTest
           --stacktrace --no-daemon
@@ -111,7 +112,7 @@ jobs:
       # A green test task proves nothing if it ran no tests. This fails the build when the
       # unit-test tasks produced no results, so a broken source set cannot pass silently.
       - name: Verify unit tests actually ran
-        if: always()
+        if: steps.build.outcome == 'success'
         run: |
           python3 - <<'PY'
           import glob, sys
