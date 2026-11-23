@@ -1,0 +1,18 @@
+# mobsfscan configuration (used by .github/workflows/security.yml).
+#
+# Leaflet is a vendored third-party bundle: app/src/main/assets/leaflet/leaflet.js is
+# committed byte-for-byte from an upstream release and is never edited in this repository.
+# Its internal DOM rendering (divIcon html templates, innerHTML assignments) is reported as
+# `js_dom_xss_sink`, which cannot be fixed here without forking the library. The page that
+# drives it, app/src/main/assets/leaflet/qibla_map.html, is first-party and *is* scanned.
+ignore-paths:
+  - assets/leaflet/leaflet.js
+
+# `ignore-rules` — StrandHogg 2.0 (`android_task_hijacking2`) only applies to apps that target
+# API < 29. mobsfscan reads `targetSdkVersion` from `<uses-sdk>` in the manifest, which Android
+# Gradle Plugin 9 forbids (SDK levels live in the Gradle DSL: targetSdk = 36), so the rule always
+# assumes a pre-Android-10 target. The application and both exported activities also declare an
+# empty `android:taskAffinity`, so there is no task to hijack.
+# Re-check this exclusion if the project ever returns to AGP 8 or a targetSdk below 29.
+ignore-rules:
+  - android_task_hijacking2

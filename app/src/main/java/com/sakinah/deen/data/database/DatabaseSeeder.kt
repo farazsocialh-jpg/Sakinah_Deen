@@ -137,10 +137,11 @@ object DatabaseSeeder {
             val needsHadith = target.hadithDao.countForBook(NAWAWI_BOOK_KEY) <= 0
             // The Hisn asset is small, so it is read once up front: its content hash decides
             // whether an existing install needs the newer (larger) edition.
-            val hisnText = readAsset(HISN_ASSET)
-            val hisnHash = hisnText?.let(::adhkarSeedHash)
-            val needsAdhkar = hisnHash != null &&
-                (target.adhkarDao.count() <= 0 || target.seedState.adhkarSeedHash() != hisnHash)
+            val hisnSeed = readAsset(HISN_ASSET)?.let { text ->
+                adhkarSeedHash(text)?.let { hash -> text to hash }
+            }
+            val needsAdhkar = hisnSeed != null &&
+                (target.adhkarDao.count() <= 0 || target.seedState.adhkarSeedHash() != hisnSeed.second)
 
             if (!needsQuran && !needsSurahMetadata && !needsHadith && !needsAdhkar) {
                 return SeedSummary(skipped = true)
@@ -180,11 +181,12 @@ object DatabaseSeeder {
             }
 
             var adhkar = 0
-            if (needsAdhkar && hisnText != null) {
-                adhkar = applyAdhkarSeed(hisnText, target.adhkarDao)
-                // Only record the edition once its rows committed, so a failed write retries.
-                if (adhkar > 0 && hisnHash != null) {
-                    target.seedState.recordAdhkarSeedHash(hisnHash)
+            if (needsAdhkar) {
+                // needsAdhkar is only true when the asset and its content hash both loaded.
+                hisnSeed?.let { (text, hash) ->
+                    adhkar = applyAdhkarSeed(text, target.adhkarDao)
+                    // Only record the edition once its rows committed, so a failed write retries.
+                    if (adhkar > 0) target.seedState.recordAdhkarSeedHash(hash)
                 }
             }
 

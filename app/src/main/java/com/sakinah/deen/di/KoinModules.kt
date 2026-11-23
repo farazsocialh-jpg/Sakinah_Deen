@@ -272,7 +272,7 @@ private class InMemorySharedPreferences : android.content.SharedPreferences {
     override fun getBoolean(key: String?, defValue: Boolean): Boolean =
         values[key] as? Boolean ?: defValue
     override fun contains(key: String?): Boolean = values.containsKey(key)
-    override fun edit(): android.content.SharedPreferences.Editor = Editor()
+    override fun edit(): android.content.SharedPreferences.Editor = InMemoryEditor()
     override fun registerOnSharedPreferenceChangeListener(
         listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener?
     ) = Unit
@@ -280,7 +280,7 @@ private class InMemorySharedPreferences : android.content.SharedPreferences {
         listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener?
     ) = Unit
 
-    private inner class Editor : android.content.SharedPreferences.Editor {
+    private inner class InMemoryEditor : android.content.SharedPreferences.Editor {
 
         private val pending = linkedMapOf<String, Any?>()
         private val removals = mutableSetOf<String>()

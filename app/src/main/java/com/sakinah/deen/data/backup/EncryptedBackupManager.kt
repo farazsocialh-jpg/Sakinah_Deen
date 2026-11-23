@@ -27,6 +27,9 @@ object EncryptedBackupManager {
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = false }
     private const val MAGIC = "SKNBAK1"
 
+    /** One generator for the process, reused for every salt and IV. */
+    private val secureRandom = SecureRandom()
+
     suspend fun export(
         context: Context,
         uri: Uri,
@@ -154,9 +157,9 @@ object EncryptedBackupManager {
     }
 
     private fun encrypt(plaintext: ByteArray, passphrase: String): ByteArray {
-        val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
+        val salt = ByteArray(16).also { secureRandom.nextBytes(it) }
         val key = deriveKey(passphrase, salt)
-        val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
+        val iv = ByteArray(12).also { secureRandom.nextBytes(it) }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
         val ct = cipher.doFinal(plaintext)

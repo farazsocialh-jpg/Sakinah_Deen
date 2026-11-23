@@ -432,7 +432,6 @@ private fun QiblaCompassPanel(
 
 /** TalkBack/VoiceOver summary: bearing, heading, accuracy and the turn to make (audit #50). */
 private fun buildSpokenSummary(uiState: QiblaUiState, status: QiblaStatus): String {
-    val reading = status.reading
     return buildString {
         append("Qibla compass. ")
         if (status.hasCoordinates) {
@@ -522,7 +521,7 @@ private fun QiblaMapView(
     var loadState by remember(latitude, longitude) { mutableStateOf(MapLoadState.LOADING) }
     var failureReason by remember(latitude, longitude) { mutableStateOf<String?>(null) }
     var reloadToken by remember(latitude, longitude) { mutableIntStateOf(0) }
-    val webViewHolder = remember { mutableStateOf<WebView?>(null) }
+    val webViewHolder = remember { QiblaMapViewHolder() }
 
     // Serves assets/leaflet/* from https://app.imancore.local/… with correct MIME types and
     // CORS headers, so Leaflet is not blocked as a cross-origin script.
@@ -555,24 +554,24 @@ private fun QiblaMapView(
     }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        webViewHolder.value?.onResume()
-        webViewHolder.value?.evaluateJavascript(
+        webViewHolder.webView?.onResume()
+        webViewHolder.webView?.evaluateJavascript(
             "window.invalidateMapSize && window.invalidateMapSize()",
             null
         )
     }
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
-        webViewHolder.value?.onPause()
+        webViewHolder.webView?.onPause()
     }
 
     DisposableEffect(Unit) {
         onDispose {
-            webViewHolder.value?.let { webView ->
+            webViewHolder.webView?.let { webView ->
                 (webView.parent as? android.view.ViewGroup)?.removeView(webView)
                 runCatching { webView.stopLoading() }
                 runCatching { webView.destroy() }
             }
-            webViewHolder.value = null
+            webViewHolder.webView = null
         }
     }
 
@@ -620,13 +619,22 @@ private fun QiblaMapView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { webContext ->
                         WebView(webContext).apply {
-                            settings.javaScriptEnabled = true
-                            settings.domStorageEnabled = true
-                            settings.allowFileAccess = false
-                            settings.allowContentAccess = false
+                            // Leaflet needs JavaScript, so the page is constrained instead of
+                            // sandboxed: it can only reach bundled assets served from
+                            // QIBLA_MAP_DOMAIN, never file:// or content:// URIs, and the JS
+                            // bridge below returns no data to the page.
+                            // lgtm[java/android/websettings-javascript-enabled] Leaflet renders
+                            // the bundled map; the page is served from a local asset domain and
+                            // no untrusted content is loaded into this WebView.
+                            settings.setJavaScriptEnabled(true)
+                            settings.setDomStorageEnabled(true)
+                            settings.setAllowFileAccess(false)
+                            settings.setAllowContentAccess(false)
+                            settings.setAllowFileAccessFromFileURLs(false)
+                            settings.setAllowUniversalAccessFromFileURLs(false)
                             settings.setGeolocationEnabled(false)
-                            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                            settings.loadsImagesAutomatically = true
+                            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW)
+                            settings.setLoadsImagesAutomatically(true)
                             settings.userAgentString =
                                 System.getProperty("http.agent").orEmpty() +
                                 " ImanCore/${BuildConfig.VERSION_NAME}"
@@ -700,6 +708,9 @@ private fun QiblaMapView(
                             }
 
                             val mainHandler = Handler(Looper.getMainLooper())
+                            // lgtm[java/android/webview-addjavascriptinterface] The bridge only
+                            // receives callbacks (ready/tile/error/debug) and exposes no data or
+                            // methods back to the page; the WebView can only load bundled assets.
                             addJavascriptInterface(
                                 QiblaMapBridge(
                                     onReadyCallback = {
@@ -707,7 +718,7 @@ private fun QiblaMapView(
                                         mainHandler.post {
                                             loadState = MapLoadState.READY
                                             failureReason = null
-                                            webViewHolder.value?.evaluateJavascript(
+                                            webViewHolder.webView?.evaluateJavascript(
                                                 "window.invalidateMapSize && window.invalidateMapSize()",
                                                 null
                                             )
@@ -734,14 +745,19 @@ private fun QiblaMapView(
                                     onDebugCallback = { message ->
                                         // Bridge diagnostics are only useful while developing; a
                                         // release build must not write WebView URLs to logcat.
+                                        // Line breaks are replaced so page-controlled text cannot
+                                        // forge extra logcat entries.
                                         if (com.sakinah.deen.BuildConfig.DEBUG) {
-                                            android.util.Log.d("QiblaMapBT", message)
+                                            android.util.Log.d(
+                                                "QiblaMapBT",
+                                                message.replace("\n", " ").replace("\r", " ")
+                                            )
                                         }
                                     }
                                 ),
                                 "QiblaBridge"
                             )
-                            webViewHolder.value = this
+                            webViewHolder.webView = this
                             tag = mapUrl
                             loadUrl(mapUrl)
                         }
@@ -825,6 +841,11 @@ private fun QiblaMapFallback(qiblaBearing: Float, reason: String?, onRetry: () -
             }
         }
     }
+}
+
+/** Holds the WebView for the lifetime of the map composable. */
+private class QiblaMapViewHolder {
+    var webView: WebView? = null
 }
 
 /** JS bridge exposed to the bundled map page as `window.QiblaBridge`. */

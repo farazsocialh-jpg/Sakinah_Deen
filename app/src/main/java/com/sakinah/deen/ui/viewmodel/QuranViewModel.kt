@@ -576,7 +576,7 @@ class QuranViewModel(
         _uiState.update { it.copy(arabicScript = script) }
         sakinahPreferences?.quranArabicScript = script
 
-        val repo = islamicRepository ?: return
+        if (islamicRepository == null) return
         val surah = _uiState.value.currentSurah
         val missing = surah.ayahs.any { ayah ->
             when (script) {

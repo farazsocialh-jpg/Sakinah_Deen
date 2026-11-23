@@ -10,7 +10,7 @@ kotlin {
     android {
         namespace = "com.sakinah.deen.shared"
         compileSdk = 36
-        minSdk = 28
+        minSdk = 29
 
         withHostTestBuilder {}.configure {}
 

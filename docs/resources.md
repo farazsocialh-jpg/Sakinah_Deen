@@ -13,7 +13,7 @@ Everything here ships inside the APK so first launch works with no network.
 | `res/mipmap-anydpi-v26/ic_launcher_round.xml` | Round variant |
 | `res/values/themes.xml` | `Theme.Sakinah` + `Theme.Sakinah.Splash` (AndroidX SplashScreen) |
 
-`minSdk` is 28, so the `-v26` adaptive icon is sufficient; no PNG density buckets are needed.
+`minSdk` is 29, so the `-v26` adaptive icon is sufficient; no PNG density buckets are needed.
 
 ## Fonts (`res/font`)
 

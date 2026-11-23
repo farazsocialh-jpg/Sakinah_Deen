@@ -201,12 +201,12 @@ class SalahViewModel(
 
         val savedCoords = preferences?.locationCoordinates
         val savedManual = preferences?.isManualLocation == true && savedCoords != null
-        val savedZone = if (savedManual) {
+        val savedZone = if (savedCoords != null && savedManual) {
             TimeZoneResolver.resolveZoneIdString(
                 explicitZoneId = preferences?.locationTimeZoneId,
                 cityLabel = preferences?.locationLabel,
                 countryCode = preferences?.locationCountryCode,
-                longitude = savedCoords?.second
+                longitude = savedCoords.second
             )
         } else {
             preferences?.locationTimeZoneId ?: ZoneId.systemDefault().id

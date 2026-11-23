@@ -60,6 +60,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:taskAffinity=""
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Sakinah.Splash">
             <intent-filter>
@@ -75,6 +76,7 @@
         <activity
             android:name=".widget.WidgetConfigActivity"
             android:exported="true"
+            android:taskAffinity=""
             android:label="@string/widget_config_title"
             android:theme="@style/Theme.Sakinah">
             <intent-filter>

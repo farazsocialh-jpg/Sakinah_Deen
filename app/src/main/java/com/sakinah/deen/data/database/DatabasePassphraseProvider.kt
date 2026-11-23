@@ -33,6 +33,9 @@ object DatabasePassphraseProvider {
     private const val CIPHERTEXT_KEY = "ciphertext"
     private const val IV_KEY = "iv"
 
+    /** One generator per process: SecureRandom is thread-safe, so per-call instances add no entropy. */
+    private val secureRandom = SecureRandom()
+
     @Synchronized
     fun getPassphrase(context: Context): ByteArray {
         val appContext = context.applicationContext
@@ -77,7 +80,7 @@ object DatabasePassphraseProvider {
             return cipher.doFinal(Base64.decode(storedCiphertext, Base64.NO_WRAP))
         }
 
-        val random = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        val random = ByteArray(32).also { secureRandom.nextBytes(it) }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, secretKey)
         val ciphertext = cipher.doFinal(random)

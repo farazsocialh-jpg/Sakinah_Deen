@@ -52,7 +52,7 @@ android {
 
     defaultConfig {
         applicationId = "com.imancore.app"
-        minSdk = 28
+        minSdk = 29
         targetSdk = 36
         // CI overrides these from the git tag / run number; local builds keep the defaults.
         versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1

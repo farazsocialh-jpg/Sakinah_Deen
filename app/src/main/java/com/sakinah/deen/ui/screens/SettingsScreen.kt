@@ -1323,7 +1323,6 @@ private fun SalahLayoutPreview(layout: SalahHomeLayout) {
         when (style) {
             0 -> {
                 Canvas(Modifier.fillMaxWidth().height(34.dp)) {
-                    val r = size.minDimension / 2f - 2f
                     drawArc(color = onSurface.copy(alpha = 0.2f), startAngle = 0f, sweepAngle = 360f, useCenter = false, style = Stroke(width = 3f))
                     drawArc(color = primary, startAngle = -90f, sweepAngle = 220f, useCenter = false, style = Stroke(width = 3f))
                 }

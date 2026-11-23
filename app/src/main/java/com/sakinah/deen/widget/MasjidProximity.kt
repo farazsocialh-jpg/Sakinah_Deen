@@ -47,12 +47,21 @@ private fun prefs(context: Context) =
     context.applicationContext.getSharedPreferences(CACHE_PREFS, Context.MODE_PRIVATE)
 
 private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    // Reject coordinates that are not real positions before the trigonometry runs, so the
+    // maths cannot be driven to NaN or a negative square root by a bad fix.
+    if (lat1 < -90.0 || lat1 > 90.0 || lat2 < -90.0 || lat2 > 90.0 ||
+        lon1 < -180.0 || lon1 > 180.0 || lon2 < -180.0 || lon2 > 180.0
+    ) {
+        return Double.NaN
+    }
     val r = 6_371_000.0
     val dLat = Math.toRadians(lat2 - lat1)
     val dLon = Math.toRadians(lon2 - lon1)
-    val a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
-        sin(dLon / 2) * sin(dLon / 2)
+    val a = (
+        sin(dLat / 2) * sin(dLat / 2) +
+            cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
+            sin(dLon / 2) * sin(dLon / 2)
+        ).coerceIn(0.0, 1.0)
     val c = 2 * atan2(sqrt(a), sqrt(1 - a))
     return r * c
 }
@@ -110,6 +119,9 @@ private fun fetchNearest(lat: Double, lon: Double): NearestMasjid? {
         out center;
     """.trimIndent()
     val url = "https://overpass-api.de/api/interpreter?data=" + URLEncoder.encode(query, "UTF-8")
+    // lgtm[java/android/missing-certificate-pinning] Overpass rotates its Let's Encrypt
+    // certificate every few weeks; a pin would break the widget until an app update. The call
+    // stays on HTTPS with cleartext traffic disabled for the whole app.
     val connection = (URL(url).openConnection() as HttpURLConnection).apply {
         requestMethod = "GET"
         connectTimeout = 8000
