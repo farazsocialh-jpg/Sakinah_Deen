@@ -53,13 +53,13 @@ struct SideDrawer: View {
                     case .profile: ProfileView(store: store)
                     case .settings: SettingsView(store: store)
                     case .sources: InfoView(title: "Islamic Data Sources & Attribution",
-                                            body: "Quran text: Tanzil / King Fahd Complex. Tafsir: Ibn Kathir, As-Sa'di, Al-Jalalayn. Hadith: nine canonical collections. Audio: Makkah adhan recordings.")
+                                         message: "Quran text: Tanzil / King Fahd Complex. Tafsir: Ibn Kathir, As-Sa'di, Al-Jalalayn. Hadith: nine canonical collections. Audio: Makkah adhan recordings.")
                     case .help: InfoView(title: "Help, Feedback & Bug Report",
-                                         body: "Send feedback to support@imancore.app and include your app version and device model.")
+                                       message: "Send feedback to support@imancore.app and include your app version and device model.")
                     case .privacy: InfoView(title: "Privacy Policy & Terms",
-                                            body: "Guest data stays on device. Signed-in profiles sync only what you choose to share.")
+                                         message: "Guest data stays on device. Signed-in profiles sync only what you choose to share.")
                     case .about: InfoView(title: "About ImanCore",
-                                          body: "Version 1.0.0 (1)\nOpen-source licenses: see NOTICE in the repository.")
+                                       message: "Version 1.0.0 (1)\nOpen-source licenses: see NOTICE in the repository.")
                     }
                 }
                 .toolbar {
@@ -142,13 +142,13 @@ struct SideDrawer: View {
 
 struct InfoView: View {
     let title: String
-    let body: String
+    let message: String
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text(title).font(.title2.bold()).foregroundColor(.emeraldDeep)
-                Text(body).font(.body).foregroundColor(.darkCharcoal)
+                Text(message).font(.body).foregroundColor(.darkCharcoal)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
