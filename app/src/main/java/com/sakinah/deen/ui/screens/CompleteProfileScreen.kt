@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -52,7 +51,6 @@ import com.sakinah.deen.ui.components.ProfileAccountHeader
 import com.sakinah.deen.ui.components.ProfileNameEmailFields
 import com.sakinah.deen.ui.components.GenderSelector
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
-import com.sakinah.deen.ui.components.ProfileAvatar
 import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.PrayerGuideGender
 import com.sakinah.deen.util.ReverseGeocoder
@@ -155,6 +153,7 @@ fun CompleteProfileScreen(
             ProfileAccountHeader(
                 photoUrl = profile?.pictureUrl()?.takeIf { it.isNotBlank() },
                 name = displayName.ifBlank { stringResource(R.string.complete_profile_your_account) },
+                avatarName = displayName,
                 email = email,
                 subtitle = if (profile?.authProvider == "google") {
                     stringResource(R.string.complete_profile_signed_in_google)

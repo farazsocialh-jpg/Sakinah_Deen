@@ -1,6 +1,5 @@
 package com.sakinah.deen.ui.screens
 
-import android.Manifest
 import android.media.MediaPlayer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background

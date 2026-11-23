@@ -27,10 +27,11 @@ fun ProfileAccountHeader(
     name: String,
     email: String,
     subtitle: String?,
+    avatarName: String = name,
     modifier: Modifier = Modifier
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        ProfileAvatar(photoUrl = photoUrl, displayName = name)
+        ProfileAvatar(photoUrl = photoUrl, displayName = avatarName)
         Spacer(Modifier.width(12.dp))
         Column {
             Text(

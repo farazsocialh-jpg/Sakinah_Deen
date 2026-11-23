@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -58,7 +57,6 @@ import com.sakinah.deen.ui.components.GenderSelector
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
 import android.net.Uri
 import com.sakinah.deen.data.backup.EncryptedBackupManager
-import com.sakinah.deen.ui.components.ProfileAvatar
 import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.PrayerGuideGender
 import kotlinx.coroutines.launch
@@ -170,6 +168,7 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 ProfileAccountHeader(
                     photoUrl = avatarUrl,
                     name = displayName.ifBlank { stringResource(R.string.profile_your_account) },
+                    avatarName = displayName.ifBlank { email },
                     email = email,
                     subtitle = providerLabel
                 )

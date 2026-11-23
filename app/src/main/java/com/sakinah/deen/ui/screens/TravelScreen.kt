@@ -2,7 +2,6 @@ package com.sakinah.deen.ui.screens
 
 import com.sakinah.deen.R
 
-import android.Manifest
 import android.content.Context
 import android.media.MediaPlayer
 import androidx.compose.foundation.BorderStroke
