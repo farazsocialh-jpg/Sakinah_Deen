@@ -74,14 +74,6 @@ class AlAdhanApiClient(
             runCatching { Log.w(TAG, message) }
         }
 
-        private fun keyOf(type: PrayerType): String = when (type) {
-            PrayerType.FAJR -> "Fajr"
-            PrayerType.SUNRISE -> "Sunrise"
-            PrayerType.DHUHR -> "Dhuhr"
-            PrayerType.ASR -> "Asr"
-            PrayerType.MAGHRIB -> "Maghrib"
-            PrayerType.ISHA -> "Isha"
-        }
     }
 
     suspend fun fetchMonth(
@@ -170,7 +162,7 @@ class AlAdhanApiClient(
 
         val times = buildMap {
             PrayerType.entries.forEach { type ->
-                val raw = (timings[keyOf(type)] as? JsonPrimitive)?.contentOrNull
+                val raw = (timings[type.englishName] as? JsonPrimitive)?.contentOrNull
                 parseTime(raw)?.let { put(type, it) }
             }
         }

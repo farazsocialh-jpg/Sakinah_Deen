@@ -52,6 +52,8 @@ import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.profile.UserProfile
 import com.sakinah.deen.profile.UserProfileRepository
 import com.sakinah.deen.ui.components.DateOfBirthField
+import com.sakinah.deen.ui.components.ProfileAccountHeader
+import com.sakinah.deen.ui.components.ProfileNameEmailFields
 import com.sakinah.deen.ui.components.GenderSelector
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
 import android.net.Uri
@@ -165,29 +167,12 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     color = MaterialTheme.colorScheme.primary
                 )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    ProfileAvatar(photoUrl = avatarUrl, displayName = displayName.ifBlank { email })
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = displayName.ifBlank { stringResource(R.string.profile_your_account) },
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        if (email.isNotBlank()) {
-                            Text(
-                                text = email,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Text(
-                            text = providerLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
+                ProfileAccountHeader(
+                    photoUrl = avatarUrl,
+                    name = displayName.ifBlank { stringResource(R.string.profile_your_account) },
+                    email = email,
+                    subtitle = providerLabel
+                )
 
                 if (profile?.isProfileComplete() != true) {
                     Surface(
@@ -219,30 +204,19 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     }
                 }
 
-                OutlinedTextField(
-                    value = displayName,
-                    onValueChange = { displayName = it; validationError = null },
-                    label = { Text(stringResource(R.string.profile_display_name)) },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .autofillName()
-                )
-
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it; validationError = null },
-                    label = { Text(stringResource(R.string.profile_email)) },
-                    singleLine = true,
-                    readOnly = signedInUser?.isGuest == false,
-                    supportingText = if (signedInUser?.isGuest == false) {
-                        { Text(stringResource(R.string.profile_email_tied)) }
+                ProfileNameEmailFields(
+                    displayName = displayName,
+                    onDisplayNameChange = { displayName = it; validationError = null },
+                    nameLabel = stringResource(R.string.profile_display_name),
+                    email = email,
+                    onEmailChange = { email = it; validationError = null },
+                    emailLabel = stringResource(R.string.profile_email),
+                    emailReadOnly = signedInUser?.isGuest == false,
+                    emailSupportingText = if (signedInUser?.isGuest == false) {
+                        stringResource(R.string.profile_email_tied)
                     } else {
                         null
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .autofillEmail()
+                    }
                 )
 
                 GenderSelector(gender = gender, onGenderChange = { gender = it })

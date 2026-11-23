@@ -2,8 +2,6 @@ package com.sakinah.deen.ui.screens
 
 import android.Manifest
 import android.media.MediaPlayer
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -94,6 +92,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sakinah.deen.ui.location.rememberGpsHomeSaver
 import com.sakinah.deen.R
 import com.sakinah.deen.data.model.CalculationMethod as AppMethod
 import com.sakinah.deen.data.model.QuranArabicScript
@@ -221,29 +220,15 @@ fun SettingsScreen(
     var hasHomeLocation by remember { mutableStateOf(appPrefs.homeCoordinates != null) }
     var homeCityName by remember { mutableStateOf(appPrefs.homeCityName) }
     var showHomeCityPicker by remember { mutableStateOf(false) }
-    var gpsHomeRequested by remember { mutableStateOf(false) }
     var cacheBytes by remember { mutableLongStateOf(repo.cacheSizeBytes()) }
 
-    fun saveCurrentGpsAsHome() {
-        scope.launch {
-            val resolved = locationProvider.getFreshOrCachedLocation()
-            val label = listOf(resolved.cityName, resolved.countryName)
-                .filter { it.isNotBlank() }
-                .joinToString(", ")
-                .ifBlank { "Saved Location" }
-            appPrefs.saveHomeAnchor(resolved.latitude, resolved.longitude, label)
-            hasHomeLocation = appPrefs.homeCoordinates != null
-            homeCityName = appPrefs.homeCityName
-        }
-    }
-
-    val locationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val isGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (isGranted && gpsHomeRequested) saveCurrentGpsAsHome()
-        gpsHomeRequested = false
+    val saveGpsHome = rememberGpsHomeSaver(
+        locationProvider = locationProvider,
+        preferences = appPrefs,
+        fallbackLabel = "Saved Location"
+    ) {
+        hasHomeLocation = appPrefs.homeCoordinates != null
+        homeCityName = appPrefs.homeCityName
     }
 
     Scaffold(
@@ -365,15 +350,7 @@ fun SettingsScreen(
                                 )
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     OutlinedButton(
-                                        onClick = {
-                                            gpsHomeRequested = true
-                                            locationPermissionLauncher.launch(
-                                                arrayOf(
-                                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                                    Manifest.permission.ACCESS_COARSE_LOCATION
-                                                )
-                                            )
-                                        },
+                                        onClick = saveGpsHome,
                                         modifier = Modifier.height(36.dp)
                                     ) {
                                         Text("Use GPS", fontSize = 11.sp)

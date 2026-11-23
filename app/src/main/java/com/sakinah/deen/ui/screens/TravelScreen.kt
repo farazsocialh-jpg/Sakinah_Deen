@@ -5,8 +5,6 @@ import com.sakinah.deen.R
 import android.Manifest
 import android.content.Context
 import android.media.MediaPlayer
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -63,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sakinah.deen.ui.location.rememberGpsHomeSaver
 import com.sakinah.deen.BuildConfig
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
@@ -100,7 +99,6 @@ fun TravelScreen(
     var homeCity by remember { mutableStateOf(appPrefs.homeCityName) }
     var showHomeOptions by remember { mutableStateOf(false) }
     var showHomeCityPicker by remember { mutableStateOf(false) }
-    var gpsHomeRequested by remember { mutableStateOf(false) }
     var maxStayDays by remember { mutableIntStateOf(appPrefs.safarMaxStayDays) }
     var jamPermitted by remember { mutableStateOf(appPrefs.safarJamPermitted) }
     var stayLimitEnabled by remember {
@@ -120,29 +118,16 @@ fun TravelScreen(
 
     val scope = rememberCoroutineScope()
 
-    fun saveCurrentGpsAsHome() {
-        scope.launch {
-            val resolved = locationProvider.getFreshOrCachedLocation()
-            val label = listOf(resolved.cityName, resolved.countryName)
-                .filter { it.isNotBlank() }
-                .joinToString(", ")
-                .ifBlank { context.getString(R.string.travel_saved_location) }
-            appPrefs.saveHomeAnchor(resolved.latitude, resolved.longitude, label)
-            homeCoordinates = appPrefs.homeCoordinates
-            homeCity = appPrefs.homeCityName
-            // A home set from the current position means zero distance and no active concession.
-            distanceKm = 0f
-            isSafar = false
-        }
-    }
-
-    val locationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val isGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (isGranted && gpsHomeRequested) saveCurrentGpsAsHome()
-        gpsHomeRequested = false
+    val saveGpsHome = rememberGpsHomeSaver(
+        locationProvider = locationProvider,
+        preferences = appPrefs,
+        fallbackLabel = context.getString(R.string.travel_saved_location)
+    ) {
+        homeCoordinates = appPrefs.homeCoordinates
+        homeCity = appPrefs.homeCityName
+        // A home set from the current position means zero distance and no active concession.
+        distanceKm = 0f
+        isSafar = false
     }
 
     LaunchedEffect(Unit) {
@@ -548,14 +533,8 @@ fun TravelScreen(
                     )
                     Button(
                         onClick = {
-                            gpsHomeRequested = true
                             showHomeOptions = false
-                            locationPermissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION
-                                )
-                            )
+                            saveGpsHome()
                         },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()

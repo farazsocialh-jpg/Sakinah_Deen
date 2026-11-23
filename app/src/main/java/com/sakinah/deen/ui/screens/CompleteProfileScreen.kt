@@ -48,6 +48,8 @@ import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.profile.UserProfile
 import com.sakinah.deen.profile.UserProfileRepository
 import com.sakinah.deen.ui.components.DateOfBirthField
+import com.sakinah.deen.ui.components.ProfileAccountHeader
+import com.sakinah.deen.ui.components.ProfileNameEmailFields
 import com.sakinah.deen.ui.components.GenderSelector
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
 import com.sakinah.deen.ui.components.ProfileAvatar
@@ -150,35 +152,16 @@ fun CompleteProfileScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ProfileAvatar(
-                    photoUrl = profile?.pictureUrl()?.takeIf { it.isNotBlank() },
-                    displayName = displayName
-                )
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Text(
-                                                    text = displayName.ifBlank { stringResource(R.string.complete_profile_your_account) },
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    if (email.isNotBlank()) {
-                        Text(
-                            text = email,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    val provider = profile?.authProvider.orEmpty()
-                    if (provider == "google") {
-                        Text(
-                            text = stringResource(R.string.complete_profile_signed_in_google),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+            ProfileAccountHeader(
+                photoUrl = profile?.pictureUrl()?.takeIf { it.isNotBlank() },
+                name = displayName.ifBlank { stringResource(R.string.complete_profile_your_account) },
+                email = email,
+                subtitle = if (profile?.authProvider == "google") {
+                    stringResource(R.string.complete_profile_signed_in_google)
+                } else {
+                    null
                 }
-            }
+            )
 
             error?.let { message ->
                 Surface(
@@ -195,24 +178,13 @@ fun CompleteProfileScreen(
                 }
             }
 
-            OutlinedTextField(
-                value = displayName,
-                onValueChange = { displayName = it; error = null },
-                label = { Text(stringResource(R.string.complete_profile_display_name)) },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .autofillName()
-            )
-
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it; error = null },
-                label = { Text(stringResource(R.string.complete_profile_email)) },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .autofillEmail()
+            ProfileNameEmailFields(
+                displayName = displayName,
+                onDisplayNameChange = { displayName = it; error = null },
+                nameLabel = stringResource(R.string.complete_profile_display_name),
+                email = email,
+                onEmailChange = { email = it; error = null },
+                emailLabel = stringResource(R.string.complete_profile_email)
             )
 
             GenderSelector(gender = gender, onGenderChange = { gender = it })

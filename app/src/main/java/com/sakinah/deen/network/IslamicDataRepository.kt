@@ -42,6 +42,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import android.util.JsonReader
 import java.io.InputStreamReader
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -91,6 +93,11 @@ class IslamicDataRepository(
         const val DEFAULT_RECITER_ID = 7 // Mishari Rashid al-`Afasy
         const val IBN_KATHIR_TAFSIR_ID = 169
         private const val TAFSIR_UPSERT_CHUNK = 50
+
+        /** Preferences files and key for the two catalogs cached for offline use. */
+        private const val QURAN_CATALOG_PREFS = "sakinah_quran_translations"
+        private const val HADITH_CATALOG_PREFS = "sakinah_hadith_catalog"
+        private const val CATALOG_KEY = "catalog_json"
 
         val SUPPORTED_HADITH_BOOKS = listOf(
             "bukhari", "muslim", "nawawi", "abudawud",
@@ -536,11 +543,11 @@ class IslamicDataRepository(
         for (source in sources) {
             val parsed = runCatching { source() }.getOrDefault(emptyList())
             if (parsed.isNotEmpty()) {
-                cacheCatalog(parsed)
+                cacheTranslationCatalog(parsed)
                 return parsed
             }
         }
-        return loadCachedCatalog()
+        return loadCachedTranslationCatalog()
     }
 
     fun parseQuranComTranslations(body: String): List<QuranTranslationResource> =
@@ -552,30 +559,34 @@ class IslamicDataRepository(
     fun parseQuranApiTranslations(body: String): List<QuranTranslationResource> =
         Companion.parseQuranApiTranslations(body, json)
 
-    private fun cacheCatalog(catalog: List<QuranTranslationResource>) {
+    private fun cacheTranslationCatalog(catalog: List<QuranTranslationResource>) =
+        cacheCatalog(QURAN_CATALOG_PREFS, catalog, ListSerializer(QuranTranslationResource.serializer()))
+
+    private fun loadCachedTranslationCatalog(): List<QuranTranslationResource> =
+        loadCachedCatalog(QURAN_CATALOG_PREFS, ListSerializer(QuranTranslationResource.serializer()))
+
+    private fun cacheHadithCatalog(catalog: List<HadithBookCatalog>) =
+        cacheCatalog(HADITH_CATALOG_PREFS, catalog, ListSerializer(HadithBookCatalog.serializer()))
+
+    private fun loadCachedHadithCatalog(): List<HadithBookCatalog> =
+        loadCachedCatalog(HADITH_CATALOG_PREFS, ListSerializer(HadithBookCatalog.serializer()))
+
+    /** Both catalogs are small JSON lists, each cached in its own preferences file. */
+    private fun <T> cacheCatalog(
+        prefsName: String,
+        catalog: List<T>,
+        serializer: KSerializer<List<T>>
+    ) {
         val context = appContext ?: return
-        val prefs = context.getSharedPreferences("sakinah_quran_translations", android.content.Context.MODE_PRIVATE)
-        prefs.edit {
-            putString(
-                "catalog_json",
-                json.encodeToString(
-                    kotlinx.serialization.builtins.ListSerializer(QuranTranslationResource.serializer()),
-                    catalog
-                )
-            )
-        }
+        val prefs = context.getSharedPreferences(prefsName, android.content.Context.MODE_PRIVATE)
+        prefs.edit { putString(CATALOG_KEY, json.encodeToString(serializer, catalog)) }
     }
 
-    private fun loadCachedCatalog(): List<QuranTranslationResource> {
+    private fun <T> loadCachedCatalog(prefsName: String, serializer: KSerializer<List<T>>): List<T> {
         val context = appContext ?: return emptyList()
-        val prefs = context.getSharedPreferences("sakinah_quran_translations", android.content.Context.MODE_PRIVATE)
-        val raw = prefs.getString("catalog_json", null) ?: return emptyList()
-        return runCatching {
-            json.decodeFromString(
-                kotlinx.serialization.builtins.ListSerializer(QuranTranslationResource.serializer()),
-                raw
-            )
-        }.getOrDefault(emptyList())
+        val prefs = context.getSharedPreferences(prefsName, android.content.Context.MODE_PRIVATE)
+        val raw = prefs.getString(CATALOG_KEY, null) ?: return emptyList()
+        return runCatching { json.decodeFromString(serializer, raw) }.getOrDefault(emptyList())
     }
 
     // ------------------------------------------------------------------ Hadith
@@ -978,31 +989,6 @@ class IslamicDataRepository(
     private suspend fun fetchHadithEdition(languageCode: String, bookKey: String): String =
         fetchHadithJson("/editions/$languageCode-$bookKey.min.json")
 
-    private fun cacheHadithCatalog(catalog: List<HadithBookCatalog>) {
-        val context = appContext ?: return
-        val prefs = context.getSharedPreferences("sakinah_hadith_catalog", android.content.Context.MODE_PRIVATE)
-        prefs.edit {
-            putString(
-                "catalog_json",
-                json.encodeToString(
-                    kotlinx.serialization.builtins.ListSerializer(HadithBookCatalog.serializer()),
-                    catalog
-                )
-            )
-        }
-    }
-
-    private fun loadCachedHadithCatalog(): List<HadithBookCatalog> {
-        val context = appContext ?: return emptyList()
-        val prefs = context.getSharedPreferences("sakinah_hadith_catalog", android.content.Context.MODE_PRIVATE)
-        val raw = prefs.getString("catalog_json", null) ?: return emptyList()
-        return runCatching {
-            json.decodeFromString(
-                kotlinx.serialization.builtins.ListSerializer(HadithBookCatalog.serializer()),
-                raw
-            )
-        }.getOrDefault(emptyList())
-    }
 
     // ------------------------------------------------------------------ Tafsir
 

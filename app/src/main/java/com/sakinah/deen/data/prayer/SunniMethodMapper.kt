@@ -95,26 +95,15 @@ object SunniMethodMapper {
      * astronomical fallback with matching twilight angles when no cache or network is
      * available.
      */
-    fun localCalculationMethod(authority: SunniAuthority): CalculationMethod = when (authority) {
-        SunniAuthority.UMM_AL_QURA -> CalculationMethod.UMM_AL_QURA
-        SunniAuthority.QATAR -> CalculationMethod.QATAR
-        SunniAuthority.DUBAI -> CalculationMethod.DUBAI
-        SunniAuthority.KARACHI -> CalculationMethod.KARACHI
-        SunniAuthority.EGYPTIAN -> CalculationMethod.EGYPTIAN
-        SunniAuthority.ISNA -> CalculationMethod.NORTH_AMERICA
-        SunniAuthority.MUSLIM_WORLD_LEAGUE -> CalculationMethod.MUSLIM_WORLD_LEAGUE
-        SunniAuthority.KUWAIT -> CalculationMethod.KUWAIT
-        SunniAuthority.GULF_REGION -> CalculationMethod.GULF_REGION
-        SunniAuthority.DIYANET -> CalculationMethod.DIYANET
-        SunniAuthority.JAKIM -> CalculationMethod.JAKIM
-        SunniAuthority.MUIS -> CalculationMethod.MUIS
-        SunniAuthority.KEMENAG -> CalculationMethod.KEMENAG
-        SunniAuthority.MOONSIGHTING_COMMITTEE -> CalculationMethod.MOONSIGHTING_COMMITTEE
-        SunniAuthority.UOIF -> CalculationMethod.UOIF
-        SunniAuthority.SAMR -> CalculationMethod.SAMR
-        SunniAuthority.JORDAN -> CalculationMethod.JORDAN
-        SunniAuthority.TUNISIA -> CalculationMethod.TUNISIA
-        SunniAuthority.TEHRAN -> CalculationMethod.TEHRAN
+    fun localCalculationMethod(authority: SunniAuthority): CalculationMethod =
+        overridesByAuthority[authority] ?: CalculationMethod.MUSLIM_WORLD_LEAGUE
+
+    /**
+     * Reverse of [fromOverride], built from it rather than restated, so the two directions can
+     * never drift apart when a calculation method is added.
+     */
+    private val overridesByAuthority: Map<SunniAuthority, CalculationMethod> by lazy {
+        CalculationMethod.entries.associateBy(::fromOverride)
     }
 }
 
