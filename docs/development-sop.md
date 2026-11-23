@@ -62,7 +62,7 @@ only to verify that R8 can build; that keystore is ephemeral.
 
 ## 3. Releasing
 
-1. Confirm the weekly CI run is green on `main`.
+1. Confirm the weekly `Security` run and the `main` push runs of `Android CI` and `iOS` are green.
 2. Tag and push — `release.yml` builds, signs, verifies and uploads:
    ```bash
    git tag v1.2.0 && git push origin v1.2.0
@@ -85,7 +85,8 @@ only to verify that R8 can build; that keystore is ephemeral.
 
 ## 4. Audit results
 
-Every run attaches `app-audit-report/AUDIT.md` and uploads SARIF to **Security → Code scanning**.
+Every run attaches `app-audit-report/AUDIT.md` (Android CI) and `security-audit-report/SECURITY_AUDIT.md`
+(Security), and uploads SARIF to **Security → Code scanning**.
 The audit is a ratchet, not a pass/fail on the whole backlog:
 
 - A **regression** against `.github/audit-baseline.json` fails `static-audit`.
