@@ -167,8 +167,28 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build for CodeQL
-        run: ./gradlew :app:assembleDebug :shared:build --stacktrace --no-daemon
+      # The extractor only records what javac/kotlinc actually compile. `gradle.properties`
+      # enables `org.gradle.caching` and the Gradle user home restored by setup-java carries
+      # `caches/build-cache-1`, so without the two flags below every task here is served
+      # FROM-CACHE, no compiler runs, and the analysis ends in
+      # "No source code seen during build".
+      - name: Build for CodeQL (traced build, cold cache)
+        run: >
+          ./gradlew :app:assembleDebug :shared:build
+          --no-build-cache -Dorg.gradle.caching=false
+          --stacktrace --no-daemon
+
+      # Turns a silent "no source" analysis into an actionable failure: if the APK or any
+      # compiled class is missing, compilation did not happen and the analysis is meaningless.
+      - name: Confirm the traced build compiled sources
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          CLASSES=$(find app/build shared/build -name '*.class' -print -quit)
+          if [ -z "$CLASSES" ]; then
+            echo "::error::The traced build produced no compiled classes; CodeQL cannot analyze anything."
+            exit 1
+          fi
+          echo "Compiled output present: $CLASSES"
 
       - name: Analyze
         uses: github/codeql-action/analyze@v3
@@ -211,12 +231,46 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      # generate-and-submit: the graph is queryable in the repository's dependency graph, so
-      # there is no reason to keep a per-run copy of the JSON as an artifact.
+      # The Dependency Submission API answers "The Dependency graph is disabled for this
+      # repository" when Settings → Code security → Dependency graph is off, and no workflow
+      # permission can change that. So the graph is ALWAYS generated (real work, always
+      # possible, uploaded as an artifact) and only SUBMITTED when an admin has enabled the
+      # feature and opted in with the repository variable DEPENDENCY_GRAPH_ENABLED=true.
+      - name: Generate the dependency graph snapshot
+        if: vars.DEPENDENCY_GRAPH_ENABLED != 'true'
+        uses: gradle/actions/dependency-submission@v6
+        with:
+          dependency-graph: generate-and-upload
+
       - name: Generate and submit the dependency graph
+        if: vars.DEPENDENCY_GRAPH_ENABLED == 'true'
         uses: gradle/actions/dependency-submission@v6
         with:
           dependency-graph: generate-and-submit
+
+      # Never let a skipped submission read as a passed scan.
+      - name: Report dependency graph status
+        if: always()
+        env:
+          SUBMIT_ENABLED: ${{ vars.DEPENDENCY_GRAPH_ENABLED }}
+        run: |
+          {
+            echo "### Gradle dependency graph"
+            echo
+            if [ "$SUBMIT_ENABLED" = "true" ]; then
+              echo "Generated and submitted to the repository dependency graph."
+            else
+              echo "Generated and uploaded as a workflow artifact — **not submitted**."
+              echo
+              echo "Submission is off because the repository variable \`DEPENDENCY_GRAPH_ENABLED\`"
+              echo "is not \`true\`. Enable *Settings → Code security → Dependency graph*, then set"
+              echo "that variable to \`true\`. Until then, transitive CVEs are not monitored by"
+              echo "Dependabot — treat dependency-graph coverage as missing, not as passing."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$SUBMIT_ENABLED" != "true" ]; then
+            echo "::warning::Dependency graph submission is disabled; the snapshot was generated but not submitted."
+          fi
 
   # ------------------------------------------------------------ single report
   report:
