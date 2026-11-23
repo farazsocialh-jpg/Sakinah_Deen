@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.PaddingValues
@@ -40,17 +39,12 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material.icons.filled.ViewColumn
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -89,7 +83,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.LayoutDirection
@@ -107,7 +100,6 @@ import com.sakinah.deen.ui.components.QuranOfflineStatusBanner
 import com.sakinah.deen.ui.components.SakinahCard
 import com.sakinah.deen.ui.components.UnifiedReaderPill
 import com.sakinah.deen.ui.components.SegmentedPillBar
-import com.sakinah.deen.ui.components.StatusBadge
 import com.sakinah.deen.ui.rememberInject
 
 import com.sakinah.deen.ui.theme.UthmanicFontFamily
@@ -1278,81 +1270,6 @@ private fun AyahActionBar(
         }
     }
 }
-
-@Composable
-private fun QuranUtilityBar(
-    surah: com.sakinah.deen.data.model.SurahModel,
-    translationIsoCode: String,
-    isStudyMode: Boolean,
-    hifzOverlayActive: Boolean,
-    searchExpanded: Boolean,
-    onSurahClick: () -> Unit,
-    onToggleStudyMode: () -> Unit,
-    onSearchClick: () -> Unit,
-    onLanguageClick: () -> Unit,
-    onHifzClick: () -> Unit,
-    onStudioClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            modifier = Modifier
-                .weight(1f)
-                .clickable(onClick = onSurahClick),
-            shape = RoundedCornerShape(50),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "${surah.number}. ${surah.nameEnglish} ▾",
-                    modifier = Modifier.weight(1f),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = surah.nameArabic,
-                    fontFamily = UthmanicFontFamily,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
-                )
-            }
-        }
-
-        QuranStudyPill(isStudyMode = isStudyMode, onClick = onToggleStudyMode)
-        QuranUtilityIcon(
-            icon = Icons.Default.Search,
-            description = "Search Quran",
-            active = searchExpanded,
-            onClick = onSearchClick
-        )
-        QuranLanguageBadge(isoCode = translationIsoCode, onClick = onLanguageClick)
-        QuranUtilityIcon(
-            icon = if (hifzOverlayActive) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-            description = "Toggle Hifz mode",
-            active = hifzOverlayActive,
-            onClick = onHifzClick
-        )
-        QuranUtilityIcon(
-            icon = Icons.Default.Book,
-            description = "Quran Study Studio",
-            onClick = onStudioClick
-        )
-    }
-}
-
 @Composable
 private fun QuranStudyPill(
     isStudyMode: Boolean,
@@ -1435,65 +1352,6 @@ private fun QuranUtilityIcon(
         }
     }
 }
-
-@Composable
-private fun QuranThumbDock(
-    surah: com.sakinah.deen.data.model.SurahModel,
-    translationIsoCode: String,
-    isStudyMode: Boolean,
-    hifzOverlayActive: Boolean,
-    onSurahClick: () -> Unit,
-    onToggleStudyMode: () -> Unit,
-    onSearchClick: () -> Unit,
-    onLanguageClick: () -> Unit,
-    onHifzClick: () -> Unit,
-    onStudioClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(50),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)),
-        shadowElevation = 8.dp
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable(onClick = onSurahClick),
-                shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.surfaceVariant
-            ) {
-                Text(
-                    text = "${surah.number}. ${surah.nameEnglish} ▾",
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            QuranUtilityIcon(Icons.Default.Search, "Search Quran", onSearchClick)
-            QuranLanguageBadge(translationIsoCode, onLanguageClick)
-            QuranUtilityIcon(
-                icon = if (hifzOverlayActive) Icons.Default.VisibilityOff
-                else Icons.Default.Visibility,
-                description = "Toggle Hifz mode",
-                active = hifzOverlayActive,
-                onClick = onHifzClick
-            )
-            QuranStudyPill(isStudyMode = isStudyMode, onClick = onToggleStudyMode)
-            QuranUtilityIcon(Icons.Default.Book, "Quran Study Studio", onStudioClick)
-        }
-    }
-}
-
 @Composable
 private fun tafseerPackIdFor(scholar: String): String? =
     com.sakinah.deen.data.repository.TafseerDownloadRepository.packIdForScholar(scholar)
@@ -1563,133 +1421,6 @@ private fun SearchResults(
         }
     }
 }
-
-@Composable
-private fun AyahCard(
-    ayah: AyahModel,
-    isSelected: Boolean,
-    isTargetHighlighted: Boolean = false,
-    translationIsRtl: Boolean = false,
-    arabicFontSizeSp: Int = 24,
-    hifzOverlayActive: Boolean = false,
-    hifzTag: String? = null,
-    showTafseerAction: Boolean = true,
-    onTagMistake: (String) -> Unit = {},
-    onClick: () -> Unit,
-    onTafseerClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = when {
-                isTargetHighlighted -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
-                else -> MaterialTheme.colorScheme.surface
-            }
-        ),
-        border = BorderStroke(
-            width = if (isTargetHighlighted) 2.5.dp else if (isSelected) 1.5.dp else 1.dp,
-            color = if (isTargetHighlighted) {
-                MaterialTheme.colorScheme.primary
-            } else if (isSelected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.65f)
-            }
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    StatusBadge(
-                        text = "Ayah ${ayah.numberInSurah}",
-                        accentColor = MaterialTheme.colorScheme.primary
-                    )
-                    if (!hifzTag.isNullOrBlank()) {
-                        StatusBadge(
-                            text = hifzTag,
-                            accentColor = MaterialTheme.colorScheme.secondary
-                        )
-                    }
-                }
-
-                if (showTafseerAction) {
-                    FilledTonalButton(onClick = onTafseerClick) {
-                        Icon(Icons.Default.Book, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Tafseer", fontSize = 11.sp)
-                    }
-                }
-            }
-
-            val marker = ArabicNormalizer.toArabicIndicNumerals(ayah.numberInSurah)
-            ArabicVerseBlock(
-                arabicText = "${cleanQuranArabic(ayah.arabicText)} ﴿$marker﴾",
-                fontSizeSp = arabicFontSizeSp,
-                color = MaterialTheme.colorScheme.onSurface,
-                isQuran = true
-            )
-
-            if (ayah.transliteration.isNotBlank()) {
-                Text(
-                    text = ayah.transliteration,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            if (ayah.translation.isNotBlank()) {
-                CompositionLocalProvider(
-                    LocalLayoutDirection provides if (translationIsRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
-                ) {
-                    Text(
-                        text = ayah.translation,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontFamily = FontFamily.Serif,
-                        textAlign = if (translationIsRtl) TextAlign.End else TextAlign.Start,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-
-            if (hifzOverlayActive) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    listOf("Tajweed", "Mutashabihat", "Memory Slip").forEach { tag ->
-                        val active = hifzTag == tag
-                        TextButton(
-                            onClick = { onTagMistake(if (active) "" else tag) }
-                        ) {
-                            Text(
-                                text = if (active) "✓ $tag" else "+ $tag",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 private fun isRtlLanguage(isoCode: String): Boolean =
     isoCode.lowercase() in setOf("ar", "ur", "fa", "ps", "sd", "ug")
 

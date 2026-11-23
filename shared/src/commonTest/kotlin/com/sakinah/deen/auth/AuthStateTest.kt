@@ -20,7 +20,7 @@ class AuthStateTest {
         assertTrue(result.isSuccess)
         val state = repo.authState.first()
         assertTrue(state is AuthState.Authenticated)
-        assertEquals("Alice", (state as AuthState.Authenticated).user.displayName)
+        assertEquals("Alice", state.user.displayName)
     }
 
     @Test

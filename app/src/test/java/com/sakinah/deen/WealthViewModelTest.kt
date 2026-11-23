@@ -6,6 +6,7 @@ import com.sakinah.deen.fakes.FakeSadaqahDao
 import com.sakinah.deen.ui.viewmodel.WealthUiIntent
 import com.sakinah.deen.ui.viewmodel.WealthUiState
 import com.sakinah.deen.ui.viewmodel.WealthViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
@@ -20,6 +21,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class WealthViewModelTest {
 
     private lateinit var testDispatcher: TestDispatcher

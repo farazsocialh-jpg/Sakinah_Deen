@@ -1,6 +1,5 @@
 package com.sakinah.deen.settings
 
-import kotlinx.coroutines.flow.first
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

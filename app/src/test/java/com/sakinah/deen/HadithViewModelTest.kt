@@ -3,6 +3,7 @@ package com.sakinah.deen
 import com.sakinah.deen.ui.viewmodel.HadithTab
 import com.sakinah.deen.ui.viewmodel.HadithUiIntent
 import com.sakinah.deen.ui.viewmodel.HadithViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
@@ -16,6 +17,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class HadithViewModelTest {
     private lateinit var testDispatcher: TestDispatcher
     @Before fun setUp() { testDispatcher = StandardTestDispatcher(); Dispatchers.setMain(testDispatcher) }

@@ -118,7 +118,7 @@ suspend fun loadSalahBoard(context: Context): SalahBoardState {
     } else null
     val muted = prefs?.azaanSettings?.modes?.filterValues { it == com.sakinah.deen.data.model.PrayerAlertMode.OFF }?.keys?.map { it.name }?.toSet() ?: emptySet()
     val methodLabel = prefs?.calculationMethodOverride?.name ?: "Auto"
-    val qiblaLabel = coords?.let { qiblaSummary(it.first, it.second, prefs?.locationLabel ?: "").let { q -> "${q.bearing}° ${q.cardinal}" } } ?: ""
+    val qiblaLabel = coords?.let { qiblaSummary(it.first, it.second, prefs.locationLabel).let { q -> "${q.bearing}° ${q.cardinal}" } } ?: ""
     val nextEvent = runCatching { nextIslamicEvent(times.date) }.getOrNull()?.let { "${it.name} ${relativeDays(it.daysAway)}" } ?: ""
     return SalahBoardState(
         times = times,

@@ -2,7 +2,6 @@ package com.sakinah.deen.ui.screens
 
 import android.content.Intent
 import android.widget.Toast
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -25,13 +23,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -743,87 +738,6 @@ private fun HadithCollectionRow(
         }
     }
 }
-
-@Composable
-private fun HadithFilterBar(
-    state: com.sakinah.deen.ui.viewmodel.HadithUiState,
-    libraryBackMode: Boolean,
-    savedOnly: Boolean,
-    onBookClick: () -> Unit,
-    onAllBooks: () -> Unit,
-    onLanguageClick: () -> Unit,
-    onGradeSelected: (String) -> Unit,
-    onSearchClick: () -> Unit,
-    onSavedClick: () -> Unit
-) {
-    val bookLabel = if (libraryBackMode && state.selectedBookKey != "all") {
-        "‹ All Books"
-    } else {
-        val title = state.books.firstOrNull { it.key == state.selectedBookKey }?.title ?: "All Books"
-        "$title ▾"
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            shape = RoundedCornerShape(50),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
-            modifier = Modifier
-                .weight(1f)
-                .clickable { if (libraryBackMode && state.selectedBookKey != "all") onAllBooks() else onBookClick() }
-        ) {
-            Text(
-                text = bookLabel,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Surface(
-            shape = RoundedCornerShape(50),
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            modifier = Modifier.clickable(onClick = onLanguageClick)
-        ) {
-            Text(
-                text = state.selectedLanguageCode.uppercase().take(3),
-                modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-        }
-        HadithGradeMenuChip(
-            filterGrade = state.filterGrade,
-            onGradeSelected = onGradeSelected
-        )
-        IconButton(onClick = onSearchClick) {
-            Icon(
-                imageVector = Icons.Default.Search,
-                contentDescription = "Search hadith",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp)
-            )
-        }
-        IconButton(onClick = onSavedClick) {
-            Icon(
-                imageVector = if (savedOnly) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
-                contentDescription = if (savedOnly) "Show all hadiths" else "Show saved hadiths",
-                tint = if (savedOnly) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp)
-            )
-        }
-    }
-}
-
 @Composable
 private fun HadithGradeMenuChip(
     filterGrade: String,
@@ -862,82 +776,6 @@ private fun HadithGradeMenuChip(
         }
     }
 }
-
-@Composable
-private fun HadithZenPill(
-    state: com.sakinah.deen.ui.viewmodel.HadithUiState,
-    savedOnly: Boolean,
-    onBookClick: () -> Unit,
-    onLanguageClick: () -> Unit,
-    onGradeSelected: (String) -> Unit,
-    onSearchClick: () -> Unit,
-    onSavedClick: () -> Unit
-) {
-    val bookTitle = state.books.firstOrNull { it.key == state.selectedBookKey }?.title ?: "All Books"
-    val grade = when {
-        state.filterGrade.equals("sahih", true) -> "Sahih"
-        state.filterGrade.equals("hasan", true) -> "Hasan"
-        else -> "All Grades"
-    }
-    val language = state.selectedLanguageCode.uppercase().take(3)
-    Surface(
-        modifier = Modifier.fillMaxWidth(0.95f),
-        shape = RoundedCornerShape(50),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
-        shadowElevation = 5.dp
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "$bookTitle · $grade · $language ▾",
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable(onClick = onBookClick)
-                    .padding(horizontal = 6.dp, vertical = 8.dp),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            IconButton(onClick = onLanguageClick) {
-                Text(language, fontSize = 9.sp, fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            IconButton(onClick = onSearchClick) {
-                Icon(Icons.Default.Search, contentDescription = "Search hadith",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
-            }
-            IconButton(
-                onClick = {
-                    val nextGrade = when {
-                        state.filterGrade.equals("all", true) -> "sahih"
-                        state.filterGrade.equals("sahih", true) -> "hasan"
-                        else -> "all"
-                    }
-                    onGradeSelected(nextGrade)
-                }
-            ) {
-                Icon(Icons.Default.Tune, contentDescription = "Filter by grade",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
-            }
-            IconButton(onClick = onSavedClick) {
-                Icon(
-                    imageVector = if (savedOnly) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
-                    contentDescription = if (savedOnly) "Show all hadiths" else "Show saved hadiths",
-                    tint = if (savedOnly) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
-    }
-}
-
 @Composable
 private fun BookPickerRow(
     title: String,

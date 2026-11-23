@@ -5,11 +5,9 @@ import android.content.Context.MODE_PRIVATE
 import android.net.Uri
 import androidx.core.content.edit
 import com.sakinah.deen.data.database.SakinahEncryptedDatabase
-import com.sakinah.deen.data.database.dao.BookmarkKey
 import com.sakinah.deen.data.database.entity.HifzMistakeEntity
 import com.sakinah.deen.data.database.entity.QadhaLedgerEntity
 import com.sakinah.deen.data.database.entity.SadaqahLogEntity
-import com.sakinah.deen.data.prefs.SakinahPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString

@@ -87,8 +87,8 @@ class SettingsRepositoryImpl(
             arabicFontSize = prefs.getInt("arabicFontSize", 24),
             translationLanguage = prefs.getString("translationLang", "en"),
             translationId = prefs.getInt("quranTranslationId", 20),
-            translationName = prefs.getString("quranTranslationName", "English") ?: "English",
-            hadithLanguageCode = prefs.getString("hadithLanguageCode", "eng") ?: "eng",
+            translationName = prefs.getString("quranTranslationName", "English"),
+            hadithLanguageCode = prefs.getString("hadithLanguageCode", "eng"),
         ),
     )
 

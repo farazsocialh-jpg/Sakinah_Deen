@@ -5,7 +5,6 @@ import com.sakinah.deen.data.model.Madhhab
 import com.sakinah.deen.data.model.PrayerAdjustments
 import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.settings.HighLatitudeRule
-import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
@@ -15,7 +14,6 @@ import kotlinx.datetime.toLocalDateTime
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.acos
-import kotlin.math.asin
 import kotlin.math.atan
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -184,7 +182,6 @@ class PrayerCalculationEngineImpl : PrayerCalculationEngine {
                     CalculationMethod.SAMR -> 15.0
                     CalculationMethod.TUNISIA -> 18.0
                     CalculationMethod.TEHRAN -> 14.0
-                    else -> 17.0
                 }
                 val ishaAltRad = -ishaAngle * PI / 180.0
                 val cosHourAngleIsha = (sin(ishaAltRad) - sin(latRad) * sin(declRad)) / (cos(latRad) * cos(declRad))

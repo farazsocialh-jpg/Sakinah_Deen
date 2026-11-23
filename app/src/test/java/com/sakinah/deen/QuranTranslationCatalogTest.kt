@@ -2,11 +2,9 @@ package com.sakinah.deen
 
 import com.sakinah.deen.data.model.QuranTranslationResource
 import com.sakinah.deen.network.IslamicDataRepository
-import com.sakinah.deen.network.model.QuranTranslationCatalogDto
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class QuranTranslationCatalogTest {

@@ -41,7 +41,6 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate as KLocalDate
 import kotlinx.datetime.LocalTime as KLocalTime
 import kotlinx.datetime.TimeZone as KTimeZone
-import kotlinx.datetime.toJavaLocalDate
 import kotlinx.datetime.toJavaLocalTime
 import kotlinx.datetime.toLocalDateTime
 import java.time.LocalDate
@@ -201,10 +200,10 @@ class SalahViewModel(
         val savedManual = preferences?.isManualLocation == true && savedCoords != null
         val savedZone = if (savedManual) {
             TimeZoneResolver.resolveZoneIdString(
-                explicitZoneId = preferences?.locationTimeZoneId,
-                cityLabel = preferences?.locationLabel,
-                countryCode = preferences?.locationCountryCode,
-                longitude = savedCoords?.second
+                explicitZoneId = preferences.locationTimeZoneId,
+                cityLabel = preferences.locationLabel,
+                countryCode = preferences.locationCountryCode,
+                longitude = savedCoords.second
             )
         } else {
             preferences?.locationTimeZoneId ?: ZoneId.systemDefault().id
@@ -221,7 +220,7 @@ class SalahViewModel(
                 locationAgeMinutes = preferences?.locationAgeMillis()?.let { age -> age / 60_000L } ?: 0L,
                 isLocationStale = preferences?.isLocationStale() == true,
                 userCoordinates = savedCoords ?: it.userCoordinates,
-                locationName = if (savedCoords != null) preferences?.locationLabel ?: it.locationName else it.locationName,
+                locationName = if (savedCoords != null) preferences.locationLabel else it.locationName,
                 timeZoneId = savedZone,
                 timeZoneAbbr = TimeZoneResolver.shortAbbreviation(savedZone),
                 isLocationPending = !hasUsableCoordinates
@@ -737,7 +736,7 @@ class SalahViewModel(
         val manualTravelMode = preferences?.travelModeActive == true
         val clearManualTravelMode = manualTravelMode &&
             SafarPolicy.shouldClearManualTravelMode(travelManager.getHomeAnchor(), coords)
-        if (clearManualTravelMode) preferences?.travelModeActive = false
+        if (clearManualTravelMode) preferences.travelModeActive = false
         val isSafar = travel.isTraveler || (manualTravelMode && !clearManualTravelMode)
         val rakats = SafarPolicy.rakats(isSafar)
 

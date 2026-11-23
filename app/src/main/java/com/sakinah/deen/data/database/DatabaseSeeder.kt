@@ -180,10 +180,10 @@ object DatabaseSeeder {
             }
 
             var adhkar = 0
-            if (needsAdhkar && hisnText != null) {
+            if (needsAdhkar) {
                 adhkar = applyAdhkarSeed(hisnText, target.adhkarDao)
                 // Only record the edition once its rows committed, so a failed write retries.
-                if (adhkar > 0 && hisnHash != null) {
+                if (adhkar > 0) {
                     target.seedState.recordAdhkarSeedHash(hisnHash)
                 }
             }

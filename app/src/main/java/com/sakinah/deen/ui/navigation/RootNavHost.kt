@@ -90,7 +90,7 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.context.GlobalContext
 
 enum class SakinahScreen(
-    @StringRes val titleRes: Int,
+    @param:StringRes val titleRes: Int,
     val showTopBar: Boolean = true,
     val showBottomBar: Boolean = false
 ) {

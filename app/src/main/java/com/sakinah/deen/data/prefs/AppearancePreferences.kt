@@ -3,12 +3,7 @@ package com.sakinah.deen.data.prefs
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
-import com.sakinah.deen.ui.theme.FontScalePreset
-import com.sakinah.deen.ui.theme.PrayerGuideGender
-import com.sakinah.deen.ui.theme.SakinahPalette
-import com.sakinah.deen.ui.theme.ThemeMode
 import com.sakinah.deen.ui.theme.UserAppearanceConfig
-import com.sakinah.deen.ui.theme.UserObjective
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

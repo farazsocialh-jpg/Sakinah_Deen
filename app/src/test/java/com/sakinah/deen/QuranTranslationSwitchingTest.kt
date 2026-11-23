@@ -1,6 +1,5 @@
 package com.sakinah.deen
 
-import com.sakinah.deen.data.database.entity.QuranAyahEntity
 import com.sakinah.deen.fakes.FakeQuranDao
 import com.sakinah.deen.fakes.FakeHadithDao
 import com.sakinah.deen.fakes.FakeTafsirDao

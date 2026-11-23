@@ -5,6 +5,7 @@ import com.sakinah.deen.data.prefs.QuranReadingMode
 import com.sakinah.deen.fakes.FakeSharedPreferences
 import com.sakinah.deen.ui.viewmodel.QuranUiIntent
 import com.sakinah.deen.ui.viewmodel.QuranViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
@@ -20,6 +21,7 @@ import org.junit.Before
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class QuranViewModelTest {
     private lateinit var testDispatcher: TestDispatcher
     @Before fun setUp() { testDispatcher = StandardTestDispatcher(); Dispatchers.setMain(testDispatcher) }

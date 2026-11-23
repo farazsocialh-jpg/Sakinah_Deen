@@ -22,7 +22,7 @@ class CitationParserTest {
         assertEquals("quran/2/255", plain.quran?.deepLink)
 
         val prefixed = CitationParser.find("As Allah says in Quran 4:59, obey the Messenger.")
-        assertTrue(prefixed.any { it.quran?.surah == 4 && it.quran?.ayahStart == 59 })
+        assertTrue(prefixed.any { it.quran?.surah == 4 && it.quran.ayahStart == 59 })
     }
 
     @Test

@@ -18,8 +18,6 @@ import com.sakinah.deen.network.model.ChapterAudioResponse
 import com.sakinah.deen.network.model.ChaptersResponse
 import com.sakinah.deen.network.model.TafsirChapterResponse
 import com.sakinah.deen.network.model.TafsirResponse
-import com.sakinah.deen.network.model.TranslationsResponse
-import com.sakinah.deen.network.model.UthmaniVersesResponse
 import com.sakinah.deen.network.model.VerseByChapterResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get

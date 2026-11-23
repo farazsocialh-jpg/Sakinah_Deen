@@ -11,7 +11,6 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
-import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
@@ -24,7 +23,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -201,7 +199,6 @@ fun NotificationSettingsScreen(
             }
         }
 
-        
 // 2. Permission health
         val needsNotificationPermission = !notificationsGranted
         val needsExactAlarmPermission = !exactAlarmsAllowed
@@ -281,7 +278,6 @@ fun NotificationSettingsScreen(
             }
         }
 
-        
         // 2. Per-Prayer Alerts (collapsible)
         AppearanceAccordion(
             title = stringResource(R.string.notif_per_prayer_alerts),
@@ -343,7 +339,6 @@ fun NotificationSettingsScreen(
             }
         }
 
-        
 // 4b. Special Fajr Azaan — moved here so every Azaan option lives together.
         SakinahCard(contentPadding = 14.dp) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -369,7 +364,6 @@ fun NotificationSettingsScreen(
             }
         }
 
-        
 // 4c. Optional critical Fajr channel, with the real Android limits spelled out.
         SakinahCard(contentPadding = 14.dp) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -409,7 +403,6 @@ fun NotificationSettingsScreen(
             }
         }
 
-        
         }
 
         // 3. Muezzin Voice (collapsible)
@@ -535,7 +528,6 @@ fun NotificationSettingsScreen(
             }
         }
 
-        
 // 3. Notification & Alarm Self-Test (live system state, never a cached guess)
         SakinahCard(contentPadding = 14.dp) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -584,7 +576,6 @@ fun NotificationSettingsScreen(
             }
         }
 
-        
         }
 
 // 4. Test notification — the button reports what Android actually did.
@@ -619,11 +610,9 @@ fun NotificationSettingsScreen(
             )
         }
 
-        
     }
 
 }
-
 
 /** One self-test line: status dot, title, honest detail and an optional fix button. */
 @Composable
