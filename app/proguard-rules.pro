@@ -19,11 +19,8 @@
 -keep class com.sakinah.deen.data.database.SakinahEncryptedDatabase { *; }
 
 # ------------------------------------------------------------------------------
-# 2. Adhan-Kotlin & Astronomical Mathematical Ephemeris
+# 2. Astronomical domain (prayer-time and Qibla calculations)
 # ------------------------------------------------------------------------------
--keep class com.batoulapps.adhan.** { *; }
--dontwarn com.batoulapps.adhan.**
-
 -keep class com.sakinah.deen.domain.astronomy.** { *; }
 
 # ------------------------------------------------------------------------------
