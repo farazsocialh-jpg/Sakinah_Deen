@@ -1,15 +1,45 @@
 name: iOS
 
-# Manual + main only: this job pins a macOS runner for the whole iOS toolchain and is slow,
-# so it does not run on every pull request.
+# The iOS side of the pipeline: shared Kotlin framework, generated Xcode project, simulator
+# build and the SwiftUI UI tests.
+#
+# Runs when the code that can break it changes (iOS sources, shared KMP sources, build
+# configuration) instead of on every main push. `shared/**` is included because an iOS compile
+# break almost always starts in `commonMain` or `iosMain`. Tag pushes are deliberately
+# unfiltered so a release tag always validates the iOS build.
+
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
+    paths:
+      - 'ios/**'
+      - 'shared/**'
+      - 'gradle/**'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - '.github/workflows/ios.yml'
+  pull_request:
+    paths:
+      - 'ios/**'
+      - 'shared/**'
+      - 'gradle/**'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - '.github/workflows/ios.yml'
   workflow_dispatch:
 
+# A macOS runner is the most expensive slot in this repository, so a superseded PR run is
+# cancelled; a tag or main run is not, because it is release evidence.
 concurrency:
   group: ios-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -46,8 +76,12 @@ jobs:
         working-directory: ios
         run: xcodegen generate
 
+      # The Swift target is where Kotlin/Native interop mistakes surface (an unexported
+      # initializer, a suspend function that Swift imports as `async throws`). Keeping this
+      # step separate from the test step makes the failure readable.
       - name: Build the iOS app (simulator)
         run: |
+          set -o pipefail
           xcodebuild \
             -project ios/Sakinah.xcodeproj \
             -scheme Sakinah \
@@ -55,7 +89,7 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            build | tee "$RUNNER_TEMP/xcodebuild.log"
 
       - name: Resolve a bootable iPhone simulator
         id: simulator
@@ -91,6 +125,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ios-build-logs
-          path: ${{ runner.temp }}/DerivedData/Logs/**
+          path: |
+            ${{ runner.temp }}/xcodebuild.log
+            ${{ runner.temp }}/DerivedData/Logs/**
           if-no-files-found: ignore
           retention-days: 7

@@ -1,17 +1,28 @@
 name: Worker
 
-# Tests the AI Scholar proxy Worker on every push. No Cloudflare account or API key is
-# needed: the suite drives the exported handler and helpers directly, and the dry-run bundle
-# only checks that wrangler can build the Worker and read its bindings.
+# Tests the AI Scholar proxy Worker. No Cloudflare account or API key is needed: the suite
+# drives the exported handler and helpers directly, and the dry-run bundle only checks that
+# wrangler can build the Worker and read its bindings.
+#
+# Path-filtered and de-duplicated: `push` is limited to `main` (a branch push that also has a
+# pull request no longer runs this job twice for the same commit), and both triggers only fire
+# for Worker changes. An Android or docs change does not boot a Node runner for this.
 
 on:
   push:
+    branches: [ main ]
+    paths:
+      - 'worker/**'
+      - '.github/workflows/worker.yml'
   pull_request:
+    paths:
+      - 'worker/**'
+      - '.github/workflows/worker.yml'
   workflow_dispatch:
 
 concurrency:
   group: worker-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -35,8 +46,16 @@ jobs:
         with:
           node-version: '22'
 
+      # The Worker has no dependencies today, so there is no lockfile and no install step.
+      # When one is added, this picks it up instead of silently testing against nothing.
+      - name: Install dependencies (only when a lockfile exists)
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else echo "No lockfile; nothing to install."; fi
+
       - name: Syntax check
-        run: node --check src/index.js
+        run: |
+          node --check src/index.js
+          node --check test/proxy.test.mjs
 
       - name: Run unit tests
         run: npm test

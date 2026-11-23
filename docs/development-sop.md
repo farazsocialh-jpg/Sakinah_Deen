@@ -5,18 +5,25 @@ can be automated runs in CI; the manual items below are the ones a machine canno
 
 ## 1. The pipeline
 
-Four workflows, no overlap. Each responsibility lives in exactly one place.
+Five workflows, no overlap. Each responsibility lives in exactly one place, and each is
+path-filtered to what can actually affect it (matrix: [CI_CD_AUDIT.md](CI_CD_AUDIT.md)).
 
 | Workflow | Trigger | Owns |
 | --- | --- | --- |
-| [`ci.yml`](../.github/workflows/ci.yml) | push to `main`, every PR, weekly (Mon 04:00), manual | Build, unit tests, Android Lint, R8 release check, audit checklist, mobsfscan, Gitleaks, CodeQL, MobSF APK scan, instrumented tests, accessibility, UI/UX audit, merged report |
+| [`ci.yml`](../.github/workflows/ci.yml) — Android CI | `app/**`, `shared/**`, Gradle files or CI scripts change on `main` or in a PR; manual | Build, unit tests, Android Lint, R8 release check, MobSF APK scan, instrumented tests, accessibility, UI/UX audit, merged `AUDIT.md`, signed-APK verification |
+| [`security.yml`](../.github/workflows/security.yml) | any code change (`app/`, `shared/`, `ios/`, `worker/`, Gradle, CI scripts) on `main` or in a PR; weekly (Mon 04:00); manual | Audit checklist, mobsfscan, Gitleaks, CodeQL, Gradle dependency graph, merged `SECURITY_AUDIT.md` |
+| [`ios.yml`](../.github/workflows/ios.yml) | `ios/**`, `shared/**` or Gradle files change on `main` or in a PR; any `v*` tag; manual | Shared framework + iOS build and UI tests |
+| [`worker.yml`](../.github/workflows/worker.yml) | `worker/**` changes on `main` or in a PR; manual | AI Scholar proxy: syntax, tests, Wrangler bundle |
 | [`release.yml`](../.github/workflows/release.yml) | `v*` tag, manual | The **only** signed AAB + APK |
-| [`ios.yml`](../.github/workflows/ios.yml) | push to `main`, manual | Shared framework + iOS build and UI tests |
-| [`worker.yml`](../.github/workflows/worker.yml) | push, PR, manual | AI Scholar proxy: syntax, tests, Wrangler bundle |
 
-`ci.yml` jobs: `quality` (the merge gate) → `static-audit`, `codeql`, `apk-security` (reuses the
-APK `quality` built), `device` (one emulator boot: tests, then accessibility, then UI/UX monkey)
-→ `report` (one `AUDIT.md`).
+`ci.yml` jobs: `quality` (the merge gate) → `apk-security` (reuses the APK `quality` built),
+`device` (one emulator boot: tests, then accessibility, then UI/UX monkey) → `report` (one
+`AUDIT.md`). `security.yml` jobs: `static-audit`, `codeql`, `dependency-submission` → `report`.
+
+`ios.yml` and `worker.yml` are de-duplicated: their `push` triggers are limited to `main`, so a
+branch push that also has a pull request does not run the same job twice for one commit. Only
+PR runs are cancelled by a newer commit; a `main` push, a tag and the weekly security run are
+never cancelled.
 
 ### CI verification of release APK
 
@@ -36,8 +43,10 @@ only to verify that R8 can build; that keystore is ephemeral.
    ./gradlew :shared:allTests :app:testDebugUnitTest :app:lintDebug
    python3 .github/scripts/audit-checklist.py        # add --strict to see every known gap
    ```
-3. Open a PR. `ci.yml` + `worker.yml` must be green before merge; `ios.yml` runs on `main`
-   (and manually) because it pins a macOS runner for the whole iOS toolchain.
+3. Open a PR. `ci.yml`, `security.yml` and — when the diff touches iOS, `shared/` or the
+   Worker — `ios.yml` / `worker.yml` must be green before merge. A PR that changes none of the
+   paths a workflow watches reports no check for it; see the required-status-check note in
+   [CI_CD_AUDIT.md](CI_CD_AUDIT.md) §7.
 4. Squash-merge to `main`. Never push release commits straight to `main`.
 
 ### Pre-PR checklist

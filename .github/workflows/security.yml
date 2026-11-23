@@ -1,0 +1,254 @@
+name: Security
+
+# Static and data-flow security analysis for the app, the shared KMP module and the Worker.
+#
+#   static-audit           embedded audit checklist, mobsfscan (OWASP MASVS), Gitleaks
+#   codeql                 data-flow analysis of Kotlin/Java
+#   dependency-submission  resolved Gradle graph (transitive CVEs reach Dependabot)
+#   report                 merged SECURITY_AUDIT.md for this workflow
+#
+# This workflow is separate from ci.yml so that a change that cannot affect the Android build
+# (iOS sources, Worker sources) still gets secret scanning and CodeQL, while a docs-only change
+# gets nothing. The APK security scan needs the APK, so it stays in ci.yml next to the job that
+# builds it. Path filters and the trigger matrix: docs/CI_CD_AUDIT.md.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'app/**'
+      - 'shared/**'
+      - 'ios/**'
+      - 'worker/**'
+      - 'gradle/**'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - 'google-services.json'
+      - '.gitleaks.toml'
+      - '.github/workflows/security.yml'
+      - '.github/scripts/**'
+      - '.github/audit-baseline.json'
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'shared/**'
+      - 'ios/**'
+      - 'worker/**'
+      - 'gradle/**'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - 'google-services.json'
+      - '.gitleaks.toml'
+      - '.github/workflows/security.yml'
+      - '.github/scripts/**'
+      - '.github/audit-baseline.json'
+  schedule:
+    - cron: '0 4 * * 1'   # weekly drift check: new CVEs, new lint rules, new permissions
+  workflow_dispatch:
+    inputs:
+      strict:
+        description: 'Audit: fail on every known gap, not only on regressions'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  security-events: write
+
+# PR runs are superseded by the next push. A main-branch or scheduled run is never cancelled:
+# the weekly scan is this repository's only periodic security baseline.
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # --------------------------------------------------------- static audit (fast)
+  static-audit:
+    name: Audit checklist, mobsfscan, secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Run the embedded audit checklist
+        env:
+          STRICT: ${{ inputs.strict && '--strict' || '' }}
+        run: python3 .github/scripts/audit-checklist.py $STRICT
+
+      - name: mobsfscan (OWASP mobile static analysis)
+        run: |
+          mkdir -p audit-report
+          # An isolated venv avoids PEP 668 / system-site permission failures on runners.
+          python3 -m venv "$RUNNER_TEMP/mobsfscan-venv"
+          "$RUNNER_TEMP/mobsfscan-venv/bin/pip" install --quiet --disable-pip-version-check mobsfscan
+          # Findings are reported through SARIF; the checklist decides what blocks a merge.
+          "$RUNNER_TEMP/mobsfscan-venv/bin/mobsfscan" \
+            --sarif -o audit-report/mobsfscan.sarif app/src shared/src || true
+          python3 - <<'PY'
+          import json, pathlib
+          report = pathlib.Path("audit-report/mobsfscan.sarif")
+          rows, counts = [], {}
+          if report.is_file():
+              data = json.loads(report.read_text())
+              for run in data.get("runs", []):
+                  for result in run.get("results", []):
+                      rule = result.get("ruleId", "mobsfscan")
+                      counts[rule] = counts.get(rule, 0) + 1
+                      rows.append(f"| `{rule}` | {result.get('message', {}).get('text', '')[:160]} |")
+          lines = ["### mobsfscan", "", f"{len(rows)} finding(s)", ""]
+          if rows:
+              lines += ["| Rule | Message |", "|---|---|"] + rows[:40]
+          pathlib.Path("audit-report/mobsfscan.md").write_text("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          PY
+
+      - name: Gitleaks (committed secrets)
+        run: |
+          mkdir -p audit-report
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
+            detect --source=/repo --config=/repo/.gitleaks.toml \
+            --report-format=sarif --report-path=/repo/audit-report/gitleaks.sarif \
+            --no-banner --redact --exit-code 0
+
+      - name: Upload SARIF findings
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: audit-report
+          category: static-audit
+
+      - name: Upload audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: audit-static
+          path: audit-report/
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ------------------------------------------------------------------- CodeQL
+  codeql:
+    name: CodeQL (data-flow security analysis)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The java-kotlin extractor needs the JDK present when it initializes, otherwise it can
+      # start without instrumentation and the analysis then processes no Kotlin/Java code.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java-kotlin
+          build-mode: manual
+          queries: security-and-quality
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Build for CodeQL
+        run: ./gradlew :app:assembleDebug :shared:build --stacktrace --no-daemon
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: codeql-app
+
+  # ------------------------------------------- dependency graph (transitive CVEs)
+  # Dependabot's Gradle ecosystem only reads the versions declared in the catalog; it cannot
+  # see what those resolve to. Submitting the resolved graph is what makes a CVE in a
+  # transitive artifact (OkHttp behind ktor, protobuf behind Firebase, ExoPlayer internals)
+  # raise an alert instead of staying invisible.
+  #
+  # `contents: write` is scoped to this job, and the job never runs on pull_request, where a
+  # fork's token is read-only and the submission would fail.
+  dependency-submission:
+    name: Submit Gradle dependency graph
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # The resolve task configures every module, and an Android module fails configuration
+      # (recording nothing) when the SDK is absent.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      # generate-and-submit: the graph is queryable in the repository's dependency graph, so
+      # there is no reason to keep a per-run copy of the JSON as an artifact.
+      - name: Generate and submit the dependency graph
+        uses: gradle/actions/dependency-submission@v6
+        with:
+          dependency-graph: generate-and-submit
+
+  # ------------------------------------------------------------ single report
+  report:
+    name: Merge security report
+    needs: [ static-audit, codeql ]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download audit artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          path: audit-download
+          pattern: audit-*
+          merge-multiple: true
+
+      - name: Merge into one report
+        run: >
+          python3 .github/scripts/merge-audit-report.py
+          --input audit-download
+          --out audit-report/SECURITY_AUDIT.md
+          --workflow .github/workflows/security.yml
+
+      - name: Upload the merged report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: security-audit-report
+          path: audit-report/SECURITY_AUDIT.md
+          if-no-files-found: warn
+          retention-days: 30

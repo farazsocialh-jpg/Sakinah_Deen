@@ -1,32 +1,54 @@
-name: CI
+name: Android CI
 
-# The single pipeline for the Android app, its KMP shared code and the automated audit.
-# One workflow, one trigger, one report — replacing the four overlapping workflows this repo
-# used to run on every push (build, audit, UI/UX audit, signed release APK).
+# The Android side of the pipeline: the app, the shared KMP module and the device audit.
 #
 #   quality        build + unit tests + lint + R8 release check; the merge gate
-#   static-audit   embedded audit checklist, mobsfscan (OWASP MASVS), Gitleaks
-#   codeql         data-flow security analysis of Kotlin/Java
-#   dependencies   resolved Gradle graph submitted so transitive CVEs reach Dependabot
 #   apk-security   MobSF assessment of the release APK produced by `quality`
 #   device         ONE emulator boot: instrumented tests, accessibility measurement, UI/UX monkey
-#   report         merged AUDIT.md for the run
+#   report         merged AUDIT.md for this workflow
+#   release        signed-APK verification (only when the signing secrets are configured)
 #
-# Release signing lives in release.yml (tag or manual). iOS lives in ios.yml.
+# Responsibilities live in exactly one workflow:
+#   security.yml   CodeQL, audit checklist, mobsfscan, Gitleaks, dependency graph
+#   ios.yml        shared framework, iOS app, simulator UI tests
+#   worker.yml     AI Scholar proxy: syntax, tests, Wrangler dry-run
+#   release.yml    the only signed, publishable AAB/APK
+#
+# Path filters keep the 75-minute emulator off docs-, Worker- and iOS-only changes.
 # Development process (branches, gates, release, audit triage): docs/development-sop.md.
 
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'app/**'
+      - 'shared/**'
+      - 'gradle/**'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - 'google-services.json'
+      - '.github/workflows/ci.yml'
+      - '.github/scripts/**'
+      - '.github/audit-baseline.json'
   pull_request:
-  schedule:
-    - cron: '0 4 * * 1'   # weekly drift check: new CVEs, new lint rules, new permissions
+    paths:
+      - 'app/**'
+      - 'shared/**'
+      - 'gradle/**'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - 'google-services.json'
+      - '.github/workflows/ci.yml'
+      - '.github/scripts/**'
+      - '.github/audit-baseline.json'
   workflow_dispatch:
     inputs:
-      strict:
-        description: 'Audit: fail on every known gap, not only on regressions'
-        type: boolean
-        default: false
       a11y_gate:
         description: 'Fail when the device accessibility audit reports violations'
         type: boolean
@@ -39,11 +61,13 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
+# A newer PR commit supersedes the old run. Pushes to main and manual runs are never
+# cancelled: the weekly security baseline and a release check must not be discarded by the
+# next commit that lands.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   MOBSF_API_KEY: ci-audit-key
@@ -54,6 +78,9 @@ jobs:
     name: Build, unit tests, lint
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write   # upload the lint SARIF to code scanning
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -150,162 +177,15 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # --------------------------------------------------------- static audit (fast)
-  static-audit:
-    name: Audit checklist, mobsfscan, secrets
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Run the embedded audit checklist
-        env:
-          STRICT: ${{ inputs.strict && '--strict' || '' }}
-        run: python3 .github/scripts/audit-checklist.py $STRICT
-
-      - name: mobsfscan (OWASP mobile static analysis)
-        run: |
-          mkdir -p audit-report
-          # An isolated venv avoids PEP 668 / system-site permission failures on runners.
-          python3 -m venv "$RUNNER_TEMP/mobsfscan-venv"
-          "$RUNNER_TEMP/mobsfscan-venv/bin/pip" install --quiet --disable-pip-version-check mobsfscan
-          # Findings are reported through SARIF; the checklist decides what blocks a merge.
-          "$RUNNER_TEMP/mobsfscan-venv/bin/mobsfscan" \
-            --sarif -o audit-report/mobsfscan.sarif app/src shared/src || true
-          python3 - <<'PY'
-          import json, pathlib
-          report = pathlib.Path("audit-report/mobsfscan.sarif")
-          rows, counts = [], {}
-          if report.is_file():
-              data = json.loads(report.read_text())
-              for run in data.get("runs", []):
-                  for result in run.get("results", []):
-                      rule = result.get("ruleId", "mobsfscan")
-                      counts[rule] = counts.get(rule, 0) + 1
-                      rows.append(f"| `{rule}` | {result.get('message', {}).get('text', '')[:160]} |")
-          lines = ["### mobsfscan", "", f"{len(rows)} finding(s)", ""]
-          if rows:
-              lines += ["| Rule | Message |", "|---|---|"] + rows[:40]
-          pathlib.Path("audit-report/mobsfscan.md").write_text("\n".join(lines) + "\n")
-          print("\n".join(lines))
-          PY
-
-      - name: Gitleaks (committed secrets)
-        run: |
-          mkdir -p audit-report
-          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
-            detect --source=/repo --config=/repo/.gitleaks.toml \
-            --report-format=sarif --report-path=/repo/audit-report/gitleaks.sarif \
-            --no-banner --redact --exit-code 0
-
-      - name: Upload SARIF findings
-        if: always()
-        continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: audit-report
-          category: static-audit
-
-      - name: Upload audit artifacts
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: audit-static
-          path: audit-report/
-          if-no-files-found: warn
-          retention-days: 30
-
-  # ------------------------------------------------------------------- CodeQL
-  codeql:
-    name: CodeQL (data-flow security analysis)
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      # The java-kotlin extractor needs the JDK present when it initializes, otherwise it can
-      # start without instrumentation and the analysis then processes no Kotlin/Java code.
-      - name: Set up JDK 17
-        uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: java-kotlin
-          build-mode: manual
-          queries: security-and-quality
-
-      - name: Make Gradle wrapper executable
-        run: chmod +x ./gradlew
-
-      - name: Build for CodeQL
-        run: ./gradlew :app:assembleDebug :shared:build --stacktrace --no-daemon
-
-      - name: Analyze
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: codeql-app
-
-  # ------------------------------------------- dependency graph (transitive CVEs)
-  # Dependabot's Gradle ecosystem only reads the versions declared in the catalog; it cannot
-  # see what those resolve to. Submitting the resolved graph is what makes a CVE in a
-  # transitive artifact (OkHttp behind ktor, protobuf behind Firebase, ExoPlayer internals)
-  # raise an alert instead of staying invisible.
-  #
-  # `contents: write` is scoped to this job, and the job never runs on pull_request, where a
-  # fork's token is read-only and the submission would fail.
-  dependency-submission:
-    name: Submit Gradle dependency graph
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      # The resolve task configures every module, and an Android module fails configuration
-      # (recording nothing) when the SDK is absent.
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
-
-      - name: Make Gradle wrapper executable
-        run: chmod +x ./gradlew
-
-      # generate-and-submit: the graph is queryable in the repository's dependency graph, so
-      # there is no reason to keep a per-run copy of the JSON as an artifact.
-      - name: Generate and submit the dependency graph
-        uses: gradle/actions/dependency-submission@v6
-        with:
-          dependency-graph: generate-and-submit
-
   # -------------------------------------------------------------- APK analysis
   apk-security:
     name: APK security (MobSF)
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write   # upload the MobSF SARIF
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -400,8 +280,8 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      # No separate assembleDebug here: connectedDebugAndroidTest builds the app and its test
-      # APK itself, so a build step would just compile everything a second time.
+      # No separate assembleDebug here: the device script builds the app and test APKs itself
+      # so that a compilation failure is reported as one, before any emulator work.
       - name: Enable KVM group perms
         run: |
           # The attribute is OPTIONS (plural); a misspelt key makes udev drop the rule. The
@@ -418,8 +298,9 @@ jobs:
             exit 1
           fi
 
-      # One boot, three legs (scripts/run-device-audit.sh): instrumented tests gate the job,
-      # the UI/UX monkey gates on crashes, the accessibility leg is report-only.
+      # One boot, staged (scripts/run-device-audit.sh): emulator readiness, compile, APK
+      # presence, install, instrumented tests (gate), accessibility (report-only), UI/UX
+      # monkey (gate on crash/ANR). Each stage reports its own failure.
       - name: Run the device legs
         id: device
         continue-on-error: true
@@ -445,12 +326,15 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      # The step is continue-on-error only so the reports above always upload; failing tests or
+      # The step above is continue-on-error only so the reports always upload; failing tests or
       # an app crash still fail the job here. Accessibility findings do not reach this step.
       - name: Fail on failing tests or a crash/ANR
         if: steps.device.outcome == 'failure'
         run: |
-          echo "::error::A device leg failed (instrumented tests or an app crash/ANR); see the audit-device artifact."
+          if [ -f device-report/failed-stages.txt ]; then
+            echo "Failed stage(s): $(paste -sd, device-report/failed-stages.txt)"
+          fi
+          echo "::error::A device stage failed; see the audit-device artifact (device-report/status.md)."
           exit 1
 
       # Opt-in only: flip a11y_gate to true once the reported violations are confirmed.
@@ -477,7 +361,7 @@ jobs:
   # ------------------------------------------------------------ single report
   report:
     name: Merge audit report
-    needs: [ quality, static-audit, codeql, apk-security, device ]
+    needs: [ quality, apk-security, device ]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -581,11 +465,32 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease --stacktrace --no-daemon
-      - name: Verify APK signature
+      - name: Verify APK signature and signer identity
         if: steps.secrets.outputs.has_secrets == 'true'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
-          apksigner verify --verbose \
-            -certs app/build/outputs/apk/release/*.apk
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
+          APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          test -n "$APK"
+          # Exits non-zero when the APK is unsigned or the signature is invalid.
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee "$RUNNER_TEMP/apksigner.txt"
+          # A valid signature is not enough: it must be the production key, not a debug or CI
+          # key. Compare the signer certificate with the configured keystore entry.
+          EXPECTED=$(keytool -list -v -keystore "$RUNNER_TEMP/release-keystore.jks" \
+            -alias "$KEY_ALIAS" -storepass "$KEYSTORE_PASSWORD" \
+            | awk -F': ' '/SHA256:/{print $2; exit}')
+          ACTUAL=$(awk -F': ' '/Signer #1 certificate SHA-256 digest:/{print $2; exit}' "$RUNNER_TEMP/apksigner.txt")
+          if [ -z "$EXPECTED" ] || [ -z "$ACTUAL" ]; then
+            echo "::error::Could not read the signing certificate digest (expected='$EXPECTED' actual='$ACTUAL')."
+            exit 1
+          fi
+          if [ "$(echo "$EXPECTED" | tr 'A-F' 'a-f' | tr -d ' ')" != "$(echo "$ACTUAL" | tr 'A-F' 'a-f' | tr -d ' ')" ]; then
+            echo "::error::The release APK is not signed by the configured production key."
+            exit 1
+          fi
+          echo "Signed by the configured production certificate."
       - name: Upload verified release APK
         if: steps.secrets.outputs.has_secrets == 'true'
         uses: actions/upload-artifact@v7

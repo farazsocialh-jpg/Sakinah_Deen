@@ -46,10 +46,13 @@ iOS (macOS only):
 
 ## Checks and releases
 
-CI is four workflows: [`ci.yml`](.github/workflows/ci.yml) (build, tests, lint and the full
-audit), [`release.yml`](.github/workflows/release.yml) (the only signed AAB/APK, from a `v*` tag or
-manual run), [`ios.yml`](.github/workflows/ios.yml) and [`worker.yml`](.github/workflows/worker.yml).
-Process, gates and checklists: [docs/development-sop.md](docs/development-sop.md).
+CI is five path-filtered workflows, one responsibility each:
+[`ci.yml`](.github/workflows/ci.yml) (Android build, tests, lint, device audit),
+[`security.yml`](.github/workflows/security.yml) (CodeQL, mobsfscan, Gitleaks, dependency graph),
+[`ios.yml`](.github/workflows/ios.yml), [`worker.yml`](.github/workflows/worker.yml) and
+[`release.yml`](.github/workflows/release.yml) (the only signed AAB/APK, from a `v*` tag or manual
+run). Triggers, duplicate-execution analysis and root causes: [docs/CI_CD_AUDIT.md](docs/CI_CD_AUDIT.md);
+process, gates and checklists: [docs/development-sop.md](docs/development-sop.md).
 
 ## Setup
 
