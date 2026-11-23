@@ -109,3 +109,35 @@ The job fails with `SCANNER FAILURE — result unverified`. Do not rerun until i
 not lower the policy to get past it: read the step log, fix the invocation (missing image,
 network, permission, unreadable report) and rerun. A red scanner is information; a green
 scanner that never ran is not.
+
+## Dependency graph (transitive CVEs)
+
+Dependabot's Gradle ecosystem only reads the versions declared in the catalog; it cannot see
+what those resolve to. Submitting the resolved graph is what makes a CVE in a transitive
+artifact (OkHttp behind ktor, protobuf behind Firebase, ExoPlayer internals) raise an alert
+instead of staying invisible.
+
+**Status today: not operational.** The workflow always *generates* the snapshot (real work, uploaded
+as an artifact) and only *submits* it when an administrator has enabled the feature and opted in
+with the repository variable `DEPENDENCY_GRAPH_ENABLED=true`. Until a real submission succeeds,
+dependency-graph coverage is missing, not passing, and the run prints
+`::warning::Dependency graph submission is disabled...`.
+
+### Exact administrator action required
+
+1. Open the repository on GitHub: **Settings → Code security → Dependency graph** and turn it on.
+2. Create the repository variable **Settings → Secrets and variables → Actions → Variables →
+   New repository variable**: name `DEPENDENCY_GRAPH_ENABLED`, value `true`.
+3. Re-run the `Security` workflow (or wait for the next push to `main`). The
+   `dependency-submission` job will then call `gradle/actions/dependency-submission@v6` with
+   `dependency-graph: generate-and-submit` and report success in the step summary.
+4. Confirm the submission step actually executed and succeeded — a skipped step is not evidence
+   of success. Check the run's `dependency-submission` job conclusion and the
+   `### Gradle dependency graph` step summary on `main`.
+5. Only after that succeeds, treat transitive CVEs as monitored.
+
+No workflow or code change can enable the dependency graph: `contents: write` on the job is not
+enough, and the Dependency Submission API answers "The Dependency graph is disabled for this
+repository" until step 1 is done. Do not set `DEPENDENCY_GRAPH_ENABLED=true` before step 1.
+
+`docs/CI_CD_FINAL_REPORT.md` tracks this as an open setting; it is not marked operational.
