@@ -2,7 +2,6 @@ package com.sakinah.deen.ui.screens
 
 import com.sakinah.deen.R
 
-import android.content.Context
 import android.media.MediaPlayer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
@@ -55,6 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -75,10 +75,6 @@ import com.sakinah.deen.ui.components.StatusBadge
 import com.sakinah.deen.ui.rememberInject
 
 import kotlinx.coroutines.launch
-
-/** Resolves a bundled raw recording by name, or 0 when the asset is not packaged. */
-private fun rawAudioResId(context: Context, name: String): Int =
-    context.resources.getIdentifier(name, "raw", context.packageName)
 
 @Composable
 fun TravelScreen(
@@ -330,7 +326,7 @@ fun TravelScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = stringResource(R.string.travel_stay_limit, maxStayDays),
+                        text = pluralStringResource(R.plurals.travel_stay_limit, maxStayDays, maxStayDays),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f)
@@ -443,16 +439,13 @@ fun TravelScreen(
                             duaPlayer = null
                             isDuaPlaying = false
                         } else {
-                            val resId = rawAudioResId(context, "dua_al_safar")
-                            if (resId != 0) {
-                                runCatching {
-                                    duaPlayer?.release()
-                                    duaPlayer = MediaPlayer.create(context, resId)?.apply {
-                                        setOnCompletionListener { isDuaPlaying = false }
-                                        start()
-                                    }
-                                    isDuaPlaying = duaPlayer != null
+                            runCatching {
+                                duaPlayer?.release()
+                                duaPlayer = MediaPlayer.create(context, R.raw.dua_al_safar)?.apply {
+                                    setOnCompletionListener { isDuaPlaying = false }
+                                    start()
                                 }
+                                isDuaPlaying = duaPlayer != null
                             }
                         }
                     },

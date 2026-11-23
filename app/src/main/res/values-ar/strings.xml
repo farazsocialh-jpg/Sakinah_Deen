@@ -10,19 +10,10 @@
     <string name="nav_guide">الدليل</string>
     <string name="nav_tools">الأدوات</string>
 
-    <string name="prayer_fajr">الفجر</string>
-    <string name="prayer_dhuhr">الظهر</string>
-    <string name="prayer_asr">العصر</string>
-    <string name="prayer_maghrib">المغرب</string>
-    <string name="prayer_isha">العشاء</string>
 
     <string name="channel_group_prayer">تنبيهات الصلاة والأذان</string>
     <string name="channel_group_travel">السفر والتنقل</string>
     <string name="channel_group_habit">الأذكار والسنن</string>
-    <string name="channel_adhan_name">الأذان ونداء الصلاة</string>
-    <string name="channel_adhan_desc">تنبيهات الأذان عالية الأولوية عند دخول وقت الصلاة</string>
-    <string name="channel_salah_silent_name">العد التنازلي للصلاة</string>
-    <string name="channel_salah_silent_desc">عد تنازلي هادئ للصلاة القادمة</string>
     <string name="channel_prayer_sound_name">تنبيهات الصلاة — صوت</string>
     <string name="channel_prayer_sound_desc">تنبيهات صلاة بارزة مع نغمة إشعار قياسية واهتزاز</string>
     <string name="channel_prayer_vibrate_name">تنبيهات الصلاة — اهتزاز فقط</string>
@@ -36,46 +27,25 @@
     <string name="channel_habit_name">أذكار وسنن يومية</string>
     <string name="channel_habit_desc">أذكار الصباح والمساء وسورة الكهف والصيام</string>
 
-    <string name="adhan_title">الأذان: حان وقت صلاة %1$s</string>
     <string name="adhan_body">حي على الصلاة ، حي على الفلاح</string>
     <string name="adhan_action_stop">إيقاف</string>
     <string name="adhan_action_mute">كتم</string>
-    <string name="adhan_action_snooze">تأجيل ١٠ دقائق</string>
-    <string name="adhan_fallback_title">الأذان: %1$s · %2$s</string>
     <string name="notif_action_mark_prayed">تسجيل الصلاة</string>
     <string name="notif_prayer_fallback_title">الصلاة</string>
     <string name="notif_prayer_fallback_window">وقت الصلاة</string>
 
     <string name="safar_title">السفر: دعاء السفر</string>
     <string name="safar_dua_arabic">سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَٰذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ</string>
-    <string name="safar_connected_title">تم الاتصال بـ %1$s</string>
-    <string name="safar_enter_prompt">دخلت وضع السفر. هل تريد قراءة دعاء السفر وتفعيل بوصلة القبلة؟</string>
-    <string name="safar_play_dua">تشغيل دعاء السفر</string>
-    <string name="safar_open_qibla">فتح قبلة الطريق</string>
-    <string name="safar_qasr_active">المسافة تتجاوز %1$d كم — القصر (ركعتان) مفعّل.</string>
-    <string name="safar_qasr_inactive">تبعد %1$d كم عن المنزل — القصر غير لازم بعد.</string>
-    <string name="safar_location_needed">اسمح بالموقع لحساب أحكام القصر.</string>
 
-    <string name="zakat_nisab">النصاب</string>
-    <string name="zakat_gold">الذهب</string>
-    <string name="zakat_silver">الفضة</string>
 
-    <string name="action_retry">إعادة المحاولة</string>
-    <string name="action_close">إغلاق</string>
-    <string name="action_download">تنزيل</string>
-    <string name="action_play">تشغيل</string>
-    <string name="offline_seed_note">محتوى مضمّن دون اتصال</string>
     <string name="city_picker_title">اختيار مدينة المنزل</string>
     <string name="city_picker_subtitle">تُقاس مسافة السفر (القصر) من المنزل.</string>
     <string name="city_picker_search">ابحث عن مدينة</string>
     <string name="city_picker_no_match">لا توجد مدينة مطابقة.</string>
     <string name="city_picker_use_gps">استخدام GPS الجهاز</string>
     <string name="action_cancel">إلغاء</string>
-    <string name="salah_home_layout_title">تخطيط الصفحة الرئيسية للصلاة</string>
     <string name="salah_home_layout_caption">اختر طريقة عرض الصلاة الحالية وجدول الصلوات في الصفحة الرئيسية.</string>
-    <string name="quran_reading_layout_title">تخطيط قراءة القرآن</string>
     <string name="quran_reading_layout_caption">اختر طريقة عرض آيات القرآن في القارئ.</string>
-    <string name="hadith_reading_layout_title">تخطيط قراءة الحديث</string>
     <string name="hadith_reading_layout_caption">اختر طريقة عرض نص الحديث في القارئ.</string>
 
     <!-- Visual Salah Guide -->
@@ -102,12 +72,9 @@
     <string name="guide_favorite_cd">حفظ في المفضلة</string>
     <string name="guide_unfavorite_cd">إزالة من المفضلة</string>
     <string name="guide_progress_tab">%1$s %2$d٪</string>
-    <string name="guide_progress_summary">تقدم التدريب: %1$d من %2$d خطوة متعلَّمة</string>
-    <string name="guide_favorites_summary">%1$d محفوظة</string>
     <string name="guide_practice_reminder">تذكير يومي بالتدريب</string>
     <string name="guide_reminder_title">واصل دليل الصلاة</string>
     <string name="guide_reminder_body">خذ دقائق لمراجعة خطوات الصلاة والأذكار.</string>
-    <string name="guide_reminder_body_progress">وضعت علامة على %1$d خطوة كمتعلَّمة. واصل من حيث توقفت.</string>
     <string name="guide_tab_adhkar">الأذكار</string>
     <string name="guide_adhkar_repeat">%1$d×</string>
     <string name="guide_adhkar_variant">رواية أخرى: %1$s</string>
@@ -115,7 +82,6 @@
     <string name="guide_adhkar_grading">الدرجة: %1$s</string>
     <string name="guide_adhkar_source_prefix">المصدر: %1$s</string>
     <string name="guide_variation_label">اختلاف المذهب / الهيئة</string>
-    <string name="guide_adhkar_subtitle">%1$d ذكرًا · %2$d محفوظ</string>
     <string name="guide_adhkar_all">الكل</string>
     <string name="guide_previous">السابق</string>
     <string name="guide_next_step">الخطوة التالية</string>
@@ -144,17 +110,15 @@
     <string name="wealth_currency_nisab">العملة: %1$s • مصدر النصاب: %2$s</string>
     <string name="wealth_nisab_rate_currency">أسعار النصاب مقوّمة بـ%1$s · %2$s</string>
     <string name="wealth_refreshing">جارٍ التحديث…</string>
-    <string name="wealth_nisab_rates_estimate">أسعار النصاب: تقدير مدمج · حدّثها عند الاتصال</string>
     <string name="travel_simulate_return">محاكاة العودة المحلية (&lt;%1$d كم) — للتصحيح فقط</string>
     <string name="travel_simulate_departure">محاكاة مغادرة السفر (&gt;%1$d كم) — للتصحيح فقط</string>
     <string name="travel_qasr_matrix">مصفوفة صلوات القصر والجمع</string>
     <string name="travel_combining">الجمع الجائز: يمكن جمع الظهر والعصر في وقت الظهر (تقديم) أو العصر (تأخير). وكذلك المغرب والعشاء.</string>
     <string name="travel_jam_toggle">السماح بالجمع — اختياري</string>
     <string name="travel_qasr_note">تختلف المذاهب في مسافة نحو %1$d كم (≈٤٨ ميلًا)، ومدة السفر قبل تطبيق القصر، والصلوات التي يجوز جمعها. اسأل عالمًا مؤهلًا في مذهبك.</string>
-    <string name="travel_dua_arabic">"Subḥānal-ladhī sakh-khara lanā hādhā wa mā kunnā lahū muqrinīn..."</string>
+    <string name="travel_dua_arabic">"Subḥānal-ladhī sakh-khara lanā hādhā wa mā kunnā lahū muqrinīn…"</string>
     <string name="notif_fajr_includes">يتضمن «الصلاة خير من النوم»</string>
     <string name="notif_dnd_granted">تم منح الوصول إلى سياسة الإشعارات — يمكن للفجر تجاوز عدم الإزعاج.</string>
-    <string name="notif_test_scheduled">تمت الجدولة والتسليح عبر Android — يجب أن يُطلق بعد نحو ٥ ثوانٍ.</string>
     <!-- Theme palette registry -->
     <string name="theme_palette_selected">محدد</string>
     <string name="theme_palette_emerald_sanctuary_name">المحمية الزمردية</string>
@@ -221,7 +185,6 @@
     <string name="quran_ayah_chip">الآية %1$d</string>
     <string name="quran_selected_badge">قيد القراءة</string>
     <string name="quran_switch_to_study">التبديل إلى الدراسة</string>
-    <string name="quran_offline_compact">تم تخزين %1$d من %2$d آية</string>
     <string name="quran_options_title">خيارات القراءة</string>
     <string name="quran_options_search">البحث في القرآن</string>
     <string name="quran_options_translation">الترجمة والرسم العثماني</string>
@@ -239,7 +202,6 @@
     <string name="hadith_open_collection">فتح</string>
     <string name="hadith_cover_cd">غلاف مجموعة الحديث: %1$s</string>
     <string name="hadith_compiled_by">جمعها %1$s</string>
-    <string name="hadith_chapters_count">%1$d بابًا</string>
     <string name="salah_exact_alarm_warning">تنبيهات الصلاة الدقيقة غير مسموح بها، لذا قد تتأخر التذكيرات. انقر للسماح بالتنبيهات الدقيقة.</string>
     <string name="app_name">ImanCore</string>
     <string name="profile_title">الملف الشخصي والحساب</string>
@@ -280,7 +242,6 @@
     <string name="profile_backup_import_action">استيراد</string>
     <string name="profile_sign_out_failed">تعذّر تسجيل الخروج.</string>
     <string name="profile_cancel">إلغاء</string>
-    <string name="profile_provider_google">حساب Google</string>
     <string name="info_data_sources_title">مصادر البيانات الإسلامية والإسناد</string>
     <string name="info_help_title">المساعدة والملاحظات والإبلاغ عن خطأ</string>
     <string name="info_help_contact">تواصل مع الدعم وأبلغ عن المشكلات على support@imancore.app.</string>
@@ -415,7 +376,6 @@
     <string name="salah_expand_cd">توسيع</string>
     <string name="salah_nawafil_recommended">النوافل المستحبة: %1$s</string>
     <string name="salah_open_guide">فتح دليل %1$s (الركعات: %2$d)</string>
-    <string name="salah_rakat_fard">الفرض: %1$d ركعات</string>
     <string name="salah_no_prayer">لا صلاة (وقت محظور)</string>
     <string name="salah_necessity_until_fajr">ضرورة حتى الفجر</string>
     <string name="salah_preferred_sunset">مستحب قبل نحو ١٥ دقيقة من الغروب</string>
@@ -443,12 +403,6 @@
     <string name="wealth_sadaqah_collected">تم جمع %1$s</string>
     <string name="wealth_sadaqah_progress">%1$d%% من هدف الصدقة الشهري</string>
     <string name="wealth_sadaqah_add">+%1$s</string>
-    <string name="wealth_amount_negative">لا يمكن أن يكون المبلغ سالبًا</string>
-    <string name="wealth_amount_decimal">استخدم علامة عشرية واحدة على الأكثر</string>
-    <string name="wealth_amount_too_large">المبلغ كبير جدًا</string>
-    <string name="wealth_amount_invalid">أدخل مبلغًا صالحًا</string>
-    <string name="wealth_amount_cap">يجب ألا يتجاوز المبلغ تريليونًا</string>
-    <string name="wealth_nisab_rates_updated">آخر تحديث لأسعار النصاب: %1$s</string>
     <string name="travel_saved_location">الموقع المحفوظ</string>
     <string name="travel_current_location">الموقع الحالي</string>
     <string name="travel_home_anchor">مرتكز السكن: %1$s</string>
@@ -457,7 +411,6 @@
     <string name="travel_resident_mode">وضع الإقامة</string>
     <string name="travel_change_home">تغيير السكن</string>
     <string name="travel_safar_methodology">منهجية السفر</string>
-    <string name="travel_stay_limit">حد الإقامة: %1$d أيام (الإقامة الأطول تنهي القصر)</string>
     <string name="travel_vehicle_audio">صوت السيارة جاهز</string>
     <string name="travel_dua_title">دعاء السفر</string>
     <string name="travel_stop_dua">إيقاف دعاء السفر</string>
@@ -504,10 +457,6 @@
     <string name="notif_self_test_desc">يُفحص مباشرة مقابل Android، لا من الإعدادات المحفوظة.</string>
     <string name="notif_refresh">تحديث</string>
     <string name="notif_test_prayer">اختبار إشعار الصلاة (٥ ثوانٍ)</string>
-    <string name="notif_test_inexact">تم التسليح، لكن دون إذن المنبه الدقيق، لذا قد يؤخّره Android. اسمح بالمنبهات الدقيقة لتذكيرات في وقتها.</string>
-    <string name="notif_test_blocked">لم تُجدول: الإشعارات محظورة. اسمح بالإشعارات ثم حاول مجددًا.</string>
-    <string name="notif_test_failed">لم تُجدول: %1$s.</string>
-    <string name="notif_test_unsupported">لم تُجدول: هذا الجهاز لا يوفر خدمة منبه.</string>
     <string name="settings_calculation_method">طريقة الحساب</string>
     <string name="settings_calculation_automatic">التلقائي يستخدم الجهة الإسلامية في دولتك.</string>
     <string name="settings_calculation_automatic_option">تلقائي (حسب الدولة)</string>
@@ -516,4 +465,71 @@
     <string name="settings_rerun_onboarding">إعادة تشغيل الإعداد الشخصي</string>
     <string name="settings_clear_cache">مسح الذاكرة المؤقتة</string>
     <string name="settings_search_language">ابحث عن لغة أو مترجم أو اسم</string>
+
+    <!-- الكميات: صيغة الجمع حتى تتوافق العربية مع المعدود. -->
+    <plurals name="guide_progress_summary">
+        <item quantity="zero">تقدم التدريب: %1$d من %2$d خطوة متعلَّمة</item>
+        <item quantity="one">تقدم التدريب: %1$d من %2$d خطوة متعلَّمة</item>
+        <item quantity="two">تقدم التدريب: %1$d من %2$d خطوتين متعلَّمتين</item>
+        <item quantity="few">تقدم التدريب: %1$d من %2$d خطوات متعلَّمة</item>
+        <item quantity="many">تقدم التدريب: %1$d من %2$d خطوة متعلَّمة</item>
+        <item quantity="other">تقدم التدريب: %1$d من %2$d خطوة متعلَّمة</item>
+    </plurals>
+    <plurals name="guide_favorites_summary">
+        <item quantity="zero">%1$d محفوظة</item>
+        <item quantity="one">%1$d محفوظة</item>
+        <item quantity="two">%1$d محفوظتان</item>
+        <item quantity="few">%1$d محفوظات</item>
+        <item quantity="many">%1$d محفوظة</item>
+        <item quantity="other">%1$d محفوظة</item>
+    </plurals>
+    <plurals name="guide_reminder_body_progress">
+        <item quantity="zero">عدد الخطوات المتعلَّمة: %1$d. واصل من حيث توقفت.</item>
+        <item quantity="one">وضعت علامة على %1$d خطوة كمتعلَّمة. واصل من حيث توقفت.</item>
+        <item quantity="two">وضعت علامة على %1$d خطوتين كمتعلَّمتين. واصل من حيث توقفت.</item>
+        <item quantity="few">وضعت علامة على %1$d خطوات كمتعلَّمة. واصل من حيث توقفت.</item>
+        <item quantity="many">وضعت علامة على %1$d خطوة كمتعلَّمة. واصل من حيث توقفت.</item>
+        <item quantity="other">وضعت علامة على %1$d خطوة كمتعلَّمة. واصل من حيث توقفت.</item>
+    </plurals>
+    <plurals name="guide_adhkar_subtitle">
+        <item quantity="zero">عدد الأذكار: %1$d · %2$d محفوظ</item>
+        <item quantity="one">%1$d ذكر · %2$d محفوظ</item>
+        <item quantity="two">%1$d ذكرين · %2$d محفوظ</item>
+        <item quantity="few">%1$d أذكار · %2$d محفوظ</item>
+        <item quantity="many">%1$d ذكرًا · %2$d محفوظ</item>
+        <item quantity="other">%1$d ذكر · %2$d محفوظ</item>
+    </plurals>
+    <plurals name="salah_rakat_fard">
+        <item quantity="zero">الفرض: %1$d ركعة</item>
+        <item quantity="one">الفرض: %1$d ركعة</item>
+        <item quantity="two">الفرض: %1$d ركعتين</item>
+        <item quantity="few">الفرض: %1$d ركعات</item>
+        <item quantity="many">الفرض: %1$d ركعة</item>
+        <item quantity="other">الفرض: %1$d ركعة</item>
+    </plurals>
+    <plurals name="travel_stay_limit">
+        <item quantity="zero">حد الإقامة: %1$d يوم (الإقامة الأطول تنهي القصر)</item>
+        <item quantity="one">حد الإقامة: %1$d يوم (الإقامة الأطول تنهي القصر)</item>
+        <item quantity="two">حد الإقامة: %1$d يومين (الإقامة الأطول تنهي القصر)</item>
+        <item quantity="few">حد الإقامة: %1$d أيام (الإقامة الأطول تنهي القصر)</item>
+        <item quantity="many">حد الإقامة: %1$d يومًا (الإقامة الأطول تنهي القصر)</item>
+        <item quantity="other">حد الإقامة: %1$d يوم (الإقامة الأطول تنهي القصر)</item>
+    </plurals>
+    <plurals name="quran_offline_compact">
+        <item quantity="zero">تم تخزين %1$d من %2$d آية</item>
+        <item quantity="one">تم تخزين %1$d من %2$d آية</item>
+        <item quantity="two">تم تخزين %1$d من %2$d آيتين</item>
+        <item quantity="few">تم تخزين %1$d من %2$d آيات</item>
+        <item quantity="many">تم تخزين %1$d من %2$d آية</item>
+        <item quantity="other">تم تخزين %1$d من %2$d آية</item>
+    </plurals>
+    <plurals name="hadith_chapters_count">
+        <item quantity="zero">%1$d باب</item>
+        <item quantity="one">%1$d باب</item>
+        <item quantity="two">%1$d بابين</item>
+        <item quantity="few">%1$d أبواب</item>
+        <item quantity="many">%1$d بابًا</item>
+        <item quantity="other">%1$d باب</item>
+    </plurals>
+
 </resources>

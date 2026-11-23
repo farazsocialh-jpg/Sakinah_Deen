@@ -1,9 +1,8 @@
 package com.sakinah.deen.service
 
 import android.content.Context
-import android.media.RingtoneManager
 import android.net.Uri
-import android.provider.Settings
+import androidx.annotation.RawRes
 import androidx.core.net.toUri
 import com.sakinah.deen.R
 import com.sakinah.deen.data.model.Muezzin
@@ -19,25 +18,14 @@ object AdhanAudio {
     ): Uri {
         val isShortTakbir = muezzin == Muezzin.TAKBIR_AQSA || muezzin == Muezzin.TAKBIR_CAIRO
         if (fajrSpecialAdhan && !isShortTakbir && prayerTypeName.equals("FAJR", ignoreCase = true)) {
-            return resourceUri(context, "adhan_fajr", R.raw.adhan_fajr)
+            return resourceUri(context, R.raw.adhan_fajr)
         }
-        return resourceUri(context, muezzin.rawName, R.raw.adhan_makkah)
+        return resourceUri(context, muezzin.rawRes)
     }
 
     /** Short alert tone for "Short Tone" mode. */
-    fun shortToneUri(context: Context): Uri {
-        val bundled = context.resources.getIdentifier("short_tone", "raw", context.packageName)
-        if (bundled != 0) {
-            return "android.resource://${context.packageName}/$bundled".toUri()
-        }
-        return RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            ?: Settings.System.DEFAULT_ALARM_ALERT_URI
-    }
+    fun shortToneUri(context: Context): Uri = resourceUri(context, R.raw.short_tone)
 
-    private fun resourceUri(context: Context, name: String, fallback: Int): Uri {
-        val id = context.resources.getIdentifier(name, "raw", context.packageName)
-            .takeIf { it != 0 }
-            ?: fallback
-        return "android.resource://${context.packageName}/$id".toUri()
-    }
+    private fun resourceUri(context: Context, @RawRes resId: Int): Uri =
+        "android.resource://${context.packageName}/$resId".toUri()
 }

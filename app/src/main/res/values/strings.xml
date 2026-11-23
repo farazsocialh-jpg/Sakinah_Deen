@@ -13,20 +13,11 @@
     <string name="nav_tools">Tools</string>
 
     <!-- Prayer names -->
-    <string name="prayer_fajr">Fajr</string>
-    <string name="prayer_dhuhr">Dhuhr</string>
-    <string name="prayer_asr">Asr</string>
-    <string name="prayer_maghrib">Maghrib</string>
-    <string name="prayer_isha">Isha</string>
 
     <!-- Notification channels -->
     <string name="channel_group_prayer">Prayer &amp; Salah Alerts</string>
     <string name="channel_group_travel">Travel &amp; Mobility (Safar)</string>
     <string name="channel_group_habit">Habits &amp; Adhkar</string>
-    <string name="channel_adhan_name">Adhan &amp; Exact Salah Call</string>
-    <string name="channel_adhan_desc">High-priority Adhan reminders at astronomical prayer entry times</string>
-    <string name="channel_salah_silent_name">Prayer Countdown (Ongoing)</string>
-    <string name="channel_salah_silent_desc">Subtle, non-audible ongoing countdown to the next prayer</string>
     <string name="channel_prayer_sound_name">Salah Alerts — Sound</string>
     <string name="channel_prayer_sound_desc">Heads-up Salah reminders with the standard notification chime and vibration</string>
     <string name="channel_prayer_vibrate_name">Salah Alerts — Vibrate Only</string>
@@ -41,12 +32,9 @@
     <string name="channel_habit_desc">Morning/Evening Adhkar, Surah Al-Kahf on Fridays, and Sunnah fasting</string>
 
     <!-- Adhan notification -->
-    <string name="adhan_title">Adhan: Time for %1$s Prayer</string>
     <string name="adhan_body">حي على الصلاة ، حي على الفلاح — Come to Prayer, Come to Success</string>
     <string name="adhan_action_stop">Stop</string>
     <string name="adhan_action_mute">Mute</string>
-    <string name="adhan_action_snooze">Snooze 10m</string>
-    <string name="adhan_fallback_title">Adhan: Time for %1$s · %2$s</string>
     <string name="notif_action_mark_prayed">Mark as Prayed</string>
     <string name="notif_prayer_fallback_title">Salah</string>
     <string name="notif_prayer_fallback_window">Prayer window</string>
@@ -55,32 +43,14 @@
     <!-- Safar / travel -->
     <string name="safar_title">Safar: Dua al-Safar</string>
     <string name="safar_dua_arabic">سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَٰذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ</string>
-    <string name="safar_connected_title">Connected to %1$s</string>
-    <string name="safar_enter_prompt">Entering vehicular travel mode. Would you like to recite Dua al-Safar and activate Qibla road tracking?</string>
-    <string name="safar_play_dua">Play Dua al-Safar</string>
-    <string name="safar_open_qibla">Open Road Qibla</string>
-    <string name="safar_qasr_active">Journey exceeds %1$d km — Qasr (2 Rak\'ah) is active.</string>
-    <string name="safar_qasr_inactive">%1$d km from home — Qasr not yet applicable.</string>
-    <string name="safar_location_needed">Allow location to calculate Qasr eligibility.</string>
 
     <!-- Zakat -->
-    <string name="zakat_nisab">Nisab</string>
-    <string name="zakat_gold">Gold</string>
-    <string name="zakat_silver">Silver</string>
 
     <!-- Common -->
-    <string name="action_retry">Retry</string>
-    <string name="action_close">Close</string>
-    <string name="action_download">Download</string>
-    <string name="action_play">Play</string>
-    <string name="offline_seed_note">Bundled offline content</string>
 
     <!-- Appearance -->
-    <string name="salah_home_layout_title">Salah Home Layout</string>
     <string name="salah_home_layout_caption">Choose how the Salah home screen presents the current prayer and timetable.</string>
-    <string name="quran_reading_layout_title">Quran Reading Layout</string>
     <string name="quran_reading_layout_caption">Choose how Quran verses are presented in the reader.</string>
-    <string name="hadith_reading_layout_title">Hadith Reading Layout</string>
     <string name="hadith_reading_layout_caption">Choose how hadith text is presented in the reader.</string>
 
     <!-- City picker -->
@@ -131,12 +101,9 @@
     <string name="guide_favorite_cd">Save to favorites</string>
     <string name="guide_unfavorite_cd">Remove from favorites</string>
     <string name="guide_progress_tab">%1$s %2$d%%</string>
-    <string name="guide_progress_summary">Practice progress: %1$d of %2$d steps learned</string>
-    <string name="guide_favorites_summary">%1$d saved</string>
     <string name="guide_practice_reminder">Daily practice reminder</string>
     <string name="guide_reminder_title">Continue your Salah guide</string>
     <string name="guide_reminder_body">Take a few minutes to review the prayer steps and adhkar.</string>
-    <string name="guide_reminder_body_progress">You have marked %1$d steps as learned. Continue where you left off.</string>
     <string name="guide_tab_adhkar">Adhkar</string>
     <string name="guide_adhkar_repeat">%1$d×</string>
     <string name="guide_adhkar_variant">Variant: %1$s</string>
@@ -144,7 +111,6 @@
     <string name="guide_adhkar_grading">Grading: %1$s</string>
     <string name="guide_adhkar_source_prefix">Source: %1$s</string>
     <string name="guide_variation_label">Madhhab / posture variant</string>
-    <string name="guide_adhkar_subtitle">%1$d adhkar · %2$d saved</string>
     <string name="guide_adhkar_all">All</string>
     <!-- Profile & account -->
     <string name="profile_title">Profile &amp; Account</string>
@@ -186,7 +152,6 @@
     <string name="profile_backup_import_action">Import</string>
     <string name="profile_sign_out_failed">Could not sign out.</string>
     <string name="profile_cancel">Cancel</string>
-    <string name="profile_provider_google">Google account</string>
     <!-- Info screens -->
     <string name="info_data_sources_title">Islamic Data Sources &amp; Attribution</string>
     <string name="info_help_title">Help, Feedback &amp; Bug Report</string>
@@ -333,7 +298,6 @@
     <string name="salah_expand_cd">Expand</string>
     <string name="salah_nawafil_recommended">Recommended Nafl: %1$s</string>
     <string name="salah_open_guide">Open %1$s Step Guide (Rakats: %2$d)</string>
-    <string name="salah_rakat_fard">Fard: %1$d Rakat</string>
     <string name="salah_no_prayer">No Prayer (Prohibited Time)</string>
     <string name="salah_necessity_until_fajr">Necessity until Fajr</string>
     <string name="salah_prohibited_window">Prohibited prayer window · Fajr ends</string>
@@ -367,13 +331,6 @@
     <string name="wealth_sadaqah_collected">%1$s collected</string>
     <string name="wealth_sadaqah_progress">%1$d%% of the monthly charity target</string>
     <string name="wealth_sadaqah_add">+%1$s</string>
-    <string name="wealth_amount_negative">Amount cannot be negative</string>
-    <string name="wealth_amount_decimal">Use at most one decimal point</string>
-    <string name="wealth_amount_too_large">Amount is too large</string>
-    <string name="wealth_amount_invalid">Enter a valid amount</string>
-    <string name="wealth_amount_cap">Amount must be 1 trillion or less</string>
-    <string name="wealth_nisab_rates_estimate">Nisab rates: built-in estimate · update when online</string>
-    <string name="wealth_nisab_rates_updated">Nisab rates last updated: %1$s</string>
     <!-- Travel screen -->
     <string name="travel_saved_location">Saved Location</string>
     <string name="travel_current_location">Current location</string>
@@ -387,12 +344,11 @@
     <string name="travel_qasr_matrix">Qasr &amp; Jam‘ Prayer Matrix</string>
     <string name="travel_combining">Permissible Combining (Jam‘): Dhuhr &amp; Asr can be prayed together during either Dhuhr (Taqdim) or Asr (Ta\'khir) time. Maghrib &amp; Isha may likewise be combined.</string>
     <string name="travel_safar_methodology">Safar methodology</string>
-    <string name="travel_stay_limit">Stay limit: %1$d days (longer stays end Qasr)</string>
     <string name="travel_jam_toggle">Permit combining (Jam‘) — opt-in</string>
     <string name="travel_qasr_note">The ~%1$d km (≈48 mi) distance, the journey duration required before Qasr applies, and which prayers may be combined differ between the madhhabs. Ask a qualified scholar for your school.</string>
     <string name="travel_vehicle_audio">Vehicle Audio Ready</string>
     <string name="travel_dua_title">Dua al-Safar</string>
-    <string name="travel_dua_arabic">"Subḥānal-ladhī sakh-khara lanā hādhā wa mā kunnā lahū muqrinīn..."</string>
+    <string name="travel_dua_arabic">"Subḥānal-ladhī sakh-khara lanā hādhā wa mā kunnā lahū muqrinīn…"</string>
     <string name="travel_stop_dua">Stop Dua al-Safar</string>
     <string name="travel_play_dua">Play Dua al-Safar via Audio</string>
     <string name="travel_bt_auto">Car Bluetooth Dua al-Safar auto-play</string>
@@ -440,11 +396,6 @@
     <string name="notif_self_test_desc">Checked live against Android, not from saved settings.</string>
     <string name="notif_refresh">Refresh</string>
     <string name="notif_test_prayer">Test Prayer Notification (5s)</string>
-    <string name="notif_test_scheduled">Scheduled and armed with Android — it should fire in about 5 seconds.</string>
-    <string name="notif_test_inexact">Armed, but without exact-alarm permission, so Android may delay it. Allow exact alarms for on-time reminders.</string>
-    <string name="notif_test_blocked">Not scheduled: notifications are blocked. Allow notifications, then try again.</string>
-    <string name="notif_test_failed">Not scheduled: %1$s.</string>
-    <string name="notif_test_unsupported">Not scheduled: this device exposes no alarm service.</string>
     <!-- Settings screen -->
     <string name="settings_calculation_method">Calculation method</string>
     <string name="settings_calculation_automatic">Automatic uses your country\'s Islamic authority.</string>
@@ -520,7 +471,6 @@
     <string name="quran_ayah_chip">Ayah %1$d</string>
     <string name="quran_selected_badge">Reading</string>
     <string name="quran_switch_to_study">Switch to study</string>
-    <string name="quran_offline_compact">%1$d of %2$d ayahs cached</string>
     <string name="quran_options_title">Reading options</string>
     <string name="quran_options_search">Search Quran</string>
     <string name="quran_options_translation">Translation &amp; Arabic script</string>
@@ -538,5 +488,39 @@
     <string name="hadith_open_collection">Open</string>
     <string name="hadith_cover_cd">Hadith collection cover: %1$s</string>
     <string name="hadith_compiled_by">Compiled by %1$s</string>
-    <string name="hadith_chapters_count">%1$d chapters</string>
+
+    <!-- Quantities: plural so Arabic/Urdu agree with the counted noun. -->
+    <plurals name="guide_progress_summary">
+        <item quantity="one">Practice progress: %1$d of %2$d step learned</item>
+        <item quantity="other">Practice progress: %1$d of %2$d steps learned</item>
+    </plurals>
+    <plurals name="guide_favorites_summary">
+        <item quantity="one">%1$d saved</item>
+        <item quantity="other">%1$d saved</item>
+    </plurals>
+    <plurals name="guide_reminder_body_progress">
+        <item quantity="one">You have marked %1$d step as learned. Continue where you left off.</item>
+        <item quantity="other">You have marked %1$d steps as learned. Continue where you left off.</item>
+    </plurals>
+    <plurals name="guide_adhkar_subtitle">
+        <item quantity="one">%1$d dhikr · %2$d saved</item>
+        <item quantity="other">%1$d adhkar · %2$d saved</item>
+    </plurals>
+    <plurals name="salah_rakat_fard">
+        <item quantity="one">Fard: %1$d Rakat</item>
+        <item quantity="other">Fard: %1$d Rakats</item>
+    </plurals>
+    <plurals name="travel_stay_limit">
+        <item quantity="one">Stay limit: %1$d day (longer stays end Qasr)</item>
+        <item quantity="other">Stay limit: %1$d days (longer stays end Qasr)</item>
+    </plurals>
+    <plurals name="quran_offline_compact">
+        <item quantity="one">%1$d of %2$d ayah cached</item>
+        <item quantity="other">%1$d of %2$d ayahs cached</item>
+    </plurals>
+    <plurals name="hadith_chapters_count">
+        <item quantity="one">%1$d chapter</item>
+        <item quantity="other">%1$d chapters</item>
+    </plurals>
+
 </resources>

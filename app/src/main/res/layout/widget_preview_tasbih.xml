@@ -11,16 +11,16 @@
         android:layout_height="wrap_content"
         android:maxLines="1"
         android:ellipsize="end"
-        android:text="TASBIH · SUBHANALLAH"
+        android:text="@string/widget_preview_tasbih_eyebrow"
         android:textColor="#4B635B"
-        android:textSize="10sp" />
+        android:textSize="11sp" />
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:maxLines="1"
         android:ellipsize="end"
-        android:text="24 / 33"
+        android:text="@string/widget_preview_tasbih_value"
         android:textColor="#0B3B2C"
         android:textSize="16sp"
         android:textStyle="bold" />
@@ -30,7 +30,7 @@
         android:layout_height="wrap_content"
         android:maxLines="2"
         android:ellipsize="end"
-        android:text="+1        ↺ reset"
+        android:text="@string/widget_preview_tasbih_footer"
         android:textColor="#4B635B"
         android:textSize="11sp" />
 </LinearLayout>

@@ -1,5 +1,8 @@
 package com.sakinah.deen.data.model
 
+import androidx.annotation.RawRes
+import com.sakinah.deen.R
+
 /** How a prayer-time alarm should behave when it fires. */
 enum class PrayerAlertMode(val label: String) {
     FULL_AZAAN("Full Azaan"),
@@ -13,15 +16,16 @@ enum class PrayerAlertMode(val label: String) {
 enum class Muezzin(
     val id: String,
     val displayName: String,
-    val rawName: String
+    /** Compiled resource id: resolving the recording by name needed reflection and hid it from lint. */
+    @RawRes val rawRes: Int
 ) {
-    MAKKAH("makkah", "Makkah (Masjid al-Haram)", "adhan_makkah"),
-    MADINAH("madinah", "Madinah (Masjid an-Nabawi)", "azan_madinah"),
-    AQSA("aqsa", "Al-Aqsa", "azan_aqsa"),
-    ALAFASY("alafasy", "Mishary Rashid Alafasy", "azan_alafasy"),
-    CAIRO("cairo", "Cairo (Classic)", "azan_cairo"),
-    TAKBIR_AQSA("takbir_aqsa", "Allahu Akbar ×2 (Al-Aqsa)", "takbir_aqsa"),
-    TAKBIR_CAIRO("takbir_cairo", "Allahu Akbar ×2 (Cairo)", "takbir_cairo");
+    MAKKAH("makkah", "Makkah (Masjid al-Haram)", R.raw.adhan_makkah),
+    MADINAH("madinah", "Madinah (Masjid an-Nabawi)", R.raw.azan_madinah),
+    AQSA("aqsa", "Al-Aqsa", R.raw.azan_aqsa),
+    ALAFASY("alafasy", "Mishary Rashid Alafasy", R.raw.azan_alafasy),
+    CAIRO("cairo", "Cairo (Classic)", R.raw.azan_cairo),
+    TAKBIR_AQSA("takbir_aqsa", "Allahu Akbar ×2 (Al-Aqsa)", R.raw.takbir_aqsa),
+    TAKBIR_CAIRO("takbir_cairo", "Allahu Akbar ×2 (Cairo)", R.raw.takbir_cairo);
 
     companion object {
         fun fromId(id: String?): Muezzin =

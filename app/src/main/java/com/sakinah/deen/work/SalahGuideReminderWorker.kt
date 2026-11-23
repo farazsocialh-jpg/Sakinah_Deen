@@ -52,7 +52,11 @@ class SalahGuideReminderWorker(
         if (!notificationsEnabled) return Result.success()
 
         val content = if (learned > 0) {
-            applicationContext.getString(R.string.guide_reminder_body_progress, learned)
+            applicationContext.resources.getQuantityString(
+                R.plurals.guide_reminder_body_progress,
+                learned,
+                learned
+            )
         } else {
             applicationContext.getString(R.string.guide_reminder_body)
         }

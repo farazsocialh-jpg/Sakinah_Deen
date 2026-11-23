@@ -67,6 +67,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -309,8 +310,9 @@ fun VisualSalahGuideScreen(
                 )
                 Text(
                     text = if (tab == GuideTab.ADHKAR) {
-                        stringResource(
-                            R.string.guide_adhkar_subtitle,
+                        pluralStringResource(
+                            R.plurals.guide_adhkar_subtitle,
+                            adhkarEntries.size,
                             adhkarEntries.size,
                             guideProgress.favoriteAdhkarIds.size
                         )
@@ -392,8 +394,9 @@ fun VisualSalahGuideScreen(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = stringResource(
-                        R.string.guide_progress_summary,
+                    text = pluralStringResource(
+                        R.plurals.guide_progress_summary,
+                        totalSteps,
                         learnedSteps,
                         totalSteps
                     ),
@@ -401,7 +404,7 @@ fun VisualSalahGuideScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = stringResource(R.string.guide_favorites_summary, favoriteCount),
+                    text = pluralStringResource(R.plurals.guide_favorites_summary, favoriteCount, favoriteCount),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

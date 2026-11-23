@@ -13,4 +13,23 @@
     <string translatable="false" name="widget_hijri_date_description">Today’s Hijri date, the Gregorian weekday and Sunnah fast badges.</string>
     <string translatable="false" name="widget_qibla_label">Qibla Direction</string>
     <string translatable="false" name="widget_qibla_description">Your Qibla bearing and city from the saved location.</string>
+    <!-- Widget picker previews: sample content shown before the widget is placed. -->
+    <string translatable="false" name="widget_preview_salah_eyebrow">TODAY’S SALAH</string>
+    <string translatable="false" name="widget_preview_salah_value">2 / 5</string>
+    <string translatable="false" name="widget_preview_salah_footer">✓ Fajr   ○ Dhuhr   ○ Asr   ○ Maghrib   ○ Isha</string>
+    <string translatable="false" name="widget_preview_tasbih_eyebrow">TASBIH · SUBHANALLAH</string>
+    <string translatable="false" name="widget_preview_tasbih_value">24 / 33</string>
+    <string translatable="false" name="widget_preview_tasbih_footer">+1        ↺ reset</string>
+    <string translatable="false" name="widget_preview_ayah_eyebrow">AYAH OF THE DAY · 2:152</string>
+    <string translatable="false" name="widget_preview_ayah_value">Remember Me and I will remember you</string>
+    <string translatable="false" name="widget_preview_ayah_footer">So remember Me; I will remember you.</string>
+    <string translatable="false" name="widget_preview_scholar_eyebrow">IMANCORE SCHOLAR</string>
+    <string translatable="false" name="widget_preview_scholar_value">Ask a question</string>
+    <string translatable="false" name="widget_preview_scholar_footer">Ask ImanCore Scholar…</string>
+    <string translatable="false" name="widget_preview_hijri_eyebrow">HIJRI DATE</string>
+    <string translatable="false" name="widget_preview_hijri_value">18 Jumada al-Ula 1448 AH</string>
+    <string translatable="false" name="widget_preview_hijri_footer">Wednesday · 19 Nov 2026</string>
+    <string translatable="false" name="widget_preview_qibla_eyebrow">QIBLA</string>
+    <string translatable="false" name="widget_preview_qibla_value">252° WSW</string>
+    <string translatable="false" name="widget_preview_qibla_footer">London · Compass</string>
 </resources>

@@ -202,7 +202,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
 
     // Unit tests
-    testImplementation("junit:junit:4.13.2")
+    testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.ktor.client.mock)
 

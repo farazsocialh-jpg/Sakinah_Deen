@@ -80,6 +80,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.PlatformTextStyle
@@ -981,8 +982,9 @@ fun QuranScreen(
                 }
                 state.offlineStatus?.let { status ->
                     Text(
-                        text = stringResource(
-                            R.string.quran_offline_compact,
+                        text = pluralStringResource(
+                            R.plurals.quran_offline_compact,
+                            status.totalAyahs,
                             status.ayahsAvailable,
                             status.totalAyahs
                         ),

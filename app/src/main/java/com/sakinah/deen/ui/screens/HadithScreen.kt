@@ -57,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -701,7 +702,7 @@ private fun HadithCollectionRow(
                 }
                 Text(
                     text = if (book.chapterCount > 0) {
-                        "${book.totalCount} · ${stringResource(R.string.hadith_chapters_count, book.chapterCount)}"
+                        "${book.totalCount} · ${pluralStringResource(R.plurals.hadith_chapters_count, book.chapterCount, book.chapterCount)}"
                     } else {
                         book.totalCount
                     },

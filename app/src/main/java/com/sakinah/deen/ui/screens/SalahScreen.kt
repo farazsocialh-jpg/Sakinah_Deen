@@ -92,6 +92,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -398,7 +399,7 @@ fun SalahScreen(
                                         )
                                     }
                                     Text(
-                                        text = if (!isSunrise) stringResource(R.string.salah_rakat_fard, prayer.fardRakats) else stringResource(R.string.salah_no_prayer),
+                                        text = if (!isSunrise) pluralStringResource(R.plurals.salah_rakat_fard, prayer.fardRakats, prayer.fardRakats) else stringResource(R.string.salah_no_prayer),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

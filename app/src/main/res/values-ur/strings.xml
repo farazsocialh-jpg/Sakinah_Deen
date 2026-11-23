@@ -10,19 +10,10 @@
     <string name="nav_guide">رہنمائی</string>
     <string name="nav_tools">ٹولز</string>
 
-    <string name="prayer_fajr">فجر</string>
-    <string name="prayer_dhuhr">ظہر</string>
-    <string name="prayer_asr">عصر</string>
-    <string name="prayer_maghrib">مغرب</string>
-    <string name="prayer_isha">عشاء</string>
 
     <string name="channel_group_prayer">نماز اور اذان کی اطلاعات</string>
     <string name="channel_group_travel">سفر اور سفر نامہ</string>
     <string name="channel_group_habit">اذکار اور سنتیں</string>
-    <string name="channel_adhan_name">اذان اور نماز کی پکار</string>
-    <string name="channel_adhan_desc">نماز کے وقت پر اعلیٰ ترجیحی اذان کی یاد دہانی</string>
-    <string name="channel_salah_silent_name">نماز کا الٹی گنتی</string>
-    <string name="channel_salah_silent_desc">اگلی نماز تک خاموش الٹی گنتی</string>
     <string name="channel_prayer_sound_name">نماز کے تنبہات — آواز</string>
     <string name="channel_prayer_sound_desc">معیاری اطلاعی نغمے اور کمپن کے ساتھ نمایاں نماز کے تنبہات</string>
     <string name="channel_prayer_vibrate_name">نماز کے تنبہات — صرف کمپن</string>
@@ -36,46 +27,25 @@
     <string name="channel_habit_name">روزانہ اذکار و سنن</string>
     <string name="channel_habit_desc">صبح و شام کے اذکار، سورۃ الکہف اور سنتی روزے</string>
 
-    <string name="adhan_title">اذان: %1$s کا وقت ہو گیا</string>
     <string name="adhan_body">حی علی الصلاۃ، حی علی الفلاح</string>
     <string name="adhan_action_stop">بند کریں</string>
     <string name="adhan_action_mute">خاموش</string>
-    <string name="adhan_action_snooze">10 منٹ بعد</string>
-    <string name="adhan_fallback_title">اذان: %1$s · %2$s</string>
     <string name="notif_action_mark_prayed">نماز ادا کی</string>
     <string name="notif_prayer_fallback_title">نماز</string>
     <string name="notif_prayer_fallback_window">نماز کا وقت</string>
 
     <string name="safar_title">سفر: دعائے سفر</string>
     <string name="safar_dua_arabic">سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَٰذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ</string>
-    <string name="safar_connected_title">%1$s سے منسلک</string>
-    <string name="safar_enter_prompt">سفر موڈ فعال۔ کیا آپ دعائے سفر پڑھنا اور قبلہ کی سمت دیکھنا چاہتے ہیں؟</string>
-    <string name="safar_play_dua">دعائے سفر چلائیں</string>
-    <string name="safar_open_qibla">روڈ قبلہ کھولیں</string>
-    <string name="safar_qasr_active">فاصلہ %1$d کلومیٹر سے زیادہ — قصر (دو رکعت) فعال ہے۔</string>
-    <string name="safar_qasr_inactive">گھر سے %1$d کلومیٹر — ابھی قصر لازم نہیں۔</string>
-    <string name="safar_location_needed">قصر کے لیے مقام کی اجازت دیں۔</string>
 
-    <string name="zakat_nisab">نصاب</string>
-    <string name="zakat_gold">سونا</string>
-    <string name="zakat_silver">چاندی</string>
 
-    <string name="action_retry">دوبارہ کوشش</string>
-    <string name="action_close">بند کریں</string>
-    <string name="action_download">ڈاؤن لوڈ</string>
-    <string name="action_play">چلائیں</string>
-    <string name="offline_seed_note">آف لائن شامل مواد</string>
     <string name="city_picker_title">گھر کا شہر منتخب کریں</string>
     <string name="city_picker_subtitle">سفر (قصر) کا حساب گھر سے لیا جاتا ہے۔</string>
     <string name="city_picker_search">شہر تلاش کریں</string>
     <string name="city_picker_no_match">کوئی مماثل شہر نہیں ملا۔</string>
     <string name="city_picker_use_gps">ڈیوائس GPS استعمال کریں</string>
     <string name="action_cancel">منسوخ کریں</string>
-    <string name="salah_home_layout_title">نماز ہوم لے آؤٹ</string>
     <string name="salah_home_layout_caption">منتخب کریں کہ نماز ہوم اسکرین موجودہ نماز اور اوقات کیسے دکھائے۔</string>
-    <string name="quran_reading_layout_title">قرآن ریڈنگ لے آؤٹ</string>
     <string name="quran_reading_layout_caption">منتخب کریں کہ قرآن کی آیات ریڈر میں کیسے دکھائی جائیں۔</string>
-    <string name="hadith_reading_layout_title">حدیث ریڈنگ لے آؤٹ</string>
     <string name="hadith_reading_layout_caption">منتخب کریں کہ حدیث کا متن ریڈر میں کیسے دکھایا جائے۔</string>
 
     <!-- Visual Salah Guide -->
@@ -102,12 +72,9 @@
     <string name="guide_favorite_cd">پسندیدہ میں محفوظ کریں</string>
     <string name="guide_unfavorite_cd">پسندیدہ سے ہٹائیں</string>
     <string name="guide_progress_tab">%1$s %2$d٪</string>
-    <string name="guide_progress_summary">مشق کی پیش رفت: %2$d میں سے %1$d مراحل سیکھے</string>
-    <string name="guide_favorites_summary">%1$d محفوظ</string>
     <string name="guide_practice_reminder">روزانہ مشق کی یاد دہانی</string>
     <string name="guide_reminder_title">اپنی نماز گائیڈ جاری رکھیں</string>
     <string name="guide_reminder_body">نماز کے مراحل اور اذکار کا جائزہ لینے کے لیے چند منٹ نکالیں۔</string>
-    <string name="guide_reminder_body_progress">آپ نے %1$d مراحل سیکھے نشان زد کیے ہیں۔ جہاں سے رکے تھے وہیں سے جاری رکھیں۔</string>
     <string name="guide_tab_adhkar">اذکار</string>
     <string name="guide_adhkar_repeat">%1$d×</string>
     <string name="guide_adhkar_variant">روایت: %1$s</string>
@@ -115,7 +82,6 @@
     <string name="guide_adhkar_grading">درجہ: %1$s</string>
     <string name="guide_adhkar_source_prefix">ماخذ: %1$s</string>
     <string name="guide_variation_label">مذہب / ہیئت کا اختلاف</string>
-    <string name="guide_adhkar_subtitle">%1$d اذکار · %2$d محفوظ</string>
     <string name="guide_adhkar_all">سب</string>
     <string name="guide_previous">پچھلا</string>
     <string name="guide_next_step">اگلا مرحلہ</string>
@@ -144,17 +110,15 @@
     <string name="wealth_currency_nisab">کرنسی: %1$s • نصاب کا ماخذ: %2$s</string>
     <string name="wealth_nisab_rate_currency">نصاب کی شرحیں %1$s میں · %2$s</string>
     <string name="wealth_refreshing">تازہ کیا جا رہا ہے…</string>
-    <string name="wealth_nisab_rates_estimate">نصاب کی شرحیں: بلٹ اِن تخمینہ · آن لائن ہونے پر اپ ڈیٹ کریں</string>
     <string name="travel_simulate_return">مقامی واپسی کی نقل (&lt;%1$d کلومیٹر) — صرف ڈیبگ</string>
     <string name="travel_simulate_departure">سفر کی روانگی کی نقل (&gt;%1$d کلومیٹر) — صرف ڈیبگ</string>
     <string name="travel_qasr_matrix">قصر اور جمع کی نماز میٹرکس</string>
     <string name="travel_combining">جائز جمع: ظہر اور عصر ظہر کے وقت (تقدیم) یا عصر کے وقت (تاخیر) میں جمع کی جا سکتی ہیں۔ اسی طرح مغرب اور عشاء بھی جمع ہو سکتی ہیں۔</string>
     <string name="travel_jam_toggle">جمع کی اجازت — اختیاری</string>
     <string name="travel_qasr_note">تقریباً %1$d کلومیٹر (≈48 میل) کا فاصلہ، قصر لاگو ہونے سے پہلے سفر کی مدت، اور کون سی نمازیں جمع ہو سکتی ہیں — یہ مسلک کے مطابق مختلف ہیں۔ اپنے مسلک کے بارے میں کسی مستند عالم سے پوچھیں۔</string>
-    <string name="travel_dua_arabic">"Subḥānal-ladhī sakh-khara lanā hādhā wa mā kunnā lahū muqrinīn..."</string>
+    <string name="travel_dua_arabic">"Subḥānal-ladhī sakh-khara lanā hādhā wa mā kunnā lahū muqrinīn…"</string>
     <string name="notif_fajr_includes">اس میں «الصلاۃ خیر من النوم» شامل ہے</string>
     <string name="notif_dnd_granted">اطلاعی پالیسی تک رسائی دی گئی — فجر ڈی این ڈی کو نظر انداز کر سکتا ہے۔</string>
-    <string name="notif_test_scheduled">Android کے ذریعے شیڈول اور مسلح ہو گیا — تقریباً 5 سیکنڈ میں چلنا چاہیے۔</string>
     <!-- Theme palette registry -->
     <string name="theme_palette_selected">منتخب</string>
     <string name="theme_palette_emerald_sanctuary_name">زمرد پناہ</string>
@@ -221,7 +185,6 @@
     <string name="quran_ayah_chip">آیت %1$d</string>
     <string name="quran_selected_badge">زیرِ مطالعہ</string>
     <string name="quran_switch_to_study">مطالعے پر جائیں</string>
-    <string name="quran_offline_compact">%1$d از %2$d آیات محفوظ</string>
     <string name="quran_options_title">پڑھنے کے اختیارات</string>
     <string name="quran_options_search">قرآن میں تلاش</string>
     <string name="quran_options_translation">ترجمہ اور عربی رسم الخط</string>
@@ -239,7 +202,6 @@
     <string name="hadith_open_collection">کھولیں</string>
     <string name="hadith_cover_cd">حدیث مجموعہ کا سرورق: %1$s</string>
     <string name="hadith_compiled_by">مرتب کردہ: %1$s</string>
-    <string name="hadith_chapters_count">%1$d ابواب</string>
     <string name="salah_exact_alarm_warning">نماز کے درست وقت کے الارم کی اجازت نہیں ہے، اس لیے یاد دہانیوں میں تاخیر ہو سکتی ہے۔ درست الارم کی اجازت دینے کے لیے یہاں ٹیپ کریں۔</string>
     <string name="app_name">ImanCore</string>
     <string name="profile_title">پروفائل اور اکاؤنٹ</string>
@@ -280,7 +242,6 @@
     <string name="profile_backup_import_action">درآمد</string>
     <string name="profile_sign_out_failed">سائن آؤٹ نہیں ہو سکا۔</string>
     <string name="profile_cancel">منسوخ</string>
-    <string name="profile_provider_google">گوگل اکاؤنٹ</string>
     <string name="info_data_sources_title">اسلامی ڈیٹا کے ذرائع اور حوالہ جات</string>
     <string name="info_help_title">مدد، رائے اور بگ رپورٹ</string>
     <string name="info_help_contact">سپورٹ سے رابطہ کریں اور مسائل support@imancore.app پر رپورٹ کریں۔</string>
@@ -415,7 +376,6 @@
     <string name="salah_expand_cd">پھیلائیں</string>
     <string name="salah_nawafil_recommended">مستحب نوافل: %1$s</string>
     <string name="salah_open_guide">%1$s کی رہنمائی کھولیں (رکعتیں: %2$d)</string>
-    <string name="salah_rakat_fard">فرض: %1$d رکعتیں</string>
     <string name="salah_no_prayer">کوئی نماز نہیں (ممنوع وقت)</string>
     <string name="salah_necessity_until_fajr">فجر تک ضرورت</string>
     <string name="salah_preferred_sunset">غروب سے تقریباً 15 منٹ پہلے مستحب</string>
@@ -443,12 +403,6 @@
     <string name="wealth_sadaqah_collected">%1$s جمع ہوئے</string>
     <string name="wealth_sadaqah_progress">ماہانہ خیراتی ہدف کا %1$d%%</string>
     <string name="wealth_sadaqah_add">+%1$s</string>
-    <string name="wealth_amount_negative">رقم منفی نہیں ہو سکتا</string>
-    <string name="wealth_amount_decimal">زیادہ سے زیادہ ایک اعشاریہ استعمال کریں</string>
-    <string name="wealth_amount_too_large">رقم بہت بڑا ہے</string>
-    <string name="wealth_amount_invalid">درست رقم درج کریں</string>
-    <string name="wealth_amount_cap">رقم ایک ٹریلین سے زیادہ نہیں ہونا چاہیے</string>
-    <string name="wealth_nisab_rates_updated">نصاب کی شرحیں آخری بار اپ ڈیٹ: %1$s</string>
     <string name="travel_saved_location">محفوظ مقام</string>
     <string name="travel_current_location">موجودہ مقام</string>
     <string name="travel_home_anchor">آبائی مرکز: %1$s</string>
@@ -457,7 +411,6 @@
     <string name="travel_resident_mode">مقیم موڈ</string>
     <string name="travel_change_home">آبائی مقام تبدیل کریں</string>
     <string name="travel_safar_methodology">سفر کا طریقہ</string>
-    <string name="travel_stay_limit">قیام کی حد: %1$d دن (لمبا قیام قصر ختم کرتا ہے)</string>
     <string name="travel_vehicle_audio">گاڑی کی آڈیو تیار</string>
     <string name="travel_dua_title">دعائے سفر</string>
     <string name="travel_stop_dua">دعائے سفر بند کریں</string>
@@ -504,10 +457,6 @@
     <string name="notif_self_test_desc">Android کے ساتھ براہِ راست جانچا جاتا ہے، محفوظ ترتیبات سے نہیں۔</string>
     <string name="notif_refresh">تازہ کریں</string>
     <string name="notif_test_prayer">نماز کی اطلاع کا ٹیسٹ (5 سیکنڈ)</string>
-    <string name="notif_test_inexact">الارم لگ گیا، لیکن عین وقت کے الارم کی اجازت نہ ہونے کی وجہ سے Android اسے مؤخر کر سکتا ہے۔ بروقت یاد دہانی کے لیے عین وقت کے الارم کی اجازت دیں۔</string>
-    <string name="notif_test_blocked">شیڈول نہیں ہوئی: اطلاعات بلاک ہیں۔ اطلاعات کی اجازت دیں، پھر دوبارہ کوشش کریں۔</string>
-    <string name="notif_test_failed">شیڈول نہیں ہوئی: %1$s۔</string>
-    <string name="notif_test_unsupported">شیڈول نہیں ہوئی: یہ ڈیوائس کوئی الارم سروس فراہم نہیں کرتی۔</string>
     <string name="settings_calculation_method">حسابی طریقہ</string>
     <string name="settings_calculation_automatic">خودکار آپ کے ملک کی اسلامی مرجع استعمال کرتا ہے۔</string>
     <string name="settings_calculation_automatic_option">خودکار (ملک کے مطابق)</string>
@@ -516,4 +465,38 @@
     <string name="settings_rerun_onboarding">ذاتی آن بورڈنگ دوبارہ چلائیں</string>
     <string name="settings_clear_cache">کیش صاف کریں</string>
     <string name="settings_search_language">زبان، مترجم یا نام تلاش کریں</string>
+
+    <plurals name="guide_progress_summary">
+        <item quantity="one">مشق کی پیش رفت: %2$d میں سے %1$d مرحلہ سیکھا</item>
+        <item quantity="other">مشق کی پیش رفت: %2$d میں سے %1$d مراحل سیکھے</item>
+    </plurals>
+    <plurals name="guide_favorites_summary">
+        <item quantity="one">%1$d محفوظ</item>
+        <item quantity="other">%1$d محفوظ</item>
+    </plurals>
+    <plurals name="guide_reminder_body_progress">
+        <item quantity="one">آپ نے %1$d مرحلہ سیکھا نشان زد کیا ہے۔ جہاں سے رکے تھے وہیں سے جاری رکھیں۔</item>
+        <item quantity="other">آپ نے %1$d مراحل سیکھے نشان زد کیے ہیں۔ جہاں سے رکے تھے وہیں سے جاری رکھیں۔</item>
+    </plurals>
+    <plurals name="guide_adhkar_subtitle">
+        <item quantity="one">%1$d ذکر · %2$d محفوظ</item>
+        <item quantity="other">%1$d اذکار · %2$d محفوظ</item>
+    </plurals>
+    <plurals name="salah_rakat_fard">
+        <item quantity="one">فرض: %1$d رکعت</item>
+        <item quantity="other">فرض: %1$d رکعتیں</item>
+    </plurals>
+    <plurals name="travel_stay_limit">
+        <item quantity="one">قیام کی حد: %1$d دن (لمبا قیام قصر ختم کرتا ہے)</item>
+        <item quantity="other">قیام کی حد: %1$d دن (لمبا قیام قصر ختم کرتا ہے)</item>
+    </plurals>
+    <plurals name="quran_offline_compact">
+        <item quantity="one">%1$d از %2$d آیت محفوظ</item>
+        <item quantity="other">%1$d از %2$d آیات محفوظ</item>
+    </plurals>
+    <plurals name="hadith_chapters_count">
+        <item quantity="one">%1$d باب</item>
+        <item quantity="other">%1$d ابواب</item>
+    </plurals>
+
 </resources>
