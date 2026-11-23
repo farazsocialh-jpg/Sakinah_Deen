@@ -7,6 +7,7 @@ name: CI
 #   quality        build + unit tests + lint + R8 release check; the merge gate
 #   static-audit   embedded audit checklist, mobsfscan (OWASP MASVS), Gitleaks
 #   codeql         data-flow security analysis of Kotlin/Java
+#   dependencies   resolved Gradle graph submitted so transitive CVEs reach Dependabot
 #   apk-security   MobSF assessment of the release APK produced by `quality`
 #   device         ONE emulator boot: instrumented tests, accessibility measurement, UI/UX monkey
 #   report         merged AUDIT.md for the run
@@ -255,6 +256,49 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: codeql-app
+
+  # ------------------------------------------- dependency graph (transitive CVEs)
+  # Dependabot's Gradle ecosystem only reads the versions declared in the catalog; it cannot
+  # see what those resolve to. Submitting the resolved graph is what makes a CVE in a
+  # transitive artifact (OkHttp behind ktor, protobuf behind Firebase, ExoPlayer internals)
+  # raise an alert instead of staying invisible.
+  #
+  # `contents: write` is scoped to this job, and the job never runs on pull_request, where a
+  # fork's token is read-only and the submission would fail.
+  dependency-submission:
+    name: Submit Gradle dependency graph
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # The resolve task configures every module, and an Android module fails configuration
+      # (recording nothing) when the SDK is absent.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      # generate-and-submit: the graph is queryable in the repository's dependency graph, so
+      # there is no reason to keep a per-run copy of the JSON as an artifact.
+      - name: Generate and submit the dependency graph
+        uses: gradle/actions/dependency-submission@v6
+        with:
+          dependency-graph: generate-and-submit
 
   # -------------------------------------------------------------- APK analysis
   apk-security:

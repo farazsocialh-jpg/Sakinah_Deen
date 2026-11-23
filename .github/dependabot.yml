@@ -18,6 +18,54 @@ updates:
         patterns:
           - "org.jetbrains.kotlin*"
           - "com.google.devtools.ksp*"
+      # Catch-all: everything not claimed above shares ONE pull request instead of one PR per
+      # artifact. Ungrouped, koin/ktor/media3/Firebase/Room each opened its own PR, none were
+      # rebased, and they rotted 40+ commits behind main until they conflicted on
+      # libs.versions.toml — six of those had to be closed by hand.
+      others:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "androidx.*"
+          - "org.jetbrains.kotlin*"
+          - "com.google.devtools.ksp*"
+    ignore:
+      # --- Blocked on compileSdk 37. Remove each entry in the change that raises compileSdk
+      # to 37, otherwise the upgrade stays invisible once it becomes possible.
+      - dependency-name: "io.insert-koin:*"   # koin 4.2.x is compiled against SDK 37
+        versions: [">= 4.2.0"]
+      - dependency-name: "io.ktor:*"          # ktor 3.6.x is compiled against SDK 37
+        versions: [">= 3.6.0"]
+      - dependency-name: "androidx.core:core-ktx"   # 1.19.x requires compileSdk 37
+        versions: [">= 1.19.0"]
+      - dependency-name: "androidx.activity:activity-compose"   # 1.13.x requires compileSdk 37
+        versions: [">= 1.13.0"]
+      - dependency-name: "androidx.lifecycle:*"   # 2.11.x requires compileSdk 37
+        versions: [">= 2.11.0"]
+      # --- Deferred by decision, not by the SDK.
+      # 1.12.0+ is published with Kotlin 2.4.10, whose klib ABI 2.4.0 the 2.3.20 compiler
+      # cannot read: :shared:compileKotlinIosArm64 fails and takes CI and iOS down with it.
+      # 1.11.0 is the newest consumable release; lift this together with Kotlin, never alone.
+      - dependency-name: "org.jetbrains.kotlinx:kotlinx-serialization-json"
+        versions: [">= 1.12.0"]
+      # 0.8.0 moved Clock to kotlin.time: a migration, not a version bump.
+      - dependency-name: "org.jetbrains.kotlinx:kotlinx-datetime"
+        versions: [">= 0.8.0"]
+      # Kotlin 2.4.x needs a matching KSP and Compose compiler, so it is a planned upgrade.
+      # Spelled per artifact form on purpose: "org.jetbrains.kotlin*" would also swallow
+      # org.jetbrains.kotlinx (coroutines, serialization) and their security fixes.
+      - dependency-name: "org.jetbrains.kotlin:*"
+        versions: [">= 2.4.0"]
+      - dependency-name: "org.jetbrains.kotlin.multiplatform:*"
+        versions: [">= 2.4.0"]
+      - dependency-name: "org.jetbrains.kotlin.plugin.compose:*"
+        versions: [">= 2.4.0"]
+      - dependency-name: "org.jetbrains.kotlin.plugin.serialization:*"
+        versions: [">= 2.4.0"]
+      # Compose 1.10 (BOM 2025.10.00+) turns the LocalContext resource read into an error;
+      # unblock after the ~38-site getString refactor noted in gradle/libs.versions.toml.
+      - dependency-name: "androidx.compose:compose-bom"
+        versions: [">= 2025.10.00"]
 
   # One PR for every action bump. Ungrouped, each refreshed action opened its own PR and
   # queued a full workflow run per branch; grouping keeps at most one action PR in flight.
