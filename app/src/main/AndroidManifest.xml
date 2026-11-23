@@ -47,6 +47,7 @@
         android:name=".SakinahApp"
         android:taskAffinity=""
         android:allowBackup="false"
+        android:fullBackupContent="false"
         android:usesCleartextTraffic="false"
         android:networkSecurityConfig="@xml/network_security_config"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -67,12 +68,15 @@
             </intent-filter>
         </activity>
 
+        <!-- An activity-level android:permission gates the *caller*, so requiring
+             BLUETOOTH_CONNECT made the launcher (which does not hold it) unable to open the
+             configuration screen. The activity validates its appWidgetId and writes only that
+             widget's own preferences, so no caller permission is needed. -->
         <activity
             android:name=".widget.WidgetConfigActivity"
             android:exported="true"
             android:label="@string/widget_config_title"
-            android:theme="@style/Theme.Sakinah"
-            android:permission="android.permission.BLUETOOTH_CONNECT">
+            android:theme="@style/Theme.Sakinah">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
             </intent-filter>
@@ -89,6 +93,11 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="sakinah_fcm_notifications" />
+        <!-- Without this, notification payloads drawn by the system tray fall back to the
+             full-colour launcher icon, which the platform renders as a white square. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_app" />
 
         <!-- Adhan Audio Playback Foreground Service (Media3 / ExoPlayer) -->
         <service

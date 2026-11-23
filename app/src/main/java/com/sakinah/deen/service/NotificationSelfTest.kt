@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import java.time.Instant
 import java.time.ZoneId
@@ -51,8 +52,9 @@ data class SelfTestRow(
  */
 object NotificationSelfTest {
 
-    private val ALARM_TIME_FORMAT: DateTimeFormatter =
-        DateTimeFormatter.ofPattern("EEE d MMM · h:mm a", Locale.getDefault())
+    // Resolved per use so a language change in Settings is reflected without a restart.
+    private val ALARM_TIME_FORMAT: DateTimeFormatter
+        get() = DateTimeFormatter.ofPattern("EEE d MMM · h:mm a", Locale.getDefault())
 
     fun rows(
         context: Context,
@@ -130,14 +132,6 @@ object NotificationSelfTest {
     }
 
     private fun channelRow(context: Context, criticalFajr: Boolean): SelfTestRow {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return SelfTestRow(
-                id = "channel",
-                title = "Prayer channel",
-                status = SelfTestStatus.INFO,
-                detail = "Channels are not used on this Android version; the sound follows the notification stream."
-            )
-        }
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         if (manager == null) {
             return SelfTestRow(
@@ -350,7 +344,7 @@ object NotificationSelfTest {
             SelfTestAction.REQUEST_EXACT_ALARMS -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 Intent(
                     Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                    Uri.parse("package:${appContext.packageName}")
+                    "package:${appContext.packageName}".toUri()
                 ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             } else {
                 null

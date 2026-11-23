@@ -125,11 +125,11 @@ private val UserAppearanceConfigSaver = listSaver<UserAppearanceConfig, String>(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PersonalizedOnboardingScreen(
+    modifier: Modifier = Modifier,
     initialConfig: UserAppearanceConfig = UserAppearanceConfig(),
     onConfigPreviewChange: (UserAppearanceConfig) -> Unit = {},
     onComplete: (UserAppearanceConfig) -> Unit,
-    onDismiss: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
+    onDismiss: (() -> Unit)? = null
 ) {
     var step by rememberSaveable { mutableIntStateOf(0) }
     var config by rememberSaveable(initialConfig, stateSaver = UserAppearanceConfigSaver) {

@@ -73,6 +73,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -160,8 +161,8 @@ enum class SettingsSection(val title: String, val subtitle: String) {
 @Composable
 fun SettingsScreen(
     section: SettingsSection,
-    onRerunOnboarding: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRerunOnboarding: () -> Unit = {}
 ) {
     val repo = rememberInject<SettingsRepository>()
     val settings by repo.settings.collectAsStateWithLifecycle()
@@ -177,7 +178,7 @@ fun SettingsScreen(
     val islamicRepository = rememberInject<IslamicDataRepository>()
     val tafseerPackages by tafseerRepository.packages.collectAsStateWithLifecycle(initialValue = emptyList())
     var downloadingPackId by remember { mutableStateOf<String?>(null) }
-    var packDownloadProgress by remember { mutableStateOf(0f) }
+    var packDownloadProgress by remember { mutableFloatStateOf(0f) }
 
     var translationCatalog by remember { mutableStateOf<List<QuranTranslationResource>>(emptyList()) }
     var isLoadingCatalog by remember { mutableStateOf(false) }

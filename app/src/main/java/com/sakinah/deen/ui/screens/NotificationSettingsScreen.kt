@@ -55,6 +55,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -266,7 +267,7 @@ fun NotificationSettingsScreen(
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                                     val intent = Intent(
                                         Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                                        Uri.parse("package:${context.packageName}")
+                                        "package:${context.packageName}".toUri()
                                     ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     runCatching { context.startActivity(intent) }
                                 }
@@ -718,7 +719,6 @@ private fun isAzaanChannelBlocked(context: Context): Boolean =
     NotificationChannels.prayerChannelBlocked(context)
 
 private fun isBatteryOptimizationActive(context: Context): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
     val power = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
     return !power.isIgnoringBatteryOptimizations(context.packageName)
 }

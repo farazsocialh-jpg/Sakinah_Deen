@@ -12,12 +12,14 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.util.Log
 import android.net.Uri
+import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -260,7 +262,7 @@ class AdhanPlaybackService : Service() {
     }
 
     private fun selectedAdhanUri(): Uri {
-        preferences.adhanSoundUri?.takeIf { it.isNotBlank() }?.let { return Uri.parse(it) }
+        preferences.adhanSoundUri?.takeIf { it.isNotBlank() }?.let { return it.toUri() }
         return AdhanAudio.muezzinUri(
             context = this,
             muezzin = currentMuezzin,
@@ -270,21 +272,32 @@ class AdhanPlaybackService : Service() {
     }
 
     private fun resolveDuaSafarUri(): Uri =
-        preferences.duaSafarSoundUri?.takeIf { it.isNotBlank() }?.let(Uri::parse)
-            ?: Uri.parse("android.resource://$packageName/${R.raw.dua_al_safar}")
+        preferences.duaSafarSoundUri?.takeIf { it.isNotBlank() }?.let { it.toUri() }
+            ?: "android.resource://$packageName/${R.raw.dua_al_safar}".toUri()
 
     /**
      * Entering the foreground can be refused (Android 14+ background-start rules, revoked
      * FGS/media permission). In that case post the reminder as a normal notification and
      * stop instead of letting the exception crash the process.
      */
+    /**
+     * The media-playback foreground-service type. The constant only exists from API 29; on
+     * API 28 ServiceCompat drops the argument anyway, so 0 keeps that path unchanged.
+     */
+    private fun mediaPlaybackForegroundType(): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+        } else {
+            0
+        }
+
     private fun startPlaybackForeground(notification: Notification): Boolean {
         val promoted = foregroundGate.enter(notification) {
             ServiceCompat.startForeground(
                 this,
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                mediaPlaybackForegroundType(),
             )
         }
         if (!promoted) {
@@ -464,7 +477,7 @@ class AdhanPlaybackService : Service() {
                 this,
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                mediaPlaybackForegroundType(),
             )
         }
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)

@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.RingtoneManager
 import android.net.Uri
 import android.provider.Settings
+import androidx.core.net.toUri
 import com.sakinah.deen.R
 import com.sakinah.deen.data.model.Muezzin
 
@@ -27,7 +28,7 @@ object AdhanAudio {
     fun shortToneUri(context: Context): Uri {
         val bundled = context.resources.getIdentifier("short_tone", "raw", context.packageName)
         if (bundled != 0) {
-            return Uri.parse("android.resource://${context.packageName}/$bundled")
+            return "android.resource://${context.packageName}/$bundled".toUri()
         }
         return RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             ?: Settings.System.DEFAULT_ALARM_ALERT_URI
@@ -37,6 +38,6 @@ object AdhanAudio {
         val id = context.resources.getIdentifier(name, "raw", context.packageName)
             .takeIf { it != 0 }
             ?: fallback
-        return Uri.parse("android.resource://${context.packageName}/$id")
+        return "android.resource://${context.packageName}/$id".toUri()
     }
 }

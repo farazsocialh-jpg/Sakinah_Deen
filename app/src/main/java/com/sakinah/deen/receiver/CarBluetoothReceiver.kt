@@ -268,21 +268,12 @@ class CarBluetoothReceiver : BroadcastReceiver() {
         val playDuaIntent = Intent(context, AdhanPlaybackService::class.java).apply {
             action = AdhanPlaybackService.ACTION_PLAY_DUA_SAFAR
         }
-        val playDuaPendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            PendingIntent.getForegroundService(
-                context,
-                102,
-                playDuaIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-        } else {
-            PendingIntent.getService(
-                context,
-                102,
-                playDuaIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-        }
+        val playDuaPendingIntent = PendingIntent.getForegroundService(
+            context,
+            102,
+            playDuaIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         val distanceLine = distanceKm?.let { "%.0f km from home".format(it) }
         val qasrLine = when {

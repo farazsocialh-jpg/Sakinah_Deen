@@ -2,6 +2,7 @@ package com.sakinah.deen.data.prefs
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import com.sakinah.deen.data.model.AzaanSettings
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
@@ -235,9 +236,9 @@ class SakinahPreferences internal constructor(
     var calculationMethodOverride: CalculationMethod?
         get() = prefs.getString(KEY_CALCULATION_METHOD_OVERRIDE, null)
             ?.let { name -> runCatching { CalculationMethod.valueOf(name) }.getOrNull() }
-        set(value) = prefs.edit().apply {
+        set(value) = prefs.edit {
             if (value == null) remove(KEY_CALCULATION_METHOD_OVERRIDE) else putString(KEY_CALCULATION_METHOD_OVERRIDE, value.name)
-        }.apply()
+        }
 
     var homeLatitude: Double?
         get() = if (securePrefs.contains(KEY_HOME_LATITUDE)) Double.fromBits(securePrefs.getLong(KEY_HOME_LATITUDE, 0L)) else null
@@ -276,7 +277,7 @@ class SakinahPreferences internal constructor(
                 prefs.getString(KEY_CALCULATION_METHOD, null) ?: return@runCatching CalculationMethod.MUSLIM_WORLD_LEAGUE
             )
         }.getOrDefault(CalculationMethod.MUSLIM_WORLD_LEAGUE)
-        set(value) = prefs.edit().putString(KEY_CALCULATION_METHOD, value.name).apply()
+        set(value) = prefs.edit { putString(KEY_CALCULATION_METHOD, value.name) }
 
     var madhhab: Madhhab
         get() = runCatching {
@@ -284,69 +285,69 @@ class SakinahPreferences internal constructor(
                 prefs.getString(KEY_MADHHAB, null) ?: return@runCatching Madhhab.HANAFI
             )
         }.getOrDefault(Madhhab.HANAFI)
-        set(value) = prefs.edit().putString(KEY_MADHHAB, value.name).apply()
+        set(value) = prefs.edit { putString(KEY_MADHHAB, value.name) }
 
     /** MAC address of the user's saved car head unit, if any. */
     var carBluetoothAddress: String?
         get() = prefs.getString(KEY_CAR_ADDRESS, null)
-        set(value) = prefs.edit().apply {
+        set(value) = prefs.edit {
             if (value.isNullOrBlank()) remove(KEY_CAR_ADDRESS) else putString(KEY_CAR_ADDRESS, value)
-        }.apply()
+        }
 
     var carBluetoothName: String?
         get() = prefs.getString(KEY_CAR_NAME, null)
-        set(value) = prefs.edit().apply {
+        set(value) = prefs.edit {
             if (value.isNullOrBlank()) remove(KEY_CAR_NAME) else putString(KEY_CAR_NAME, value)
-        }.apply()
+        }
 
     var travelModeActive: Boolean
         get() = prefs.getBoolean(KEY_TRAVEL_MODE, false)
-        set(value) = prefs.edit().putBoolean(KEY_TRAVEL_MODE, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_TRAVEL_MODE, value) }
 
     var qasrActive: Boolean
         get() = prefs.getBoolean(KEY_QASR_ACTIVE, false)
-        set(value) = prefs.edit().putBoolean(KEY_QASR_ACTIVE, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_QASR_ACTIVE, value) }
 
     var lastDistanceFromHomeKm: Float
         get() = prefs.getFloat(KEY_LAST_DISTANCE_KM, 0f)
-        set(value) = prefs.edit().putFloat(KEY_LAST_DISTANCE_KM, value).apply()
+        set(value) = prefs.edit { putFloat(KEY_LAST_DISTANCE_KM, value) }
 
     /** Optional override when the user supplies their own Adhan recording. */
     var adhanSoundUri: String?
         get() = prefs.getString(KEY_ADHAN_SOUND_URI, null)
-        set(value) = prefs.edit().apply {
+        set(value) = prefs.edit {
             if (value.isNullOrBlank()) remove(KEY_ADHAN_SOUND_URI) else putString(KEY_ADHAN_SOUND_URI, value)
-        }.apply()
+        }
 
     var duaSafarSoundUri: String?
         get() = prefs.getString(KEY_DUA_SAFAR_SOUND_URI, null)
-        set(value) = prefs.edit().apply {
+        set(value) = prefs.edit {
             if (value.isNullOrBlank()) remove(KEY_DUA_SAFAR_SOUND_URI) else putString(KEY_DUA_SAFAR_SOUND_URI, value)
-        }.apply()
+        }
 
     var quranTranslationId: Int
         get() = prefs.getInt(KEY_QURAN_TRANSLATION_ID, IslamicDataRepository.DEFAULT_TRANSLATION_ID)
-        set(value) = prefs.edit().putInt(KEY_QURAN_TRANSLATION_ID, value).apply()
+        set(value) = prefs.edit { putInt(KEY_QURAN_TRANSLATION_ID, value) }
 
     var quranTranslationLanguage: String
         get() = prefs.getString(KEY_QURAN_TRANSLATION_LANGUAGE, "English") ?: "English"
-        set(value) = prefs.edit().putString(KEY_QURAN_TRANSLATION_LANGUAGE, value).apply()
+        set(value) = prefs.edit { putString(KEY_QURAN_TRANSLATION_LANGUAGE, value) }
 
     var quranTranslationEditionKey: String
         get() = prefs.getString(KEY_QURAN_TRANSLATION_EDITION_KEY, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_QURAN_TRANSLATION_EDITION_KEY, value).apply()
+        set(value) = prefs.edit { putString(KEY_QURAN_TRANSLATION_EDITION_KEY, value) }
 
     var quranTranslationSource: String
         get() = prefs.getString(
             KEY_QURAN_TRANSLATION_SOURCE,
             QuranTranslationResource.SOURCE_QURAN_COM
         ) ?: QuranTranslationResource.SOURCE_QURAN_COM
-        set(value) = prefs.edit().putString(KEY_QURAN_TRANSLATION_SOURCE, value).apply()
+        set(value) = prefs.edit { putString(KEY_QURAN_TRANSLATION_SOURCE, value) }
 
     /** Selected Arabic script edition for the Quran reader. */
     var quranArabicScript: QuranArabicScript
         get() = QuranArabicScript.fromKey(prefs.getString(KEY_QURAN_ARABIC_SCRIPT, null))
-        set(value) = prefs.edit().putString(KEY_QURAN_ARABIC_SCRIPT, value.name).apply()
+        set(value) = prefs.edit { putString(KEY_QURAN_ARABIC_SCRIPT, value.name) }
 
     /**
      * Background Azaan scheduling is on after onboarding (or whenever a location has already
@@ -354,7 +355,7 @@ class SakinahPreferences internal constructor(
      */
     var alarmsEnabled: Boolean
         get() = prefs.getBoolean(KEY_ALARMS_ENABLED, locationCoordinates != null)
-        set(value) = prefs.edit().putBoolean(KEY_ALARMS_ENABLED, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_ALARMS_ENABLED, value) }
 
     /**
      * Last day (epoch day) whose missed prayers were rolled into the Qadha ledger. Keeps the
@@ -362,12 +363,12 @@ class SakinahPreferences internal constructor(
      */
     var lastQadhaRolloverEpochDay: Long
         get() = prefs.getLong(KEY_LAST_QADHA_ROLLOVER, Long.MIN_VALUE)
-        set(value) = prefs.edit().putLong(KEY_LAST_QADHA_ROLLOVER, value).apply()
+        set(value) = prefs.edit { putLong(KEY_LAST_QADHA_ROLLOVER, value) }
 
     /** True once the first-launch permission request has been shown, so it is not repeated. */
     var firstLaunchPermissionsRequested: Boolean
         get() = prefs.getBoolean(KEY_FIRST_LAUNCH_PERMISSIONS_REQUESTED, false)
-        set(value) = prefs.edit().putBoolean(KEY_FIRST_LAUNCH_PERMISSIONS_REQUESTED, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_FIRST_LAUNCH_PERMISSIONS_REQUESTED, value) }
 
     var azaanSettings: AzaanSettings
         get() {
@@ -389,7 +390,7 @@ class SakinahPreferences internal constructor(
             )
         }
         set(value) {
-            prefs.edit().apply {
+            prefs.edit {
                 putBoolean(KEY_ALARMS_ENABLED, value.enabled)
                 putString(KEY_MUEZZIN, value.muezzin.id)
                 putBoolean(KEY_FAJR_SPECIAL_ADHAN, value.fajrSpecialAdhan)
@@ -405,7 +406,7 @@ class SakinahPreferences internal constructor(
                         value.offsetsMinutes[prayer] ?: 0
                     )
                 }
-            }.apply()
+            }
         }
 
     fun alertModeFor(prayer: PrayerType): PrayerAlertMode = azaanSettings.modeFor(prayer)
@@ -419,16 +420,16 @@ class SakinahPreferences internal constructor(
      */
     var nextAlarmAtMillis: Long
         get() = prefs.getLong(KEY_NEXT_ALARM_AT, 0L)
-        set(value) = prefs.edit().putLong(KEY_NEXT_ALARM_AT, value).apply()
+        set(value) = prefs.edit { putLong(KEY_NEXT_ALARM_AT, value) }
 
     var nextAlarmPrayer: String
         get() = prefs.getString(KEY_NEXT_ALARM_PRAYER, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_NEXT_ALARM_PRAYER, value).apply()
+        set(value) = prefs.edit { putString(KEY_NEXT_ALARM_PRAYER, value) }
 
     /** [com.sakinah.deen.service.AlarmScheduleResult.code] of the last scheduling attempt. */
     var lastAlarmScheduleResult: String
         get() = prefs.getString(KEY_LAST_ALARM_RESULT, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_LAST_ALARM_RESULT, value).apply()
+        set(value) = prefs.edit { putString(KEY_LAST_ALARM_RESULT, value) }
 
     /**
      * FNV-1a hash of the bundled Hisn al-Muslim asset edition that was last written to
@@ -436,17 +437,17 @@ class SakinahPreferences internal constructor(
      */
     var adhkarSeedHash: String?
         get() = prefs.getString(KEY_ADHKAR_SEED_HASH, null)?.takeIf { it.isNotBlank() }
-        set(value) = prefs.edit().apply {
+        set(value) = prefs.edit {
             if (value.isNullOrBlank()) remove(KEY_ADHKAR_SEED_HASH) else putString(KEY_ADHKAR_SEED_HASH, value)
-        }.apply()
+        }
 
     var hadithLanguageCode: String
         get() = prefs.getString(KEY_HADITH_LANGUAGE, "eng") ?: "eng"
-        set(value) = prefs.edit().putString(KEY_HADITH_LANGUAGE, value).apply()
+        set(value) = prefs.edit { putString(KEY_HADITH_LANGUAGE, value) }
 
     var hasInitializedHadithBookmarks: Boolean
         get() = prefs.getBoolean(KEY_HADITH_BOOKMARKS_INITIALIZED, false)
-        set(value) = prefs.edit().putBoolean(KEY_HADITH_BOOKMARKS_INITIALIZED, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_HADITH_BOOKMARKS_INITIALIZED, value) }
 
     var bookmarkedHadithIds: Set<String>
         get() {
@@ -455,7 +456,7 @@ class SakinahPreferences internal constructor(
             return raw.split("|").mapNotNull { it.takeIf(String::isNotBlank) }.toSet()
         }
         set(value) {
-            prefs.edit().putString(KEY_BOOKMARKED_HADITH_IDS, value.joinToString("|")).apply()
+            prefs.edit { putString(KEY_BOOKMARKED_HADITH_IDS, value.joinToString("|")) }
         }
 
     /**
@@ -513,9 +514,9 @@ class SakinahPreferences internal constructor(
                 .entries
                 .joinToString("|") { "${it.key}=${it.value}" }
             if (encoded.isBlank()) {
-                prefs.edit().remove(KEY_HIFZ_ANNOTATIONS).apply()
+                prefs.edit { remove(KEY_HIFZ_ANNOTATIONS) }
             } else {
-                prefs.edit().putString(KEY_HIFZ_ANNOTATIONS, encoded).apply()
+                prefs.edit { putString(KEY_HIFZ_ANNOTATIONS, encoded) }
             }
         }
 
@@ -603,7 +604,7 @@ class SakinahPreferences internal constructor(
             sameDay.add(key)
             true
         }
-        prefs.edit().putStringSet(KEY_NAFL_COMPLETIONS, sameDay).apply()
+        prefs.edit { putStringSet(KEY_NAFL_COMPLETIONS, sameDay) }
         return completed
     }
 
@@ -617,23 +618,23 @@ class SakinahPreferences internal constructor(
                     ?: return@runCatching SafarPolicy.SafarMethodology.DISTANCE_AND_STAY_DURATION
             )
         }.getOrDefault(SafarPolicy.SafarMethodology.DISTANCE_AND_STAY_DURATION)
-        set(value) = prefs.edit().putString(KEY_SAFAR_METHODOLOGY, value.name).apply()
+        set(value) = prefs.edit { putString(KEY_SAFAR_METHODOLOGY, value.name) }
 
     /** Nights after which a traveller following the stay-limit methodology becomes Muqim. */
     var safarMaxStayDays: Int
         get() = prefs.getInt(KEY_SAFAR_MAX_STAY_DAYS, SafarPolicy.DEFAULT_MAX_STAY_DAYS)
-        set(value) = prefs.edit().putInt(KEY_SAFAR_MAX_STAY_DAYS, value.coerceAtLeast(1)).apply()
+        set(value) = prefs.edit { putInt(KEY_SAFAR_MAX_STAY_DAYS, value.coerceAtLeast(1)) }
 
     /** Explicit opt-in: Jam is never enabled merely by crossing the distance threshold. */
     var safarJamPermitted: Boolean
         get() = prefs.getBoolean(KEY_SAFAR_JAM_PERMITTED, false)
-        set(value) = prefs.edit().putBoolean(KEY_SAFAR_JAM_PERMITTED, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_SAFAR_JAM_PERMITTED, value) }
 
     var safarTravelStartEpochDay: Long?
         get() = prefs.getLong(KEY_SAFAR_TRAVEL_START, 0L).takeIf { it > 0L }
-        set(value) = prefs.edit().apply {
+        set(value) = prefs.edit {
             if (value == null) remove(KEY_SAFAR_TRAVEL_START) else putLong(KEY_SAFAR_TRAVEL_START, value)
-        }.apply()
+        }
 
     /** Current Safar rules, shared by the dashboard, the travel card and background code. */
     val safarSettings: SafarPolicy.SafarSettings
@@ -698,9 +699,7 @@ class SakinahPreferences internal constructor(
         editor.apply()
         val verified = copied.filter { securePrefs.all[it] == prefs.all[it] }
         if (verified.size == copied.size) {
-            val legacyEditor = prefs.edit()
-            copied.forEach(legacyEditor::remove)
-            legacyEditor.apply()
+            prefs.edit { copied.forEach { key -> remove(key) } }
         }
     }
 
@@ -731,14 +730,14 @@ class SakinahPreferences internal constructor(
             maghribMinutes = prefs.getInt(KEY_ADJUST_MAGHRIB, 0),
             ishaMinutes = prefs.getInt(KEY_ADJUST_ISHA, 0)
         )
-        set(value) = prefs.edit().apply {
+        set(value) = prefs.edit {
             putInt(KEY_ADJUST_FAJR, value.fajrMinutes)
             putInt(KEY_ADJUST_SUNRISE, value.sunriseMinutes)
             putInt(KEY_ADJUST_DHUHR, value.dhuhrMinutes)
             putInt(KEY_ADJUST_ASR, value.asrMinutes)
             putInt(KEY_ADJUST_MAGHRIB, value.maghribMinutes)
             putInt(KEY_ADJUST_ISHA, value.ishaMinutes)
-        }.apply()
+        }
 
     /**
      * Mirrors the high-latitude rule kept in the shared settings store so background
@@ -751,7 +750,7 @@ class SakinahPreferences internal constructor(
                     ?: return@runCatching HighLatitudeRule.MIDDLE_OF_NIGHT
             )
         }.getOrDefault(HighLatitudeRule.MIDDLE_OF_NIGHT)
-        set(value) = prefs.edit().putString(KEY_HIGH_LATITUDE_RULE, value.name).apply()
+        set(value) = prefs.edit { putString(KEY_HIGH_LATITUDE_RULE, value.name) }
 
     fun saveCarDevice(address: String, name: String?) {
         carBluetoothAddress = address

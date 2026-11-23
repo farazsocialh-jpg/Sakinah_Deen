@@ -4,6 +4,8 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.core.content.edit
+import androidx.core.net.toUri
 
 /**
  * Single factory for every prayer-alarm [PendingIntent].
@@ -27,7 +29,7 @@ internal object AlarmPendingIntents {
     private fun intentFor(context: Context, key: String): Intent =
         Intent(context, PrayerAlarmReceiver::class.java).apply {
             action = PrayerAlarmScheduler.ACTION_PRAYER_ALARM
-            data = Uri.parse(AlarmIdentity.uri(key))
+            data = AlarmIdentity.uri(key).toUri()
         }
 
     /** Creates (or updates) the PendingIntent for [key], applying [fill] to a fresh Intent. */
@@ -79,12 +81,12 @@ internal object AlarmPendingIntents {
     }
 
     fun clearRegistry(context: Context) {
-        registry(context).edit().remove(KEY_OUTSTANDING).apply()
+        registry(context).edit { remove(KEY_OUTSTANDING) }
     }
 
     private fun write(context: Context, keys: Collection<String>) {
-        registry(context).edit()
-            .putString(KEY_OUTSTANDING, AlarmIdentity.encode(keys))
-            .apply()
+        registry(context).edit {
+            putString(KEY_OUTSTANDING, AlarmIdentity.encode(keys))
+        }
     }
 }

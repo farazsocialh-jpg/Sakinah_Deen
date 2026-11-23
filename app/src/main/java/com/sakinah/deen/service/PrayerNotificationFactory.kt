@@ -18,6 +18,8 @@ import android.text.style.StyleSpan
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.createBitmap
+import androidx.core.net.toUri
 import com.sakinah.deen.MainActivity
 import com.sakinah.deen.R
 import com.sakinah.deen.data.model.PrayerAlertMode
@@ -60,7 +62,9 @@ object PrayerNotificationFactory {
 
     private const val FALLBACK_WINDOW_MS = 10 * 60_000L
 
-    private val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())
+    // Resolved per use so a language change in Settings is reflected without a restart.
+    private val TIME_FORMAT: DateTimeFormatter
+        get() = DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())
 
     fun build(context: Context, spec: Spec): Notification {
         val theme = NotificationAppearance.resolve(context)
@@ -261,9 +265,7 @@ object PrayerNotificationFactory {
             this.action = action
             // The data URI keeps PendingIntents distinct per prayer and per day, so a stale
             // "Mark as Prayed" can never complete a different prayer or a previous date.
-            data = Uri.parse(
-                "sakinah://prayer_action/$kind/${prayerType.name}/${if (includeDate) epochDay else "current"}"
-            )
+            data = "sakinah://prayer_action/$kind/${prayerType.name}/${if (includeDate) epochDay else "current"}".toUri()
             putExtra(PrayerNotificationActionReceiver.EXTRA_PRAYER_TYPE, prayerType.name)
             putExtra(PrayerNotificationActionReceiver.EXTRA_PRAYER_DATE, epochDay)
         }
@@ -288,7 +290,7 @@ object PrayerNotificationFactory {
         val size = context.resources.getDimensionPixelSize(
             android.R.dimen.notification_large_icon_width
         ).coerceAtLeast(192)
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         drawable.setBounds(0, 0, size, size)
         drawable.draw(canvas)

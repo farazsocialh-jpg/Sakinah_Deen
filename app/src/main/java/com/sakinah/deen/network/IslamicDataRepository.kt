@@ -1,5 +1,6 @@
 package com.sakinah.deen.network
 
+import androidx.core.content.edit
 import com.sakinah.deen.data.database.OfflineContentSeeder
 import com.sakinah.deen.data.database.dao.HadithDao
 import com.sakinah.deen.data.database.dao.QuranDao
@@ -554,10 +555,15 @@ class IslamicDataRepository(
     private fun cacheCatalog(catalog: List<QuranTranslationResource>) {
         val context = appContext ?: return
         val prefs = context.getSharedPreferences("sakinah_quran_translations", android.content.Context.MODE_PRIVATE)
-        prefs.edit().putString("catalog_json", json.encodeToString(
-            kotlinx.serialization.builtins.ListSerializer(QuranTranslationResource.serializer()),
-            catalog
-        )).apply()
+        prefs.edit {
+            putString(
+                "catalog_json",
+                json.encodeToString(
+                    kotlinx.serialization.builtins.ListSerializer(QuranTranslationResource.serializer()),
+                    catalog
+                )
+            )
+        }
     }
 
     private fun loadCachedCatalog(): List<QuranTranslationResource> {
@@ -975,10 +981,15 @@ class IslamicDataRepository(
     private fun cacheHadithCatalog(catalog: List<HadithBookCatalog>) {
         val context = appContext ?: return
         val prefs = context.getSharedPreferences("sakinah_hadith_catalog", android.content.Context.MODE_PRIVATE)
-        prefs.edit().putString("catalog_json", json.encodeToString(
-            kotlinx.serialization.builtins.ListSerializer(HadithBookCatalog.serializer()),
-            catalog
-        )).apply()
+        prefs.edit {
+            putString(
+                "catalog_json",
+                json.encodeToString(
+                    kotlinx.serialization.builtins.ListSerializer(HadithBookCatalog.serializer()),
+                    catalog
+                )
+            )
+        }
     }
 
     private fun loadCachedHadithCatalog(): List<HadithBookCatalog> {

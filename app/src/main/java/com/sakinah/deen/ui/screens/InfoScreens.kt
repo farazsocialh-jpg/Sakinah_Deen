@@ -47,6 +47,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import com.sakinah.deen.BuildConfig
 import kotlinx.coroutines.launch
 
@@ -155,7 +156,7 @@ fun PrivacyScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 )
             }
             TextButton(onClick = {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://imancore.app/privacy"))
+                val intent = Intent(Intent.ACTION_VIEW, "https://imancore.app/privacy".toUri())
                 try {
                     context.startActivity(intent)
                 } catch (_: ActivityNotFoundException) {
@@ -225,7 +226,7 @@ private fun SimpleInfoScreen(
 
 private fun sendFeedbackEmail(context: Context): Boolean {
     val intent = Intent(Intent.ACTION_SENDTO).apply {
-        data = Uri.parse("mailto:support@imancore.app")
+        data = "mailto:support@imancore.app".toUri()
         putExtra(Intent.EXTRA_SUBJECT, "ImanCore Feedback v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
         putExtra(
             Intent.EXTRA_TEXT,

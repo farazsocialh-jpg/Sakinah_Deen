@@ -1,5 +1,6 @@
 package com.sakinah.deen.data.repository
 
+import androidx.core.content.edit
 import com.sakinah.deen.BuildConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -187,7 +188,7 @@ class SharedPreferencesNisabRateCacheStore(
     private val prefs: android.content.SharedPreferences
 ) : NisabRateCacheStore {
     override fun getFloat(key: String, default: Float): Float = prefs.getFloat(key, default)
-    override fun putFloat(key: String, value: Float) = prefs.edit().putFloat(key, value).apply()
+    override fun putFloat(key: String, value: Float) = prefs.edit { this.putFloat(key, value) }
     override fun getLong(key: String, default: Long): Long = prefs.getLong(key, default)
-    override fun putLong(key: String, value: Long) = prefs.edit().putLong(key, value).apply()
+    override fun putLong(key: String, value: Long) = prefs.edit { this.putLong(key, value) }
 }

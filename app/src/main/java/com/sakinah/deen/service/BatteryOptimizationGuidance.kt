@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.core.net.toUri
 
 /**
  * OEM-aware guidance for surviving aggressive battery managers.
@@ -140,7 +141,6 @@ object BatteryOptimizationGuidance {
 
     /** True when the app is still subject to Android's own battery optimisation. */
     fun isBatteryOptimizationActive(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
         val power = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
         return runCatching { !power.isIgnoringBatteryOptimizations(context.packageName) }
             .getOrDefault(false)
@@ -155,7 +155,7 @@ object BatteryOptimizationGuidance {
     fun appDetailsIntent(context: Context): Intent =
         Intent(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-            Uri.parse("package:${context.packageName}")
+            "package:${context.packageName}".toUri()
         ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
     /** Vendor auto-start screens this build can actually resolve on this device. */

@@ -3,6 +3,7 @@ package com.sakinah.deen.data.backup
 import android.content.Context
 import android.content.Context.MODE_PRIVATE
 import android.net.Uri
+import androidx.core.content.edit
 import com.sakinah.deen.data.database.SakinahEncryptedDatabase
 import com.sakinah.deen.data.database.dao.BookmarkKey
 import com.sakinah.deen.data.database.entity.HifzMistakeEntity
@@ -79,20 +80,21 @@ object EncryptedBackupManager {
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val MAX_BACKUP_SIZE = 50L * 1024 * 1024 // 50 MB
-            val input = context.contentResolver.openInputStream(uri) ?: error("Could not open input stream")
-            val buffer = java.io.ByteArrayOutputStream()
-            val copyBuffer = ByteArray(1024 * 1024) // 1 MB copy buffer
-            var totalRead = 0L
-            var bytes: ByteArray
-            do {
-                val count = input.read(copyBuffer)
-                if (count > 0) {
-                    buffer.write(copyBuffer, 0, count)
-                    totalRead += count
-                    if (totalRead > MAX_BACKUP_SIZE) error("Backup file exceeds maximum size of 50 MB")
-                }
-            } while (count > 0)
-            bytes = buffer.toByteArray()
+            // `use` closes the provider stream even when the size cap or a read error aborts.
+            val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
+                val buffer = java.io.ByteArrayOutputStream()
+                val copyBuffer = ByteArray(1024 * 1024) // 1 MB copy buffer
+                var totalRead = 0L
+                do {
+                    val count = input.read(copyBuffer)
+                    if (count > 0) {
+                        buffer.write(copyBuffer, 0, count)
+                        totalRead += count
+                        if (totalRead > MAX_BACKUP_SIZE) error("Backup file exceeds maximum size of 50 MB")
+                    }
+                } while (count > 0)
+                buffer.toByteArray()
+            } ?: error("Could not open input stream")
             if (!bytes.startsWith(MAGIC.toByteArray(Charsets.US_ASCII))) error("Not a Sakinah backup file")
             val encrypted = bytes.copyOfRange(MAGIC.length, bytes.size)
             val decrypted = decrypt(encrypted, passphrase)
@@ -131,18 +133,18 @@ object EncryptedBackupManager {
             }
 
             // Restore prefs
-            val prefs = context.getSharedPreferences("sakinah_preferences", Context.MODE_PRIVATE).edit()
-            envelope.data.prefs.forEach { e ->
-                when (e.type) {
-                    "string" -> prefs.putString(e.key, e.value)
-                    "int" -> prefs.putInt(e.key, e.value.toIntOrNull() ?: 0)
-                    "long" -> prefs.putLong(e.key, e.value.toLongOrNull() ?: 0L)
-                    "float" -> prefs.putFloat(e.key, e.value.toFloatOrNull() ?: 0f)
-                    "boolean" -> prefs.putBoolean(e.key, e.value.toBooleanStrictOrNull() ?: false)
-                    "stringset" -> prefs.putStringSet(e.key, e.value.split("|").filter { it.isNotBlank() }.toSet())
+            context.getSharedPreferences("sakinah_preferences", Context.MODE_PRIVATE).edit {
+                envelope.data.prefs.forEach { e ->
+                    when (e.type) {
+                        "string" -> putString(e.key, e.value)
+                        "int" -> putInt(e.key, e.value.toIntOrNull() ?: 0)
+                        "long" -> putLong(e.key, e.value.toLongOrNull() ?: 0L)
+                        "float" -> putFloat(e.key, e.value.toFloatOrNull() ?: 0f)
+                        "boolean" -> putBoolean(e.key, e.value.toBooleanStrictOrNull() ?: false)
+                        "stringset" -> putStringSet(e.key, e.value.split("|").filter { it.isNotBlank() }.toSet())
+                    }
                 }
             }
-            prefs.apply()
         }
     }
 

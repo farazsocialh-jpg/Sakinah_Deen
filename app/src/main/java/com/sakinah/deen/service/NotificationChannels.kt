@@ -7,9 +7,9 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.net.Uri
-import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.net.toUri
 import com.sakinah.deen.R
 import com.sakinah.deen.data.model.PrayerAlertMode
 import com.sakinah.deen.data.model.PrayerType
@@ -55,13 +55,13 @@ object NotificationChannels {
 
     /** Bundled Adhan URI, playable even when the app process was killed. */
     fun adhanSoundUri(context: Context): Uri =
-        Uri.parse("android.resource://${context.packageName}/${R.raw.adhan_makkah}")
+        "android.resource://${context.packageName}/${R.raw.adhan_makkah}".toUri()
 
     fun fajrAdhanSoundUri(context: Context): Uri =
-        Uri.parse("android.resource://${context.packageName}/${R.raw.adhan_fajr}")
+        "android.resource://${context.packageName}/${R.raw.adhan_fajr}".toUri()
 
     fun duaSafarSoundUri(context: Context): Uri =
-        Uri.parse("android.resource://${context.packageName}/${R.raw.dua_al_safar}")
+        "android.resource://${context.packageName}/${R.raw.dua_al_safar}".toUri()
 
     /**
      * Channel for one alert mode. Full Azaan posts on the vibrate channel on purpose: its
@@ -98,7 +98,6 @@ object NotificationChannels {
 
     /** True when the user silenced every prayer channel in Android settings. */
     fun prayerChannelBlocked(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
             ?: return false
         // Only the three core channels count: the optional Fajr channel may legitimately be
@@ -128,8 +127,6 @@ object NotificationChannels {
             ?: Settings.System.DEFAULT_NOTIFICATION_URI
 
     fun createChannels(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
