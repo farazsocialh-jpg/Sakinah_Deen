@@ -24,10 +24,10 @@ ktor = "3.5.0"
 # GeneratedSerializer gained typeParametersSerializers(); older runtimes throw
 # AbstractMethodError in MigrationTestHelper (see SakinahMigrationTest).
 #
-# Ceiling while Kotlin is 2.3.20: 1.13.0 is published with Kotlin 2.4.10, whose klib
-# ABI (2.4.0) this compiler cannot read, so :shared:compileKotlinIosArm64 fails with
-# "incompatible ABI version" and takes the whole build down. Bump this only together
-# with Kotlin, never on its own.
+# Ceiling while Kotlin is 2.3.20: 1.12.0 and newer are published with Kotlin 2.4.10,
+# whose klib ABI (2.4.0) this compiler cannot read, so :shared:compileKotlinIosArm64
+# fails with "incompatible ABI version" and takes the whole build down. 1.11.0 is the
+# newest verified-consumable release (ABI 2.3.0). Bump this with Kotlin, never alone.
 kotlinxSerialization = "1.9.0"
 playServicesLocation = "21.4.0"
 multiplatformSettings = "1.3.0"
