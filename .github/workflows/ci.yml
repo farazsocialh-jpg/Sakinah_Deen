@@ -108,6 +108,45 @@ jobs:
           ./gradlew :shared:build :shared:allTests :app:assembleDebug :app:testDebugUnitTest
           --stacktrace --no-daemon
 
+      # A green test task proves nothing if it ran no tests. This fails the build when the
+      # unit-test tasks produced no results, so a broken source set cannot pass silently.
+      - name: Verify unit tests actually ran
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob, sys
+          import xml.etree.ElementTree as ET
+
+          files = glob.glob("app/build/test-results/**/*.xml", recursive=True) + \
+                  glob.glob("shared/build/test-results/**/*.xml", recursive=True)
+          cases = failures = skipped = 0
+          for path in files:
+              root = ET.parse(path).getroot()
+              cases += len(list(root.iter("testcase")))
+              failures += len(list(root.iter("failure"))) + len(list(root.iter("error")))
+              skipped += len(list(root.iter("skipped")))
+          print(f"{len(files)} result file(s), {cases} test(s), {failures} failure(s), {skipped} skipped")
+          if cases == 0:
+              print("::error::No unit tests ran (app and shared produced no test results).")
+              sys.exit(1)
+          if skipped:
+              print(f"::warning::{skipped} unit test(s) were skipped.")
+          sys.exit(1 if failures else 0)
+          PY
+
+      - name: Upload unit test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-test-results
+          path: |
+            app/build/test-results/**
+            shared/build/test-results/**
+            app/build/reports/tests/**
+            shared/build/reports/tests/**
+          if-no-files-found: warn
+          retention-days: 14
+
       # Official Android Lint: security, correctness, accessibility, i18n and performance.
       - name: Android Lint
         run: ./gradlew :app:lintDebug --stacktrace --no-daemon
