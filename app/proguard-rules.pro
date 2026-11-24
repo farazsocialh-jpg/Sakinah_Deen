@@ -129,3 +129,4 @@
 }
 
 -keep class com.sakinah.deen.ui.components.QiblaMapBridge { *; }
+-keep class com.sakinah.deen.ui.components.QiblaMapBridge$* { *; }

@@ -366,214 +366,102 @@ fun SalahScreen(
 
             when (selectedSegment) {
                 0 -> {
-                    // Daily Prayer Matrix (5-prayer checklist in Focus Mode)
-                    val visiblePrayers = if (focusMode) {
-                        state.prayersList.filter { it.id != "sunrise" }
-                    } else {
-                        state.prayersList
-                    }
-                    items(visiblePrayers, key = { it.id }) { prayer ->
-                        val isExpanded = !focusMode && expandedId == prayer.id
-                        val isSunrise = prayer.id == "sunrise"
+                    // Layout F: 5-Segment Daily Progress Strip
+                    val fardPrayers = state.prayersList.filter { it.id != "sunrise" }
+                    val prayedCount = fardPrayers.count { it.isFardCompleted }
 
-                        SakinahCard(contentPadding = 14.dp) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = prayer.nameEnglish,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 16.sp,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = prayer.nameArabic,
-                                            fontFamily = AmiriFontFamily,
-                                            fontSize = 16.sp,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                    Text(
-                                        text = if (!isSunrise) pluralStringResource(R.plurals.salah_rakat_fard, prayer.fardRakats, prayer.fardRakats) else stringResource(R.string.salah_no_prayer),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text(
-                                            text = if (prayer.endTime.isNotBlank()) "${prayer.time} – ${prayer.endTime}" else prayer.time,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 15.sp,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                        if (prayer.id == "isha" && prayer.endTime.isNotBlank()) {
-                                            Text(
-                                                text = stringResource(R.string.salah_necessity_until_fajr),
-                                                fontSize = 9.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        if (prayer.id == "sunrise") {
-                                            Text(
-                                                text = stringResource(R.string.salah_prohibited_window),
-                                                fontSize = 9.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        if (prayer.id == "asr") {
-                                            Text(
-                                                text = stringResource(R.string.salah_preferred_sunset),
-                                                fontSize = 9.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    if (!isSunrise) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(48.dp)
-                                                .clickable {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                    prayerTypeOf(prayer)?.let { prayerType ->
-                                                        viewModel?.onIntent(
-                                                            SalahUiIntent.ToggleSalahCompletion(prayerType, prayer.isJamaah)
-                                                        )
-                                                    }
-                                                },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Surface(
-                                                shape = RoundedCornerShape(10.dp),
-                                                color = if (prayer.isFardCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                                                modifier = Modifier.size(32.dp)
-                                            ) {
-                                                Box(contentAlignment = Alignment.Center) {
-                                                    if (prayer.isFardCompleted) {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Check,
-                                                            contentDescription = stringResource(R.string.salah_completed_cd),
-                                                            tint = MaterialTheme.colorScheme.onPrimary,
-                                                            modifier = Modifier.size(18.dp)
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    if (!focusMode && !isSunrise) {
-                                        IconButton(
-                                            onClick = { expandedId = if (isExpanded) null else prayer.id }
-                                        ) {
-                                            Icon(
-                                                imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                                contentDescription = stringResource(R.string.salah_expand_cd),
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            AnimatedVisibility(visible = isExpanded && !isSunrise) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 10.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        if (prayer.sunnahBefore > 0) {
-                                            StatusBadge(
-                                                text = "${prayer.sunnahBefore} Sunnah Before",
-                                                accentColor = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                        if (prayer.sunnahAfter > 0) {
-                                            StatusBadge(
-                                                text = "${prayer.sunnahAfter} Sunnah After",
-                                                accentColor = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    }
-                                    if (prayer.nawafilName != null) {
-                                        Text(
-                                            text = stringResource(R.string.salah_nawafil_recommended, prayer.nawafilName),
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-                                    FilledTonalButton(
-                                        onClick = { launchPrayerGuide(prayer.nameEnglish, prayer.fardRakats) },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp)
-                                    ) {
-                                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text(stringResource(R.string.salah_open_guide, prayer.nameEnglish, prayer.fardRakats), fontSize = 12.sp)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    item { TahajjudCard(state) }
-                }
-
-                1 -> {
-                    // One shared Qibla card (Compass · Map · Sun). Interference, calibration
-                    // and permission guidance are owned by the card itself.
-                    item {
-                        QiblaModesCard(
-                            latitude = state.userCoordinates.first,
-                            longitude = state.userCoordinates.second,
-                            cityName = state.locationName,
-                            locationAvailable = !state.isLocationPending
-                        )
-                    }
-                }
-
-                else -> {
-                    // Guide segment: prayer-specific Rakat guides
-                    items(state.prayersList.filter { it.id != "sunrise" }, key = { "guide-${it.id}" }) { prayer ->
-                        SakinahCard(
-                            onClick = { launchPrayerGuide(prayer.nameEnglish, prayer.fardRakats) },
-                            contentPadding = 14.dp
+                    item(key = "daily-progress-strip") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "${prayer.nameEnglish} (${prayer.nameArabic})",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "${prayer.fardRakats} Rakat Fard posture & recitation walkthrough",
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                StatusBadge(
-                                    text = "${prayer.fardRakats} Rakats",
-                                    accentColor = MaterialTheme.colorScheme.primary
+                                Text(
+                                    text = stringResource(R.string.salah_today_prayed, prayedCount, 5),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "${prayedCount * 20}%",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
                                 )
                             }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                fardPrayers.forEach { p ->
+                                    val isDone = p.isFardCompleted
+                                    val segmentColor = if (isDone) {
+                                        Color(0xFF3D5A36)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(6.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(segmentColor)
+                                    )
+                                }
+                            }
                         }
+                    }
+
+                    // Slim Single-Line Status-Accent Prayer Rows
+                    items(fardPrayers, key = { it.id }) { prayer ->
+                        val isExpanded = !focusMode && expandedId == prayer.id
+                        StatusAccentPrayerRow(
+                            prayer = prayer,
+                            isExpanded = isExpanded,
+                            onToggleExpand = { expandedId = if (isExpanded) null else prayer.id },
+                            onToggleCompletion = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                prayerTypeOf(prayer)?.let { prayerType ->
+                                    viewModel?.onIntent(
+                                        SalahUiIntent.ToggleSalahCompletion(prayerType, prayer.isJamaah)
+                                    )
+                                }
+                            },
+                            onOpenGuide = { launchPrayerGuide(prayer.nameEnglish, prayer.fardRakats) }
+                        )
+                    }
+
+                    // Slim secondary rows below Isha: Sunrise and Tahajjud
+                    if (!focusMode) {
+                        val sunrise = state.prayersList.firstOrNull { it.id == "sunrise" }
+                        if (sunrise != null) {
+                            item(key = "sunrise") {
+                                SunriseRow(sunrise)
+                            }
+                        }
+                    }
+
+                    item(key = "tahajjud") {
+                        TahajjudCard(state)
+                    }
+                }
+
+                else -> {
+                    // One shared Qibla card (Compass · Map · Sun). Interference, calibration
+                    // and permission guidance are owned by the card itself.
+                    item(key = "qibla-card") {
+                        QiblaModesCard(
+                            latitude = state.userCoordinates.first,
+                            longitude = state.userCoordinates.second,
+                            cityName = state.locationName,
+                            locationAvailable = !state.isLocationPending
+                        )
                     }
                 }
             }
@@ -948,6 +836,292 @@ fun SalahScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun StatusAccentPrayerRow(
+    prayer: PrayerModel,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
+    onToggleCompletion: () -> Unit,
+    onOpenGuide: () -> Unit
+) {
+    val isPrayed = prayer.isFardCompleted
+    val isActive = prayer.isCurrent
+
+    val accentColor = when {
+        isPrayed -> Color(0xFF3D5A36)
+        isActive -> Color(0xFFE68A1E)
+        else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+    }
+
+    SakinahCard(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = 12.dp,
+        onClick = onToggleExpand
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Left edge: 4.dp wide, 28.dp tall rounded vertical accent bar
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .height(28.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(accentColor)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+
+                // Left text: Prayer name (maxLines = 1, softWrap = false)
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = prayer.nameEnglish,
+                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.SemiBold,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = prayer.nameArabic,
+                        fontFamily = AmiriFontFamily,
+                        fontSize = 15.sp,
+                        color = if (isActive) Color(0xFFE68A1E) else MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Right side: Start time (04:46 am, tabular / single-line)
+                Text(
+                    text = prayer.time,
+                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 14.sp,
+                    color = if (isActive) Color(0xFFE68A1E) else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    softWrap = false
+                )
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                // Circular check toggle (28.dp–32.dp visual circle with 44.dp touch target)
+                Box(
+                    modifier = Modifier
+                        .width(44.dp)
+                        .height(44.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onToggleCompletion),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when {
+                        isPrayed -> {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xFF3D5A36),
+                                modifier = Modifier.size(30.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Check,
+                                        contentDescription = stringResource(R.string.salah_completed_cd),
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                        isActive -> {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xFFE68A1E).copy(alpha = 0.12f),
+                                border = BorderStroke(1.5.dp, Color(0xFFE68A1E)),
+                                modifier = Modifier.size(30.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Check,
+                                        contentDescription = stringResource(R.string.salah_toggle_prayer_cd, prayer.nameEnglish),
+                                        tint = Color(0xFFE68A1E).copy(alpha = 0.5f),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                        else -> {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color.Transparent,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+                                modifier = Modifier.size(30.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Optional tap-to-expand accordion
+            AnimatedVisibility(visible = isExpanded) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp, start = 14.dp, end = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val windowText = if (prayer.endTime.isNotBlank()) {
+                            "${prayer.time} – ${prayer.endTime}"
+                        } else {
+                            prayer.time
+                        }
+                        Text(
+                            text = windowText,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        val rakatText = when {
+                            prayer.sunnahBefore > 0 && prayer.sunnahAfter > 0 ->
+                                stringResource(R.string.salah_rakat_summary, prayer.sunnahBefore, prayer.fardRakats, prayer.sunnahAfter)
+                            prayer.sunnahBefore > 0 ->
+                                stringResource(R.string.salah_rakat_before_fard, prayer.sunnahBefore, prayer.fardRakats)
+                            prayer.sunnahAfter > 0 ->
+                                stringResource(R.string.salah_rakat_fard_after, prayer.fardRakats, prayer.sunnahAfter)
+                            else ->
+                                stringResource(R.string.salah_rakat_fard_only, prayer.fardRakats)
+                        }
+                        Text(
+                            text = rakatText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    if (prayer.id == "isha" && prayer.endTime.isNotBlank()) {
+                        Text(
+                            text = stringResource(R.string.salah_necessity_until_fajr),
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (prayer.id == "asr") {
+                        Text(
+                            text = stringResource(R.string.salah_preferred_sunset),
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (prayer.nawafilName != null) {
+                        Text(
+                            text = stringResource(R.string.salah_nawafil_recommended, prayer.nawafilName),
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    FilledTonalButton(
+                        onClick = onOpenGuide,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = stringResource(R.string.salah_open_guide, prayer.nameEnglish, prayer.fardRakats),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SunriseRow(prayer: PrayerModel) {
+    SakinahCard(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = 12.dp
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(28.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(R.string.salah_sunrise_label),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = prayer.nameArabic,
+                        fontFamily = AmiriFontFamily,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.salah_prohibited_window),
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = prayer.time,
+                fontWeight = FontWeight.Medium,
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false
+            )
         }
     }
 }

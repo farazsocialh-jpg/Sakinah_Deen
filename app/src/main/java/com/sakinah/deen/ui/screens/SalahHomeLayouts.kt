@@ -1,5 +1,7 @@
 package com.sakinah.deen.ui.screens
 
+import com.sakinah.deen.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -115,12 +117,13 @@ internal fun SalahTopHeader(
 ) {
     val shortDate = state.gregorianDate.substringAfter("·", state.gregorianDate).trim()
         .ifBlank { state.gregorianDate }
-    val cityShort = state.locationName.substringBefore(",").trim().ifBlank { "Location" }
+    val fallbackCity = stringResource(R.string.salah_location_fallback)
+    val cityShort = state.locationName.substringBefore(",").trim().ifBlank { fallbackCity }
     val methodShort = state.authorityName.ifBlank { state.sourceLabel }
     // A stale fix must say so rather than reading as the current position.
     val staleNote = if (state.isLocationStale) {
         val hours = (state.locationAgeMinutes / 60).coerceAtLeast(1L)
-        " · saved ${hours}h ago"
+        stringResource(R.string.salah_stale_location, hours)
     } else {
         ""
     }
@@ -139,30 +142,30 @@ internal fun SalahTopHeader(
                 text = state.hijriDate,
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = "$shortDate · $cityShort ▾ · $methodShort$staleNote",
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
         Row(
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (!focusMode) {
                 Surface(
                     shape = RoundedCornerShape(50),
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .clickable(onClick = onOpenQadha)
+                    modifier = Modifier.clickable(onClick = onOpenQadha)
                 ) {
                     Text(
-                        text = "Qadha",
+                        text = stringResource(R.string.salah_qadha_btn),
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
@@ -171,70 +174,61 @@ internal fun SalahTopHeader(
                 }
             }
             if (onOpenNotifications != null) {
-                Surface(
-                    color = Color.Transparent,
+                Box(
                     modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .clickable(onClick = onOpenNotifications)
+                        .width(40.dp)
+                        .height(40.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onOpenNotifications),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier.size(48.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        androidx.compose.material3.Icon(
-                            imageVector = Icons.Outlined.Notifications,
-                            contentDescription = "Prayer Notifications",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                    androidx.compose.material3.Icon(
+                        imageVector = Icons.Outlined.Notifications,
+                        contentDescription = stringResource(R.string.salah_notifications_cd),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
             if (onRecalculate != null) {
-                Surface(
-                    color = Color.Transparent,
+                Box(
                     modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .clickable(enabled = !state.isRefreshing, onClick = onRecalculate)
+                        .width(40.dp)
+                        .height(40.dp)
+                        .clip(CircleShape)
+                        .clickable(enabled = !state.isRefreshing, onClick = onRecalculate),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier.size(48.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (state.isRefreshing) {
-                            CircularProgressIndicator(
-                                strokeWidth = 2.dp,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        } else {
-                            androidx.compose.material3.Icon(
-                                imageVector = Icons.Outlined.Refresh,
-                                contentDescription = "Recalculate today's times",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                    if (state.isRefreshing) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    } else {
+                        androidx.compose.material3.Icon(
+                            imageVector = Icons.Outlined.Refresh,
+                            contentDescription = stringResource(R.string.salah_recalculate_cd),
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             }
             if (!focusMode) {
-                Surface(
-                    color = Color.Transparent,
+                Box(
                     modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .clickable(onClick = onOpenSettings)
+                        .width(40.dp)
+                        .height(40.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onOpenSettings),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier.size(48.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        androidx.compose.material3.Icon(
-                            imageVector = Icons.Outlined.Tune,
-                            contentDescription = "Prayer Settings",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                    androidx.compose.material3.Icon(
+                        imageVector = Icons.Outlined.Tune,
+                        contentDescription = stringResource(R.string.salah_settings_cd),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }
@@ -247,7 +241,10 @@ internal fun SalahTabBar(
     onSelect: (Int) -> Unit,
     underline: Boolean = false
 ) {
-    val tabs = listOf("Times", "Qibla", "Guide")
+    val tabs = listOf(
+        stringResource(R.string.salah_tab_times),
+        stringResource(R.string.salah_tab_qibla)
+    )
     if (!underline) {
         SegmentedPillBar(
             options = tabs,

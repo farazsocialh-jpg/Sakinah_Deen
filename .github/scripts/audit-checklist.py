@@ -901,9 +901,10 @@ def render_markdown(checks: list[Check], strict: bool) -> str:
         group = [c for c in checks if c.area == area]
         for c in group:
             evidence = c.evidence.replace("|", "\\|") or "—"
+            escaped_detail = c.detail.replace("|", "\\|")
             lines.append(
                 f"| {icon.get(c.status, '•')} | `{c.id}` | {c.area} | {c.severity} | "
-                f"{c.title} — {c.detail.replace('|', '\\|')} | {evidence} |"
+                f"{c.title} — {escaped_detail} | {evidence} |"
             )
     if actions:
         lines += ["", "### Known gaps (tracked, not blocking)", ""]

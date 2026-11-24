@@ -829,7 +829,7 @@ private fun QiblaMapFallback(qiblaBearing: Float, reason: String?, onRetry: () -
 
 /** JS bridge exposed to the bundled map page as `window.QiblaBridge`. */
 @Keep
-private class QiblaMapBridge(
+internal class QiblaMapBridge(
     private val onReadyCallback: () -> Unit,
     private val onTileLoadedCallback: () -> Unit,
     private val onErrorCallback: (String) -> Unit,

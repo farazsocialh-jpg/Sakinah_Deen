@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
     <base-config cleartextTrafficPermitted="false" />
+    <domain-config>
+        <domain includeSubdomains="true">cartocdn.com</domain>
+        <domain includeSubdomains="true">openstreetmap.org</domain>
+        <domain includeSubdomains="true">arcgisonline.com</domain>
+        <domain includeSubdomains="true">app.imancore.local</domain>
+    </domain-config>
 </network-security-config>

@@ -24,10 +24,9 @@
 (function () {
   "use strict";
 
-  var bridge = window.QiblaBridge;
-
   function call(name, payload) {
     try {
+      var bridge = window.QiblaBridge;
       if (bridge && typeof bridge[name] === "function") {
         if (payload === undefined) {
           bridge[name]();
@@ -88,7 +87,21 @@
     .setView([lat, lon], 17);
 
   window.invalidateMapSize = function () { if (map) { map.invalidateSize(true); } };
-  setTimeout(function () { if (map) { map.invalidateSize(true); } }, 150);
+  setTimeout(function () { if (map) { map.invalidateSize(true); } }, 100);
+  setTimeout(function () { if (map) { map.invalidateSize(true); } }, 300);
+  setTimeout(function () { if (map) { map.invalidateSize(true); } }, 600);
+  setTimeout(function () { if (map) { map.invalidateSize(true); } }, 1200);
+
+  if (window.ResizeObserver) {
+    var ro = new ResizeObserver(function () {
+      if (map) { map.invalidateSize(true); }
+    });
+    var mapEl = document.getElementById("map");
+    if (mapEl) { ro.observe(mapEl); }
+  }
+  window.addEventListener("resize", function () {
+    if (map) { map.invalidateSize(true); }
+  });
   var sourceIndex = 0;
   var tileErrors = 0;
   var tileLayer = null;

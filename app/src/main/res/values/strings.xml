@@ -302,6 +302,26 @@
     <string name="salah_necessity_until_fajr">Necessity until Fajr</string>
     <string name="salah_prohibited_window">Prohibited prayer window · Fajr ends</string>
     <string name="salah_preferred_sunset">Preferred before ~15m pre-sunset</string>
+    <string name="salah_qadha_btn">Qadha</string>
+    <string name="salah_notifications_cd">Prayer Notifications</string>
+    <string name="salah_recalculate_cd">Recalculate today\'s times</string>
+    <string name="salah_settings_cd">Prayer Settings</string>
+    <string name="salah_stale_location"> · saved %1$dh ago</string>
+    <string name="salah_location_fallback">Location</string>
+    <string name="salah_tab_times">Times</string>
+    <string name="salah_tab_qibla">Qibla</string>
+    <string name="salah_today_prayed">Today: %1$d/%2$d Prayed</string>
+    <string name="salah_progress_strip_cd">Today %1$d of %2$d prayers completed</string>
+    <string name="salah_toggle_prayer_cd">Toggle completion for %1$s</string>
+    <string name="salah_step_by_step_guide">Step-by-Step Guide</string>
+    <string name="salah_rakat_summary">%1$d Sunnah · %2$d Fard · %3$d Sunnah</string>
+    <string name="salah_rakat_fard_only">%1$d Rakat Fard</string>
+    <string name="salah_rakat_before_fard">%1$d Sunnah · %2$d Fard</string>
+    <string name="salah_rakat_fard_after">%1$d Fard · %2$d Sunnah</string>
+    <string name="salah_status_prayed">Prayed</string>
+    <string name="salah_status_active">Current Prayer</string>
+    <string name="salah_status_upcoming">Upcoming</string>
+    <string name="salah_sunrise_label">Sunrise</string>
     <!-- Wealth screen -->
     <string name="wealth_hub_title">Māl, Zakat &amp; Sadaqah Hub</string>
     <string name="wealth_currency_nisab">Currency: %1$s  •  Nisab source: %2$s</string>
