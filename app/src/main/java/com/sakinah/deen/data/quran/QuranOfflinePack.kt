@@ -212,8 +212,14 @@ object QuranOfflinePack {
     // QUL word-by-word pack (scripts/pack_qul_bundle.py)
     // ------------------------------------------------------------------------------------
 
-    /** Gzipped QUL bundle holding words, WBW translations, layouts, morphology and tafsir. */
-    const val QUL_ASSET = "qul_offline.db.gz"
+    /**
+     * Gzipped QUL bundle holding words, WBW translations, layouts, morphology and tafsir.
+     *
+     * The `.gzip` suffix is deliberate: AGP's asset merge transparently gunzips any asset
+     * named `*.gz` before packaging, so a `.gz` asset arrives as `qul_offline.db` and
+     * [ensureQulDatabaseFile] would never find it (Android CI run 51 failed exactly so).
+     */
+    const val QUL_ASSET = "qul_offline.db.gzip"
 
     /** File name the bundle is unpacked to inside `context.filesDir`. */
     const val QUL_DB_NAME = "qul_offline.db"

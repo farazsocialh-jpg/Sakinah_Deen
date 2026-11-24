@@ -21,7 +21,8 @@ Downloads are cached in ``qul_raw/`` (git-ignored) so an interrupted run resumes
 it stopped.  Nothing copyrighted is bundled: only resources published as open data are
 used, and each table records its provenance in ``qul_meta``.
 
-Output: ``app/src/main/assets/qul_offline.db`` (gzipped when it exceeds 25 MB), then
+Output: ``app/src/main/assets/qul_offline.db`` (gzipped to ``qul_offline.db.gzip`` when it
+exceeds 25 MB; not ``.gz``, which the Android asset merge would silently unpack), then
 prints ``QUL_DB_BYTES`` / ``QUL_DB_SHA256`` for the unpacked database so the constants
 in ``QuranOfflinePack.kt`` can be pinned.
 """
@@ -47,7 +48,9 @@ ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = ROOT / "qul_raw"
 ASSETS_DIR = ROOT / "app" / "src" / "main" / "assets"
 DB_PATH = ASSETS_DIR / "qul_offline.db"
-GZ_PATH = ASSETS_DIR / "qul_offline.db.gz"
+# ``.gzip`` rather than ``.gz``: AGP's asset merge transparently gunzips ``*.gz``
+# assets, which ships the raw 108 MB database under the name the app never looks for.
+GZ_PATH = ASSETS_DIR / "qul_offline.db.gzip"
 
 QUL_API = "https://qul.tarteel.ai/api/v1"
 QUL_SITE = "https://qul.tarteel.ai"
