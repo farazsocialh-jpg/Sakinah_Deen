@@ -44,7 +44,6 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         // An overlay must not be able to aim a tap at a destructive or financial control.
         enableTapjackingProtection()
         pendingNavigation.value = navigationTarget(intent)
