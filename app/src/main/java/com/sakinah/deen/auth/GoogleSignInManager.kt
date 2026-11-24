@@ -29,8 +29,8 @@ class GoogleSignInCancelled : Exception("Google Sign-In was cancelled")
 
 /** The build has no GOOGLE_WEB_CLIENT_ID, so Credential Manager cannot be invoked. */
 class GoogleSignInNotConfigured : Exception(
-    "Google Sign-In is not set up for this build. Add GOOGLE_WEB_CLIENT_ID in " +
-        "local.properties (or the environment) and rebuild."
+    "Google Sign-In is not set up for this build. Add GOOGLE_WEB_CLIENT_ID to " +
+        ".env or local.properties (or the environment) and rebuild."
 )
 
 /**

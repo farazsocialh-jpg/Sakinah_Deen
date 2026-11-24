@@ -231,6 +231,11 @@ GOOGLE_WEB_CLIENT_ID=1234567890-abcdef.apps.googleusercontent.com
 export GOOGLE_WEB_CLIENT_ID="1234567890-abcdef.apps.googleusercontent.com"
 ```
 
+```properties
+# or .env in the repository root (the location README.md tells you to use)
+GOOGLE_WEB_CLIENT_ID=1234567890-abcdef.apps.googleusercontent.com
+```
+
 In CI, the same value is the `GOOGLE_WEB_CLIENT_ID` repository secret. The workflows warn and
 build with sign-in disabled when it is absent; they never fall back to a built-in id, and the
 Android OAuth client above is what makes that id usable from `com.imancore.app`.
@@ -238,8 +243,8 @@ Android OAuth client above is what makes that id usable from `com.imancore.app`.
 Cosmetic but user-visible: set **OAuth consent screen → App name** to `ImanCore`, so the
 account chooser no longer shows the old name. No client id changes when you rename it.
 
-The build reads `local.properties` first, then the environment (and `keystore.properties`
-inside CI). If the value is blank the app still builds; tapping **Continue with Google**
+The build reads `local.properties` first, then the environment, then `keystore.properties`
+(inside CI), then `.env`. If the value is blank the app still builds; tapping **Continue with Google**
 shows an inline "not configured for this build" message instead of crashing.
 
 Google returns identity only (`uniqueId`, email, name, photo). Gender, date of birth, city

@@ -38,9 +38,32 @@ val localProperties = Properties().apply {
     }
 }
 
+// README.md and .env.example tell you to put these values in .env, but Gradle has no dotenv
+// support of its own: without this, a client id or proxy URL set there is silently ignored.
+// Lowest precedence, so local.properties, the environment and keystore.properties still win.
+val dotenvProperties = Properties().apply {
+    val envFile = rootProject.file(".env")
+    if (envFile.exists()) {
+        envFile.readLines().forEach { rawLine ->
+            val line = rawLine.trim().removePrefix("export ").trim()
+            if (line.isEmpty() || line.startsWith("#")) return@forEach
+            val separator = line.indexOf('=')
+            if (separator <= 0) return@forEach
+            setProperty(
+                line.substring(0, separator).trim(),
+                line.substring(separator + 1).trim().removeSurrounding("\"").removeSurrounding("'"),
+            )
+        }
+    }
+}
+
+fun dotenvValue(key: String): String? =
+    dotenvProperties.getProperty(key)?.takeIf { it.isNotBlank() }
+
 fun localOrSigningValue(key: String): String? =
     localProperties.getProperty(key)?.takeIf { it.isNotBlank() }
         ?: signingValue(key, key)
+        ?: dotenvValue(key)
 
 val releaseStoreFile = signingValue("storeFile", "KEYSTORE_PATH")?.let { configuredPath ->
     rootProject.file(configuredPath).takeIf { it.exists() }
@@ -64,16 +87,18 @@ android {
         // Supply via the AI_PROXY_URL env var or keystore.properties. There is deliberately no
         // built-in default: an unset URL makes the AI screen show its "not configured" state
         // instead of silently sending prompts to a deployment this build never chose.
-        val aiProxyUrl = signingValue("AI_PROXY_URL", "AI_PROXY_URL")?.trim().orEmpty()
+        val aiProxyUrl = (signingValue("AI_PROXY_URL", "AI_PROXY_URL") ?: dotenvValue("AI_PROXY_URL"))
+            ?.trim().orEmpty()
         buildConfigField("String", "AI_PROXY_URL", "\"$aiProxyUrl\"")
 
         // Public metal-price endpoint used for the live nisab threshold. Empty disables
         // fetching, in which case the last cached rate is used.
-        val nisabRateUrl = signingValue("NISAB_RATE_URL", "NISAB_RATE_URL").orEmpty()
+        val nisabRateUrl = (signingValue("NISAB_RATE_URL", "NISAB_RATE_URL") ?: dotenvValue("NISAB_RATE_URL"))
+            .orEmpty()
         buildConfigField("String", "NISAB_RATE_URL", "\"$nisabRateUrl\"")
 
         // Web OAuth client id used as Credential Manager's serverClientId for Google Sign-In.
-        // Never hardcoded: supply via local.properties or the GOOGLE_WEB_CLIENT_ID env var.
+        // Never hardcoded: supply via local.properties, the GOOGLE_WEB_CLIENT_ID env var or .env.
         // Blank builds compile and simply show an inline "not configured" message.
         val googleWebClientId = localOrSigningValue("GOOGLE_WEB_CLIENT_ID").orEmpty()
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
