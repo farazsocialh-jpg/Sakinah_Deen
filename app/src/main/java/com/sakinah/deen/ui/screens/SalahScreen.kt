@@ -423,6 +423,7 @@ fun SalahScreen(
                         val isExpanded = !focusMode && expandedId == prayer.id
                         StatusAccentPrayerRow(
                             prayer = prayer,
+                            isCurrent = prayer.nameEnglish.equals(state.currentPrayerName, ignoreCase = true),
                             isExpanded = isExpanded,
                             onToggleExpand = { expandedId = if (isExpanded) null else prayer.id },
                             onToggleCompletion = {
@@ -843,13 +844,14 @@ fun SalahScreen(
 @Composable
 private fun StatusAccentPrayerRow(
     prayer: PrayerModel,
+    isCurrent: Boolean,
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
     onToggleCompletion: () -> Unit,
     onOpenGuide: () -> Unit
 ) {
     val isPrayed = prayer.isFardCompleted
-    val isActive = prayer.isCurrent
+    val isActive = isCurrent
 
     val accentColor = when {
         isPrayed -> Color(0xFF3D5A36)
