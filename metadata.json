@@ -1,0 +1,8 @@
+{
+  "name": "ImanCore",
+  "description": "Comprehensive Islamic companion app featuring prayer times, Quran reader, Qibla compass, Hadith collections, AI Islamic Scholar, and Android Glance widgets.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
