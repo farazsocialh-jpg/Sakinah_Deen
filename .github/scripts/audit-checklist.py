@@ -39,6 +39,8 @@ LEGITIMATELY_IDENTICAL = {
     "guide_step_badge",
     "notif_prayer_window",
     "theme_palette_selected",
+    # A mask glyph, identical in every locale by design.
+    "quran_wbw_quiz_masked",
 }
 
 AREA_ORDER = [

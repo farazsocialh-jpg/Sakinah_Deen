@@ -62,17 +62,20 @@ fun SakinahCard(
     onClick: (() -> Unit)? = null,
     containerColor: Color = MaterialTheme.colorScheme.surface,
     contentPadding: Dp = 16.dp,
+    /** False lets the card size itself, e.g. as one tile in a flowing word-card grid. */
+    fillWidth: Boolean = true,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val shape = RoundedCornerShape(16.dp)
     val border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.65f))
+    val sized = if (fillWidth) modifier.fillMaxWidth() else modifier
     val body: @Composable () -> Unit = {
         Column(modifier = Modifier.padding(contentPadding), content = content)
     }
     if (onClick != null) {
         Surface(
             onClick = onClick,
-            modifier = modifier.fillMaxWidth(),
+            modifier = sized,
             shape = shape,
             color = containerColor,
             border = border,
@@ -80,7 +83,7 @@ fun SakinahCard(
         )
     } else {
         Surface(
-            modifier = modifier.fillMaxWidth(),
+            modifier = sized,
             shape = shape,
             color = containerColor,
             border = border,

@@ -23,6 +23,38 @@ enum class QuranReadingMode {
     }
 }
 
+/**
+ * Presentation of the Word-by-Word (WBW) row under each ayah.
+ *
+ * Every mode renders the same verbatim QUL Arabic; only the affordances around it change,
+ * so switching modes can never alter the Quranic text. The order of the entries is the
+ * order the layout picker shows them in, and [INTERLINEAR_RTL] is the default because it
+ * is the only mode that shows a meaning per word without a tap.
+ */
+enum class WbwLayoutMode {
+    INTERLINEAR_RTL,
+    MUSHAF_TAP,
+    VERSE_BOTTOM_DOCK,
+    WORD_CARDS_RTL,
+    GLOSSARY_LIST,
+    VOCAB_QUIZ;
+
+    /** True when the mode shows root / part of speech, i.e. needs the chapter's morphology. */
+    val showsMorphology: Boolean
+        get() = this == VERSE_BOTTOM_DOCK || this == GLOSSARY_LIST
+
+    companion object {
+        val DEFAULT = INTERLINEAR_RTL
+
+        /** Resolves a stored name; null when the value is empty or unknown. */
+        fun fromStoredName(raw: String?): WbwLayoutMode? {
+            val name = raw?.trim().orEmpty()
+            if (name.isEmpty()) return null
+            return entries.firstOrNull { it.name == name }
+        }
+    }
+}
+
 /** One saved ayah. The timestamp orders the bookmarks sheet newest-first. */
 data class AyahBookmark(
     val surahNumber: Int,
@@ -63,6 +95,7 @@ class QuranReaderPreferences internal constructor(
         private const val KEY_WBW_LANGUAGE = "quran_wbw_language"
         private const val KEY_WBW_SCRIPT = "quran_wbw_script"
         private const val KEY_MUSHAF_LAYOUT = "quran_mushaf_layout"
+        private const val KEY_WBW_LAYOUT_MODE = "quran_wbw_layout_mode"
 
         const val DEFAULT_WBW_LANGUAGE = "en"
         const val DEFAULT_WBW_SCRIPT = "uthmani"
@@ -132,6 +165,12 @@ class QuranReaderPreferences internal constructor(
         set(value) = prefs.edit {
             putString(KEY_WBW_SCRIPT, value.trim().takeIf { it in WBW_SCRIPTS } ?: DEFAULT_WBW_SCRIPT)
         }
+
+    /** Word-by-word presentation; survives a restart like the rest of the reader state. */
+    var wbwLayoutMode: WbwLayoutMode
+        get() = WbwLayoutMode.fromStoredName(prefs.getString(KEY_WBW_LAYOUT_MODE, null))
+            ?: WbwLayoutMode.DEFAULT
+        set(value) = prefs.edit { putString(KEY_WBW_LAYOUT_MODE, value.name) }
 
     /** Mushaf page layout key bundled in the QUL database. */
     var mushafLayout: String

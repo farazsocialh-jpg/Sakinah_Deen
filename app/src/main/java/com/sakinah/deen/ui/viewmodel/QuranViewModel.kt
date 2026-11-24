@@ -14,6 +14,7 @@ import com.sakinah.deen.data.model.SurahModel
 import com.sakinah.deen.data.prefs.AyahBookmark
 import com.sakinah.deen.data.prefs.QuranReaderPreferences
 import com.sakinah.deen.data.prefs.QuranReadingMode
+import com.sakinah.deen.data.prefs.WbwLayoutMode
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.quran.QulDataSource
 import com.sakinah.deen.data.quran.QulMorphology
@@ -26,8 +27,12 @@ import com.sakinah.deen.network.IslamicDataRepository
 import com.sakinah.deen.settings.SettingsRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -91,6 +96,12 @@ data class QuranUiState(
     val qulWordsByAyah: Map<Int, List<QulWord>> = emptyMap(),
     /** "uthmani" or "indopak", persisted with the rest of the reader state. */
     val qulScript: String = QuranReaderPreferences.DEFAULT_WBW_SCRIPT,
+    /** How the word-by-word row under each ayah is presented; persisted by the reader. */
+    val wbwLayoutMode: WbwLayoutMode = WbwLayoutMode.DEFAULT,
+    /** Root / lemma / stem / POS for the open chapter, loaded once when a mode prints roots. */
+    val wbwMorphology: Map<String, QulMorphology> = emptyMap(),
+    /** wordKeys revealed in [WbwLayoutMode.VOCAB_QUIZ]; cleared when the chapter changes. */
+    val revealedWbwWordKeys: Set<String> = emptySet(),
     val mushafLayout: String = QuranReaderPreferences.DEFAULT_MUSHAF_LAYOUT,
     /** Word whose morphology sheet is open, plus its root occurrences. */
     val selectedQulWord: QulWord? = null,
@@ -121,6 +132,8 @@ sealed class QuranUiIntent {
     data class SelectArabicScript(val script: QuranArabicScript) : QuranUiIntent()
     data class SelectWbwLanguage(val lang: String) : QuranUiIntent()
     data class SelectQulScript(val script: String) : QuranUiIntent()
+    data class SelectWbwLayout(val mode: WbwLayoutMode) : QuranUiIntent()
+    data class ToggleWbwReveal(val wordKey: String) : QuranUiIntent()
     data class SelectMushafLayout(val layout: String) : QuranUiIntent()
     data class SelectQulWord(val wordKey: String) : QuranUiIntent()
     data object ClearQulWord : QuranUiIntent()
@@ -189,6 +202,9 @@ class QuranViewModel(
     private var searchJob: Job? = null
     private var pendingTargetAyah: Int? = null
 
+    /** Chapter [QuranUiState.wbwMorphology] was loaded for; null before the first load. */
+    private var wbwMorphologySurah: Int? = null
+
     /** True once Room has supplied chapter metadata, i.e. the offline library is usable. */
     private var hasDatabaseSurahs = false
 
@@ -204,10 +220,17 @@ class QuranViewModel(
             qulScript = quranReaderPreferences?.wbwScript
                 ?: QuranReaderPreferences.DEFAULT_WBW_SCRIPT,
             mushafLayout = quranReaderPreferences?.mushafLayout
-                ?: QuranReaderPreferences.DEFAULT_MUSHAF_LAYOUT
+                ?: QuranReaderPreferences.DEFAULT_MUSHAF_LAYOUT,
+            wbwLayoutMode = quranReaderPreferences?.wbwLayoutMode ?: WbwLayoutMode.DEFAULT
         )
     )
     val uiState: StateFlow<QuranUiState> = _uiState.asStateFlow()
+
+    /** The word-by-word presentation on its own, for callers that only observe that choice. */
+    val wbwLayoutMode: StateFlow<WbwLayoutMode> = uiState
+        .map { it.wbwLayoutMode }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, _uiState.value.wbwLayoutMode)
 
     init {
         val selectedId = selectedTranslationIdFlow.value
@@ -248,6 +271,8 @@ class QuranViewModel(
             is QuranUiIntent.SelectArabicScript -> selectArabicScript(intent.script)
             is QuranUiIntent.SelectWbwLanguage -> selectWbwLanguage(intent.lang)
             is QuranUiIntent.SelectQulScript -> selectQulScript(intent.script)
+            is QuranUiIntent.SelectWbwLayout -> selectWbwLayout(intent.mode)
+            is QuranUiIntent.ToggleWbwReveal -> toggleWbwReveal(intent.wordKey)
             is QuranUiIntent.SelectMushafLayout -> selectMushafLayout(intent.layout)
             is QuranUiIntent.SelectQulWord -> selectQulWord(intent.wordKey)
             is QuranUiIntent.ClearQulWord -> _uiState.update {
@@ -433,13 +458,18 @@ class QuranViewModel(
         // moved on before they landed.
         loadQulWords(surahNumber)
         loadSurahInfo(surahNumber)
+        // A quiz answer belongs to the chapter it was revealed in, and the old chapter's
+        // morphology would print the wrong roots under the new one.
+        wbwMorphologySurah = null
         _uiState.update {
             it.copy(
                 surahInfo = null,
                 ayahTopics = emptyList(),
                 selectedQulWord = null,
                 selectedQulMorphology = null,
-                selectedQulWordOccurrences = emptyList()
+                selectedQulWordOccurrences = emptyList(),
+                revealedWbwWordKeys = emptySet(),
+                wbwMorphology = emptyMap()
             )
         }
         // Switching chapters is a reading position too; the reader refines the index as
@@ -637,6 +667,9 @@ class QuranViewModel(
         }
         loadQulWords(selectedSurahNumber.value)
         loadSurahInfo(selectedSurahNumber.value)
+        if (_uiState.value.wbwLayoutMode.showsMorphology) {
+            loadWbwMorphology(selectedSurahNumber.value)
+        }
     }
 
     /**
@@ -683,6 +716,38 @@ class QuranViewModel(
         if (_uiState.value.qulScript == normalized) return
         _uiState.update { it.copy(qulScript = normalized) }
         quranReaderPreferences?.wbwScript = normalized
+    }
+
+    /** Switches the word-by-word presentation and remembers it across restarts. */
+    private fun selectWbwLayout(mode: WbwLayoutMode) {
+        if (_uiState.value.wbwLayoutMode == mode) return
+        _uiState.update { it.copy(wbwLayoutMode = mode) }
+        quranReaderPreferences?.wbwLayoutMode = mode
+        if (mode.showsMorphology) loadWbwMorphology(selectedSurahNumber.value)
+    }
+
+    /** Flips one word between masked and revealed in the vocabulary quiz. */
+    private fun toggleWbwReveal(wordKey: String) {
+        if (wordKey.isBlank()) return
+        _uiState.update { state ->
+            val revealed = state.revealedWbwWordKeys
+            state.copy(
+                revealedWbwWordKeys =
+                    if (wordKey in revealed) revealed - wordKey else revealed + wordKey
+            )
+        }
+    }
+
+    /** One prefix scan of `qul_morphology` per chapter, only for the modes that print roots. */
+    private fun loadWbwMorphology(surahNumber: Int) {
+        val qul = qulDatabase ?: return
+        if (wbwMorphologySurah == surahNumber && _uiState.value.wbwMorphology.isNotEmpty()) return
+        viewModelScope.launch {
+            val morphology = qul.getMorphologyForSurah(surahNumber)
+            if (selectedSurahNumber.value != surahNumber) return@launch
+            wbwMorphologySurah = surahNumber
+            _uiState.update { it.copy(wbwMorphology = morphology) }
+        }
     }
 
     private fun selectMushafLayout(layout: String) {

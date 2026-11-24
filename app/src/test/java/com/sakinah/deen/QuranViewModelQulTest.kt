@@ -69,6 +69,9 @@ class QuranViewModelQulTest {
         override suspend fun getWordMorphology(wordKey: String): QulMorphology =
             QulMorphology(wordKey, root = "كلم", lemma = "كَلِمَة", stem = "كَلِمَة", pos = "N")
 
+        override suspend fun getMorphologyForSurah(surah: Int): Map<String, QulMorphology> =
+            mapOf("1:1:1" to getWordMorphology("1:1:1"))
+
         override suspend fun searchByRoot(root: String): List<QulWord> = words["en"]?.get(1).orEmpty()
 
         override suspend fun getTafsir(slug: String, ayahKey: String): String? = null

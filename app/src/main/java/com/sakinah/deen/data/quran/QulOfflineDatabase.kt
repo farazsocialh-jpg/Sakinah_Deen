@@ -76,6 +76,14 @@ interface QulDataSource {
     suspend fun getWordsForSurah(surah: Int, lang: String): Map<Int, List<QulWord>>
     suspend fun getMushafPage(layout: String, pageNumber: Int): List<QulMushafLine>
     suspend fun getWordMorphology(wordKey: String): QulMorphology?
+
+    /**
+     * Every word's morphology for one chapter, keyed by `word_key`.
+     *
+     * The word-by-word modes that print a root need all of a chapter's morphology at once;
+     * asking [getWordMorphology] per word would be one query per word on a scroll path.
+     */
+    suspend fun getMorphologyForSurah(surah: Int): Map<String, QulMorphology>
     suspend fun searchByRoot(root: String): List<QulWord>
     suspend fun getTafsir(slug: String, ayahKey: String): String?
     suspend fun getSurahInfo(surah: Int): QulSurahInfo?
@@ -229,6 +237,29 @@ class QulOfflineDatabase(context: Context) : QulDataSource {
             morphology
         }
     }
+
+    override suspend fun getMorphologyForSurah(surah: Int): Map<String, QulMorphology> =
+        withContext(Dispatchers.IO) {
+            val morphology = LinkedHashMap<String, QulMorphology>()
+            // One prefix scan: word keys are `surah:ayah:word`, so `12:%` never matches 120.
+            database().rawQuery(
+                "SELECT word_key, root, lemma, stem, pos FROM qul_morphology " +
+                    "WHERE word_key LIKE ? ORDER BY word_key",
+                arrayOf("$surah:%")
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val wordKey = cursor.getString(0).orEmpty()
+                    morphology[wordKey] = QulMorphology(
+                        wordKey = wordKey,
+                        root = cursor.getString(1).orEmpty(),
+                        lemma = cursor.getString(2).orEmpty(),
+                        stem = cursor.getString(3).orEmpty(),
+                        pos = cursor.getString(4).orEmpty()
+                    )
+                }
+            }
+            morphology
+        }
 
     override suspend fun searchByRoot(root: String): List<QulWord> {
         if (root.isBlank()) return emptyList()

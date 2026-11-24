@@ -102,6 +102,7 @@ import com.sakinah.deen.data.model.AyahModel
 import com.sakinah.deen.data.model.QuranArabicScript
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.QuranReadingLayout
+import com.sakinah.deen.data.prefs.WbwLayoutMode
 import com.sakinah.deen.data.prefs.QuranReadingMode
 import com.sakinah.deen.data.quran.QulWord
 import com.sakinah.deen.ui.components.ArabicVerseBlock
@@ -266,7 +267,11 @@ fun QuranScreen(
         translationIsRtl = translationIsRtl,
         arabicFontSizeSp = state.arabicFontSize,
         focusMode = focusMode,
-        bookmarkedAyahNumbers = state.bookmarkedAyahNumbers
+        bookmarkedAyahNumbers = state.bookmarkedAyahNumbers,
+        wbwMode = state.wbwLayoutMode,
+        selectedWbwWordKey = state.selectedQulWord?.wordKey,
+        revealedWbwWordKeys = state.revealedWbwWordKeys,
+        wbwMorphology = state.wbwMorphology
     )
     val onAyahClick: (AyahModel) -> Unit = { ayah ->
         selectedAyahNumber = ayah.numberInSurah
@@ -443,6 +448,9 @@ fun QuranScreen(
                             qulScript = state.qulScript,
                             onWordClick = { word ->
                                 vm.onIntent(QuranUiIntent.SelectQulWord(word.wordKey))
+                            },
+                            onToggleWbwReveal = { word ->
+                                vm.onIntent(QuranUiIntent.ToggleWbwReveal(word.wordKey))
                             }
                         )
                     }
@@ -1016,13 +1024,23 @@ fun QuranScreen(
                     }
                 )
                 Text(
-                    text = "Word-by-word",
+                    text = stringResource(R.string.quran_wbw_title),
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 13.sp
                 )
+                Text(
+                    text = stringResource(R.string.quran_wbw_layout_title),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                WbwLayoutPicker(
+                    selected = state.wbwLayoutMode,
+                    onSelect = { mode -> vm.onIntent(QuranUiIntent.SelectWbwLayout(mode)) }
+                )
                 if (state.availableWbwLanguages.isEmpty()) {
                     Text(
-                        text = "Word-by-word data is still loading…",
+                        text = stringResource(R.string.quran_wbw_loading),
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1055,7 +1073,10 @@ fun QuranScreen(
                         }
                     }
                     SegmentedPillBar(
-                        options = listOf("Uthmani", "IndoPak"),
+                        options = listOf(
+                            stringResource(R.string.quran_wbw_script_uthmani),
+                            stringResource(R.string.quran_wbw_script_indopak)
+                        ),
                         selectedIndex = if (state.qulScript == QulWord.QUL_SCRIPT_INDOPAK) 1 else 0,
                         onSelect = { index ->
                             vm.onIntent(
@@ -1320,6 +1341,84 @@ internal fun QuranReadingLayout.shortLabel(): String = when (this) {
 internal fun QuranReadingMode.localizedLabel(): String = when (this) {
     QuranReadingMode.STUDY -> stringResource(R.string.quran_mode_study)
     QuranReadingMode.MUSHAF -> stringResource(R.string.quran_mode_mushaf)
+}
+
+/**
+ * Word-by-word layout picker: all six [WbwLayoutMode] presentations, each with the one
+ * reason to choose it. Lives in the reading-options sheet next to the language and script.
+ */
+@Composable
+private fun WbwLayoutPicker(
+    selected: WbwLayoutMode,
+    onSelect: (WbwLayoutMode) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        WbwLayoutMode.entries.forEach { mode ->
+            val isSelected = mode == selected
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                border = if (isSelected) {
+                    BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                } else {
+                    null
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelect(mode) }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (isSelected) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = mode.wbwTitle(),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = mode.wbwDescription(),
+                            fontSize = 10.sp,
+                            lineHeight = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun WbwLayoutMode.wbwTitle(): String = when (this) {
+    WbwLayoutMode.INTERLINEAR_RTL -> stringResource(R.string.quran_wbw_mode_interlinear)
+    WbwLayoutMode.MUSHAF_TAP -> stringResource(R.string.quran_wbw_mode_mushaf_tap)
+    WbwLayoutMode.VERSE_BOTTOM_DOCK -> stringResource(R.string.quran_wbw_mode_verse_dock)
+    WbwLayoutMode.WORD_CARDS_RTL -> stringResource(R.string.quran_wbw_mode_word_cards)
+    WbwLayoutMode.GLOSSARY_LIST -> stringResource(R.string.quran_wbw_mode_glossary)
+    WbwLayoutMode.VOCAB_QUIZ -> stringResource(R.string.quran_wbw_mode_vocab_quiz)
+}
+
+@Composable
+internal fun WbwLayoutMode.wbwDescription(): String = when (this) {
+    WbwLayoutMode.INTERLINEAR_RTL -> stringResource(R.string.quran_wbw_desc_interlinear)
+    WbwLayoutMode.MUSHAF_TAP -> stringResource(R.string.quran_wbw_desc_mushaf_tap)
+    WbwLayoutMode.VERSE_BOTTOM_DOCK -> stringResource(R.string.quran_wbw_desc_verse_dock)
+    WbwLayoutMode.WORD_CARDS_RTL -> stringResource(R.string.quran_wbw_desc_word_cards)
+    WbwLayoutMode.GLOSSARY_LIST -> stringResource(R.string.quran_wbw_desc_glossary)
+    WbwLayoutMode.VOCAB_QUIZ -> stringResource(R.string.quran_wbw_desc_vocab_quiz)
 }
 
 /** Layout picker shown inside the bottom reader pill. */
