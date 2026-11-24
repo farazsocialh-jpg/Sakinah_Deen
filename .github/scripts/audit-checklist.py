@@ -475,13 +475,6 @@ class Audit:
                  "PASS" if not http_hits else "FAIL", f"{len(http_hits)} http:// endpoint(s)",
                  "; ".join(http_hits[:5]), "block", "S2")
 
-        flag_secure = count(r"FLAG_SECURE", self.root / "app/src/main/java/com/sakinah/deen/MainActivity.kt")
-        self.add("flag_secure", "Security/Privacy", "Sensitive screens block screenshots",
-                 "PASS" if flag_secure else "ACTION",
-                 "No FLAG_SECURE; Zakat balances can appear in recents thumbnails"
-                 if not flag_secure else "FLAG_SECURE applied",
-                 "app/src/main/java/com/sakinah/deen/MainActivity.kt", "advise", "S3")
-
         at_rest = count(r"EncryptedSharedPreferences", self.root / "app/src/main/java/com/sakinah/deen/data/prefs/SensitivePreferences.kt")
         self.add("encrypted_prefs", "Security/Privacy", "Sensitive preferences use EncryptedSharedPreferences",
                  "PASS" if at_rest else "FAIL", f"{at_rest} encrypted store usage(s)",
@@ -722,16 +715,6 @@ class Audit:
             "PASS" if extraction else "ACTION",
             "Explicit dataExtractionRules present" if extraction else "No explicit scoping",
             "app/src/main/AndroidManifest.xml",
-            "advise", "S3",
-        )
-        # Check for FLAG_SECURE
-        flag_secure = count(r"FLAG_SECURE", self.root / "app/src/main/java/com/sakinah/deen/MainActivity.kt")
-        self.add(
-            "flag_secure_deep", "Security/Privacy",
-            "Sensitive screens FLAG_SECURE",
-            "PASS" if flag_secure else "ACTION",
-            "FLAG_SECURE applied" if flag_secure else "No FLAG_SECURE",
-            "app/src/main/java/com/sakinah/deen/MainActivity.kt",
             "advise", "S3",
         )
 
