@@ -115,17 +115,17 @@ class QulOfflineDatabase(context: Context) : QulDataSource {
             database ?: run {
                 // Unpacks + verifies the gzip on IO the first time a reader query needs it.
                 val file = QuranOfflinePack.ensureQulDatabaseFile(appContext)
+                // No PRAGMA tuning on this connection: execSQL() rejects a PRAGMA that
+                // returns a row (`PRAGMA mmap_size = …` does) with "Queries can be
+                // performed using SQLiteDatabase query or rawQuery methods only", and an
+                // OPEN_READONLY connection additionally refuses statements SQLite does
+                // not consider read-only. Both surfaced as a silently empty database, so
+                // the connection is opened with SQLite's defaults instead.
                 SQLiteDatabase.openDatabase(
                     file.path,
                     null,
                     SQLiteDatabase.OPEN_READONLY
-                ).also { opened ->
-                    // Keep temp b-trees in RAM and map the 108 MB file instead of heap-copying
-                    // pages; both matter for scroll latency on low-end devices.
-                    opened.execSQL("PRAGMA temp_store = MEMORY")
-                    opened.execSQL("PRAGMA mmap_size = 67108864")
-                    database = opened
-                }
+                ).also { opened -> database = opened }
             }
         }
     }
@@ -136,14 +136,12 @@ class QulOfflineDatabase(context: Context) : QulDataSource {
         languagesCache.get(LANGUAGES_KEY)?.let { return it }
         return withContext(Dispatchers.IO) {
             val values = mutableListOf<String>()
-            runCatching {
-                database().rawQuery(
-                    "SELECT lang FROM qul_wbw_translations " +
-                        "GROUP BY lang ORDER BY COUNT(*) DESC, lang",
-                    emptyArray()
-                ).use { cursor ->
-                    while (cursor.moveToNext()) values += cursor.getString(0)
-                }
+            database().rawQuery(
+                "SELECT lang FROM qul_wbw_translations " +
+                    "GROUP BY lang ORDER BY COUNT(*) DESC, lang",
+                emptyArray()
+            ).use { cursor ->
+                while (cursor.moveToNext()) values += cursor.getString(0)
             }
             languagesCache.put(LANGUAGES_KEY, values)
             values
@@ -155,26 +153,24 @@ class QulOfflineDatabase(context: Context) : QulDataSource {
         surahCache.get(cacheKey)?.let { return it }
         return withContext(Dispatchers.IO) {
             val grouped = LinkedHashMap<Int, MutableList<QulWord>>()
-            runCatching {
-                // One indexed query for the whole surah: 286 rows maximum, not N+1 per ayah.
-                database().rawQuery(WORDS_FOR_SURAH_SQL, arrayOf(lang, surah.toString()))
-                    .use { cursor ->
-                        while (cursor.moveToNext()) {
-                            val word = QulWord(
-                                id = cursor.getInt(0),
-                                wordKey = cursor.getString(1),
-                                surah = cursor.getInt(2),
-                                ayah = cursor.getInt(3),
-                                wordIndex = cursor.getInt(4),
-                                uthmani = cursor.getString(5).orEmpty(),
-                                indopak = cursor.getString(6).orEmpty(),
-                                transliteration = cursor.getString(7).orEmpty(),
-                                translation = cursor.getString(8).orEmpty()
-                            )
-                            grouped.getOrPut(word.ayah) { mutableListOf() } += word
-                        }
+            // One indexed query for the whole surah: 286 rows maximum, not N+1 per ayah.
+            database().rawQuery(WORDS_FOR_SURAH_SQL, arrayOf(lang, surah.toString()))
+                .use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val word = QulWord(
+                            id = cursor.getInt(0),
+                            wordKey = cursor.getString(1),
+                            surah = cursor.getInt(2),
+                            ayah = cursor.getInt(3),
+                            wordIndex = cursor.getInt(4),
+                            uthmani = cursor.getString(5).orEmpty(),
+                            indopak = cursor.getString(6).orEmpty(),
+                            transliteration = cursor.getString(7).orEmpty(),
+                            translation = cursor.getString(8).orEmpty()
+                        )
+                        grouped.getOrPut(word.ayah) { mutableListOf() } += word
                     }
-            }
+                }
             val result: Map<Int, List<QulWord>> = grouped.mapValues { it.value.toList() }
             surahCache.put(cacheKey, result)
             result
@@ -186,25 +182,23 @@ class QulOfflineDatabase(context: Context) : QulDataSource {
         pageCache.get(cacheKey)?.let { return it }
         return withContext(Dispatchers.IO) {
             val lines = mutableListOf<QulMushafLine>()
-            runCatching {
-                database().rawQuery(
-                    "SELECT layout, page_number, line_number, line_type, is_centered, " +
-                        "first_word_id, last_word_id, surah_number FROM qul_mushaf_pages " +
-                        "WHERE layout = ? AND page_number = ? ORDER BY line_number",
-                    arrayOf(layout, pageNumber.toString())
-                ).use { cursor ->
-                    while (cursor.moveToNext()) {
-                        lines += QulMushafLine(
-                            layout = cursor.getString(0).orEmpty(),
-                            pageNumber = cursor.getInt(1),
-                            lineNumber = cursor.getInt(2),
-                            lineType = cursor.getString(3).orEmpty(),
-                            isCentered = cursor.getInt(4) != 0,
-                            firstWordId = cursor.getInt(5),
-                            lastWordId = cursor.getInt(6),
-                            surahNumber = cursor.getInt(7)
-                        )
-                    }
+            database().rawQuery(
+                "SELECT layout, page_number, line_number, line_type, is_centered, " +
+                    "first_word_id, last_word_id, surah_number FROM qul_mushaf_pages " +
+                    "WHERE layout = ? AND page_number = ? ORDER BY line_number",
+                arrayOf(layout, pageNumber.toString())
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    lines += QulMushafLine(
+                        layout = cursor.getString(0).orEmpty(),
+                        pageNumber = cursor.getInt(1),
+                        lineNumber = cursor.getInt(2),
+                        lineType = cursor.getString(3).orEmpty(),
+                        isCentered = cursor.getInt(4) != 0,
+                        firstWordId = cursor.getInt(5),
+                        lastWordId = cursor.getInt(6),
+                        surahNumber = cursor.getInt(7)
+                    )
                 }
             }
             val result = lines.toList()
@@ -217,20 +211,18 @@ class QulOfflineDatabase(context: Context) : QulDataSource {
         morphologyCache.get(wordKey)?.let { return it }
         return withContext(Dispatchers.IO) {
             var morphology: QulMorphology? = null
-            runCatching {
-                database().rawQuery(
-                    "SELECT word_key, root, lemma, stem, pos FROM qul_morphology WHERE word_key = ?",
-                    arrayOf(wordKey)
-                ).use { cursor ->
-                    if (cursor.moveToNext()) {
-                        morphology = QulMorphology(
-                            wordKey = cursor.getString(0).orEmpty(),
-                            root = cursor.getString(1).orEmpty(),
-                            lemma = cursor.getString(2).orEmpty(),
-                            stem = cursor.getString(3).orEmpty(),
-                            pos = cursor.getString(4).orEmpty()
-                        )
-                    }
+            database().rawQuery(
+                "SELECT word_key, root, lemma, stem, pos FROM qul_morphology WHERE word_key = ?",
+                arrayOf(wordKey)
+            ).use { cursor ->
+                if (cursor.moveToNext()) {
+                    morphology = QulMorphology(
+                        wordKey = cursor.getString(0).orEmpty(),
+                        root = cursor.getString(1).orEmpty(),
+                        lemma = cursor.getString(2).orEmpty(),
+                        stem = cursor.getString(3).orEmpty(),
+                        pos = cursor.getString(4).orEmpty()
+                    )
                 }
             }
             morphology?.let { morphologyCache.put(wordKey, it) }
@@ -242,20 +234,18 @@ class QulOfflineDatabase(context: Context) : QulDataSource {
         if (root.isBlank()) return emptyList()
         return withContext(Dispatchers.IO) {
             val words = mutableListOf<QulWord>()
-            runCatching {
-                database().rawQuery(ROOT_SEARCH_SQL, arrayOf(root)).use { cursor ->
-                    while (cursor.moveToNext()) {
-                        words += QulWord(
-                            id = cursor.getInt(0),
-                            wordKey = cursor.getString(1),
-                            surah = cursor.getInt(2),
-                            ayah = cursor.getInt(3),
-                            wordIndex = cursor.getInt(4),
-                            uthmani = cursor.getString(5).orEmpty(),
-                            indopak = cursor.getString(6).orEmpty(),
-                            transliteration = cursor.getString(7).orEmpty()
-                        )
-                    }
+            database().rawQuery(ROOT_SEARCH_SQL, arrayOf(root)).use { cursor ->
+                while (cursor.moveToNext()) {
+                    words += QulWord(
+                        id = cursor.getInt(0),
+                        wordKey = cursor.getString(1),
+                        surah = cursor.getInt(2),
+                        ayah = cursor.getInt(3),
+                        wordIndex = cursor.getInt(4),
+                        uthmani = cursor.getString(5).orEmpty(),
+                        indopak = cursor.getString(6).orEmpty(),
+                        transliteration = cursor.getString(7).orEmpty()
+                    )
                 }
             }
             words.toList()
@@ -267,12 +257,10 @@ class QulOfflineDatabase(context: Context) : QulDataSource {
         tafsirCache.get(cacheKey)?.let { return it }
         return withContext(Dispatchers.IO) {
             var text = ""
-            runCatching {
-                database().rawQuery(
-                    "SELECT text FROM qul_tafsir WHERE slug = ? AND ayah_key = ?",
-                    arrayOf(slug, ayahKey)
-                ).use { cursor -> if (cursor.moveToNext()) text = cursor.getString(0).orEmpty() }
-            }
+            database().rawQuery(
+                "SELECT text FROM qul_tafsir WHERE slug = ? AND ayah_key = ?",
+                arrayOf(slug, ayahKey)
+            ).use { cursor -> if (cursor.moveToNext()) text = cursor.getString(0).orEmpty() }
             text.takeIf { it.isNotBlank() }?.also { tafsirCache.put(cacheKey, it) }
         }
     }
@@ -281,19 +269,17 @@ class QulOfflineDatabase(context: Context) : QulDataSource {
         surahInfoCache.get(surah)?.let { return it }
         return withContext(Dispatchers.IO) {
             var info: QulSurahInfo? = null
-            runCatching {
-                database().rawQuery(
-                    "SELECT surah, lang, revelation_place, summary FROM qul_surah_info WHERE surah = ?",
-                    arrayOf(surah.toString())
-                ).use { cursor ->
-                    if (cursor.moveToNext()) {
-                        info = QulSurahInfo(
-                            surah = cursor.getInt(0),
-                            lang = cursor.getString(1).orEmpty(),
-                            revelationPlace = cursor.getString(2).orEmpty(),
-                            summary = cursor.getString(3).orEmpty()
-                        )
-                    }
+            database().rawQuery(
+                "SELECT surah, lang, revelation_place, summary FROM qul_surah_info WHERE surah = ?",
+                arrayOf(surah.toString())
+            ).use { cursor ->
+                if (cursor.moveToNext()) {
+                    info = QulSurahInfo(
+                        surah = cursor.getInt(0),
+                        lang = cursor.getString(1).orEmpty(),
+                        revelationPlace = cursor.getString(2).orEmpty(),
+                        summary = cursor.getString(3).orEmpty()
+                    )
                 }
             }
             info?.let { surahInfoCache.put(surah, it) }
@@ -305,14 +291,12 @@ class QulOfflineDatabase(context: Context) : QulDataSource {
         topicsCache.get(ayahKey)?.let { return it }
         return withContext(Dispatchers.IO) {
             val topics = mutableListOf<Pair<String, String?>>()
-            runCatching {
-                database().rawQuery(
-                    "SELECT topic, theme FROM qul_ayah_topics WHERE ayah_key = ? ORDER BY topic",
-                    arrayOf(ayahKey)
-                ).use { cursor ->
-                    while (cursor.moveToNext()) {
-                        topics += cursor.getString(0).orEmpty() to cursor.getString(1)
-                    }
+            database().rawQuery(
+                "SELECT topic, theme FROM qul_ayah_topics WHERE ayah_key = ? ORDER BY topic",
+                arrayOf(ayahKey)
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    topics += cursor.getString(0).orEmpty() to cursor.getString(1)
                 }
             }
             val result = topics.toList()

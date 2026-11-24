@@ -468,6 +468,7 @@
     <string name="quran_action_share">Share ayah</string>
     <string name="quran_action_tafseer">Open tafsir</string>
     <string name="quran_action_close">Close ayah actions</string>
+    <string name="quran_sheet_close">Close</string>
     <string name="quran_ayah_chip">Ayah %1$d</string>
     <string name="quran_selected_badge">Reading</string>
     <string name="quran_switch_to_study">Switch to study</string>

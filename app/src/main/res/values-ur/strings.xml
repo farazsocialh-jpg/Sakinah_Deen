@@ -182,6 +182,7 @@
     <string name="quran_action_share">آیت شیئر کریں</string>
     <string name="quran_action_tafseer">تفسیر کھولیں</string>
     <string name="quran_action_close">آیت کے اعمال بند کریں</string>
+    <string name="quran_sheet_close">بند کریں</string>
     <string name="quran_ayah_chip">آیت %1$d</string>
     <string name="quran_selected_badge">زیرِ مطالعہ</string>
     <string name="quran_switch_to_study">مطالعے پر جائیں</string>

@@ -612,7 +612,10 @@ fun QuranScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                     IconButton(onClick = { studioSheetTab = -1 }) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = stringResource(R.string.quran_sheet_close)
+                        )
                     }
                 }
 
@@ -1130,7 +1133,10 @@ fun QuranScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                     IconButton(onClick = { vm.onIntent(QuranUiIntent.ClearQulWord) }) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = stringResource(R.string.quran_sheet_close)
+                        )
                     }
                 }
                 Text(
