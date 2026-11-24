@@ -541,4 +541,57 @@
         <item quantity="other">%1$d ابواب</item>
     </plurals>
 
+
+    <!-- Personalized onboarding -->
+    <string name="onboarding_brand">ImanCore</string>
+    <string name="onboarding_skip">چھوڑیں</string>
+    <string name="onboarding_back">واپس</string>
+    <string name="onboarding_welcome_greeting">السلام علیکم</string>
+    <string name="onboarding_mission">ہم آپ کو اللہ کے قریب ہونے اور اسلام کے مطابق اپنی روزمرہ زندگی بہتر بنانے میں مدد کے لیے حاضر ہیں۔</string>
+    <string name="onboarding_name_prompt">ہم آپ کو کیا کہہ کر بلائیں؟</string>
+    <string name="onboarding_name_label">پسندیدہ نام (اختیاری)</string>
+    <string name="onboarding_name_placeholder">مثلاً عبداللہ، آمنہ</string>
+    <string name="onboarding_privacy_microcopy">سب کچھ آپ کے فون پر نجی رہتا ہے۔</string>
+    <string name="onboarding_continue">جاری رکھیں</string>
+    <string name="onboarding_journey_greeting_named">خوش آمدید، %1$s</string>
+    <string name="onboarding_journey_greeting">خوش آمدید</string>
+    <string name="onboarding_journey_subtitle">کوئی جلدی نہیں — آپ کبھی بھی سب کچھ دیکھ سکتے ہیں۔</string>
+    <string name="onboarding_experience_new">اسلام میں نیا</string>
+    <string name="onboarding_experience_practicing">عمل کرنے والا مسلمان</string>
+    <string name="onboarding_experience_student">طالب علم</string>
+    <string name="onboarding_focus_question">آپ کس چیز سے شروع کرنا چاہیں گے؟</string>
+    <string name="onboarding_focus_prayer">نماز میں تسلسل</string>
+    <string name="onboarding_focus_quran">قرآن کی تلاوت</string>
+    <string name="onboarding_focus_learning">علم اور دعائیں</string>
+    <string name="onboarding_focus_everything">سب کچھ اکٹھا</string>
+    <string name="onboarding_live_preview">براہِ راست پیش نظارہ</string>
+    <string name="onboarding_bismillah_translation">اللہ کے نام سے جو بڑا مہربان نہایت رحم والا ہے۔</string>
+    <string name="onboarding_color_theme">رنگوں کا تھیم</string>
+    <string name="onboarding_theme_system">سسٹم</string>
+    <string name="onboarding_theme_light">روشن</string>
+    <string name="onboarding_theme_dark">تاریک</string>
+    <string name="onboarding_font_size">مجموعی فونٹ سائز</string>
+    <string name="onboarding_font_compact">تنگ</string>
+    <string name="onboarding_font_standard">معیاری</string>
+    <string name="onboarding_font_comfort">آرام دہ</string>
+    <string name="onboarding_font_large">بڑا</string>
+    <string name="onboarding_arabic_size">عربی فونٹ سائز</string>
+    <string name="onboarding_translation_size">ترجمہ فونٹ سائز</string>
+    <string name="onboarding_increase">بڑھائیں</string>
+    <string name="onboarding_decrease">کم کریں</string>
+    <string name="onboarding_setup_heading_named">ایک بار ترتیب دیں، %1$s</string>
+    <string name="onboarding_setup_heading">ایک بار ترتیب دیں</string>
+    <string name="onboarding_setup_subtitle">بعد میں فون کی ترتیبات بدلنے کی ضرورت نہیں۔</string>
+    <string name="onboarding_perm_location_title">مقام</string>
+    <string name="onboarding_perm_location_reason">نماز اور قبلہ</string>
+    <string name="onboarding_perm_notifications_title">اطلاعات</string>
+    <string name="onboarding_perm_notifications_reason">اذان الرٹس</string>
+    <string name="onboarding_perm_alarms_title">درست الارم</string>
+    <string name="onboarding_perm_alarms_reason">وقت پر نماز</string>
+    <string name="onboarding_perm_battery_title">بیٹری</string>
+    <string name="onboarding_perm_battery_reason">قابلِ بھروسہ رہیں</string>
+    <string name="onboarding_perm_allowed">اجازت شدہ</string>
+    <string name="onboarding_perm_allow">اجازت دیں</string>
+    <string name="onboarding_no_ads">نہ اشتہارات، نہ اکاؤنٹ کی ضرورت۔</string>
+    <string name="onboarding_open_app">ImanCore کھولیں</string>
 </resources>

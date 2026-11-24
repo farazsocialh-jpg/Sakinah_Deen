@@ -106,6 +106,8 @@ class AppearancePreferences internal constructor(
         private const val KEY_QURAN_READING_LAYOUT = "quran_reading_layout"
         private const val KEY_HADITH_READING_LAYOUT = "hadith_reading_layout"
         private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
+        private const val KEY_ARABIC_FONT_SIZE = "arabic_font_size"
+        private const val KEY_TRANSLATION_FONT_SIZE = "translation_font_size"
     }
 
     private val _config = MutableStateFlow(load())
@@ -181,7 +183,11 @@ class AppearancePreferences internal constructor(
                 prefs.getString(KEY_QURAN_READING_LAYOUT, null)
             ) ?: defaults.quranReadingLayout,
             hadithReadingLayout = safeEnum(KEY_HADITH_READING_LAYOUT, defaults.hadithReadingLayout),
-            onboardingCompleted = prefs.getBoolean(KEY_ONBOARDING_COMPLETED, defaults.onboardingCompleted)
+            onboardingCompleted = prefs.getBoolean(KEY_ONBOARDING_COMPLETED, defaults.onboardingCompleted),
+            arabicFontSize = prefs.getInt(KEY_ARABIC_FONT_SIZE, defaults.arabicFontSize)
+                .coerceIn(18, 36),
+            translationFontSize = prefs.getInt(KEY_TRANSLATION_FONT_SIZE, defaults.translationFontSize)
+                .coerceIn(12, 24)
         )
     }
 
@@ -200,6 +206,8 @@ class AppearancePreferences internal constructor(
             putString(KEY_QURAN_READING_LAYOUT, value.quranReadingLayout.name)
             putString(KEY_HADITH_READING_LAYOUT, value.hadithReadingLayout.name)
             putBoolean(KEY_ONBOARDING_COMPLETED, value.onboardingCompleted)
+            putInt(KEY_ARABIC_FONT_SIZE, value.arabicFontSize)
+            putInt(KEY_TRANSLATION_FONT_SIZE, value.translationFontSize)
         }
     }
 

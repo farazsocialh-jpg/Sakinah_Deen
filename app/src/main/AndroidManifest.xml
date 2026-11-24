@@ -19,6 +19,8 @@
     <!-- Alarms, Doze-Bypass & Reboot Restoration -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Onboarding offers a one-tap Doze exemption so prayer alarms are never deferred. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Prayer reminders are notification-type alerts: no full-screen intents, no alarm stream. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Required for the vibrate-only Salah alert channel and for cancelling its pattern. -->

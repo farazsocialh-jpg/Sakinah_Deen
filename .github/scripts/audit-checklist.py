@@ -41,6 +41,8 @@ LEGITIMATELY_IDENTICAL = {
     "theme_palette_selected",
     # A mask glyph, identical in every locale by design.
     "quran_wbw_quiz_masked",
+    # Product wordmark, never localised.
+    "onboarding_brand",
 }
 
 AREA_ORDER = [

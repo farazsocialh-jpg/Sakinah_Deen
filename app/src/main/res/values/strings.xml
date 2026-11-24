@@ -565,4 +565,57 @@
         <item quantity="other">%1$d chapters</item>
     </plurals>
 
+
+    <!-- Personalized onboarding -->
+    <string name="onboarding_brand">ImanCore</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_back">Back</string>
+    <string name="onboarding_welcome_greeting">Assalamu Alaikum</string>
+    <string name="onboarding_mission">We\'re here to help you move closer to Allah and improve your daily life according to Islam.</string>
+    <string name="onboarding_name_prompt">What should we call you?</string>
+    <string name="onboarding_name_label">Preferred name (optional)</string>
+    <string name="onboarding_name_placeholder">e.g., Abdullah, Amina</string>
+    <string name="onboarding_privacy_microcopy">Everything stays private on your phone.</string>
+    <string name="onboarding_continue">Continue</string>
+    <string name="onboarding_journey_greeting_named">Glad you\'re here, %1$s</string>
+    <string name="onboarding_journey_greeting">Glad you\'re here</string>
+    <string name="onboarding_journey_subtitle">No rush — you can explore everything anytime.</string>
+    <string name="onboarding_experience_new">New to Islam</string>
+    <string name="onboarding_experience_practicing">Practicing Muslim</string>
+    <string name="onboarding_experience_student">Student of Knowledge</string>
+    <string name="onboarding_focus_question">What would you like to start with?</string>
+    <string name="onboarding_focus_prayer">Prayer consistency</string>
+    <string name="onboarding_focus_quran">Reading Quran</string>
+    <string name="onboarding_focus_learning">Learning &amp; Duas</string>
+    <string name="onboarding_focus_everything">Everything together</string>
+    <string name="onboarding_live_preview">LIVE PREVIEW</string>
+    <string name="onboarding_bismillah_translation">In the name of Allah, the Entirely Merciful, the Especially Merciful.</string>
+    <string name="onboarding_color_theme">Color Theme</string>
+    <string name="onboarding_theme_system">System</string>
+    <string name="onboarding_theme_light">Light</string>
+    <string name="onboarding_theme_dark">Dark</string>
+    <string name="onboarding_font_size">Overall Font Size</string>
+    <string name="onboarding_font_compact">Compact</string>
+    <string name="onboarding_font_standard">Standard</string>
+    <string name="onboarding_font_comfort">Comfort</string>
+    <string name="onboarding_font_large">Large</string>
+    <string name="onboarding_arabic_size">Arabic Size</string>
+    <string name="onboarding_translation_size">Translation Size</string>
+    <string name="onboarding_increase">Increase</string>
+    <string name="onboarding_decrease">Decrease</string>
+    <string name="onboarding_setup_heading_named">Set up once, %1$s</string>
+    <string name="onboarding_setup_heading">Set up once</string>
+    <string name="onboarding_setup_subtitle">No need to tweak phone settings later.</string>
+    <string name="onboarding_perm_location_title">Location</string>
+    <string name="onboarding_perm_location_reason">Salah &amp; Qibla</string>
+    <string name="onboarding_perm_notifications_title">Notifications</string>
+    <string name="onboarding_perm_notifications_reason">Azaan alerts</string>
+    <string name="onboarding_perm_alarms_title">Exact Alarms</string>
+    <string name="onboarding_perm_alarms_reason">On-time prayer</string>
+    <string name="onboarding_perm_battery_title">Battery</string>
+    <string name="onboarding_perm_battery_reason">Stay reliable</string>
+    <string name="onboarding_perm_allowed">Allowed</string>
+    <string name="onboarding_perm_allow">Allow</string>
+    <string name="onboarding_no_ads">No ads, no account needed.</string>
+    <string name="onboarding_open_app">Open ImanCore</string>
 </resources>

@@ -222,7 +222,9 @@ data class UserAppearanceConfig(
     val salahHomeLayout: SalahHomeLayout = SalahHomeLayout.CLASSIC_COMPACT,
     val quranReadingLayout: QuranReadingLayout = QuranReadingLayout.DIVIDER_HAIRLINE,
     val hadithReadingLayout: HadithReadingLayout = HadithReadingLayout.COMPACT_DROPDOWN,
-    val onboardingCompleted: Boolean = false
+    val onboardingCompleted: Boolean = false,
+    val arabicFontSize: Int = 24,
+    val translationFontSize: Int = 16
 )
 
 fun buildSakinahColorScheme(palette: SakinahPalette, isDark: Boolean): ColorScheme = when (palette) {
