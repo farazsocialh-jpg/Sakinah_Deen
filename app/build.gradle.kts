@@ -244,101 +244,84 @@ dependencies {
 // Bundled offline resources (Uthmani/Amiri fonts + Adhan & Dua audio)
 // ---------------------------------------------------------------------------
 // The files are committed so offline and CI builds work without network access.
-// These tasks only fetch an asset when it is missing or truncated, or when
+// The task only fetches an asset when it is missing or truncated, or when
 // -PforceDownloadAssets=true is passed. Network failure never fails the build:
 // the app degrades to the committed asset or a notification-only alert.
+//
+// Each entry is (file name, url, minimum size in bytes, expected sha256), held as plain
+// strings so the task action captures only serializable values and the build stays
+// compatible with org.gradle.configuration-cache=true.
 val bundledFonts = listOf(
-    Quad("uthmanic_hafs.ttf", "https://cdn.jsdelivr.net/gh/thetruetruth/quran-data-kfgqpc@main/hafs/font/hafs.18.ttf", 50_000L, "a0636e68e375af9552470d67773936f54d536e6586ce2608311b2fe7f9cbec3a"),
-    Quad("amiri_regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Regular.ttf", 50_000L, "ab391c4147d054c48976e98322ad0eefe1427aa0e0502a12a4c75d80a70cfcd7"),
-    Quad("amiri_bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Bold.ttf", 50_000L, "cfccb794268e7d573d857e6d6a67f89cf8a053e8ffd85dfa0c8ec1bb36fc4827")
+    listOf("uthmanic_hafs.ttf", "https://cdn.jsdelivr.net/gh/thetruetruth/quran-data-kfgqpc@main/hafs/font/hafs.18.ttf", "50000", "a0636e68e375af9552470d67773936f54d536e6586ce2608311b2fe7f9cbec3a"),
+    listOf("amiri_regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Regular.ttf", "50000", "ab391c4147d054c48976e98322ad0eefe1427aa0e0502a12a4c75d80a70cfcd7"),
+    listOf("amiri_bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Bold.ttf", "50000", "cfccb794268e7d573d857e6d6a67f89cf8a053e8ffd85dfa0c8ec1bb36fc4827")
 )
 
 val bundledAudio = listOf(
-    Quad("adhan_makkah.ogg", "https://archive.org/download/4-9-13MakkahDuhurAdhanSheikhYunusKhoja/4-9-13MakkahDuhurAdhanSheikhYunusKhoja.ogg", 200_000L, "ddb722100223b58f628582bcc41aae5b71749d7b3555b6f63e693289ba380888"),
-    Quad("adhan_fajr.ogg", "https://archive.org/download/MakkahAdhanAl-fajr5-9-13SheikhYunusKhoja/MakkahAdhanAl-fajr5-9-13SheikhYunusKhoja.ogg", 200_000L, "f2e67ca40fbbf095cbcbc301f8f1e94a5d8c5c46318bf78ea160cec841f6e012"),
-    Quad("dua_al_safar.mp3", "https://cdn.islamic.network/quran/audio/128/ar.alafasy/4339.mp3", 20_000L, "f816012396ca986c98e55d8869ce8c53e26d5ddd28fa6814675110bc9a2ef13d")
+    listOf("adhan_makkah.ogg", "https://archive.org/download/4-9-13MakkahDuhurAdhanSheikhYunusKhoja/4-9-13MakkahDuhurAdhanSheikhYunusKhoja.ogg", "200000", "ddb722100223b58f628582bcc41aae5b71749d7b3555b6f63e693289ba380888"),
+    listOf("adhan_fajr.ogg", "https://archive.org/download/MakkahAdhanAl-fajr5-9-13SheikhYunusKhoja/MakkahAdhanAl-fajr5-9-13SheikhYunusKhoja.ogg", "200000", "f2e67ca40fbbf095cbcbc301f8f1e94a5d8c5c46318bf78ea160cec841f6e012"),
+    listOf("dua_al_safar.mp3", "https://cdn.islamic.network/quran/audio/128/ar.alafasy/4339.mp3", "20000", "f816012396ca986c98e55d8869ce8c53e26d5ddd28fa6814675110bc9a2ef13d")
 )
 
-data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
-
-fun sha256OfFile(file: java.io.File): String {
-    val digest = MessageDigest.getInstance("SHA-256")
-    file.inputStream().use { input ->
-        val buf = ByteArray(8192)
-        var n: Int
-        while (input.read(buf).also { n = it } != -1) digest.update(buf, 0, n)
-    }
-    return digest.digest().joinToString("") { "%02x".format(it) }
-}
-
-fun fetchBundledAsset(
-    targetFile: java.io.File,
-    url: String,
-    minBytes: Long,
-    expectedSha256: String,
-    force: Boolean,
-    offline: Boolean = false
-) {
-    if (!force && targetFile.exists() && targetFile.length() >= minBytes) {
-        if (offline || sha256OfFile(targetFile).equals(expectedSha256, ignoreCase = true)) {
-            return
-        }
-    }
-    if (offline && targetFile.exists() && targetFile.length() >= minBytes) {
-        return
-    }
-    targetFile.parentFile?.mkdirs()
-    val partial = File(targetFile.parentFile, targetFile.name + ".part")
-    try {
-        URI(url).toURL().openStream().use { input ->
-            partial.outputStream().use { output -> input.copyTo(output) }
-        }
-        if (partial.length() < minBytes) {
-            partial.delete()
-            throw GradleException("Sakinah: ${targetFile.name} download was too small (${partial.length()} < $minBytes)")
-        }
-        if (!sha256OfFile(partial).equals(expectedSha256, ignoreCase = true)) {
-            logger.warn("Sakinah: ${targetFile.name} SHA-256 mismatch after download; keeping if size is sufficient")
-        }
-        if (targetFile.exists()) targetFile.delete()
-        if (!partial.renameTo(targetFile)) {
-            partial.copyTo(targetFile, overwrite = true)
-            partial.delete()
-        }
-        logger.lifecycle("Sakinah: fetched ${targetFile.name} (${targetFile.length()} bytes)")
-    } catch (e: Exception) {
-        partial.delete()
-        if (targetFile.exists() && targetFile.length() >= minBytes) {
-            logger.warn("Sakinah: could not refresh ${targetFile.name}, keeping existing asset: ${e.message}")
-            return
-        }
-        throw GradleException("Sakinah: required asset ${targetFile.name} is missing or corrupt: ${e.message}", e)
-    }
-}
-
-val downloadFontAssets = tasks.register("downloadFontAssets") {
+val downloadBundledAssets = tasks.register("downloadBundledAssets") {
     group = "sakinah"
-    description = "Ensures the bundled Uthmani Hafs and Amiri fonts exist in res/font."
+    description = "Ensures the bundled fonts (res/font) and Adhan/Dua audio (res/raw) exist."
+    // Captured values only: no build-script members, so configuration cache can store it.
+    val fontSpecs = bundledFonts
+    val audioSpecs = bundledAudio
+    val fontDir = project.file("src/main/res/font").absolutePath
+    val rawDir = project.file("src/main/res/raw").absolutePath
     val force = project.hasProperty("forceDownloadAssets")
     val offline = gradle.startParameter.isOffline
-    val targetDir = project.file("src/main/res/font")
     doLast {
-        bundledFonts.forEach { asset ->
-            fetchBundledAsset(File(targetDir, asset.first), asset.second, asset.third, asset.fourth, force, offline)
+        fun sha256Of(file: File): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { input ->
+                val buf = ByteArray(8192)
+                var n: Int
+                while (input.read(buf).also { n = it } != -1) digest.update(buf, 0, n)
+            }
+            return digest.digest().joinToString("") { "%02x".format(it) }
         }
-    }
-}
 
-val downloadAudioAssets = tasks.register("downloadAudioAssets") {
-    group = "sakinah"
-    description = "Ensures the bundled Adhan and Dua al-Safar audio exist in res/raw."
-    val force = project.hasProperty("forceDownloadAssets")
-    val offline = gradle.startParameter.isOffline
-    val targetDir = project.file("src/main/res/raw")
-    doLast {
-        bundledAudio.forEach { asset ->
-            fetchBundledAsset(File(targetDir, asset.first), asset.second, asset.third, asset.fourth, force, offline)
+        fun fetch(targetFile: File, url: String, minBytes: Long, expectedSha256: String) {
+            if (targetFile.exists() && targetFile.length() >= minBytes) {
+                if (force.not() && (offline || sha256Of(targetFile).equals(expectedSha256, ignoreCase = true))) {
+                    return
+                }
+                if (offline) return
+            }
+            targetFile.parentFile?.mkdirs()
+            val partial = File(targetFile.parentFile, targetFile.name + ".part")
+            try {
+                URI(url).toURL().openStream().use { input ->
+                    partial.outputStream().use { output -> input.copyTo(output) }
+                }
+                if (partial.length() < minBytes) {
+                    partial.delete()
+                    throw GradleException("Sakinah: ${targetFile.name} download was too small (${partial.length()} < $minBytes)")
+                }
+                if (!sha256Of(partial).equals(expectedSha256, ignoreCase = true)) {
+                    println("Sakinah: ${targetFile.name} SHA-256 mismatch after download; keeping if size is sufficient")
+                }
+                if (targetFile.exists()) targetFile.delete()
+                if (!partial.renameTo(targetFile)) {
+                    partial.copyTo(targetFile, overwrite = true)
+                    partial.delete()
+                }
+                println("Sakinah: fetched ${targetFile.name} (${targetFile.length()} bytes)")
+            } catch (e: Exception) {
+                partial.delete()
+                if (targetFile.exists() && targetFile.length() >= minBytes) {
+                    println("Sakinah: could not refresh ${targetFile.name}, keeping existing asset: ${e.message}")
+                    return
+                }
+                throw GradleException("Sakinah: required asset ${targetFile.name} is missing or corrupt: ${e.message}", e)
+            }
         }
+
+        fontSpecs.forEach { spec -> fetch(File(fontDir, spec[0]), spec[1], spec[2].toLong(), spec[3]) }
+        audioSpecs.forEach { spec -> fetch(File(rawDir, spec[0]), spec[1], spec[2].toLong(), spec[3]) }
     }
 }
 
@@ -356,5 +339,5 @@ tasks.matching { it.name in setOf("assembleRelease", "bundleRelease") }.configur
 
 // Populate resources before they are merged into the APK.
 tasks.matching { it.name == "preBuild" }.configureEach {
-    dependsOn(downloadFontAssets, downloadAudioAssets)
+    dependsOn(downloadBundledAssets)
 }

@@ -93,7 +93,7 @@ transliteration and variant-note columns that this provenance needs.
 
 ## Build-time refresh tasks
 
-`downloadFontAssets` and `downloadAudioAssets` run before `preBuild`:
+`downloadBundledAssets` runs before `preBuild` (fonts into `res/font`, audio into `res/raw`):
 
 - they **no-op** when the committed asset already exists and meets a minimum size;
 - they **never fail the build** on network errors (the committed asset stays);

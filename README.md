@@ -46,13 +46,13 @@ iOS (macOS only):
 
 ## Checks and releases
 
-CI is five path-filtered workflows, one responsibility each:
-[`ci.yml`](.github/workflows/ci.yml) (Android build, tests, lint, device audit),
-[`security.yml`](.github/workflows/security.yml) (CodeQL, mobsfscan, Gitleaks, dependency graph),
-[`ios.yml`](.github/workflows/ios.yml), [`worker.yml`](.github/workflows/worker.yml) and
-[`release.yml`](.github/workflows/release.yml) (the only signed AAB/APK, from a `v*` tag or manual
-run). Triggers, duplicate-execution analysis and root causes: [docs/CI_CD_AUDIT.md](docs/CI_CD_AUDIT.md);
-process, gates and checklists: [docs/development-sop.md](docs/development-sop.md).
+CI is one workflow: [`ci.yml`](.github/workflows/ci.yml), a single `fast-debug-apk` job that runs
+on every push to `main` (or on demand) and builds `:app:assembleDebug`, then uploads
+`app-debug.apk` as a 7-day artifact. Tests, lint, the emulator device audit, MobSF, release
+signing, iOS and the Worker pipeline no longer run in CI — build them locally when needed.
+
+The retired multi-workflow pipeline (and its audit) is described in
+[docs/CI_CD_AUDIT.md](docs/CI_CD_AUDIT.md) and [docs/development-sop.md](docs/development-sop.md).
 
 ## Setup
 
