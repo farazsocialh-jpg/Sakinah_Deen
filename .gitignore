@@ -43,3 +43,7 @@ audit-report/
 audit-download/
 a11y-report/
 __pycache__/
+
+# Temporary QUL dataset downloads (scripts/pack_qul_bundle.py)
+qul_raw/
+app/src/main/assets/qul_offline.db

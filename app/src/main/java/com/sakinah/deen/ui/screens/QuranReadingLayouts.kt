@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -32,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,9 +46,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sakinah.deen.data.model.AyahModel
 import com.sakinah.deen.data.model.SurahModel
+import com.sakinah.deen.data.quran.QulWord
 import com.sakinah.deen.R
 import com.sakinah.deen.data.prefs.QuranReadingLayout
 import com.sakinah.deen.ui.components.ArabicVerseBlock
+import com.sakinah.deen.ui.theme.UthmanicFontFamily
 import com.sakinah.deen.util.ArabicNormalizer
 
 internal data class QuranAyahUiState(
@@ -203,7 +208,10 @@ private fun DividerHairlineLayout(
     onTafseer: (AyahModel) -> Unit,
     onTagMistake: (AyahModel, String) -> Unit,
     onToggleBookmark: (AyahModel) -> Unit,
-    listState: LazyListState
+    listState: LazyListState,
+    wbwWords: Map<Int, List<QulWord>> = emptyMap(),
+    qulScript: String = QulWord.QUL_SCRIPT_UTHMANI,
+    onWordClick: (QulWord) -> Unit = {}
 ) {
     val ayahs = surah.ayahs
     LazyColumn(
@@ -254,6 +262,11 @@ private fun DividerHairlineLayout(
                     }
                 }
                 AyahArabic(ayah, state.arabicFontSizeSp)
+                WordByWordRow(
+                    words = wbwWords[ayah.numberInSurah].orEmpty(),
+                    script = qulScript,
+                    onWordClick = onWordClick
+                )
                 TranslationText(ayah, state)
                 HifzTagRow(surah, ayah, state, onTagMistake)
             }
@@ -278,7 +291,10 @@ private fun ContinuousMushafLayout(
     onTagMistake: (AyahModel, String) -> Unit,
     onToggleBookmark: (AyahModel) -> Unit,
     onToggleStudyMode: () -> Unit,
-    listState: LazyListState
+    listState: LazyListState,
+    wbwWords: Map<Int, List<QulWord>> = emptyMap(),
+    qulScript: String = QulWord.QUL_SCRIPT_UTHMANI,
+    onWordClick: (QulWord) -> Unit = {}
 ) {
     val ayahs = surah.ayahs
     Box(modifier = Modifier.fillMaxSize()) {
@@ -319,6 +335,12 @@ private fun ContinuousMushafLayout(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     AyahArabic(ayah, (state.arabicFontSizeSp + 4).coerceAtMost(36))
+                    WordByWordRow(
+                        words = wbwWords[ayah.numberInSurah].orEmpty(),
+                        script = qulScript,
+                        onWordClick = onWordClick,
+                        fontSizeSp = 16
+                    )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -372,7 +394,10 @@ private fun SplitColumnLayout(
     onTafseer: (AyahModel) -> Unit,
     onTagMistake: (AyahModel, String) -> Unit,
     onToggleBookmark: (AyahModel) -> Unit,
-    listState: LazyListState
+    listState: LazyListState,
+    wbwWords: Map<Int, List<QulWord>> = emptyMap(),
+    qulScript: String = QulWord.QUL_SCRIPT_UTHMANI,
+    onWordClick: (QulWord) -> Unit = {}
 ) {
     val ayahs = surah.ayahs
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
@@ -421,6 +446,12 @@ private fun SplitColumnLayout(
                         .padding(vertical = 10.dp)
                 ) {
                     AyahArabic(ayah, state.arabicFontSizeSp)
+                    WordByWordRow(
+                        words = wbwWords[ayah.numberInSurah].orEmpty(),
+                        script = qulScript,
+                        onWordClick = onWordClick,
+                        fontSizeSp = 16
+                    )
                 }
             }
             if (index < ayahs.lastIndex) {
@@ -442,7 +473,10 @@ private fun ThumbBottomDockLayout(
     onTafseer: (AyahModel) -> Unit,
     onTagMistake: (AyahModel, String) -> Unit,
     onToggleBookmark: (AyahModel) -> Unit,
-    listState: LazyListState
+    listState: LazyListState,
+    wbwWords: Map<Int, List<QulWord>> = emptyMap(),
+    qulScript: String = QulWord.QUL_SCRIPT_UTHMANI,
+    onWordClick: (QulWord) -> Unit = {}
 ) {
     val ayahs = surah.ayahs
     LazyColumn(
@@ -481,8 +515,74 @@ private fun ThumbBottomDockLayout(
                     }
                 }
                 AyahArabic(ayah, state.arabicFontSizeSp)
+                WordByWordRow(
+                    words = wbwWords[ayah.numberInSurah].orEmpty(),
+                    script = qulScript,
+                    onWordClick = onWordClick
+                )
                 TranslationText(ayah, state)
                 HifzTagRow(surah, ayah, state, onTagMistake)
+            }
+        }
+    }
+}
+
+/**
+ * Word-by-word strip: Arabic, meaning and transliteration for every word.
+ *
+ * Rendered only when the surah's QUL words are already in memory (the ViewModel
+ * preloads them), so the row never triggers a query while scrolling. Each word is
+ * keyed by its stable `word_key`, and tapping opens the morphology sheet.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WordByWordRow(
+    words: List<QulWord>,
+    script: String,
+    onWordClick: (QulWord) -> Unit,
+    fontSizeSp: Int = 18
+) {
+    if (words.isEmpty()) return
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        words.forEach { word ->
+            key(word.wordKey) {
+                Column(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onWordClick(word) }
+                        .padding(horizontal = 3.dp, vertical = 2.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(1.dp)
+                ) {
+                    Text(
+                        text = word.arabicFor(script),
+                        fontFamily = UthmanicFontFamily,
+                        fontSize = fontSizeSp.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (word.translation.isNotBlank()) {
+                        Text(
+                            text = word.translation,
+                            fontSize = 9.sp,
+                            lineHeight = 11.sp,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (word.transliteration.isNotBlank()) {
+                        Text(
+                            text = word.transliteration,
+                            fontSize = 8.sp,
+                            lineHeight = 10.sp,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                        )
+                    }
+                }
             }
         }
     }
@@ -502,21 +602,27 @@ internal fun QuranReadingLayoutContent(
     onTagMistake: (AyahModel, String) -> Unit,
     onToggleBookmark: (AyahModel) -> Unit,
     onToggleStudyMode: () -> Unit,
-    listState: LazyListState
+    listState: LazyListState,
+    wbwWords: Map<Int, List<QulWord>> = emptyMap(),
+    qulScript: String = QulWord.QUL_SCRIPT_UTHMANI,
+    onWordClick: (QulWord) -> Unit = {}
 ) {
     when (layout) {
         QuranReadingLayout.DIVIDER_HAIRLINE -> DividerHairlineLayout(
-            surah, state, onAyahClick, onTafseer, onTagMistake, onToggleBookmark, listState
+            surah, state, onAyahClick, onTafseer, onTagMistake, onToggleBookmark, listState,
+            wbwWords, qulScript, onWordClick
         )
         QuranReadingLayout.CONTINUOUS_MUSHAF -> ContinuousMushafLayout(
             surah, state, onAyahClick, onTafseer, onTagMistake, onToggleBookmark,
-            onToggleStudyMode, listState
+            onToggleStudyMode, listState, wbwWords, qulScript, onWordClick
         )
         QuranReadingLayout.SPLIT_COLUMN -> SplitColumnLayout(
-            surah, state, onAyahClick, onTafseer, onTagMistake, onToggleBookmark, listState
+            surah, state, onAyahClick, onTafseer, onTagMistake, onToggleBookmark, listState,
+            wbwWords, qulScript, onWordClick
         )
         QuranReadingLayout.THUMB_BOTTOM_DOCK -> ThumbBottomDockLayout(
-            surah, state, onAyahClick, onTafseer, onTagMistake, onToggleBookmark, listState
+            surah, state, onAyahClick, onTafseer, onTagMistake, onToggleBookmark, listState,
+            wbwWords, qulScript, onWordClick
         )
     }
 }

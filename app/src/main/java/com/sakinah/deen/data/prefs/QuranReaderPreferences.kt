@@ -60,6 +60,14 @@ class QuranReaderPreferences internal constructor(
         private const val KEY_LAST_SCROLL_INDEX = "quran_last_read_scroll_index"
         private const val KEY_BOOKMARKS = "quran_ayah_bookmarks"
         private const val KEY_READING_DAYS = "quran_reading_days"
+        private const val KEY_WBW_LANGUAGE = "quran_wbw_language"
+        private const val KEY_WBW_SCRIPT = "quran_wbw_script"
+        private const val KEY_MUSHAF_LAYOUT = "quran_mushaf_layout"
+
+        const val DEFAULT_WBW_LANGUAGE = "en"
+        const val DEFAULT_WBW_SCRIPT = "uthmani"
+        const val DEFAULT_MUSHAF_LAYOUT = "madani"
+        val WBW_SCRIPTS = setOf("uthmani", "indopak")
 
         /** Consecutive reading days ending today, or yesterday before today's reading. */
         internal fun streakOf(days: Set<Long>, today: Long): Int {
@@ -104,6 +112,36 @@ class QuranReaderPreferences internal constructor(
         }
         recordReadingDay(java.time.LocalDate.now().toEpochDay())
     }
+
+    /** QUL word-by-word language code (ISO-639-1/3), e.g. "en", "ur", "inh". */
+    var wbwLanguage: String
+        get() = prefs.getString(KEY_WBW_LANGUAGE, null)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: DEFAULT_WBW_LANGUAGE
+        set(value) = prefs.edit {
+            putString(KEY_WBW_LANGUAGE, value.trim().ifEmpty { DEFAULT_WBW_LANGUAGE })
+        }
+
+    /** Which QUL Arabic script the word-by-word row renders: "uthmani" or "indopak". */
+    var wbwScript: String
+        get() = prefs.getString(KEY_WBW_SCRIPT, null)
+            ?.trim()
+            ?.takeIf { it in WBW_SCRIPTS }
+            ?: DEFAULT_WBW_SCRIPT
+        set(value) = prefs.edit {
+            putString(KEY_WBW_SCRIPT, value.trim().takeIf { it in WBW_SCRIPTS } ?: DEFAULT_WBW_SCRIPT)
+        }
+
+    /** Mushaf page layout key bundled in the QUL database. */
+    var mushafLayout: String
+        get() = prefs.getString(KEY_MUSHAF_LAYOUT, null)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: DEFAULT_MUSHAF_LAYOUT
+        set(value) = prefs.edit {
+            putString(KEY_MUSHAF_LAYOUT, value.trim().ifEmpty { DEFAULT_MUSHAF_LAYOUT })
+        }
 
     /** Days on which the reader was used; drives the home-screen streak widget. */
     val readingDays: Set<Long>

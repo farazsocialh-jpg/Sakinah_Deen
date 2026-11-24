@@ -15,6 +15,10 @@ import com.sakinah.deen.data.prefs.AyahBookmark
 import com.sakinah.deen.data.prefs.QuranReaderPreferences
 import com.sakinah.deen.data.prefs.QuranReadingMode
 import com.sakinah.deen.data.prefs.SakinahPreferences
+import com.sakinah.deen.data.quran.QulDataSource
+import com.sakinah.deen.data.quran.QulMorphology
+import com.sakinah.deen.data.quran.QulSurahInfo
+import com.sakinah.deen.data.quran.QulWord
 import com.sakinah.deen.data.quran.QuranOfflineStatus
 import com.sakinah.deen.data.repository.TafseerDownloadRepository
 import com.sakinah.deen.data.repository.TafseerPackage
@@ -80,6 +84,21 @@ data class QuranUiState(
     val arabicFontSize: Int = 24,
     val availableTranslations: List<QuranTranslationResource> = emptyList(),
     val isLoadingTranslation: Boolean = false,
+    /** QUL word-by-word language (ISO code) and the words preloaded for the open surah. */
+    val wbwLanguage: String = QuranReaderPreferences.DEFAULT_WBW_LANGUAGE,
+    val availableWbwLanguages: List<String> = emptyList(),
+    /** Ayah number -> words, loaded with a single indexed query per surah. */
+    val qulWordsByAyah: Map<Int, List<QulWord>> = emptyMap(),
+    /** "uthmani" or "indopak", persisted with the rest of the reader state. */
+    val qulScript: String = QuranReaderPreferences.DEFAULT_WBW_SCRIPT,
+    val mushafLayout: String = QuranReaderPreferences.DEFAULT_MUSHAF_LAYOUT,
+    /** Word whose morphology sheet is open, plus its root occurrences. */
+    val selectedQulWord: QulWord? = null,
+    val selectedQulMorphology: QulMorphology? = null,
+    val selectedQulWordOccurrences: List<QulWord> = emptyList(),
+    /** Offline QUL surah introduction and the open ayah's topics. */
+    val surahInfo: QulSurahInfo? = null,
+    val ayahTopics: List<Pair<String, String?>> = emptyList(),
     /** Live coverage of the bundled 114-surah pack; null until Room reports once. */
     val offlineStatus: QuranOfflineStatus? = null
 ) {
@@ -100,6 +119,11 @@ sealed class QuranUiIntent {
     data object ClearScrollTarget : QuranUiIntent()
     data class SelectAyahForTafseer(val ayahNumber: Int) : QuranUiIntent()
     data class SelectArabicScript(val script: QuranArabicScript) : QuranUiIntent()
+    data class SelectWbwLanguage(val lang: String) : QuranUiIntent()
+    data class SelectQulScript(val script: String) : QuranUiIntent()
+    data class SelectMushafLayout(val layout: String) : QuranUiIntent()
+    data class SelectQulWord(val wordKey: String) : QuranUiIntent()
+    data object ClearQulWord : QuranUiIntent()
     data class SelectScholar(val scholarName: String) : QuranUiIntent()
     data class SetHifzMistakeTag(val surah: Int, val ayah: Int, val wordPos: Int, val tag: String) : QuranUiIntent()
     data class DownloadTafseerPack(val packageId: String) : QuranUiIntent()
@@ -132,7 +156,8 @@ class QuranViewModel(
     private val quranDao: QuranDao? = null,
     private val sakinahPreferences: SakinahPreferences? = null,
     private val settingsRepository: SettingsRepository? = null,
-    private val quranReaderPreferences: QuranReaderPreferences? = null
+    private val quranReaderPreferences: QuranReaderPreferences? = null,
+    private val qulDatabase: QulDataSource? = null
 ) : ViewModel() {
 
     /** Only used before the encrypted database has been seeded/reached. */
@@ -173,7 +198,13 @@ class QuranViewModel(
             surahs = listOf(sampleSurah.copy(ayahs = emptyList())),
             selectedTafseerContent = sampleSurah.ayahs[0].tafseerIbnKathir,
             readingMode = quranReaderPreferences?.readingMode ?: QuranReadingMode.STUDY,
-            bookmarks = quranReaderPreferences?.bookmarks.orEmpty()
+            bookmarks = quranReaderPreferences?.bookmarks.orEmpty(),
+            wbwLanguage = quranReaderPreferences?.wbwLanguage
+                ?: QuranReaderPreferences.DEFAULT_WBW_LANGUAGE,
+            qulScript = quranReaderPreferences?.wbwScript
+                ?: QuranReaderPreferences.DEFAULT_WBW_SCRIPT,
+            mushafLayout = quranReaderPreferences?.mushafLayout
+                ?: QuranReaderPreferences.DEFAULT_MUSHAF_LAYOUT
         )
     )
     val uiState: StateFlow<QuranUiState> = _uiState.asStateFlow()
@@ -202,6 +233,7 @@ class QuranViewModel(
         viewModelScope.launch { tafseerRepository?.refreshDownloadStatus() }
         observeRoomSurahs()
         observeSelectedSurahAyahs()
+        observeQulData()
         if (islamicRepository != null) {
             viewModelScope.launch { loadTranslationCatalog() }
         }
@@ -214,6 +246,17 @@ class QuranViewModel(
             is QuranUiIntent.ClearScrollTarget -> _uiState.update { it.copy(scrollTargetAyah = null) }
             is QuranUiIntent.SelectAyahForTafseer -> selectAyahForTafseer(intent.ayahNumber)
             is QuranUiIntent.SelectArabicScript -> selectArabicScript(intent.script)
+            is QuranUiIntent.SelectWbwLanguage -> selectWbwLanguage(intent.lang)
+            is QuranUiIntent.SelectQulScript -> selectQulScript(intent.script)
+            is QuranUiIntent.SelectMushafLayout -> selectMushafLayout(intent.layout)
+            is QuranUiIntent.SelectQulWord -> selectQulWord(intent.wordKey)
+            is QuranUiIntent.ClearQulWord -> _uiState.update {
+                it.copy(
+                    selectedQulWord = null,
+                    selectedQulMorphology = null,
+                    selectedQulWordOccurrences = emptyList()
+                )
+            }
             is QuranUiIntent.SelectScholar -> {
                 _uiState.update { it.copy(selectedScholar = intent.scholarName) }
                 onIntent(QuranUiIntent.SelectAyahForTafseer(_uiState.value.activeHighlightedAyah))
@@ -385,6 +428,20 @@ class QuranViewModel(
         pendingTargetAyah = targetAyah
         val listing = state.surahs.find { it.number == surahNumber }
         selectedSurahNumber.value = surahNumber
+        // Preload the chapter's word-by-word data while the ayah rows arrive, and swap the
+        // Surah Info card. Both stay off the main thread and are discarded if the reader
+        // moved on before they landed.
+        loadQulWords(surahNumber)
+        loadSurahInfo(surahNumber)
+        _uiState.update {
+            it.copy(
+                surahInfo = null,
+                ayahTopics = emptyList(),
+                selectedQulWord = null,
+                selectedQulMorphology = null,
+                selectedQulWordOccurrences = emptyList()
+            )
+        }
         // Switching chapters is a reading position too; the reader refines the index as
         // soon as the new page is composed and scrolled. Re-picking the open chapter must
         // not reset the position stored for it.
@@ -567,6 +624,106 @@ class QuranViewModel(
         }
     }
 
+    // ------------------------------------------------------------------------------------
+    // QUL word-by-word, morphology, surah info and offline tafsir
+    // ------------------------------------------------------------------------------------
+
+    /** Loads the language list and the open chapter's words once the DB is reachable. */
+    private fun observeQulData() {
+        val qul = qulDatabase ?: return
+        viewModelScope.launch {
+            val languages = qul.getAvailableWbwLanguages()
+            _uiState.update { it.copy(availableWbwLanguages = languages) }
+        }
+        loadQulWords(selectedSurahNumber.value)
+        loadSurahInfo(selectedSurahNumber.value)
+    }
+
+    /**
+     * Preloads one surah's words in the selected language. The query is single and indexed,
+     * so it is cheap enough to start as soon as a chapter is chosen rather than on first
+     * visible row. A result that arrives after the reader moved on is dropped.
+     */
+    private fun loadQulWords(surahNumber: Int) {
+        val qul = qulDatabase ?: return
+        val language = _uiState.value.wbwLanguage
+        viewModelScope.launch {
+            val words = qul.getWordsForSurah(surahNumber, language)
+            if (selectedSurahNumber.value != surahNumber || _uiState.value.wbwLanguage != language) {
+                return@launch
+            }
+            _uiState.update { it.copy(qulWordsByAyah = words) }
+        }
+    }
+
+    private fun loadSurahInfo(surahNumber: Int) {
+        val qul = qulDatabase ?: return
+        viewModelScope.launch {
+            val info = qul.getSurahInfo(surahNumber)
+            if (selectedSurahNumber.value == surahNumber) {
+                _uiState.update { it.copy(surahInfo = info) }
+            }
+        }
+    }
+
+    private fun selectWbwLanguage(lang: String) {
+        val normalized = lang.trim().lowercase().ifBlank {
+            QuranReaderPreferences.DEFAULT_WBW_LANGUAGE
+        }
+        if (_uiState.value.wbwLanguage == normalized) return
+        _uiState.update { it.copy(wbwLanguage = normalized, qulWordsByAyah = emptyMap()) }
+        quranReaderPreferences?.wbwLanguage = normalized
+        loadQulWords(selectedSurahNumber.value)
+    }
+
+    private fun selectQulScript(script: String) {
+        val normalized = script.trim().lowercase()
+            .takeIf { it in QuranReaderPreferences.WBW_SCRIPTS }
+            ?: QuranReaderPreferences.DEFAULT_WBW_SCRIPT
+        if (_uiState.value.qulScript == normalized) return
+        _uiState.update { it.copy(qulScript = normalized) }
+        quranReaderPreferences?.wbwScript = normalized
+    }
+
+    private fun selectMushafLayout(layout: String) {
+        val normalized = layout.trim().ifBlank { QuranReaderPreferences.DEFAULT_MUSHAF_LAYOUT }
+        if (_uiState.value.mushafLayout == normalized) return
+        _uiState.update { it.copy(mushafLayout = normalized) }
+        quranReaderPreferences?.mushafLayout = normalized
+    }
+
+    /** Opens the word sheet with morphology and every occurrence of the same root. */
+    private fun selectQulWord(wordKey: String) {
+        val word = _uiState.value.qulWordsByAyah.values
+            .asSequence()
+            .flatten()
+            .firstOrNull { it.wordKey == wordKey }
+            ?: return
+        _uiState.update { it.copy(selectedQulWord = word) }
+        val qul = qulDatabase ?: return
+        viewModelScope.launch {
+            val morphology = qul.getWordMorphology(wordKey)
+            val occurrences = morphology?.root
+                ?.takeIf { it.isNotBlank() }
+                ?.let { qul.searchByRoot(it) }
+                .orEmpty()
+            if (_uiState.value.selectedQulWord?.wordKey != wordKey) return@launch
+            _uiState.update {
+                it.copy(
+                    selectedQulMorphology = morphology,
+                    selectedQulWordOccurrences = occurrences
+                )
+            }
+        }
+    }
+
+    /** QUL tafsir slug for a scholar chip; only bundled editions are mapped. */
+    private fun qulTafsirSlug(scholar: String): String? = when (scholar) {
+        "Ibn Kathir" -> "ibn-kathir"
+        "Al-Jalalayn", "Jalalayn" -> "jalalayn"
+        else -> null
+    }
+
     /**
      * Switches the Arabic script edition. Chapters cached before the script columns existed
      * are re-synced once so the chosen script is actually available offline.
@@ -604,7 +761,8 @@ class QuranViewModel(
         _uiState.update {
             it.copy(
                 activeHighlightedAyah = ayahNumber,
-                tafseerErrorMessage = null
+                tafseerErrorMessage = null,
+                ayahTopics = emptyList()
             )
         }
 
@@ -636,6 +794,50 @@ class QuranViewModel(
             )
         }
 
+        // The bundled QUL editions are read-only and always offline: try them before the
+        // encrypted cache/network path, and surface the ayah's topics either way.
+        val slug = qulTafsirSlug(scholar)
+        if (slug != null && qulDatabase != null) {
+            viewModelScope.launch {
+                val ayahKey = "$surahNumber:$ayahNumber"
+                val qulText = qulDatabase.getTafsir(slug, ayahKey)
+                val topics = qulDatabase.getAyahTopics(ayahKey)
+                if (qulText != null) {
+                    _uiState.update { current ->
+                        if (current.selectedScholar != scholar ||
+                            current.currentSurah.number != surahNumber ||
+                            current.activeHighlightedAyah != ayahNumber
+                        ) {
+                            current
+                        } else {
+                            current.copy(
+                                selectedTafseerContent = qulText,
+                                contentNotice = null,
+                                tafseerErrorMessage = null,
+                                ayahTopics = topics
+                            )
+                        }
+                    }
+                    return@launch
+                }
+                _uiState.update { current ->
+                    if (current.currentSurah.number == surahNumber &&
+                        current.activeHighlightedAyah == ayahNumber
+                    ) {
+                        current.copy(ayahTopics = topics)
+                    } else {
+                        current
+                    }
+                }
+                loadRemoteTafsir(ayahNumber, surahNumber, scholar)
+            }
+            return
+        }
+        loadRemoteTafsir(ayahNumber, surahNumber, scholar)
+    }
+
+    /** Existing encrypted-cache/network tafsir path, unchanged but reusable. */
+    private fun loadRemoteTafsir(ayahNumber: Int, surahNumber: Int, scholar: String) {
         val repo = islamicRepository ?: return
         val tafsirId = TafseerDownloadRepository.tafsirIdForScholar(scholar)
             ?: IslamicDataRepository.IBN_KATHIR_TAFSIR_ID

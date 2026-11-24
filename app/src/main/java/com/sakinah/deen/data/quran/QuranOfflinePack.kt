@@ -1,8 +1,16 @@
 package com.sakinah.deen.data.quran
 
+import android.content.Context
 import com.sakinah.deen.content.SeedQuranDocument
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import java.io.File
+import java.io.FileOutputStream
 import java.security.MessageDigest
+import java.util.zip.GZIPInputStream
 
 /**
  * The verified, bundled 114-surah / 6,236-ayah Quran pack.
@@ -199,4 +207,112 @@ object QuranOfflinePack {
         surahCount >= TOTAL_SURAHS && ayahCount >= TOTAL_AYAHS
 
     private val HEX = "0123456789abcdef".toCharArray()
+
+    // ------------------------------------------------------------------------------------
+    // QUL word-by-word pack (scripts/pack_qul_bundle.py)
+    // ------------------------------------------------------------------------------------
+
+    /** Gzipped QUL bundle holding words, WBW translations, layouts, morphology and tafsir. */
+    const val QUL_ASSET = "qul_offline.db.gz"
+
+    /** File name the bundle is unpacked to inside `context.filesDir`. */
+    const val QUL_DB_NAME = "qul_offline.db"
+
+    /** Bump when the DB schema or the bundled dataset changes. */
+    const val QUL_DB_VERSION = 1
+
+    /** Size and SHA-256 of the unpacked database, printed by the packer. */
+    const val QUL_DB_BYTES = 108_216_320L
+    const val QUL_DB_SHA256 = "51f5979458d61c7a1d0da96c280ff7a08de9a34fb009844ce4b6816eec8003ec"
+
+    private const val QUL_MARKER_SUFFIX = ".sha256"
+    private const val UNPACK_BUFFER_BYTES = 256 * 1024
+
+    private val qulUnpackMutex = Mutex()
+
+    @Volatile
+    private var qulUnpacked: File? = null
+
+    /**
+     * Returns the verified read-only QUL database, unpacking it on first use.
+     *
+     * Deliberately never called from `Application.onCreate` or the seeder: a 108 MB gzip
+     * expansion on the main thread would be a visible startup stall. The first reader
+     * query awaits this on [Dispatchers.IO], and a [Mutex] makes concurrent callers share
+     * the single unpack. The SHA-256 is checked before the temp file is renamed, so a
+     * truncated or tampered asset can never reach SQLite; a marker file makes the check
+     * a one-time cost instead of rehashing the database on every launch.
+     */
+    suspend fun ensureQulDatabaseFile(context: Context): File = withContext(Dispatchers.IO) {
+        val appContext = context.applicationContext
+        qulUnpacked?.takeIf { it.exists() }?.let { return@withContext it }
+        qulUnpackMutex.withLock {
+            qulUnpacked?.takeIf { it.exists() }?.let { return@withLock it }
+
+            val target = File(appContext.filesDir, QUL_DB_NAME)
+            val marker = File(appContext.filesDir, QUL_DB_NAME + QUL_MARKER_SUFFIX)
+            if (target.length() == QUL_DB_BYTES && markerMatches(marker)) {
+                qulUnpacked = target
+                return@withLock target
+            }
+
+            val temp = File(appContext.filesDir, "$QUL_DB_NAME.tmp")
+            val digest = MessageDigest.getInstance("SHA-256")
+            try {
+                appContext.assets.open(QUL_ASSET).use { asset ->
+                    GZIPInputStream(asset, UNPACK_BUFFER_BYTES).use { gzip ->
+                        FileOutputStream(temp).use { output ->
+                            val buffer = ByteArray(UNPACK_BUFFER_BYTES)
+                            while (true) {
+                                val read = gzip.read(buffer)
+                                if (read < 0) break
+                                digest.update(buffer, 0, read)
+                                output.write(buffer, 0, read)
+                            }
+                            output.fd.sync()
+                        }
+                    }
+                }
+            } catch (error: Exception) {
+                temp.delete()
+                throw IllegalStateException(
+                    "Bundled QUL database could not be unpacked. Reinstall the app.",
+                    error
+                )
+            }
+
+            val actual = hex(digest.digest())
+            if (temp.length() != QUL_DB_BYTES || !actual.equals(QUL_DB_SHA256, ignoreCase = true)) {
+                temp.delete()
+                throw IllegalStateException(
+                    "Bundled QUL database failed verification " +
+                        "(${temp.length()} bytes, sha256 ${actual.take(16)}…). Reinstall the app."
+                )
+            }
+            if (target.exists() && !target.delete()) {
+                temp.delete()
+                throw IllegalStateException("Could not replace the cached QUL database.")
+            }
+            if (!temp.renameTo(target)) {
+                temp.delete()
+                throw IllegalStateException("Could not move the QUL database into place.")
+            }
+            runCatching { marker.writeText(QUL_DB_SHA256) }
+            qulUnpacked = target
+            target
+        }
+    }
+
+    /** True when the marker records the checksum this build expects. */
+    private fun markerMatches(marker: File): Boolean = runCatching {
+        marker.isFile && marker.readText().trim().equals(QUL_DB_SHA256, ignoreCase = true)
+    }.getOrDefault(false)
+
+    private fun hex(bytes: ByteArray): String = buildString(bytes.size * 2) {
+        bytes.forEach { byte ->
+            val value = byte.toInt() and 0xFF
+            append(HEX[value ushr 4])
+            append(HEX[value and 0x0F])
+        }
+    }
 }

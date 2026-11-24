@@ -70,6 +70,11 @@ val databaseModule = module {
     single { get<SakinahEncryptedDatabase>().tafsirDao() }
     single { get<SakinahEncryptedDatabase>().adhkarDao() }
     single { get<SakinahEncryptedDatabase>().prayerTimetableDao() }
+    // Read-only public Quran text and QUL datasets. The database is unpacked and verified
+    // lazily on the first query, never during Application.onCreate.
+    single<com.sakinah.deen.data.quran.QulDataSource> {
+        com.sakinah.deen.data.quran.QulOfflineDatabase(androidContext())
+    }
     single {
         OfflineContentSeeder(
             readAsset = DatabaseSeeder.assetReader(androidContext()),
@@ -362,7 +367,7 @@ val viewModelModule = module {
     viewModel {
         QuranViewModel(
             getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull(),
-            getOrNull()
+            getOrNull(), getOrNull()
         )
     }
     viewModel { HadithViewModel(getOrNull(), getOrNull(), getOrNull()) }

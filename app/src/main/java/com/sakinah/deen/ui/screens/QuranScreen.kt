@@ -103,6 +103,7 @@ import com.sakinah.deen.data.model.QuranArabicScript
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.QuranReadingLayout
 import com.sakinah.deen.data.prefs.QuranReadingMode
+import com.sakinah.deen.data.quran.QulWord
 import com.sakinah.deen.ui.components.ArabicVerseBlock
 import com.sakinah.deen.ui.components.QuranOfflineStatusBanner
 import com.sakinah.deen.ui.components.SakinahCard
@@ -437,7 +438,12 @@ fun QuranScreen(
                             onTagMistake = onTagMistakeClick,
                             onToggleBookmark = onToggleBookmark,
                             onToggleStudyMode = toggleStudyMode,
-                            listState = listState
+                            listState = listState,
+                            wbwWords = state.qulWordsByAyah,
+                            qulScript = state.qulScript,
+                            onWordClick = { word ->
+                                vm.onIntent(QuranUiIntent.SelectQulWord(word.wordKey))
+                            }
                         )
                     }
                 } else {
@@ -623,6 +629,29 @@ fun QuranScreen(
                                 .fillMaxWidth()
                                 .heightIn(max = 420.dp)
                         ) {
+                            state.surahInfo?.summary?.takeIf { it.isNotBlank() }?.let { summary ->
+                                item(key = "surah-info") {
+                                    SakinahCard(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        contentPadding = 12.dp
+                                    ) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Text(
+                                                text = "About ${surah.nameEnglish}",
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Text(
+                                                text = summary,
+                                                fontSize = 11.sp,
+                                                lineHeight = 16.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                             items(state.surahs, key = { it.number }) { item ->
                                 Row(
                                     modifier = Modifier
@@ -796,6 +825,7 @@ fun QuranScreen(
                                     "Al-Tabari",
                                     "Al-Qurtubi",
                                     "Al-Sa'di",
+                                    "Al-Jalalayn",
                                     "Ma'ariful Quran"
                                 ).forEach { scholar ->
                                     val selected = state.selectedScholar == scholar
@@ -825,6 +855,37 @@ fun QuranScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
+
+                            if (state.ayahTopics.isNotEmpty()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = "Topics in this ayah",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        state.ayahTopics.forEach { (topic, _) ->
+                                            Surface(
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                            ) {
+                                                Text(
+                                                    text = topic,
+                                                    fontSize = 10.sp,
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
 
                             if (state.selectedTafseerContent.isBlank()) {
                                 val packId = tafseerPackIdFor(state.selectedScholar)
@@ -951,6 +1012,58 @@ fun QuranScreen(
                         }
                     }
                 )
+                Text(
+                    text = "Word-by-word",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp
+                )
+                if (state.availableWbwLanguages.isEmpty()) {
+                    Text(
+                        text = "Word-by-word data is still loading…",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        state.availableWbwLanguages.forEach { code ->
+                            val selected = code == state.wbwLanguage
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.clickable {
+                                    vm.onIntent(QuranUiIntent.SelectWbwLanguage(code))
+                                }
+                            ) {
+                                Text(
+                                    text = wbwLanguageLabel(code),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (selected) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+                    SegmentedPillBar(
+                        options = listOf("Uthmani", "IndoPak"),
+                        selectedIndex = if (state.qulScript == QulWord.QUL_SCRIPT_INDOPAK) 1 else 0,
+                        onSelect = { index ->
+                            vm.onIntent(
+                                QuranUiIntent.SelectQulScript(
+                                    if (index == 1) QulWord.QUL_SCRIPT_INDOPAK
+                                    else QulWord.QUL_SCRIPT_UTHMANI
+                                )
+                            )
+                        }
+                    )
+                }
                 TextButton(onClick = { showBookmarks = true; showQuranOptions = false }) {
                     Icon(Icons.Default.Bookmark, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
@@ -991,6 +1104,69 @@ fun QuranScreen(
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+        }
+    }
+
+    state.selectedQulWord?.let { word ->
+        ModalBottomSheet(onDismissRequest = { vm.onIntent(QuranUiIntent.ClearQulWord) }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Word ${word.wordKey}",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    IconButton(onClick = { vm.onIntent(QuranUiIntent.ClearQulWord) }) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+                Text(
+                    text = word.arabicFor(state.qulScript),
+                    fontFamily = UthmanicFontFamily,
+                    fontSize = 34.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                word.transliteration.takeIf { it.isNotBlank() }?.let {
+                    Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                word.translation.takeIf { it.isNotBlank() }?.let {
+                    Text(it, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+                }
+                state.selectedQulMorphology?.let { morphology ->
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        QulMorphologyRow("Root", morphology.root.ifBlank { "—" })
+                        QulMorphologyRow("Lemma", morphology.lemma.ifBlank { "—" })
+                        QulMorphologyRow("Stem", morphology.stem.ifBlank { "—" })
+                        QulMorphologyRow("Part of speech", morphology.pos.ifBlank { "—" })
+                    }
+                }
+                if (state.selectedQulWordOccurrences.isNotEmpty()) {
+                    Text(
+                        text = "Other occurrences of this root",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    state.selectedQulWordOccurrences.take(40).forEach { occurrence ->
+                        Text(
+                            text = "${occurrence.surah}:${occurrence.ayah} · ${occurrence.uthmani}",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
@@ -1494,6 +1670,42 @@ private fun QuranThumbDock(
             QuranUtilityIcon(Icons.Default.Book, "Quran Study Studio", onStudioClick)
         }
     }
+}
+
+@Composable
+private fun QulMorphologyRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            fontSize = 14.sp,
+            fontFamily = FontFamily.Serif,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+/** Human label for a QUL WBW language code. */
+private fun wbwLanguageLabel(code: String): String = when (code) {
+    "en" -> "English"
+    "ur" -> "Urdu"
+    "id" -> "Indonesian"
+    "tr" -> "Turkish"
+    "bn" -> "Bengali"
+    "hi" -> "Hindi"
+    "fr" -> "French"
+    "ta" -> "Tamil"
+    "fa" -> "Persian"
+    "inh" -> "Ingush"
+    else -> code.uppercase()
 }
 
 @Composable
