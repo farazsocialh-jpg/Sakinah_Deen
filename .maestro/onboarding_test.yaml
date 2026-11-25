@@ -1,0 +1,20 @@
+appId: com.imancore.app
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Assalamu Alaikum"
+- takeScreenshot: "01_welcome"
+- tapOn: "Preferred name (optional)"
+- inputText: "Faraz"
+- hideKeyboard
+- tapOn: "Continue"
+- assertVisible: "Glad you're here, Faraz"
+- takeScreenshot: "02_focus"
+- tapOn: "Continue"
+- assertVisible: "LIVE PREVIEW"
+- tapOn: "Dark"
+- takeScreenshot: "03_theme_dark"
+- tapOn: "Continue"
+- assertVisible: "Set up once, Faraz"
+- takeScreenshot: "04_permissions"
+- tapOn: "Open ImanCore"
