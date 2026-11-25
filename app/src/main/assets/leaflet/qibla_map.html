@@ -9,6 +9,14 @@
   html, body { height: 100%; margin: 0; padding: 0; background: #0B3B2C; }
   #map { position: absolute; inset: 0; background: #0B3B2C; }
   .leaflet-container { background: #0B3B2C; font: inherit; }
+  /* Offline bearing graphic: covers the map until a real tile paints, so Map mode is never a
+     bare solid-colour rectangle on an emulator or a network that blocks tile CDNs. */
+  #qibla-fallback {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    z-index: 700; pointer-events: none;
+    transition: opacity .3s ease;
+  }
+  #qibla-fallback.hidden { opacity: 0; }
   .qibla-arrow {
     display: block; width: 0; height: 0;
     border-left: 9px solid transparent;
@@ -20,6 +28,7 @@
 </head>
 <body>
 <div id="map"></div>
+<canvas id="qibla-fallback"></canvas>
 <script>
 (function () {
   "use strict";
@@ -106,7 +115,98 @@
   var tileErrors = 0;
   var tileLayer = null;
 
+  // ---- offline bearing graphic ----------------------------------------------------------
+  var fallbackCanvas = document.getElementById("qibla-fallback");
+  var fallbackCtx = fallbackCanvas ? fallbackCanvas.getContext("2d") : null;
+
+  function hideFallback() {
+    if (fallbackCanvas) { fallbackCanvas.classList.add("hidden"); }
+  }
+
+  function drawFallback() {
+    if (!fallbackCtx) { return; }
+    var w = fallbackCanvas.clientWidth || window.innerWidth;
+    var h = fallbackCanvas.clientHeight || window.innerHeight;
+    var dpr = window.devicePixelRatio || 1;
+    if (!w || !h) { return; }
+    fallbackCanvas.width = Math.round(w * dpr);
+    fallbackCanvas.height = Math.round(h * dpr);
+    fallbackCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    fallbackCtx.clearRect(0, 0, w, h);
+
+    // Faint grid reads as a map surface rather than a broken panel.
+    fallbackCtx.strokeStyle = "rgba(16,185,129,0.16)";
+    fallbackCtx.lineWidth = 1;
+    for (var gx = 0; gx < w; gx += 34) {
+      fallbackCtx.beginPath();
+      fallbackCtx.moveTo(gx, 0);
+      fallbackCtx.lineTo(gx, h);
+      fallbackCtx.stroke();
+    }
+    for (var gy = 0; gy < h; gy += 34) {
+      fallbackCtx.beginPath();
+      fallbackCtx.moveTo(0, gy);
+      fallbackCtx.lineTo(w, gy);
+      fallbackCtx.stroke();
+    }
+
+    var cx = w / 2;
+    var cy = h / 2;
+    var r = Math.min(w, h) * 0.26;
+
+    fallbackCtx.beginPath();
+    fallbackCtx.arc(cx, cy, r, 0, Math.PI * 2);
+    fallbackCtx.strokeStyle = "rgba(16,185,129,0.7)";
+    fallbackCtx.lineWidth = 2;
+    fallbackCtx.stroke();
+
+    fallbackCtx.beginPath();
+    fallbackCtx.arc(cx, cy, r - 14, 0, Math.PI * 2);
+    fallbackCtx.strokeStyle = "rgba(16,185,129,0.3)";
+    fallbackCtx.stroke();
+
+    // Fixed north marker.
+    fallbackCtx.beginPath();
+    fallbackCtx.moveTo(cx, cy - r);
+    fallbackCtx.lineTo(cx, cy - r + 14);
+    fallbackCtx.strokeStyle = "rgba(239,68,68,0.9)";
+    fallbackCtx.lineWidth = 4;
+    fallbackCtx.stroke();
+
+    // Qibla needle at the true bearing.
+    fallbackCtx.save();
+    fallbackCtx.translate(cx, cy);
+    fallbackCtx.rotate((qibla * Math.PI) / 180);
+    fallbackCtx.beginPath();
+    fallbackCtx.moveTo(0, -(r - 16));
+    fallbackCtx.lineTo(-9, 12);
+    fallbackCtx.lineTo(0, 3);
+    fallbackCtx.lineTo(9, 12);
+    fallbackCtx.closePath();
+    fallbackCtx.fillStyle = "#10B981";
+    fallbackCtx.fill();
+    fallbackCtx.restore();
+
+    fallbackCtx.beginPath();
+    fallbackCtx.arc(cx, cy, 4, 0, Math.PI * 2);
+    fallbackCtx.fillStyle = "#E7F5EE";
+    fallbackCtx.fill();
+
+    fallbackCtx.textAlign = "center";
+    fallbackCtx.fillStyle = "#E7F5EE";
+    fallbackCtx.font = "600 13px sans-serif";
+    fallbackCtx.fillText("QIBLA " + Math.round(qibla) + "° FROM TRUE NORTH", cx, cy + r + 20);
+    fallbackCtx.fillStyle = "rgba(231,245,238,0.72)";
+    fallbackCtx.font = "11px sans-serif";
+    fallbackCtx.fillText("Offline bearing — street tiles unavailable", cx, cy + r + 38);
+  }
+
+  drawFallback();
+  setTimeout(drawFallback, 150);
+  window.addEventListener("resize", drawFallback);
+
   function markReady() {
+    hideFallback();
     call("onTileLoaded");
   }
 
@@ -124,8 +224,10 @@
       if (index + 1 < SOURCES.length) {
         installTiles(index + 1);
       } else {
-        debug("tiles_unavailable: all providers failed, keeping vector Qibla line");
-        call("onDebug", "tiles_unavailable");
+        // Every provider failed. The page keeps its offline bearing graphic, and the native
+        // card is told so it can offer the retry control instead of spinning forever.
+        debug("tiles_unavailable: all providers failed, keeping offline bearing graphic");
+        fail("tiles_unavailable");
       }
     });
   }

@@ -49,23 +49,32 @@ fun ThemePalettePicker(
     columns: Int = 2
 ) {
     val columnCount = columns.coerceAtLeast(1)
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val spacing = 8.dp
-        val itemWidth = (maxWidth - spacing * (columnCount - 1)) / columnCount
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(spacing),
-            verticalArrangement = Arrangement.spacedBy(spacing)
-        ) {
-            SakinahPalette.entries.forEach { palette ->
-                PaletteSwatchCard(
-                    palette = palette,
-                    selected = palette == selected,
-                    onClick = { onSelect(palette) },
-                    modifier = Modifier.width(itemWidth)
-                )
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val spacing = 8.dp
+            val itemWidth = (maxWidth - spacing * (columnCount - 1)) / columnCount
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(spacing),
+                verticalArrangement = Arrangement.spacedBy(spacing)
+            ) {
+                SakinahPalette.entries.forEach { palette ->
+                    PaletteSwatchCard(
+                        palette = palette,
+                        selected = palette == selected,
+                        onClick = { onSelect(palette) },
+                        modifier = Modifier.width(itemWidth)
+                    )
+                }
             }
         }
+        // The selected palette's description is shown once, under the grid, instead of inside
+        // its card: a subtitle squeezed into a half-width card was ellipsised mid-word.
+        Text(
+            text = stringResource(selected.subtitleRes),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -96,35 +105,23 @@ private fun PaletteSwatchCard(
         )
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            PaletteSwatch(palette = palette, modifier = Modifier.size(26.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(palette.titleRes),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                // The description is shown only for the active palette so 18 cards stay
-                // compact instead of turning the picker into a wall of small text.
-                if (selected) {
-                    Text(
-                        text = stringResource(palette.subtitleRes),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
+            PaletteSwatch(palette = palette, modifier = Modifier.size(22.dp))
+            Text(
+                text = stringResource(palette.titleRes),
+                style = MaterialTheme.typography.labelMedium,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
             if (selected) {
                 Icon(
                     imageVector = Icons.Rounded.Check,

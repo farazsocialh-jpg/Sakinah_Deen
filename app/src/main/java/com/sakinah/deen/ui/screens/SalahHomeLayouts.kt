@@ -138,24 +138,27 @@ internal fun SalahTopHeader(
                 .weight(1f)
                 .clickable(onClick = onPickLocation)
         ) {
+            // The date and city/method lines wrap instead of being ellipsised to a few
+            // characters by the Qadha pill and the icon buttons beside them.
             Text(
                 text = state.hijriDate,
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp,
                 color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = "$shortDate · $cityShort ▾ · $methodShort$staleNote",
                 fontSize = 12.sp,
+                lineHeight = 15.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
         }
         Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (!focusMode) {
@@ -166,7 +169,7 @@ internal fun SalahTopHeader(
                 ) {
                     Text(
                         text = stringResource(R.string.salah_qadha_btn),
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -176,8 +179,8 @@ internal fun SalahTopHeader(
             if (onOpenNotifications != null) {
                 Box(
                     modifier = Modifier
-                        .width(40.dp)
-                        .height(40.dp)
+                        .width(34.dp)
+                        .height(34.dp)
                         .clip(CircleShape)
                         .clickable(onClick = onOpenNotifications),
                     contentAlignment = Alignment.Center
@@ -186,15 +189,15 @@ internal fun SalahTopHeader(
                         imageVector = Icons.Outlined.Notifications,
                         contentDescription = stringResource(R.string.salah_notifications_cd),
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
             if (onRecalculate != null) {
                 Box(
                     modifier = Modifier
-                        .width(40.dp)
-                        .height(40.dp)
+                        .width(34.dp)
+                        .height(34.dp)
                         .clip(CircleShape)
                         .clickable(enabled = !state.isRefreshing, onClick = onRecalculate),
                     contentAlignment = Alignment.Center
@@ -202,14 +205,14 @@ internal fun SalahTopHeader(
                     if (state.isRefreshing) {
                         CircularProgressIndicator(
                             strokeWidth = 2.dp,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                     } else {
                         androidx.compose.material3.Icon(
                             imageVector = Icons.Outlined.Refresh,
                             contentDescription = stringResource(R.string.salah_recalculate_cd),
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
@@ -217,8 +220,8 @@ internal fun SalahTopHeader(
             if (!focusMode) {
                 Box(
                     modifier = Modifier
-                        .width(40.dp)
-                        .height(40.dp)
+                        .width(34.dp)
+                        .height(34.dp)
                         .clip(CircleShape)
                         .clickable(onClick = onOpenSettings),
                     contentAlignment = Alignment.Center
@@ -227,7 +230,7 @@ internal fun SalahTopHeader(
                         imageVector = Icons.Outlined.Tune,
                         contentDescription = stringResource(R.string.salah_settings_cd),
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }

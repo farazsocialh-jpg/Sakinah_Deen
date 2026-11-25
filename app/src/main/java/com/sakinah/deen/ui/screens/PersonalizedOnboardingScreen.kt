@@ -842,10 +842,19 @@ private fun ThemeStep(
             ThemeMode.entries.getOrNull(index)?.let { onConfigChange(config.copy(themeMode = it)) }
         }
     )
-    ThemePalettePicker(
-        selected = config.palette,
-        onSelect = { onConfigChange(config.copy(palette = it)) }
-    )
+    // The palette grid is capped and scrolls on its own so the font-size controls below it are
+    // one short scroll away instead of sitting under nine rows of swatches.
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 172.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        ThemePalettePicker(
+            selected = config.palette,
+            onSelect = { onConfigChange(config.copy(palette = it)) }
+        )
+    }
 
     Text(
         text = stringResource(R.string.onboarding_font_size),

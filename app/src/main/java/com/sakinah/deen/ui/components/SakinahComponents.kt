@@ -3,7 +3,6 @@ package com.sakinah.deen.ui.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,7 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
@@ -175,21 +173,23 @@ fun StatusBadge(
     accentColor: Color,
     modifier: Modifier = Modifier
 ) {
-    // Bright accents such as mint are illegible on a light surface, so darken the text
-    // while keeping the accent-tinted background.
-    val darkTheme = isSystemInDarkTheme()
-    val labelColor = if (darkTheme) accentColor else lerp(accentColor, Color.Black, 0.45f)
+    // The label must stay readable in every palette and both theme modes, so it takes the
+    // theme's own content colour and the accent only tints the container and border. Deriving
+    // the label from the accent (or from isSystemInDarkTheme, which is wrong whenever the
+    // in-app theme differs from the system) produced dark text on dark green, e.g. the
+    // "Magnet-Free" pill in Dark mode.
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(8.dp),
-        color = accentColor.copy(alpha = if (darkTheme) 0.22f else 0.16f)
+        color = accentColor.copy(alpha = 0.14f),
+        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.45f))
     ) {
         Text(
             text = text,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
-            color = labelColor,
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             softWrap = false

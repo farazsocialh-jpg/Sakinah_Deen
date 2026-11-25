@@ -588,27 +588,6 @@ private fun QiblaMapView(
                 .height(230.dp)
                 .clip(RoundedCornerShape(12.dp))
         ) {
-            if (loadState == MapLoadState.LOADING) {
-                Surface(
-                    modifier = Modifier.fillMaxSize().zIndex(1f),
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Loading Qibla map…",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
             if (loadState == MapLoadState.FAILED) {
                 QiblaMapFallback(
                     qiblaBearing = qiblaBearing,
@@ -754,6 +733,36 @@ private fun QiblaMapView(
                         }
                     }
                 )
+
+                // A small pill, not a full-cover overlay: the page's own offline bearing
+                // graphic has to stay visible while tiles are still being fetched, otherwise
+                // Map mode looks like an empty coloured rectangle on a slow or offline device.
+                if (loadState == MapLoadState.LOADING) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 10.dp)
+                            .zIndex(1f),
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(12.dp),
+                                strokeWidth = 1.5.dp
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "Loading street tiles…",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
         }
 

@@ -169,6 +169,21 @@ fun SalahScreen(
     var gpsPermissionRequested by rememberSaveable { mutableStateOf(false) }
     var showGpsSettingsDialog by rememberSaveable { mutableStateOf(false) }
 
+    // Exact-alarm permission is a system grant: open its settings screen, or the in-app
+    // notification settings when the OS has no such screen.
+    val openExactAlarmSettings: () -> Unit = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val intent = Intent(
+                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                "package:${context.packageName}".toUri()
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val opened = runCatching { context.startActivity(intent) }.isSuccess
+            if (!opened) onOpenNotificationSettings?.invoke()
+        } else {
+            onOpenNotificationSettings?.invoke()
+        }
+    }
+
     var selectedSegment by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(focusMode) {
         if (focusMode) {
@@ -234,71 +249,33 @@ fun SalahScreen(
                             onRecalculate = { viewModel?.onIntent(SalahUiIntent.RecalculateToday) }
                         )
 
-                        if (!focusMode && state.showLocationWarningBanner) {
+                        // One compact warning card: two stacked full-width banners pushed the
+                        // first prayer rows below the fold on a short screen.
+                        if (!focusMode &&
+                            (state.showLocationWarningBanner || state.showExactAlarmWarningBanner)
+                        ) {
                             Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = SalahAmber.copy(alpha = 0.14f),
-                                border = BorderStroke(1.dp, SalahAmber.copy(alpha = 0.55f)),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showManualCityDialog = true }
+                                shape = RoundedCornerShape(10.dp),
+                                color = SalahAmber.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, SalahAmber.copy(alpha = 0.45f)),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Warning,
-                                        contentDescription = null,
-                                        tint = SalahAmber,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        text = stringResource(R.string.salah_enable_location),
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                            }
-                        }
-
-                        if (!focusMode && state.showExactAlarmWarningBanner) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = SalahAmber.copy(alpha = 0.14f),
-                                border = BorderStroke(1.dp, SalahAmber.copy(alpha = 0.55f)),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                            val intent = Intent(
-                                                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                                                "package:${context.packageName}".toUri()
-                                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                            val opened = runCatching { context.startActivity(intent) }.isSuccess
-                                            if (!opened) onOpenNotificationSettings?.invoke()
-                                        } else {
-                                            onOpenNotificationSettings?.invoke()
-                                        }
+                                    if (state.showLocationWarningBanner) {
+                                        SalahWarningLine(
+                                            text = stringResource(R.string.salah_enable_location),
+                                            onClick = { showManualCityDialog = true }
+                                        )
                                     }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Warning,
-                                        contentDescription = null,
-                                        tint = SalahAmber,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        text = stringResource(R.string.salah_exact_alarm_warning),
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
+                                    if (state.showExactAlarmWarningBanner) {
+                                        SalahWarningLine(
+                                            text = stringResource(R.string.salah_exact_alarm_warning),
+                                            onClick = openExactAlarmSettings
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -841,6 +818,34 @@ fun SalahScreen(
     }
 }
 
+/** One tappable line inside the compact warning card. */
+@Composable
+private fun SalahWarningLine(text: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.Warning,
+            contentDescription = null,
+            tint = SalahAmber,
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            lineHeight = 14.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
 @Composable
 private fun StatusAccentPrayerRow(
     prayer: PrayerModel,
@@ -945,6 +950,8 @@ private fun StatusAccentPrayerRow(
                             }
                         }
                         isActive -> {
+                            // A checkmark means "prayed", so the current prayer that is still
+                            // outstanding gets a clock instead of a confusing tick.
                             Surface(
                                 shape = CircleShape,
                                 color = Color(0xFFE68A1E).copy(alpha = 0.12f),
@@ -953,9 +960,12 @@ private fun StatusAccentPrayerRow(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        imageVector = Icons.Rounded.Check,
-                                        contentDescription = stringResource(R.string.salah_toggle_prayer_cd, prayer.nameEnglish),
-                                        tint = Color(0xFFE68A1E).copy(alpha = 0.5f),
+                                        imageVector = Icons.Outlined.Schedule,
+                                        contentDescription = stringResource(
+                                            R.string.salah_toggle_prayer_cd,
+                                            prayer.nameEnglish
+                                        ),
+                                        tint = Color(0xFFE68A1E),
                                         modifier = Modifier.size(16.dp)
                                     )
                                 }

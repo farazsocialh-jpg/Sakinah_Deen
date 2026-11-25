@@ -17,7 +17,7 @@
 settings:
   variables:
     appId: "com.imancore.app"
-  # Default is 3 retries per scenario. Ten scenarios on a 500-request/day free tier must
+  # Default is 3 retries per scenario. Eleven scenarios on a 500-request/day free tier must
   # not spend 4x on one flaky screen.
   maxRetry: 1
   prompt:
@@ -42,7 +42,11 @@ settings:
       Data Sources, Privacy & Terms, About ImanCore). There is NO Tasbih tile and NO
       Travel tile on this hub: travel settings live under Tools -> Prayer & Location, in
       its "Travel & Car" section, and Qadha opens from the "Qadha" pill in the Salah
-      header.
+      header. Do not look for a screen that is not listed here.
+      Salah header: on the left the Hijri date and the "date · city ▾ · method" line, on the
+      right the "Qadha" pill, a bell, a refresh and a tune/settings icon. Under the header a
+      single compact amber card holds any location/exact-alarm warnings. Prayer rows show a
+      filled check for a prayed prayer and a clock ring for the current, still-unprayed prayer.
     additionalSystemPrompts:
       - |-
         You are also a senior mobile UX reviewer. Before each action, add a short review
@@ -214,7 +218,7 @@ scenarios:
       - assertionPrompt: "AI Scholar chat input, send button, and message bubbles are unobstructed and clearly readable."
 
   # ------------------------------------------------------------- tools
-  - id: "08-tools-zakat-and-visual-guide"
+  - id: "08a-wealth-and-guide"
     initializationMethods:
       - type: "CleanupData"
         packageName: "{{appId}}"
@@ -233,7 +237,7 @@ scenarios:
       - assertionPrompt: "The Tools hub renders clean sections and readable tile titles/subtitles with no clipped or overlapping text."
 
   # ---------------------------------------------- travel settings + qadha ledger
-  - id: "08b-travel-mode-and-qadha"
+  - id: "08b-travel-and-qadha"
     initializationMethods:
       - type: "CleanupData"
         packageName: "{{appId}}"
