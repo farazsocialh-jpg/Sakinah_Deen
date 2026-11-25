@@ -1,9 +1,10 @@
 name: AI Human QA (Arbigent)
 
 # Manual only: every run spends Gemini API credits.
-# Requires a repository secret named GEMINI_API_KEY
-# (Settings -> Secrets and variables -> Actions). The job stops with a clear
-# error before booting an emulator if that secret is missing or empty.
+# Requires GEMINI_API_KEY, either as a repository secret/variable or as one
+# scoped to the "Playstore" environment (Settings -> Secrets and variables ->
+# Actions). The job stops with a clear error before booting an emulator if it
+# cannot find a non-empty value.
 
 on:
   workflow_dispatch:
@@ -15,6 +16,9 @@ jobs:
   ai-ux-test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # GEMINI_API_KEY is stored on the "Playstore" environment, and environment
+    # scoped values are only injected into jobs that name the environment.
+    environment: Playstore
     env:
       # The wrapper needs a pinned release: no arbigentw.properties ships with the
       # app repo, so it bootstraps one from this version on first run.
@@ -52,12 +56,19 @@ jobs:
 
       - name: Write Arbigent Gemini settings
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Either source works: an environment/repository secret, or an
+          # environment/repository variable (the Variables tab uses vars.*).
+          GEMINI_KEY_SECRET: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_KEY_VARIABLE: ${{ vars.GEMINI_API_KEY }}
         run: |
-          # A missing secret expands to an empty string, which Arbigent reports as
+          # Unset values expand to an empty string, which Arbigent reports as
           # "Missing Gemini API key". Fail here instead, before the emulator boots.
-          if [ -z "${GEMINI_API_KEY:-}" ]; then
-            echo "::error::GEMINI_API_KEY is missing or empty. Add it at Settings -> Secrets and variables -> Actions."
+          GEMINI_API_KEY="${GEMINI_KEY_SECRET:-}"
+          if [ -z "$GEMINI_API_KEY" ]; then
+            GEMINI_API_KEY="${GEMINI_KEY_VARIABLE:-}"
+          fi
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::No GEMINI_API_KEY for environment 'Playstore'. Add it under Settings -> Secrets and variables -> Actions (Secrets or Variables, name GEMINI_API_KEY, environment Playstore)."
             exit 1
           fi
           echo "::add-mask::$GEMINI_API_KEY"
