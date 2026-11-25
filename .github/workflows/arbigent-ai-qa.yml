@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       gemini_model:
-        description: "Gemini model id for the AI agent"
+        description: "Gemini model id (free tier: 3.5-flash-lite = 15 req/min, 500/day)"
         required: false
-        default: gemini-3.8-flash
+        default: gemini-3.5-flash-lite
         type: string
 
 permissions:
@@ -31,7 +31,13 @@ jobs:
       ARBIGENT_VERSION: "0.89.0"
       # Overridable from the Run workflow form, so a renamed/deprecated model
       # does not need a code change. 2.5-flash returns 404 for new API keys.
-      GEMINI_MODEL: ${{ inputs.gemini_model || 'gemini-3.8-flash' }}
+      #
+      # Free-tier quotas decide the default: gemini-3.8-flash allows only 5
+      # requests/minute and 20/day, which a multi-step audit exhausts at once
+      # (429 RESOURCE_EXHAUSTED, generate_content_free_tier_requests).
+      # gemini-3.5-flash-lite is free too, accepts screenshots, and allows
+      # roughly 15 requests/minute and 500/day.
+      GEMINI_MODEL: ${{ inputs.gemini_model || 'gemini-3.5-flash-lite' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
