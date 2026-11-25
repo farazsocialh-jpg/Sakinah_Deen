@@ -490,6 +490,7 @@
     <string name="quran_action_close">Close ayah actions</string>
     <string name="quran_sheet_close">Close</string>
     <string name="quran_wbw_title">Word-by-word</string>
+    <string name="quran_wbw_single_behavior">Interlinear RTL: Arabic with meanings underneath. Tap any word for its meaning and root.</string>
     <string name="quran_wbw_loading">Word-by-word data is still loading…</string>
     <string name="quran_wbw_script_uthmani">Uthmani</string>
     <string name="quran_wbw_script_indopak">IndoPak</string>

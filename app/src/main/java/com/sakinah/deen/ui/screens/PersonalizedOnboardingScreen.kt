@@ -162,9 +162,8 @@ private val UserAppearanceConfigSaver = listSaver<UserAppearanceConfig, String>(
             salahHomeLayout = values.getOrNull(9)
                 ?.let { runCatching { SalahHomeLayout.valueOf(it) }.getOrNull() }
                 ?: SalahHomeLayout.CLASSIC_COMPACT,
-            quranReadingLayout = values.getOrNull(10)
-                ?.let { runCatching { QuranReadingLayout.valueOf(it) }.getOrNull() }
-                ?: QuranReadingLayout.DIVIDER_HAIRLINE,
+            quranReadingLayout = QuranReadingLayout.fromStoredName(values.getOrNull(10))
+                ?: QuranReadingLayout.SPLIT_COLUMN,
             hadithReadingLayout = values.getOrNull(11)
                 ?.let { runCatching { HadithReadingLayout.valueOf(it) }.getOrNull() }
                 ?: HadithReadingLayout.COMPACT_DROPDOWN,

@@ -109,7 +109,7 @@ class AppearancePreferencesTest {
 
         fake.edit().putString("quran_reading_layout", "OBSOLETE_LAYOUT").apply()
         assertEquals(
-            QuranReadingLayout.DIVIDER_HAIRLINE,
+            QuranReadingLayout.SPLIT_COLUMN,
             AppearancePreferences(fake).config.value.quranReadingLayout
         )
     }

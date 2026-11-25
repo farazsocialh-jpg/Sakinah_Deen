@@ -26,30 +26,31 @@ enum class QuranReadingMode {
 /**
  * Presentation of the Word-by-Word (WBW) row under each ayah.
  *
- * Every mode renders the same verbatim QUL Arabic; only the affordances around it change,
- * so switching modes can never alter the Quranic text. The order of the entries is the
- * order the layout picker shows them in, and [INTERLINEAR_RTL] is the default because it
- * is the only mode that shows a meaning per word without a tap.
+ * The reader now has a single presentation: verbatim QUL Arabic flowing right to left with
+ * each word's meaning underneath. Tapping any word still opens the word-meaning/root sheet.
+ * Previously saved modes are mapped to [INTERLINEAR_RTL] by [fromStoredName], so upgrading
+ * never changes the Quranic text or loses a reader's choice.
  */
 enum class WbwLayoutMode {
-    INTERLINEAR_RTL,
-    MUSHAF_TAP,
-    VERSE_BOTTOM_DOCK,
-    WORD_CARDS_RTL,
-    GLOSSARY_LIST,
-    VOCAB_QUIZ;
-
-    /** True when the mode shows root / part of speech, i.e. needs the chapter's morphology. */
-    val showsMorphology: Boolean
-        get() = this == VERSE_BOTTOM_DOCK || this == GLOSSARY_LIST
+    INTERLINEAR_RTL;
 
     companion object {
         val DEFAULT = INTERLINEAR_RTL
+
+        /** Retired presentations, kept so stored preferences migrate instead of resetting. */
+        private val LEGACY_NAMES = setOf(
+            "MUSHAF_TAP",
+            "VERSE_BOTTOM_DOCK",
+            "WORD_CARDS_RTL",
+            "GLOSSARY_LIST",
+            "VOCAB_QUIZ"
+        )
 
         /** Resolves a stored name; null when the value is empty or unknown. */
         fun fromStoredName(raw: String?): WbwLayoutMode? {
             val name = raw?.trim().orEmpty()
             if (name.isEmpty()) return null
+            if (name in LEGACY_NAMES) return INTERLINEAR_RTL
             return entries.firstOrNull { it.name == name }
         }
     }

@@ -102,7 +102,6 @@ import com.sakinah.deen.data.model.AyahModel
 import com.sakinah.deen.data.model.QuranArabicScript
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.QuranReadingLayout
-import com.sakinah.deen.data.prefs.WbwLayoutMode
 import com.sakinah.deen.data.prefs.QuranReadingMode
 import com.sakinah.deen.data.quran.QulWord
 import com.sakinah.deen.ui.components.ArabicVerseBlock
@@ -178,7 +177,7 @@ fun QuranScreen(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     // Both presentations prepend a header item in the continuous page; the verse layouts do not.
-    val usesHeaderItem = !state.isStudyMode || readingLayout == QuranReadingLayout.CONTINUOUS_MUSHAF
+    val usesHeaderItem = !state.isStudyMode
 
     LaunchedEffect(focusMode) {
         // Focus mode reads the flowing page; the reader branch follows the same state value,
@@ -268,11 +267,8 @@ fun QuranScreen(
         arabicFontSizeSp = state.arabicFontSize,
         focusMode = focusMode,
         bookmarkedAyahNumbers = state.bookmarkedAyahNumbers,
-        wbwMode = state.wbwLayoutMode,
         wbwEnabled = state.wbwEnabled,
-        selectedWbwWordKey = state.selectedQulWord?.wordKey,
-        revealedWbwWordKeys = state.revealedWbwWordKeys,
-        wbwMorphology = state.wbwMorphology
+        selectedWbwWordKey = state.selectedQulWord?.wordKey
     )
     val onAyahClick: (AyahModel) -> Unit = { ayah ->
         selectedAyahNumber = ayah.numberInSurah
@@ -443,15 +439,11 @@ fun QuranScreen(
                             onTafseer = onTafseerClick,
                             onTagMistake = onTagMistakeClick,
                             onToggleBookmark = onToggleBookmark,
-                            onToggleStudyMode = toggleStudyMode,
                             listState = listState,
                             wbwWords = state.qulWordsByAyah,
                             qulScript = state.qulScript,
                             onWordClick = { word ->
                                 vm.onIntent(QuranUiIntent.SelectQulWord(word.wordKey))
-                            },
-                            onToggleWbwReveal = { word ->
-                                vm.onIntent(QuranUiIntent.ToggleWbwReveal(word.wordKey))
                             }
                         )
                     }
@@ -991,10 +983,6 @@ fun QuranScreen(
                 onWbwEnabledChange = { enabled ->
                     vm.onIntent(QuranUiIntent.SetWbwEnabled(enabled))
                 },
-                wbwLayoutMode = state.wbwLayoutMode,
-                onWbwLayoutSelect = { mode ->
-                    vm.onIntent(QuranUiIntent.SelectWbwLayout(mode))
-                },
                 wbwScript = state.qulScript,
                 onWbwScriptSelect = { script ->
                     vm.onIntent(QuranUiIntent.SelectQulScript(script))
@@ -1224,17 +1212,13 @@ fun QuranScreen(
 /** Full, localized preset name used by menus and Settings. */
 @Composable
 internal fun QuranReadingLayout.localizedLabel(): String = when (this) {
-    QuranReadingLayout.DIVIDER_HAIRLINE -> stringResource(R.string.quran_layout_divider_hairline)
-    QuranReadingLayout.CONTINUOUS_MUSHAF -> stringResource(R.string.quran_layout_continuous_mushaf)
     QuranReadingLayout.SPLIT_COLUMN -> stringResource(R.string.quran_layout_split_column)
     QuranReadingLayout.THUMB_BOTTOM_DOCK -> stringResource(R.string.quran_layout_thumb_bottom_dock)
 }
 
-/** Compact name for the four-option segmented bar, where long labels would wrap. */
+/** Compact name for the two-option segmented bar, where long labels would wrap. */
 @Composable
 internal fun QuranReadingLayout.shortLabel(): String = when (this) {
-    QuranReadingLayout.DIVIDER_HAIRLINE -> stringResource(R.string.quran_layout_short_hairline)
-    QuranReadingLayout.CONTINUOUS_MUSHAF -> stringResource(R.string.quran_layout_short_mushaf)
     QuranReadingLayout.SPLIT_COLUMN -> stringResource(R.string.quran_layout_short_split)
     QuranReadingLayout.THUMB_BOTTOM_DOCK -> stringResource(R.string.quran_layout_short_dock)
 }
@@ -1243,26 +1227,6 @@ internal fun QuranReadingLayout.shortLabel(): String = when (this) {
 internal fun QuranReadingMode.localizedLabel(): String = when (this) {
     QuranReadingMode.STUDY -> stringResource(R.string.quran_mode_study)
     QuranReadingMode.MUSHAF -> stringResource(R.string.quran_mode_mushaf)
-}
-
-@Composable
-internal fun WbwLayoutMode.wbwTitle(): String = when (this) {
-    WbwLayoutMode.INTERLINEAR_RTL -> stringResource(R.string.quran_wbw_mode_interlinear)
-    WbwLayoutMode.MUSHAF_TAP -> stringResource(R.string.quran_wbw_mode_mushaf_tap)
-    WbwLayoutMode.VERSE_BOTTOM_DOCK -> stringResource(R.string.quran_wbw_mode_verse_dock)
-    WbwLayoutMode.WORD_CARDS_RTL -> stringResource(R.string.quran_wbw_mode_word_cards)
-    WbwLayoutMode.GLOSSARY_LIST -> stringResource(R.string.quran_wbw_mode_glossary)
-    WbwLayoutMode.VOCAB_QUIZ -> stringResource(R.string.quran_wbw_mode_vocab_quiz)
-}
-
-@Composable
-internal fun WbwLayoutMode.wbwDescription(): String = when (this) {
-    WbwLayoutMode.INTERLINEAR_RTL -> stringResource(R.string.quran_wbw_desc_interlinear)
-    WbwLayoutMode.MUSHAF_TAP -> stringResource(R.string.quran_wbw_desc_mushaf_tap)
-    WbwLayoutMode.VERSE_BOTTOM_DOCK -> stringResource(R.string.quran_wbw_desc_verse_dock)
-    WbwLayoutMode.WORD_CARDS_RTL -> stringResource(R.string.quran_wbw_desc_word_cards)
-    WbwLayoutMode.GLOSSARY_LIST -> stringResource(R.string.quran_wbw_desc_glossary)
-    WbwLayoutMode.VOCAB_QUIZ -> stringResource(R.string.quran_wbw_desc_vocab_quiz)
 }
 
 /** Layout picker shown inside the bottom reader pill. */

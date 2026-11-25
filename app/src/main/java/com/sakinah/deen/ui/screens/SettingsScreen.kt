@@ -1375,40 +1375,13 @@ private fun SalahLayoutPreview(layout: SalahHomeLayout) {
 @Composable
 private fun QuranLayoutPreview(layout: QuranReadingLayout) {
     val style = when (layout) {
-        QuranReadingLayout.DIVIDER_HAIRLINE -> 0
-        QuranReadingLayout.CONTINUOUS_MUSHAF -> 1
         QuranReadingLayout.SPLIT_COLUMN -> 2
         QuranReadingLayout.THUMB_BOTTOM_DOCK -> 3
     }
     val primary = MaterialTheme.colorScheme.primary
     val onSurface = MaterialTheme.colorScheme.onSurfaceVariant
-    val gold = MaterialTheme.colorScheme.tertiary
     Box(Modifier.fillMaxSize().padding(6.dp)) {
         when (style) {
-            0 -> {
-                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    repeat(5) {
-                        Column(Modifier.fillMaxWidth()) {
-                            Box(Modifier.fillMaxWidth(0.6f).height(5.dp).align(Alignment.End).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.45f)))
-                            Spacer(Modifier.height(2.dp))
-                            Box(Modifier.fillMaxWidth(0.9f).height(3.dp).align(Alignment.Start).clip(RoundedCornerShape(2.dp)).background(onSurface.copy(alpha = 0.25f)))
-                        }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
-                    }
-                }
-            }
-            1 -> {
-                Box(Modifier.fillMaxSize().border(1.dp, onSurface.copy(alpha = 0.3f), RoundedCornerShape(4.dp)).padding(4.dp)) {
-                    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        repeat(7) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.weight(1f).height(3.dp).clip(RoundedCornerShape(1.dp)).background(onSurface.copy(alpha = 0.35f)))
-                                if (it % 2 == 0) Box(Modifier.size(5.dp).clip(CircleShape).background(gold))
-                            }
-                        }
-                    }
-                }
-            }
             2 -> {
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     repeat(3) {

@@ -24,8 +24,8 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Word-by-word layout selection, persistence and the vocabulary-quiz reveal state,
- * exercised against the [QulDataSource] contract without Android SQLite.
+ * Word-by-word state, persistence and the single interlinear presentation, exercised
+ * against the [QulDataSource] contract without Android SQLite.
  */
 class QuranViewModelWbwLayoutTest {
 
@@ -39,18 +39,6 @@ class QuranViewModelWbwLayoutTest {
 
     @After
     fun tearDown() = Dispatchers.resetMain()
-
-    private fun word(key: String, index: Int, translation: String) = QulWord(
-        id = index,
-        wordKey = key,
-        surah = 1,
-        ayah = 1,
-        wordIndex = index,
-        uthmani = "كلمة$index",
-        indopak = "کلمہ$index",
-        transliteration = "kalimah$index",
-        translation = translation
-    )
 
     private class FakeQul : QulDataSource {
         val morphologyRequests = mutableListOf<Int>()
@@ -90,26 +78,22 @@ class QuranViewModelWbwLayoutTest {
     }
 
     @Test
-    fun everyModeIsSelectedPersistedAndExposedAsAStateFlow() = runTest(testDispatcher) {
+    fun theSingleModeIsExposedAsAStateFlowAndPersisted() = runTest(testDispatcher) {
         val prefs = QuranReaderPreferences(FakeSharedPreferences())
         val vm = QuranViewModel(quranReaderPreferences = prefs, qulDatabase = FakeQul())
         advanceUntilIdle()
+
         assertEquals(WbwLayoutMode.INTERLINEAR_RTL, vm.wbwLayoutMode.value)
-
-        WbwLayoutMode.entries.forEach { mode ->
-            vm.onIntent(QuranUiIntent.SelectWbwLayout(mode))
-            advanceUntilIdle()
-
-            assertEquals(mode, vm.uiState.value.wbwLayoutMode)
-            assertEquals(mode, vm.wbwLayoutMode.value)
-            assertEquals(mode, prefs.wbwLayoutMode)
-        }
+        assertEquals(WbwLayoutMode.INTERLINEAR_RTL, vm.uiState.value.wbwLayoutMode)
+        assertEquals(WbwLayoutMode.INTERLINEAR_RTL, prefs.wbwLayoutMode)
     }
 
     @Test
-    fun theStoredModeIsRestoredAndItsMorphologyPreloaded() = runTest(testDispatcher) {
+    fun aStoredRetiredModeMigratesToInterlinearWithoutAMorphologyScan() = runTest(testDispatcher) {
         val fake = FakeSharedPreferences()
-        QuranReaderPreferences(fake).wbwLayoutMode = WbwLayoutMode.GLOSSARY_LIST
+        QuranReaderPreferences(fake).wbwLayoutMode = WbwLayoutMode.INTERLINEAR_RTL
+        // Simulate a pre-consolidation install writing its own enum name directly.
+        fake.edit().putString("quran_wbw_layout_mode", "GLOSSARY_LIST").apply()
         val qul = FakeQul()
 
         val vm = QuranViewModel(
@@ -118,51 +102,9 @@ class QuranViewModelWbwLayoutTest {
         )
         advanceUntilIdle()
 
-        assertEquals(WbwLayoutMode.GLOSSARY_LIST, vm.uiState.value.wbwLayoutMode)
-        // The glossary prints a root per word, so the chapter's morphology is fetched once.
-        assertTrue(qul.morphologyRequests.contains(1))
-        assertEquals("أله", vm.uiState.value.wbwMorphology["1:1:2"]?.root)
-    }
-
-    @Test
-    fun switchingToADockModeLoadsMorphologyOnce() = runTest(testDispatcher) {
-        val qul = FakeQul()
-        val vm = QuranViewModel(qulDatabase = qul)
-        advanceUntilIdle()
+        assertEquals(WbwLayoutMode.INTERLINEAR_RTL, vm.uiState.value.wbwLayoutMode)
+        assertEquals(WbwLayoutMode.INTERLINEAR_RTL, vm.wbwLayoutMode.value)
         assertTrue(qul.morphologyRequests.isEmpty())
-
-        vm.onIntent(QuranUiIntent.SelectWbwLayout(WbwLayoutMode.VERSE_BOTTOM_DOCK))
-        advanceUntilIdle()
-        assertEquals(listOf(1), qul.morphologyRequests)
-
-        vm.onIntent(QuranUiIntent.SelectWbwLayout(WbwLayoutMode.GLOSSARY_LIST))
-        advanceUntilIdle()
-        // Same chapter, already loaded: no duplicate scan.
-        assertEquals(listOf(1), qul.morphologyRequests)
-    }
-
-    @Test
-    fun quizRevealTogglesPerWord() = runTest(testDispatcher) {
-        val vm = QuranViewModel(
-            quranReaderPreferences = QuranReaderPreferences(FakeSharedPreferences()),
-            qulDatabase = FakeQul()
-        )
-        advanceUntilIdle()
-        vm.onIntent(QuranUiIntent.SelectWbwLayout(WbwLayoutMode.VOCAB_QUIZ))
-        assertTrue(vm.uiState.value.revealedWbwWordKeys.isEmpty())
-
-        vm.onIntent(QuranUiIntent.ToggleWbwReveal("1:1:1"))
-        assertEquals(setOf("1:1:1"), vm.uiState.value.revealedWbwWordKeys)
-
-        vm.onIntent(QuranUiIntent.ToggleWbwReveal("1:1:3"))
-        assertEquals(setOf("1:1:1", "1:1:3"), vm.uiState.value.revealedWbwWordKeys)
-
-        vm.onIntent(QuranUiIntent.ToggleWbwReveal("1:1:1"))
-        assertEquals(setOf("1:1:3"), vm.uiState.value.revealedWbwWordKeys)
-
-        // A blank key is ignored rather than polluting the revealed set.
-        vm.onIntent(QuranUiIntent.ToggleWbwReveal(""))
-        assertEquals(setOf("1:1:3"), vm.uiState.value.revealedWbwWordKeys)
     }
 
     @Test

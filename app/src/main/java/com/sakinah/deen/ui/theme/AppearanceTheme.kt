@@ -220,7 +220,7 @@ data class UserAppearanceConfig(
     val autoHideBarsOnScroll: Boolean = true,
     val prayerGuideGender: PrayerGuideGender = PrayerGuideGender.MALE,
     val salahHomeLayout: SalahHomeLayout = SalahHomeLayout.CLASSIC_COMPACT,
-    val quranReadingLayout: QuranReadingLayout = QuranReadingLayout.DIVIDER_HAIRLINE,
+    val quranReadingLayout: QuranReadingLayout = QuranReadingLayout.SPLIT_COLUMN,
     val hadithReadingLayout: HadithReadingLayout = HadithReadingLayout.COMPACT_DROPDOWN,
     val onboardingCompleted: Boolean = false,
     val arabicFontSize: Int = 24,

@@ -15,25 +15,25 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 /**
- * The four supported Quran reader presets. Ten near-duplicate layouts previously existed;
+ * The two supported Quran reader presets. Ten near-duplicate layouts previously existed;
  * they multiplied QA and accessibility work without adding a distinct reading mode.
  * Legacy preference values are mapped by [fromStoredName], so an upgrade never silently
  * resets a reader's chosen layout.
  */
 enum class QuranReadingLayout(val displayName: String, val subtitle: String) {
-    DIVIDER_HAIRLINE("Divider Hairline", "Zero boxes, thin dividers, Arabic + translation"),
-    CONTINUOUS_MUSHAF("Continuous Mushaf", "Book-like flowing page with inline verse markers"),
     SPLIT_COLUMN("Split-Column Study", "Translation left, Arabic right side-by-side"),
     THUMB_BOTTOM_DOCK("Thumb-Zone Dock", "Floating bottom utility pill for one-handed use");
 
     companion object {
         /** Presets retired in the layout consolidation, mapped to their closest successor. */
         private val LEGACY_NAMES = mapOf(
-            "ALTERNATING_ROWS" to DIVIDER_HAIRLINE,
-            "COMPACT_CARDS" to DIVIDER_HAIRLINE,
-            "LEFT_ACCENT_RIBBON" to DIVIDER_HAIRLINE,
-            "FOCUS_SPOTLIGHT" to DIVIDER_HAIRLINE,
-            "IMMERSIVE_ZEN" to CONTINUOUS_MUSHAF,
+            "DIVIDER_HAIRLINE" to SPLIT_COLUMN,
+            "CONTINUOUS_MUSHAF" to SPLIT_COLUMN,
+            "ALTERNATING_ROWS" to SPLIT_COLUMN,
+            "COMPACT_CARDS" to SPLIT_COLUMN,
+            "LEFT_ACCENT_RIBBON" to SPLIT_COLUMN,
+            "FOCUS_SPOTLIGHT" to SPLIT_COLUMN,
+            "IMMERSIVE_ZEN" to SPLIT_COLUMN,
             "ARABIC_TAP_EXPAND" to THUMB_BOTTOM_DOCK
         )
 
@@ -41,7 +41,7 @@ enum class QuranReadingLayout(val displayName: String, val subtitle: String) {
         fun fromStoredName(raw: String?): QuranReadingLayout? {
             val name = raw?.trim().orEmpty()
             if (name.isEmpty()) return null
-            return entries.firstOrNull { it.name == name } ?: LEGACY_NAMES[name]
+            return LEGACY_NAMES[name] ?: entries.firstOrNull { it.name == name }
         }
     }
 }
