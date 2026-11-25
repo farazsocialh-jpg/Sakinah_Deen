@@ -1,0 +1,55 @@
+# AI-driven UX audit for ImanCore.
+# Arbigent drives the app from screenshots + the UI tree like a human user, so these
+# scenarios describe what a person should experience instead of brittle selectors.
+#
+# Run locally / in CI with:
+#   arbigentw run --os=android --project-file=.arbigent/imancore_ux_audit.yaml \
+#     --ai-type=gemini --gemini-model-name=gemini-2.5-flash
+
+settings:
+  variables:
+    # applicationId from app/build.gradle.kts ("com.sakinah.deen" is only the Kotlin
+    # namespace, so using it here would leave the app never installed/launched).
+    appId: "com.imancore.app"
+
+scenarios:
+  - id: "onboarding-human-ux"
+    goal: |
+      Act as a first-time Muslim user opening ImanCore for the first time.
+      1. On the welcome screen, read the text, tap the "Preferred name (optional)" field,
+         type "Faraz", dismiss the keyboard, and tap "Continue".
+      2. On the next step, confirm it greets Faraz by name, choose "Practicing Muslim",
+         choose "Prayer consistency", and tap "Continue".
+      3. On the appearance step, switch the theme to "Dark" mode, check that the
+         "LIVE PREVIEW" Arabic text and its translation stay legible, and tap "Continue".
+      4. On the setup step, verify all 4 permission tiles (Location, Notifications,
+         Exact Alarms, Battery) and their Allow/Allowed buttons have clear readable text
+         with no invisible white-on-white buttons, then tap "Open ImanCore".
+      Do not grant the system permission dialogs yourself if they appear over the app;
+      return to ImanCore instead.
+    maxStep: 20
+    imageAssertions:
+      - assertionPrompt: "All text, icons, and permission buttons are clearly readable with strong contrast and no overlapping or clipped labels."
+
+  - id: "salah-and-qibla-ux"
+    dependency: "onboarding-human-ux"
+    goal: |
+      Explore the Daily Salah screen like a real user.
+      1. Mark Fajr as prayed using the Fajr prayer row's completion control and verify the
+         daily progress strip at the top updates cleanly.
+      2. Switch to the Qibla view in the Salah screen and try its Compass, Map, and Sun
+         modes; confirm each loads without an error message or blank screen.
+      3. Look for prayer names that wrap awkwardly or rows/buttons that feel cramped.
+    maxStep: 15
+    imageAssertions:
+      - assertionPrompt: "Prayer names, times, and the Qibla card are cleanly aligned with no overlapping text and no blank error states."
+
+  - id: "quran-and-hadith-ux"
+    dependency: "salah-and-qibla-ux"
+    goal: |
+      Navigate to the Quran tab, open Surah Al-Fatihah, scroll down, and verify the Arabic
+      and translation text look comfortable to read. Then open the Hadith tab and confirm
+      the Books list loads cleanly.
+    maxStep: 20
+    imageAssertions:
+      - assertionPrompt: "Quran and Hadith screens are legible, well-spaced, and free of layout glitches."

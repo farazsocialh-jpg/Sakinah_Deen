@@ -1,0 +1,71 @@
+name: AI Human QA (Arbigent)
+
+# Manual only: every run spends Gemini API credits.
+# Requires a repository secret named GEMINI_API_KEY
+# (Settings -> Secrets and variables -> Actions).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ai-ux-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # The wrapper needs a pinned release: no arbigentw.properties ships with the
+      # app repo, so it bootstraps one from this version on first run.
+      ARBIGENT_VERSION: "0.89.0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable KVM for fast emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew :app:assembleDebug
+
+      - name: Download Arbigent Wrapper
+        run: |
+          curl -fsSLo arbigentw https://raw.githubusercontent.com/takahirom/arbigent/main/arbigent-cli/src/main/resources/arbigentw
+          chmod +x arbigentw
+          # Pins arbigentw.properties and downloads/verifies the CLI before the
+          # emulator starts, so setup failures are not hidden inside the run step.
+          ./arbigentw --help > /dev/null
+
+      - name: Boot Emulator & Run AI UX Agent
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            ./arbigentw run --os=android --project-file=.arbigent/imancore_ux_audit.yaml --ai-type=gemini --gemini-model-name=gemini-2.5-flash
+
+      - name: Upload AI QA Report & Screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arbigent-ux-report
+          path: arbigent-result/
