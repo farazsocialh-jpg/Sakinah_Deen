@@ -96,6 +96,7 @@ class QuranReaderPreferences internal constructor(
         private const val KEY_WBW_SCRIPT = "quran_wbw_script"
         private const val KEY_MUSHAF_LAYOUT = "quran_mushaf_layout"
         private const val KEY_WBW_LAYOUT_MODE = "quran_wbw_layout_mode"
+        private const val KEY_WBW_ENABLED = "quran_wbw_enabled"
 
         const val DEFAULT_WBW_LANGUAGE = "en"
         const val DEFAULT_WBW_SCRIPT = "uthmani"
@@ -171,6 +172,11 @@ class QuranReaderPreferences internal constructor(
         get() = WbwLayoutMode.fromStoredName(prefs.getString(KEY_WBW_LAYOUT_MODE, null))
             ?: WbwLayoutMode.DEFAULT
         set(value) = prefs.edit { putString(KEY_WBW_LAYOUT_MODE, value.name) }
+
+    /** Whether the word-by-word strip is shown under each ayah at all. */
+    var wbwEnabled: Boolean
+        get() = prefs.getBoolean(KEY_WBW_ENABLED, true)
+        set(value) = prefs.edit { putBoolean(KEY_WBW_ENABLED, value) }
 
     /** Mushaf page layout key bundled in the QUL database. */
     var mushafLayout: String

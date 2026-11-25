@@ -98,6 +98,8 @@ data class QuranUiState(
     val qulScript: String = QuranReaderPreferences.DEFAULT_WBW_SCRIPT,
     /** How the word-by-word row under each ayah is presented; persisted by the reader. */
     val wbwLayoutMode: WbwLayoutMode = WbwLayoutMode.DEFAULT,
+    /** False hides the word-by-word strip entirely; the chosen layout is kept. */
+    val wbwEnabled: Boolean = true,
     /** Root / lemma / stem / POS for the open chapter, loaded once when a mode prints roots. */
     val wbwMorphology: Map<String, QulMorphology> = emptyMap(),
     /** wordKeys revealed in [WbwLayoutMode.VOCAB_QUIZ]; cleared when the chapter changes. */
@@ -133,6 +135,7 @@ sealed class QuranUiIntent {
     data class SelectWbwLanguage(val lang: String) : QuranUiIntent()
     data class SelectQulScript(val script: String) : QuranUiIntent()
     data class SelectWbwLayout(val mode: WbwLayoutMode) : QuranUiIntent()
+    data class SetWbwEnabled(val enabled: Boolean) : QuranUiIntent()
     data class ToggleWbwReveal(val wordKey: String) : QuranUiIntent()
     data class SelectMushafLayout(val layout: String) : QuranUiIntent()
     data class SelectQulWord(val wordKey: String) : QuranUiIntent()
@@ -221,7 +224,8 @@ class QuranViewModel(
                 ?: QuranReaderPreferences.DEFAULT_WBW_SCRIPT,
             mushafLayout = quranReaderPreferences?.mushafLayout
                 ?: QuranReaderPreferences.DEFAULT_MUSHAF_LAYOUT,
-            wbwLayoutMode = quranReaderPreferences?.wbwLayoutMode ?: WbwLayoutMode.DEFAULT
+            wbwLayoutMode = quranReaderPreferences?.wbwLayoutMode ?: WbwLayoutMode.DEFAULT,
+            wbwEnabled = quranReaderPreferences?.wbwEnabled ?: true
         )
     )
     val uiState: StateFlow<QuranUiState> = _uiState.asStateFlow()
@@ -272,6 +276,7 @@ class QuranViewModel(
             is QuranUiIntent.SelectWbwLanguage -> selectWbwLanguage(intent.lang)
             is QuranUiIntent.SelectQulScript -> selectQulScript(intent.script)
             is QuranUiIntent.SelectWbwLayout -> selectWbwLayout(intent.mode)
+            is QuranUiIntent.SetWbwEnabled -> setWbwEnabled(intent.enabled)
             is QuranUiIntent.ToggleWbwReveal -> toggleWbwReveal(intent.wordKey)
             is QuranUiIntent.SelectMushafLayout -> selectMushafLayout(intent.layout)
             is QuranUiIntent.SelectQulWord -> selectQulWord(intent.wordKey)
@@ -724,6 +729,13 @@ class QuranViewModel(
         _uiState.update { it.copy(wbwLayoutMode = mode) }
         quranReaderPreferences?.wbwLayoutMode = mode
         if (mode.showsMorphology) loadWbwMorphology(selectedSurahNumber.value)
+    }
+
+    /** Shows or hides the word-by-word strip and remembers the choice across restarts. */
+    private fun setWbwEnabled(enabled: Boolean) {
+        if (_uiState.value.wbwEnabled == enabled) return
+        _uiState.update { it.copy(wbwEnabled = enabled) }
+        quranReaderPreferences?.wbwEnabled = enabled
     }
 
     /** Flips one word between masked and revealed in the vocabulary quiz. */

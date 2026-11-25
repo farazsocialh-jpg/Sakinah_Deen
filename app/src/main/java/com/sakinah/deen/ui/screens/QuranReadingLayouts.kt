@@ -1,8 +1,10 @@
 package com.sakinah.deen.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,23 +18,32 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
@@ -44,6 +55,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,9 +65,11 @@ import com.sakinah.deen.data.quran.QulMorphology
 import com.sakinah.deen.data.quran.QulWord
 import com.sakinah.deen.R
 import com.sakinah.deen.data.prefs.QuranReadingLayout
+import com.sakinah.deen.data.prefs.QuranReadingMode
 import com.sakinah.deen.data.prefs.WbwLayoutMode
 import com.sakinah.deen.ui.components.ArabicVerseBlock
 import com.sakinah.deen.ui.components.SakinahCard
+import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.theme.UthmanicFontFamily
 import com.sakinah.deen.util.ArabicNormalizer
 
@@ -70,6 +84,8 @@ internal data class QuranAyahUiState(
     val bookmarkedAyahNumbers: Set<Int> = emptySet(),
     /** Word-by-word presentation plus the state the modes that need it read from. */
     val wbwMode: WbwLayoutMode = WbwLayoutMode.DEFAULT,
+    /** False hides the word-by-word strip without forgetting [wbwMode]. */
+    val wbwEnabled: Boolean = true,
     val selectedWbwWordKey: String? = null,
     val revealedWbwWordKeys: Set<String> = emptySet(),
     val wbwMorphology: Map<String, QulMorphology> = emptyMap()
@@ -571,7 +587,7 @@ private fun WbwWordsBlock(
     onToggleReveal: (QulWord) -> Unit,
     fontSizeSp: Int = 18
 ) {
-    if (words.isEmpty()) return
+    if (words.isEmpty() || !state.wbwEnabled) return
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         when (state.wbwMode) {
             WbwLayoutMode.INTERLINEAR_RTL ->
@@ -990,5 +1006,870 @@ internal fun QuranReadingLayoutContent(
             surah, state, onAyahClick, onTafseer, onTagMistake, onToggleBookmark, listState,
             wbwWords, qulScript, onWordClick, onToggleWbwReveal
         )
+    }
+}
+
+// ----------------------------------------------------------------------------------------
+// Reading options sheet with a pinned Live Mini-Preview
+// ----------------------------------------------------------------------------------------
+
+/**
+ * The reading-options sheet: a pinned preview that answers "what will this look like?"
+ * before the reader leaves the sheet, and the controls that change it directly below.
+ *
+ * The preview renders Surah Al-Fatihah 1:1 from the bundled data only — the Uthmani line is
+ * the same verbatim string the reader shows, the IndoPak line is the QUL column, and the
+ * word tokens are the four QUL rows for 1:1. Nothing here invents or rewrites Quranic text.
+ */
+@Composable
+internal fun QuranReadingOptionsSheet(
+    readingMode: QuranReadingMode,
+    onReadingModeSelect: (QuranReadingMode) -> Unit,
+    readingLayout: QuranReadingLayout,
+    onReadingLayoutSelect: (QuranReadingLayout) -> Unit,
+    wbwEnabled: Boolean,
+    onWbwEnabledChange: (Boolean) -> Unit,
+    wbwLayoutMode: WbwLayoutMode,
+    onWbwLayoutSelect: (WbwLayoutMode) -> Unit,
+    wbwScript: String,
+    onWbwScriptSelect: (String) -> Unit,
+    wbwLanguages: List<String>,
+    wbwLanguage: String,
+    onWbwLanguageSelect: (String) -> Unit,
+    translationLanguage: String,
+    onSearch: () -> Unit,
+    onBookmarks: () -> Unit,
+    onTranslation: () -> Unit,
+    onTafsir: () -> Unit,
+    hifzEnabled: Boolean,
+    onHifzChange: (Boolean) -> Unit,
+    offlineSummary: String? = null
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.quran_options_title),
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(Modifier.height(8.dp))
+        // Search sits above the preview so it is reachable without scrolling past it.
+        Surface(
+            onClick = onSearch,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(17.dp)
+                )
+                Text(
+                    text = stringResource(R.string.quran_options_search),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        LiveMiniPreviewCard(
+            readingMode = readingMode,
+            readingLayout = readingLayout,
+            wbwEnabled = wbwEnabled,
+            wbwLayoutMode = wbwLayoutMode,
+            script = wbwScript,
+            translationLanguage = translationLanguage
+        )
+        // Only this column scrolls; the preview above stays pinned while options move.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState())
+                .padding(top = 10.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            ReadingOptionsSectionLabel(stringResource(R.string.quran_reading_mode_title))
+            SegmentedPillBar(
+                options = QuranReadingMode.entries.map { it.localizedLabel() },
+                selectedIndex = QuranReadingMode.entries.indexOf(readingMode).coerceAtLeast(0),
+                onSelect = { index ->
+                    QuranReadingMode.entries.getOrNull(index)?.let(onReadingModeSelect)
+                }
+            )
+
+            ReadingOptionsSectionLabel(stringResource(R.string.quran_layout_menu_title))
+            SegmentedPillBar(
+                options = QuranReadingLayout.entries.map { it.shortLabel() },
+                selectedIndex = QuranReadingLayout.entries.indexOf(readingLayout).coerceAtLeast(0),
+                onSelect = { index ->
+                    QuranReadingLayout.entries.getOrNull(index)?.let(onReadingLayoutSelect)
+                }
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.quran_wbw_title),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (wbwEnabled) {
+                        Text(
+                            text = wbwLayoutMode.wbwTitle(),
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Switch(checked = wbwEnabled, onCheckedChange = onWbwEnabledChange)
+            }
+            AnimatedVisibility(visible = wbwEnabled) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = stringResource(R.string.quran_wbw_layout_title),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    WbwLayoutCardGrid(selected = wbwLayoutMode, onSelect = onWbwLayoutSelect)
+                    if (wbwLanguages.isNotEmpty()) {
+                        Text(
+                            text = stringResource(R.string.quran_wbw_language_title),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            wbwLanguages.forEach { code ->
+                                val selected = code == wbwLanguage
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (selected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.surfaceVariant,
+                                    modifier = Modifier.clickable { onWbwLanguageSelect(code) }
+                                ) {
+                                    Text(
+                                        text = wbwLanguageLabel(code),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (selected) MaterialTheme.colorScheme.onPrimary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(
+                thickness = 1.dp,
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+            )
+            ReadingOptionsSectionLabel(stringResource(R.string.quran_script_title))
+            SegmentedPillBar(
+                options = listOf(
+                    stringResource(R.string.quran_wbw_script_uthmani),
+                    stringResource(R.string.quran_wbw_script_indopak)
+                ),
+                selectedIndex = if (wbwScript == QulWord.QUL_SCRIPT_INDOPAK) 1 else 0,
+                onSelect = { index ->
+                    onWbwScriptSelect(
+                        if (index == 1) QulWord.QUL_SCRIPT_INDOPAK
+                        else QulWord.QUL_SCRIPT_UTHMANI
+                    )
+                }
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.quran_translation_language_title),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = translationLanguage,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                TextButton(onClick = onTranslation) {
+                    Text(stringResource(R.string.quran_option_change), fontSize = 12.sp)
+                }
+            }
+            HorizontalDivider(
+                thickness = 1.dp,
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ReadingOptionLink(
+                    icon = Icons.Default.Bookmark,
+                    label = stringResource(R.string.quran_options_bookmarks),
+                    onClick = onBookmarks,
+                    modifier = Modifier.weight(1f)
+                )
+                ReadingOptionLink(
+                    icon = Icons.Default.Book,
+                    label = stringResource(R.string.quran_options_tafseer),
+                    onClick = onTafsir,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.quran_options_hifz),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Switch(checked = hifzEnabled, onCheckedChange = onHifzChange)
+            }
+            offlineSummary?.let { summary ->
+                Text(
+                    text = summary,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReadingOptionsSectionLabel(text: String) {
+    Text(
+        text = text,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 12.sp,
+        color = MaterialTheme.colorScheme.onSurface
+    )
+}
+
+@Composable
+private fun ReadingOptionLink(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp)
+            )
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+/** Two compact cards per row for the six word-by-word presentations. */
+@Composable
+private fun WbwLayoutCardGrid(
+    selected: WbwLayoutMode,
+    onSelect: (WbwLayoutMode) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        WbwLayoutMode.entries.chunked(2).forEach { pair ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                pair.forEach { mode ->
+                    WbwLayoutCard(
+                        mode = mode,
+                        isSelected = mode == selected,
+                        onClick = { onSelect(mode) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun WbwLayoutCard(
+    mode: WbwLayoutMode,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+        border = if (isSelected) {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f))
+        } else {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+        },
+        modifier = modifier
+            .heightIn(min = 58.dp)
+            .clickable(onClick = onClick)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(13.dp)
+                    )
+                }
+                Text(
+                    text = mode.wbwTitle(),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Text(
+                text = mode.wbwDescription(),
+                fontSize = 9.sp,
+                lineHeight = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+// ---- Live mini preview ----------------------------------------------------------------
+
+/** The four QUL rows of 1:1, verbatim from the bundled qul_offline.db. */
+private val QUL_PREVIEW_1_1 = listOf(
+    QulWord(1, "1:1:1", 1, 1, 1, "بِسْمِ", "بِسۡمِ", "bis'mi", "In (the) name"),
+    QulWord(2, "1:1:2", 1, 1, 2, "ٱللَّهِ", "اللهِ", "l-lahi", "(of) Allah"),
+    QulWord(3, "1:1:3", 1, 1, 3, "ٱلرَّحْمَـٰنِ", "الرَّحۡمٰنِ", "l-raḥmāni", "the Most Gracious"),
+    QulWord(4, "1:1:4", 1, 1, 4, "ٱلرَّحِيمِ", "الرَّحِيۡمِ", "l-raḥīmi", "the Most Merciful")
+)
+
+/** Bundled Uthmani reading text of 1:1, exactly as the reader renders it. */
+private const val PREVIEW_1_1_UTHMANI = "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ"
+
+/** Bundled Saheeh International translation of 1:1. */
+private const val PREVIEW_1_1_TRANSLATION =
+    "In the name of Allah, the Entirely Merciful, the Especially Merciful."
+
+private fun previewArabicFor(script: String): String =
+    if (script == QulWord.QUL_SCRIPT_INDOPAK) {
+        QUL_PREVIEW_1_1.joinToString(" ") { it.indopak }
+    } else {
+        PREVIEW_1_1_UTHMANI
+    }
+
+@Composable
+private fun LiveMiniPreviewCard(
+    readingMode: QuranReadingMode,
+    readingLayout: QuranReadingLayout,
+    wbwEnabled: Boolean,
+    wbwLayoutMode: WbwLayoutMode,
+    script: String,
+    translationLanguage: String
+) {
+    val subtitle = when {
+        readingMode == QuranReadingMode.MUSHAF -> stringResource(R.string.quran_preview_mode_mushaf)
+        readingLayout == QuranReadingLayout.DIVIDER_HAIRLINE ->
+            stringResource(R.string.quran_preview_layout_hairline)
+        readingLayout == QuranReadingLayout.CONTINUOUS_MUSHAF ->
+            stringResource(R.string.quran_preview_layout_mushaf)
+        readingLayout == QuranReadingLayout.SPLIT_COLUMN ->
+            stringResource(R.string.quran_preview_layout_split)
+        else -> stringResource(R.string.quran_preview_layout_dock)
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                    )
+                    Text(
+                        text = stringResource(R.string.quran_preview_label),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.quran_preview_reference),
+                    fontSize = 9.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(132.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(9.dp)
+            ) {
+                PreviewBody(
+                    readingMode = readingMode,
+                    readingLayout = readingLayout,
+                    wbwEnabled = wbwEnabled,
+                    wbwLayoutMode = wbwLayoutMode,
+                    script = script,
+                    translationLanguage = translationLanguage
+                )
+            }
+            Text(
+                text = subtitle,
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun PreviewBody(
+    readingMode: QuranReadingMode,
+    readingLayout: QuranReadingLayout,
+    wbwEnabled: Boolean,
+    wbwLayoutMode: WbwLayoutMode,
+    script: String,
+    translationLanguage: String
+) {
+    val arabic = previewArabicFor(script)
+    if (readingMode == QuranReadingMode.MUSHAF) {
+        PreviewMushafPage(arabic = arabic, translationLanguage = translationLanguage)
+        return
+    }
+    when (readingLayout) {
+        QuranReadingLayout.DIVIDER_HAIRLINE -> Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            PreviewArabicLine(arabic, fontSize = 15)
+            if (wbwEnabled) PreviewWbwStrip(wbwLayoutMode, script)
+            PreviewTranslationLine(translationLanguage, maxLines = 2)
+            HorizontalDivider(
+                thickness = 1.dp,
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+            )
+            PreviewSkeletonLine(0.85f)
+            PreviewSkeletonLine(0.6f)
+        }
+        QuranReadingLayout.CONTINUOUS_MUSHAF -> Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            PreviewArabicLine(arabic, fontSize = 16)
+            if (wbwEnabled) PreviewWbwStrip(wbwLayoutMode, script)
+            PreviewTranslationLine(translationLanguage, maxLines = 2, fontSize = 9)
+            PreviewSkeletonLine(0.9f)
+        }
+        QuranReadingLayout.SPLIT_COLUMN -> Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                Column(
+                    modifier = Modifier.weight(0.46f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    PreviewTranslationLine(translationLanguage, maxLines = 3, fontSize = 8)
+                    Text(
+                        text = stringResource(R.string.quran_options_tafseer),
+                        fontSize = 7.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .fillMaxHeight()
+                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                )
+                Column(
+                    modifier = Modifier.weight(0.54f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    PreviewArabicLine(arabic, fontSize = 12)
+                    if (wbwEnabled) PreviewWbwStrip(wbwLayoutMode, script)
+                }
+            }
+            PreviewSkeletonLine(0.8f)
+        }
+        QuranReadingLayout.THUMB_BOTTOM_DOCK -> Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = 22.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                PreviewArabicLine(arabic, fontSize = 14)
+                if (wbwEnabled) PreviewWbwStrip(wbwLayoutMode, script)
+                PreviewTranslationLine(translationLanguage, maxLines = 2, fontSize = 9)
+                PreviewSkeletonLine(0.7f)
+            }
+            Surface(
+                modifier = Modifier.align(Alignment.BottomCenter),
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                border = BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                )
+            ) {
+                Text(
+                    text = "Al-Fatihah ▾",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PreviewMushafPage(arabic: String, translationLanguage: String) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(
+            text = "سورة الفاتحة · Al-Fatihah",
+            fontSize = 8.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1
+        )
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            Text(
+                text = arabic,
+                modifier = Modifier.fillMaxWidth(),
+                fontFamily = UthmanicFontFamily,
+                fontSize = 15.sp,
+                lineHeight = 24.sp,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        PreviewTranslationLine(
+            language = translationLanguage,
+            maxLines = 2,
+            fontSize = 8,
+            center = true
+        )
+        PreviewSkeletonLine(0.95f)
+        PreviewSkeletonLine(0.7f)
+    }
+}
+
+@Composable
+private fun PreviewArabicLine(text: String, fontSize: Int) {
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        Text(
+            text = text,
+            modifier = Modifier.fillMaxWidth(),
+            fontFamily = UthmanicFontFamily,
+            fontSize = fontSize.sp,
+            lineHeight = (fontSize * 1.75f).sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun PreviewTranslationLine(
+    language: String,
+    maxLines: Int,
+    fontSize: Int = 9,
+    center: Boolean = false
+) {
+    val isEnglish = language.contains("English", ignoreCase = true)
+    Text(
+        text = if (isEnglish) PREVIEW_1_1_TRANSLATION
+        else stringResource(R.string.quran_preview_translation_language, language),
+        modifier = Modifier.fillMaxWidth(),
+        fontFamily = FontFamily.Serif,
+        fontSize = fontSize.sp,
+        lineHeight = (fontSize * 1.3f).sp,
+        textAlign = if (center) TextAlign.Center else TextAlign.Start,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis
+    )
+}
+
+@Composable
+private fun PreviewSkeletonLine(fraction: Float) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth(fraction)
+            .height(5.dp)
+            .clip(RoundedCornerShape(50))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+    )
+}
+
+/** Miniature of the six word-by-word presentations, using the bundled 1:1 word rows. */
+@Composable
+private fun PreviewWbwStrip(mode: WbwLayoutMode, script: String) {
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        when (mode) {
+            WbwLayoutMode.INTERLINEAR_RTL -> Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                QUL_PREVIEW_1_1.forEach { word ->
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = word.arabicFor(script),
+                            fontFamily = UthmanicFontFamily,
+                            fontSize = 9.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = word.translation,
+                            fontSize = 6.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            WbwLayoutMode.MUSHAF_TAP -> Text(
+                text = QUL_PREVIEW_1_1.joinToString(" ") { it.arabicFor(script) },
+                fontFamily = UthmanicFontFamily,
+                fontSize = 10.sp,
+                lineHeight = 16.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            WbwLayoutMode.VERSE_BOTTOM_DOCK -> Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = QUL_PREVIEW_1_1.joinToString(" ") { it.arabicFor(script) },
+                    fontFamily = UthmanicFontFamily,
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = QUL_PREVIEW_1_1.first().arabicFor(script),
+                            fontFamily = UthmanicFontFamily,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = QUL_PREVIEW_1_1.first().translation,
+                            fontSize = 6.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            WbwLayoutMode.WORD_CARDS_RTL -> Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                QUL_PREVIEW_1_1.forEach { word ->
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 3.dp, vertical = 2.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = word.arabicFor(script),
+                                fontFamily = UthmanicFontFamily,
+                                fontSize = 8.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = word.translation,
+                                fontSize = 5.5.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+            WbwLayoutMode.GLOSSARY_LIST -> Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(1.dp)
+            ) {
+                QUL_PREVIEW_1_1.take(2).forEach { word ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = word.arabicFor(script),
+                            fontFamily = UthmanicFontFamily,
+                            fontSize = 9.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = word.translation,
+                            modifier = Modifier.weight(1f),
+                            fontSize = 6.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = word.transliteration,
+                            fontSize = 5.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+            WbwLayoutMode.VOCAB_QUIZ -> Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                QUL_PREVIEW_1_1.forEach { word ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = word.arabicFor(script),
+                            fontFamily = UthmanicFontFamily,
+                            fontSize = 9.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = stringResource(R.string.quran_wbw_quiz_masked),
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                fontSize = 6.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }

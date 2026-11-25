@@ -522,6 +522,18 @@
     <string name="quran_share_subject">Quran ayah</string>
     <string name="quran_reference">Quran %1$d:%2$d</string>
     <string name="quran_surah_chip">Surah %1$d</string>
+    <string name="quran_preview_label">Live preview</string>
+    <string name="quran_preview_reference">Surah Al-Fatihah · 1:1</string>
+    <string name="quran_preview_translation_language">%1$s translation</string>
+    <string name="quran_preview_layout_hairline">Hairline: one verse per block above a thin divider.</string>
+    <string name="quran_preview_layout_mushaf">Mushaf: verses flow together, translation tucked under.</string>
+    <string name="quran_preview_layout_split">Split: translation on the left, Arabic on the right.</string>
+    <string name="quran_preview_layout_dock">Dock: one-handed reading with a floating bottom dock.</string>
+    <string name="quran_preview_mode_mushaf">Mushaf page: the whole surah flows without per-verse dividers.</string>
+    <string name="quran_script_title">Script</string>
+    <string name="quran_translation_language_title">Translation language</string>
+    <string name="quran_wbw_language_title">Word-by-word language</string>
+    <string name="quran_option_change">Change</string>
 
     <string name="hadith_tab_books">Books</string>
     <string name="hadith_tab_daily">Daily</string>

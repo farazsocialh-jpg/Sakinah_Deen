@@ -269,6 +269,7 @@ fun QuranScreen(
         focusMode = focusMode,
         bookmarkedAyahNumbers = state.bookmarkedAyahNumbers,
         wbwMode = state.wbwLayoutMode,
+        wbwEnabled = state.wbwEnabled,
         selectedWbwWordKey = state.selectedQulWord?.wordKey,
         revealedWbwWordKeys = state.revealedWbwWordKeys,
         wbwMorphology = state.wbwMorphology
@@ -977,159 +978,60 @@ fun QuranScreen(
 
     if (showQuranOptions) {
         ModalBottomSheet(onDismissRequest = { showQuranOptions = false }) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.quran_options_title),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                TextButton(onClick = { searchExpanded = true; showQuranOptions = false }) {
-                    Icon(Icons.Default.Search, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.quran_options_search))
-                }
-                // Reading mode and layout are both selectable here and in the pill bar.
-                Text(
-                    text = stringResource(R.string.quran_reading_mode_title),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp
-                )
-                SegmentedPillBar(
-                    options = QuranReadingMode.entries.map { it.localizedLabel() },
-                    selectedIndex = QuranReadingMode.entries.indexOf(state.readingMode).coerceAtLeast(0),
-                    onSelect = { index ->
-                        QuranReadingMode.entries.getOrNull(index)?.let {
-                            vm.onIntent(QuranUiIntent.SetReadingMode(it))
-                        }
-                    }
-                )
-                Text(
-                    text = stringResource(R.string.quran_layout_menu_title),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp
-                )
-                SegmentedPillBar(
-                    options = QuranReadingLayout.entries.map { it.shortLabel() },
-                    selectedIndex = QuranReadingLayout.entries.indexOf(readingLayout),
-                    onSelect = { index ->
-                        QuranReadingLayout.entries.getOrNull(index)?.let {
-                            appearancePrefs.updateQuranReadingLayout(it)
-                        }
-                    }
-                )
-                Text(
-                    text = stringResource(R.string.quran_wbw_title),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp
-                )
-                Text(
-                    text = stringResource(R.string.quran_wbw_layout_title),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                WbwLayoutPicker(
-                    selected = state.wbwLayoutMode,
-                    onSelect = { mode -> vm.onIntent(QuranUiIntent.SelectWbwLayout(mode)) }
-                )
-                if (state.availableWbwLanguages.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.quran_wbw_loading),
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        state.availableWbwLanguages.forEach { code ->
-                            val selected = code == state.wbwLanguage
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = if (selected) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.surfaceVariant,
-                                modifier = Modifier.clickable {
-                                    vm.onIntent(QuranUiIntent.SelectWbwLanguage(code))
-                                }
-                            ) {
-                                Text(
-                                    text = wbwLanguageLabel(code),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (selected) MaterialTheme.colorScheme.onPrimary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                )
-                            }
-                        }
-                    }
-                    SegmentedPillBar(
-                        options = listOf(
-                            stringResource(R.string.quran_wbw_script_uthmani),
-                            stringResource(R.string.quran_wbw_script_indopak)
-                        ),
-                        selectedIndex = if (state.qulScript == QulWord.QUL_SCRIPT_INDOPAK) 1 else 0,
-                        onSelect = { index ->
-                            vm.onIntent(
-                                QuranUiIntent.SelectQulScript(
-                                    if (index == 1) QulWord.QUL_SCRIPT_INDOPAK
-                                    else QulWord.QUL_SCRIPT_UTHMANI
-                                )
-                            )
-                        }
+            QuranReadingOptionsSheet(
+                readingMode = state.readingMode,
+                onReadingModeSelect = { mode ->
+                    vm.onIntent(QuranUiIntent.SetReadingMode(mode))
+                },
+                readingLayout = readingLayout,
+                onReadingLayoutSelect = { layout ->
+                    appearancePrefs.updateQuranReadingLayout(layout)
+                },
+                wbwEnabled = state.wbwEnabled,
+                onWbwEnabledChange = { enabled ->
+                    vm.onIntent(QuranUiIntent.SetWbwEnabled(enabled))
+                },
+                wbwLayoutMode = state.wbwLayoutMode,
+                onWbwLayoutSelect = { mode ->
+                    vm.onIntent(QuranUiIntent.SelectWbwLayout(mode))
+                },
+                wbwScript = state.qulScript,
+                onWbwScriptSelect = { script ->
+                    vm.onIntent(QuranUiIntent.SelectQulScript(script))
+                },
+                wbwLanguages = state.availableWbwLanguages,
+                wbwLanguage = state.wbwLanguage,
+                onWbwLanguageSelect = { code ->
+                    vm.onIntent(QuranUiIntent.SelectWbwLanguage(code))
+                },
+                translationLanguage = state.selectedTranslationLanguage,
+                onSearch = {
+                    searchExpanded = true
+                    showQuranOptions = false
+                },
+                onBookmarks = {
+                    showBookmarks = true
+                    showQuranOptions = false
+                },
+                onTranslation = {
+                    studioSheetTab = 1
+                    showQuranOptions = false
+                },
+                onTafsir = {
+                    studioSheetTab = 2
+                    showQuranOptions = false
+                },
+                hifzEnabled = hifzOverlayActive,
+                onHifzChange = { hifzOverlayActive = it },
+                offlineSummary = state.offlineStatus?.let { status ->
+                    pluralStringResource(
+                        R.plurals.quran_offline_compact,
+                        status.totalAyahs,
+                        status.ayahsAvailable,
+                        status.totalAyahs
                     )
                 }
-                TextButton(onClick = { showBookmarks = true; showQuranOptions = false }) {
-                    Icon(Icons.Default.Bookmark, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.quran_options_bookmarks))
-                }
-                TextButton(onClick = { studioSheetTab = 1; showQuranOptions = false }) {
-                    Icon(Icons.Default.Translate, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.quran_options_translation))
-                }
-                TextButton(onClick = { studioSheetTab = 2; showQuranOptions = false }) {
-                    Icon(Icons.Default.Book, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.quran_options_tafseer))
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.quran_options_hifz),
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Switch(
-                        checked = hifzOverlayActive,
-                        onCheckedChange = { hifzOverlayActive = it }
-                    )
-                }
-                state.offlineStatus?.let { status ->
-                    Text(
-                        text = pluralStringResource(
-                            R.plurals.quran_offline_compact,
-                            status.totalAyahs,
-                            status.ayahsAvailable,
-                            status.totalAyahs
-                        ),
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            )
         }
     }
 
@@ -1341,64 +1243,6 @@ internal fun QuranReadingLayout.shortLabel(): String = when (this) {
 internal fun QuranReadingMode.localizedLabel(): String = when (this) {
     QuranReadingMode.STUDY -> stringResource(R.string.quran_mode_study)
     QuranReadingMode.MUSHAF -> stringResource(R.string.quran_mode_mushaf)
-}
-
-/**
- * Word-by-word layout picker: all six [WbwLayoutMode] presentations, each with the one
- * reason to choose it. Lives in the reading-options sheet next to the language and script.
- */
-@Composable
-private fun WbwLayoutPicker(
-    selected: WbwLayoutMode,
-    onSelect: (WbwLayoutMode) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        WbwLayoutMode.entries.forEach { mode ->
-            val isSelected = mode == selected
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                border = if (isSelected) {
-                    BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
-                } else {
-                    null
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSelect(mode) }
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (isSelected) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = mode.wbwTitle(),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = mode.wbwDescription(),
-                            fontSize = 10.sp,
-                            lineHeight = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable
@@ -1799,7 +1643,7 @@ private fun QulMorphologyRow(label: String, value: String) {
 }
 
 /** Human label for a QUL WBW language code. */
-private fun wbwLanguageLabel(code: String): String = when (code) {
+internal fun wbwLanguageLabel(code: String): String = when (code) {
     "en" -> "English"
     "ur" -> "Urdu"
     "id" -> "Indonesian"
