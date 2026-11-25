@@ -8,6 +8,12 @@ name: AI Human QA (Arbigent)
 
 on:
   workflow_dispatch:
+    inputs:
+      gemini_model:
+        description: "Gemini model id for the AI agent"
+        required: false
+        default: gemini-3.8-flash
+        type: string
 
 permissions:
   contents: read
@@ -23,6 +29,9 @@ jobs:
       # The wrapper needs a pinned release: no arbigentw.properties ships with the
       # app repo, so it bootstraps one from this version on first run.
       ARBIGENT_VERSION: "0.89.0"
+      # Overridable from the Run workflow form, so a renamed/deprecated model
+      # does not need a code change. 2.5-flash returns 404 for new API keys.
+      GEMINI_MODEL: ${{ inputs.gemini_model || 'gemini-3.8-flash' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -76,7 +85,7 @@ jobs:
           # gemini.apikey). Written to the gitignored local settings file so the key
           # never reaches the repository, a commit, or the uploaded artifact.
           umask 077
-          printf 'ai-type: gemini\ngemini-model-name: gemini-2.5-flash\ngemini-api-key: "%s"\n' "$GEMINI_API_KEY" \
+          printf 'ai-type: gemini\ngemini-model-name: %s\ngemini-api-key: "%s"\n' "$GEMINI_MODEL" "$GEMINI_API_KEY" \
             > .arbigent/settings.local.yml
 
       - name: Boot Emulator & Run AI UX Agent
@@ -89,7 +98,7 @@ jobs:
           disable-animations: true
           script: |
             adb install -r app/build/outputs/apk/debug/app-debug.apk
-            ./arbigentw run --os=android --project-file=.arbigent/imancore_ux_audit.yaml --ai-type=gemini --gemini-model-name=gemini-2.5-flash
+            ./arbigentw run --os=android --project-file=.arbigent/imancore_ux_audit.yaml --ai-type=gemini --gemini-model-name="$GEMINI_MODEL"
 
       - name: Upload AI QA Report & Screenshots
         if: always()

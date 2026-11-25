@@ -4,7 +4,7 @@
 #
 # Run locally / in CI with:
 #   arbigentw run --os=android --project-file=.arbigent/imancore_ux_audit.yaml \
-#     --ai-type=gemini --gemini-model-name=gemini-2.5-flash
+#     --ai-type=gemini --gemini-model-name=gemini-3.8-flash
 
 settings:
   variables:
