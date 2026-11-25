@@ -2,7 +2,7 @@
 #
 # Rules this file follows:
 #  * Every scenario is INDEPENDENT: CleanupData + LaunchApp, no `dependency:` chain. One
-#    broken screen can therefore never stop the remaining nine scenarios from running.
+#    broken screen can therefore never stop the remaining scenarios from running.
 #  * Arbigent only evaluates `imageAssertions` on the FINAL screenshot of a scenario, so
 #    each scenario ends on the exact screen its assertions grade.
 #  * Android runtime permission dialogs are handled inside the goal text: they are denied
@@ -35,9 +35,14 @@ settings:
       ("Verse by verse", "Mushaf page") and a bottom pill bar with Layout controls.
       Hadith: Books / Daily / Search / Saved tabs, collection cards with an "Open" button.
       Scholar: AI chat with quick prompts and an input bar above the bottom navigation.
-      Tools: sections "Islamic Tools", "Discover", "Settings", "Support & About" with
-      tiles such as Tasbih, Zakat & Sadaqah Jar, Travel / Safar, Visual Salah Posture
-      Guide, "Appearance & Reading", "Replay Quick Tour" and Prayer & Location.
+      Tools: an account card, then the sections "ISLAMIC TOOLS" (Visual Salah Posture
+      Guide, Zakat & Sadaqah Jar), "DISCOVER" (Replay Quick Tour, What's New, Offline
+      Capabilities), "SETTINGS" (Prayer & Location, Prayer Notifications, Appearance &
+      Reading, Quran & Offline Packs) and "SUPPORT & ABOUT" (Help & Feedback, Islamic
+      Data Sources, Privacy & Terms, About ImanCore). There is NO Tasbih tile and NO
+      Travel tile on this hub: travel settings live under Tools -> Prayer & Location, in
+      its "Travel & Car" section, and Qadha opens from the "Qadha" pill in the Salah
+      header.
     additionalSystemPrompts:
       - |-
         You are also a senior mobile UX reviewer. Before each action, add a short review
@@ -131,15 +136,12 @@ scenarios:
         packageName: "{{appId}}"
     goal: |-
       0. Dismiss any Android permission dialog. Tap "Skip" if onboarding appears.
-      1. On the Salah screen, switch to the "Qibla" tab.
-      2. In "Compass" mode, inspect the compass/direction indicator, the degree readout,
-         the location line and the status badge (for example "Magnet-Free"). Judge that
-         badge's contrast against its background.
-      3. Tap "Sun" mode and verify it renders cleanly - real graphics and labels, not a
-         blank area or an endless spinner.
-      4. Tap "Map" mode LAST. Wait at least 4 seconds for the WebView/Leaflet tiles to
-         load, without tapping again. Inspect the map area.
-    maxStep: 14
+      1. Tap the "Qibla" tab on the Salah screen.
+      2. In "Compass", check the degree readout, the location line and the status badge
+         (for example "Magnet-Free") for readable contrast.
+      3. Tap "Sun" and confirm it shows content, not a blank area or endless spinner.
+      4. Tap "Map", wait 3 seconds without tapping again, and finish there.
+    maxStep: 10
     imageAssertions:
       - assertionPrompt: "Qibla Map mode renders visible map tiles or graphics (NOT a blank solid-color rectangle) and all badges including Magnet-Free have readable contrast."
 
@@ -212,7 +214,7 @@ scenarios:
       - assertionPrompt: "AI Scholar chat input, send button, and message bubbles are unobstructed and clearly readable."
 
   # ------------------------------------------------------------- tools
-  - id: "08-tools-tasbih-wealth-travel-qadha"
+  - id: "08-tools-zakat-and-visual-guide"
     initializationMethods:
       - type: "CleanupData"
         packageName: "{{appId}}"
@@ -220,17 +222,33 @@ scenarios:
         packageName: "{{appId}}"
     goal: |-
       0. Dismiss any Android permission dialog. Tap "Skip" if onboarding appears.
-      1. Open "Tools".
-      2. Test Tasbih: tap the counter 5 times and verify the count reads 5, tap Reset and
-         verify it returns to 0. Go back.
-      3. Open "Zakat & Sadaqah Jar" (Wealth): enter "10000" into a numeric asset field and
-         verify the Zakat calculation updates without crashing or clipping. Go back.
-      4. Open "Travel / Safar": verify its toggles/controls work, then go back.
-      5. Open the Qadha tracker from the Salah header's "Qadha" pill, verify it renders,
-         then return. Finish on the Tools hub.
-    maxStep: 24
+      1. Open "Tools" and find the "ISLAMIC TOOLS" section.
+      2. Tap "Zakat & Sadaqah Jar". Type "10000" into the "Cash in Hand & Bank Accounts"
+         field and check the Zakat payable summary updates without clipping or crashing.
+         Go back to Tools.
+      3. Tap "Visual Salah Posture Guide", step through two postures, then go back to
+         Tools. Stay on the Tools hub.
+    maxStep: 14
     imageAssertions:
-      - assertionPrompt: "Tools, Zakat inputs, Tasbih, and Travel screens are responsive, uncluttered, and readable."
+      - assertionPrompt: "The Tools hub renders clean sections and readable tile titles/subtitles with no clipped or overlapping text."
+
+  # ---------------------------------------------- travel settings + qadha ledger
+  - id: "08b-travel-mode-and-qadha"
+    initializationMethods:
+      - type: "CleanupData"
+        packageName: "{{appId}}"
+      - type: "LaunchApp"
+        packageName: "{{appId}}"
+    goal: |-
+      0. Dismiss any Android permission dialog. Tap "Skip" if onboarding appears.
+      1. Open "Tools" and tap "Prayer & Location" under the "SETTINGS" section.
+      2. Scroll to the "Travel & Car" section, toggle "Travel Mode" once, and check the
+         "Dua al-Safar" row renders. Go back.
+      3. Open the "Salah" tab and tap the "Qadha" pill in the header. Check the Qadha
+         ledger rows and its increment/decrement buttons, then leave the dialog open.
+    maxStep: 18
+    imageAssertions:
+      - assertionPrompt: "The Qadha ledger dialog shows readable prayer rows with visible increment/decrement and confirm controls, with no clipped or overlapping text."
 
   # ------------------------------------------------------- settings/profile
   - id: "09-settings-notifications-and-profile"

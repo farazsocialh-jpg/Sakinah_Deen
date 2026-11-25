@@ -307,6 +307,7 @@ fun PersonalizedOnboardingScreen(
                             config = config,
                             accent = accent,
                             accentSoft = accentSoft,
+                            onAccent = onAccent,
                             onConfigChange = ::updateConfig
                         )
                         2 -> ThemeStep(
@@ -318,6 +319,7 @@ fun PersonalizedOnboardingScreen(
                         else -> SetupStep(
                             permissions = permissions,
                             accent = accent,
+                            onAccent = onAccent,
                             accentSoft = accentSoft,
                             onAccentSoft = onAccentSoft,
                             onAllowLocation = {
@@ -707,6 +709,7 @@ private fun JourneyStep(
     config: UserAppearanceConfig,
     accent: Color,
     accentSoft: Color,
+    onAccent: Color,
     onConfigChange: (UserAppearanceConfig) -> Unit
 ) {
     val experiences = listOf(EXPERIENCE_NEW, EXPERIENCE_PRACTICING, EXPERIENCE_STUDENT)
@@ -759,6 +762,7 @@ private fun JourneyStep(
                         selected = config.objective == objective,
                         accent = accent,
                         accentSoft = accentSoft,
+                        onAccent = onAccent,
                         modifier = Modifier.weight(1f),
                         // Tapping a focus must not overwrite an already chosen palette or Focus Mode.
                         onClick = { onConfigChange(config.copy(objective = objective)) }
@@ -776,6 +780,7 @@ private fun FocusTile(
     selected: Boolean,
     accent: Color,
     accentSoft: Color,
+    onAccent: Color,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
@@ -801,7 +806,7 @@ private fun FocusTile(
                 Icon(
                     imageVector = objectiveIcon(objective),
                     contentDescription = null,
-                    tint = if (selected) Color.White else accent,
+                    tint = if (selected) onAccent else accent,
                     modifier = Modifier.size(17.dp)
                 )
             }
@@ -954,6 +959,7 @@ private fun StepperButton(
 private fun SetupStep(
     permissions: PermissionState,
     accent: Color,
+    onAccent: Color,
     accentSoft: Color,
     onAccentSoft: Color,
     onAllowLocation: () -> Unit,
@@ -1004,6 +1010,7 @@ private fun SetupStep(
                     PermissionTile(
                         model = tile,
                         accent = accent,
+                        onAccent = onAccent,
                         accentSoft = accentSoft,
                         onAccentSoft = onAccentSoft,
                         modifier = Modifier.weight(1f)
@@ -1033,6 +1040,7 @@ private data class PermissionTileModel(
 private fun PermissionTile(
     model: PermissionTileModel,
     accent: Color,
+    onAccent: Color,
     accentSoft: Color,
     onAccentSoft: Color,
     modifier: Modifier = Modifier
@@ -1093,7 +1101,7 @@ private fun PermissionTile(
                     },
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (model.granted) Color.White else accent
+                    color = if (model.granted) onAccent else accent
                 )
             }
         }
