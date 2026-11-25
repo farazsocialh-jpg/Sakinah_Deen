@@ -1,55 +1,295 @@
-# AI-driven UX audit for ImanCore.
-# Arbigent drives the app from screenshots + the UI tree like a human user, so these
-# scenarios describe what a person should experience instead of brittle selectors.
+# AI-driven UX audit for ImanCore (Sakinah Deen).
+#
+# Shape of the audit: one scenario per screen, not one scenario per journey. Arbigent
+# only runs imageAssertions on the FINAL screenshot of a scenario, so the only way to
+# get a per-screen verdict on clutter / layout / visibility / theming is to end a
+# scenario on that screen. Dependencies chain them so the app stays in one session:
+# onboarding -> salah -> qibla -> quran -> hadith -> tools -> settings.
+#
+# Each screen is graded on the four questions from the brief, worded as statements the
+# image assertion model has to agree with (it passes at >= requiredFulfillmentPercent):
+#   1. CLUTTER     - is the screen focused, or does everything compete for attention?
+#   2. LAYOUT      - clipping, overlap, cramped rows, content pushed off-screen
+#   3. VISIBILITY  - contrast and text size in the current (dark) theme
+#   4. THEME       - deliberate, industry-standard Islamic app look vs. default Material
+# A failing assertion is the finding: the model writes why it disagreed into result.yml
+# and the HTML report, which is the actual UX critique.
+#
+# `settings.prompt.additionalSystemPrompts` also asks the agent to write a one-line
+# CLUTTER / LAYOUT / VISIBILITY / THEME note per step, so the report has a running
+# review of every tap, not just the final screen.
 #
 # Run locally / in CI with:
 #   arbigentw run --os=android --project-file=.arbigent/imancore_ux_audit.yaml \
 #     --ai-type=gemini --gemini-model-name=gemini-3.5-flash-lite
-
+#
+# Package name is com.imancore.app (applicationId). "com.sakinah.deen" is only the
+# Kotlin namespace, so using it would leave the app never installed/launched.
 settings:
-  variables:
-    # applicationId from app/build.gradle.kts ("com.sakinah.deen" is only the Kotlin
-    # namespace, so using it here would leave the app never installed/launched).
-    appId: "com.imancore.app"
+  # Default is 3 retries per scenario. This audit has 10 scenarios, and the Gemini free
+  # tier allows 500 requests/day, so one genuinely broken screen must not burn 4x.
+  maxRetry: 1
+  prompt:
+    appUiStructure: |-
+      ImanCore is an Islamic companion app for Android.
+      First launch shows a short onboarding: Welcome (preferred name), About you
+      (experience level + what to start with), Appearance (theme mode, font sizes, a
+      LIVE PREVIEW card), Permissions (Location, Notifications, Exact Alarms, Battery),
+      then a button labelled "Open ImanCore".
+      After onboarding the bottom navigation has five tabs: Salah, Quran, Hadith,
+      Scholar, Tools.
+      Salah opens on a "Times" tab with a "Today: X/Y Prayed" progress strip, prayer rows
+      (Fajr, Dhuhr, Asr, Maghrib, Isha) with completion controls, and a "Qibla" tab with
+      Compass / Map / Sun modes.
+      Quran is a surah list that opens a reader. Hadith is a books list that opens
+      chapters, then hadith text. Tools is a hub of extra features (e.g. Safar, Zakat,
+      Settings).
+    additionalSystemPrompts:
+      - |-
+        You are also a senior mobile UX reviewer auditing this app for a human team.
+        On every step, before choosing an action, add a short review of the CURRENT
+        screen to your reply using exactly these four labels, one line each:
+        CLUTTER: how busy the screen is, how many elements compete with the main action.
+        LAYOUT: alignment, spacing, anything clipped, overlapping or pushed off-screen.
+        VISIBILITY: text contrast, text size, labels that are hard to read.
+        THEME: whether colours and type look like a deliberate, modern Islamic app theme
+        (industry standard) rather than Android's default Material look.
+        Be specific and blunt - name the element you are judging. Still perform the taps
+        in the goal; the review must not stop you from completing it.
 
 scenarios:
-  - id: "onboarding-human-ux"
-    goal: |
-      Act as a first-time Muslim user opening ImanCore for the first time.
-      1. On the welcome screen, read the text, tap the "Preferred name (optional)" field,
-         type "Faraz", dismiss the keyboard, and tap "Continue".
-      2. On the next step, confirm it greets Faraz by name, choose "Practicing Muslim",
-         choose "Prayer consistency", and tap "Continue".
-      3. On the appearance step, switch the theme to "Dark" mode, check that the
-         "LIVE PREVIEW" Arabic text and its translation stay legible, and tap "Continue".
-      4. On the setup step, verify all 4 permission tiles (Location, Notifications,
-         Exact Alarms, Battery) and their Allow/Allowed buttons have clear readable text
-         with no invisible white-on-white buttons, then tap "Open ImanCore".
-      Do not grant the system permission dialogs yourself if they appear over the app;
-      return to ImanCore instead.
-    maxStep: 20
+  # ---------------------------------------------------------------- onboarding 1/4
+  # tree: onboarding-welcome | children: onboarding-goals
+  - id: "onboarding-welcome"
+    goal: |-
+      Start from a clean install, on the ImanCore welcome step. If a different
+      onboarding step is showing, press Back until you reach the "Assalamu Alaikum"
+      welcome step with the "Preferred name (optional)" field.
+      1. Review the screen as a first-time user: is the headline, the mission sentence,
+         the single name field and the main button arranged with a clear reading order,
+         or is anything crowded, clipped or competing for attention? Judge the Arabic /
+         Islamic styling of the header too.
+      2. Tap the "Preferred name (optional)" field, type "Faraz".
+      3. Dismiss the on-screen keyboard so the whole screen is visible again, then
+         confirm nothing (button, microcopy, footer) is hidden behind the keyboard or
+         left floating in the wrong place.
+      4. Tap "Continue" (do not tap "Skip").
+      Do not grant any Android system permission dialog; if one appears, dismiss or
+      ignore it and return to ImanCore.
+    maxStep: 8
     imageAssertions:
-      - assertionPrompt: "All text, icons, and permission buttons are clearly readable with strong contrast and no overlapping or clipped labels."
+      - assertionPrompt: "The welcome step has one obvious primary action, and the name field, mission text and header are not competing with each other for attention."
+      - assertionPrompt: "Nothing on this screen is clipped, overlapping, truncated mid-word, or pushed off the visible screen; all margins and alignments look deliberate."
+      - assertionPrompt: "Every label, hint text and button caption is clearly readable with strong contrast against its background."
+      - assertionPrompt: "The colours and typography look like a considered, modern Islamic app theme rather than Android's default Material purple template."
 
-  - id: "salah-and-qibla-ux"
-    dependency: "onboarding-human-ux"
-    goal: |
-      Explore the Daily Salah screen like a real user.
-      1. Mark Fajr as prayed using the Fajr prayer row's completion control and verify the
-         daily progress strip at the top updates cleanly.
-      2. Switch to the Qibla view in the Salah screen and try its Compass, Map, and Sun
-         modes; confirm each loads without an error message or blank screen.
-      3. Look for prayer names that wrap awkwardly or rows/buttons that feel cramped.
-    maxStep: 15
+  # tree: onboarding-welcome > onboarding-goals | children: onboarding-appearance
+  - id: "onboarding-goals"
+    dependency: "onboarding-welcome"
+    goal: |-
+      You have just tapped "Continue" with the name "Faraz". Confirm the next step greets
+      Faraz by name and reads "Glad you're here, Faraz" (or similar).
+      1. Review this step: the greeting, the experience-level options ("New to Islam",
+         "Practicing Muslim", "Student of Knowledge") and the "What would you like to
+         start with?" options ("Prayer consistency", "Reading Quran", "Learning & Duas",
+         "Everything together"). Count how many choices are on screen at once and say
+         whether the screen feels like a clean question or an overwhelming questionnaire.
+      2. Tap "Practicing Muslim".
+      3. Tap "Prayer consistency" and check that selected and unselected options are
+         obviously distinguishable, not just by a faint tint.
+      4. Tap "Continue".
+    maxStep: 8
     imageAssertions:
-      - assertionPrompt: "Prayer names, times, and the Qibla card are cleanly aligned with no overlapping text and no blank error states."
+      - assertionPrompt: "The selected option is unmistakably different from the unselected options, clearly readable rather than a subtle tint change."
+      - assertionPrompt: "The greeting, the two question groups and the Continue button fit without crowding; text is not clipped or overlapping and the screen still looks calm rather than like a long form."
+      - assertionPrompt: "Option labels and their supporting text are readable with comfortable tap-target spacing, not cramped against each other."
+      - assertionPrompt: "The visual style of the option cards and headings looks consistent with a polished Islamic app, not a default Material prototype."
 
-  - id: "quran-and-hadith-ux"
-    dependency: "salah-and-qibla-ux"
-    goal: |
-      Navigate to the Quran tab, open Surah Al-Fatihah, scroll down, and verify the Arabic
-      and translation text look comfortable to read. Then open the Hadith tab and confirm
-      the Books list loads cleanly.
-    maxStep: 20
+  # tree: onboarding-welcome > onboarding-goals > onboarding-appearance | children: onboarding-permissions
+  - id: "onboarding-appearance"
+    dependency: "onboarding-goals"
+    goal: |-
+      You are on the "Appearance" onboarding step (Color Theme / System, Light, Dark;
+      Overall Font Size; Arabic Size; Translation Size; a "LIVE PREVIEW" card and
+      "Continue").
+      1. Review the step: does the live preview actually let a user see the effect of the
+         controls, and is it obvious which control changes what?
+      2. Tap "Dark" under Color Theme and observe the whole screen, not just the preview.
+      3. Use "Increase" on Arabic Size once and "Decrease" on Translation Size once, and
+         check the preview does not overflow its card or clip the Arabic.
+      4. Leave Dark mode selected and tap "Continue".
+    maxStep: 12
     imageAssertions:
-      - assertionPrompt: "Quran and Hadith screens are legible, well-spaced, and free of layout glitches."
+      - assertionPrompt: "In dark mode every text element, label and control on this screen is still clearly readable; no dark-on-dark or washed-out grey text remains."
+      - assertionPrompt: "The LIVE PREVIEW Arabic text and its English translation are fully visible, correctly aligned, right-to-left aware, and not clipped by the preview card."
+      - assertionPrompt: "The theme controls, font-size steppers and Continue button are laid out in a clear hierarchy without crowding or misalignment."
+      - assertionPrompt: "The dark palette and typography look like a designed Islamic app theme rather than an inverted default Material palette."
+
+  # tree: onboarding-welcome > onboarding-goals > onboarding-appearance > onboarding-permissions
+  - id: "onboarding-permissions"
+    dependency: "onboarding-appearance"
+    goal: |-
+      You are on the "Set up once" permissions step with four tiles: Location
+      ("Salah & Qibla"), Notifications ("Azaan alerts"), Exact Alarms ("On-time
+      prayer"), Battery ("Stay reliable"), each with an "Allow" / "Allowed" button, and a
+      primary "Open ImanCore" button.
+      1. Review the step: are the four permission rows evenly spaced and is the primary
+         action clearly the last thing on the screen, or do the rows push it away?
+      2. Tap "Allow" on the Location row. If Android's system permission dialog appears,
+         choose "Don't allow" (or dismiss it) and come back to ImanCore - do not grant it.
+      3. Confirm the row's state changed visibly and honestly (no button that stays
+         looking active while doing nothing, no white-on-white label).
+      4. Scroll if needed and tap "Open ImanCore".
+    maxStep: 10
+    imageAssertions:
+      - assertionPrompt: "All four permission tiles and their Allow/Allowed buttons have readable text with strong contrast; no button label is invisible or white-on-white."
+      - assertionPrompt: "The four tiles are evenly sized, evenly spaced and aligned, with no clipped reason text and no overlap."
+      - assertionPrompt: "The primary 'Open ImanCore' action is visually dominant over the four secondary Allow buttons."
+      - assertionPrompt: "The permission cards and iconography look like part of a coherent, modern Islamic app design system."
+
+  # ------------------------------------------------------------------- salah
+  # tree: onboarding-welcome > onboarding-goals > onboarding-appearance > onboarding-permissions > salah-home | children: salah-qibla
+  - id: "salah-home"
+    dependency: "onboarding-permissions"
+    goal: |-
+      You should now be inside ImanCore on the Salah tab (bottom bar item "Salah"), on
+      its "Times" tab. If you are on another tab, tap "Salah" in the bottom bar first.
+      1. Review the top of the screen: the "Today: X/Y Prayed" progress strip, the current
+         prayer card, location/city line and the Times/Qibla tabs. Judge whether the eye
+         knows where to go first, or whether the header area is stacked with too many
+         competing bits of information.
+      2. Mark Fajr as prayed using the Fajr row's completion control and check that the
+         row's state and the "Today: X/Y Prayed" counter update consistently.
+      3. Scroll the prayer list down and back up, and note whether rows are evenly spaced,
+         whether times align in a column, and whether anything (badges like "Current
+         Prayer", "Prayed", "Upcoming", Qadha, Tahajjud) collides with the prayer name.
+      4. Look at the bottom navigation as part of this screen: five tabs "Salah", "Quran",
+         "Hadith", "Scholar", "Tools" - check the labels are not truncated or ellipsised.
+    maxStep: 14
+    imageAssertions:
+      - assertionPrompt: "The Salah Times screen has a clear visual hierarchy: the current prayer and today's progress read first, and the prayer list does not compete with the header for attention."
+      - assertionPrompt: "Prayer names, times and status badges are cleanly aligned in columns with no overlapping text and no cramped or clipped rows."
+      - assertionPrompt: "Prayer names, times, status badges and the bottom navigation labels are all readable with strong contrast, and no bottom navigation label is truncated."
+      - assertionPrompt: "The prayer cards, status chips and progress strip look like a deliberate, modern Islamic app theme, not generic default-Material surfaces."
+
+  # tree: ... > salah-home > salah-qibla | children: quran-surah-list
+  - id: "salah-qibla"
+    dependency: "salah-home"
+    goal: |-
+      From the Salah screen, tap the "Qibla" tab.
+      1. Review the Qibla view: the compass or direction indicator, the heading/degrees
+         readout, the location line and the mode controls (Compass / Map / Sun). Judge
+         whether the primary reading dominates and whether the extra numbers and buttons
+         are clutter.
+      2. Tap each of the three modes once (Compass, then Map, then Sun), waiting for each
+         to settle, and check that none of them shows a blank area, a spinner that never
+         ends, or an error text.
+      3. Return to Compass mode and check that the needle/arrow and its labels cannot be
+         confused with the degrees readout.
+    maxStep: 10
+    imageAssertions:
+      - assertionPrompt: "The Qibla view has one dominant element (the direction indicator or its reading) and the secondary numbers and mode controls do not compete with it."
+      - assertionPrompt: "No mode of the Qibla view shows a blank screen, an endless spinner or an error message in place of the compass, map or sun information."
+      - assertionPrompt: "The direction indicator, degree/heading labels and mode control labels are readable with strong contrast and are not overlapping."
+      - assertionPrompt: "The Qibla screen's circular indicator and controls look like a modern, purpose-built Islamic app design rather than unstyled Material components."
+
+  # ------------------------------------------------------------------- quran
+  # tree: ... > salah-qibla > quran-surah-list | children: quran-reader
+  - id: "quran-surah-list"
+    dependency: "salah-qibla"
+    goal: |-
+      Tap "Quran" in the bottom navigation and stay on the surah list (do not open a
+      surah yet).
+      1. Review the list: search field, any continue-reading card, surah number, Arabic
+         name, transliterated name, translation subtitle and ayah count. Judge whether
+         each row is scannable at a glance and whether the rows are overcrowded with four
+         or five pieces of information in a small space.
+      2. Type "Fatihah" into the search field and confirm the list filters to Surah
+         Al-Fatihah.
+      3. Clear the search and check the full list returns.
+      4. Note whether Arabic and Latin text sit on the same baseline in a way that looks
+         intentional, and whether any long surah name is cut off.
+    maxStep: 12
+    imageAssertions:
+      - assertionPrompt: "Each surah row is scannable: the surah number, names and ayah count are separated and aligned, not crammed together or competing with each other."
+      - assertionPrompt: "No surah name, translation or count is clipped, ellipsised awkwardly mid-word, or overlapping another element in the row."
+      - assertionPrompt: "All surah names, subtitles and counts are readable with strong contrast, and the Arabic text is comfortably sized next to the Latin text."
+      - assertionPrompt: "The surah list uses a considered Islamic-app visual language (typography, dividers, number treatment) rather than a plain default Material list."
+
+  # tree: ... > quran-surah-list > quran-reader | children: hadith-books
+  - id: "quran-reader"
+    dependency: "quran-surah-list"
+    goal: |-
+      Open "Al-Fatihah" (Surah 1) from the list.
+      1. Review the reader screen before scrolling: the surah title bar, the Bismillah,
+         and the first ayah with its Arabic text and translation. Judge line spacing,
+         Arabic size relative to the translation, and whether the ayah number marker
+         reads as part of the text or floats awkwardly.
+      2. Scroll down one screen and check that ayahs keep consistent spacing and that the
+         Arabic right-to-left block does not collide with the translation or with any
+         floating controls.
+      3. Look for the reader's controls (play/audio, font size, translation toggle,
+         bookmark) and judge whether they are discoverable or hidden/cluttered.
+    maxStep: 12
+    imageAssertions:
+      - assertionPrompt: "The reader has comfortable line spacing and a clear Arabic-versus-translation hierarchy; the translation does not crowd or overlap the Arabic."
+      - assertionPrompt: "The Arabic text is fully visible and correctly shaped and joined, the ayah markers sit cleanly at the end of each ayah, and nothing is clipped at the screen edges."
+      - assertionPrompt: "Arabic and translation text are readable with strong contrast in the current theme, and reader controls' icons and labels are distinguishable."
+      - assertionPrompt: "The reader typography and page framing look like a thoughtfully designed Quran reading experience, not a plain text dump."
+
+  # ------------------------------------------------------------------- hadith
+  # tree: ... > quran-reader > hadith-books | children: tools-hub
+  - id: "hadith-books"
+    dependency: "quran-reader"
+    goal: |-
+      Tap "Hadith" in the bottom navigation.
+      1. Review the books list: book covers or tiles, collection names, chapter counts and
+         any download/offline indicators. Judge whether the grid or list is tidy, whether
+         covers are consistently sized, and whether metadata is legible or cramped.
+      2. Open any collection (for example "Sahih al-Bukhari" or the first book shown) and
+         confirm its chapter list loads with readable chapter titles and counts.
+      3. Go back to the books list.
+    maxStep: 10
+    imageAssertions:
+      - assertionPrompt: "The books grid or list is tidy and evenly aligned: covers or tiles are consistently sized and metadata is not cramped or clipped."
+      - assertionPrompt: "Collection names, chapter counts and any offline/download labels are readable with strong contrast."
+      - assertionPrompt: "The books screen and its chapter list look like a polished, modern Islamic app rather than default Material cards with placeholder art."
+
+  # ------------------------------------------------------------------- tools
+  # tree: ... > hadith-books > tools-hub | children: settings-appearance
+  - id: "tools-hub"
+    dependency: "hadith-books"
+    goal: |-
+      Tap "Tools" in the bottom navigation (the grid icon).
+      1. Review the hub: count the tiles and note whether the grouping makes sense or the
+         grid is a flat dump of unrelated features. Judge the icon style consistency and
+         whether tile labels wrap badly.
+      2. Tap one tile, confirm the feature screen opens with a readable title, then go back.
+      3. Review the bottom navigation from here: five tabs with labels "Salah", "Quran",
+         "Hadith", "Scholar", "Tools" - check spacing and that the selected tab is obvious.
+    maxStep: 10
+    imageAssertions:
+      - assertionPrompt: "The Tools hub is organised into a legible grid: tiles are evenly sized, icons are consistent, and no label wraps badly or is clipped."
+      - assertionPrompt: "Tile icons, labels and descriptions are readable with strong contrast against their backgrounds."
+      - assertionPrompt: "The hub and the bottom navigation look like a coherent, modern Islamic app design system, with an obvious selected tab."
+
+  # ---------------------------------------------------------------- theming
+  # tree: ... > tools-hub > settings-appearance
+  - id: "settings-appearance"
+    dependency: "tools-hub"
+    goal: |-
+      From the Tools hub, open "Settings" and then the appearance / theme section (it may
+      be labelled "Appearance", "Color Theme", "Theme" or "Palette"). If you cannot find
+      it, open the Settings list and review the list itself instead, then stop.
+      1. Review the list of available colour themes / palettes and the light-dark-system
+         switch: are the palette names and swatches self-explanatory, and do they look
+         like curated brand themes or random colours?
+      2. Tap a different palette (not the default emerald one), let the app repaint, and
+         judge the result.
+      3. Switch between Light and Dark once and confirm the Settings screen itself stays
+         readable in both.
+    maxStep: 12
+    imageAssertions:
+      - assertionPrompt: "The theme or palette chooser presents swatches and names that are easy to compare, with an obvious indication of the currently selected theme."
+      - assertionPrompt: "After changing the palette, all text, switches and section headers remain readable with strong contrast and nothing looks mismatched."
+      - assertionPrompt: "The palette choices and the settings rows read as a curated, industry-standard app theme system rather than a random set of colours."

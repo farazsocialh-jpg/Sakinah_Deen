@@ -21,7 +21,9 @@ permissions:
 jobs:
   ai-ux-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The audit is one scenario per screen (10 screens, ~90 AI steps + ~35 image
+    # assertions), so it needs more than the old single-flow run did.
+    timeout-minutes: 45
     # GEMINI_API_KEY is stored on the "Playstore" environment, and environment
     # scoped values are only injected into jobs that name the environment.
     environment: Playstore
