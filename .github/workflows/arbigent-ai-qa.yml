@@ -2,7 +2,8 @@ name: AI Human QA (Arbigent)
 
 # Manual only: every run spends Gemini API credits.
 # Requires a repository secret named GEMINI_API_KEY
-# (Settings -> Secrets and variables -> Actions).
+# (Settings -> Secrets and variables -> Actions). The job stops with a clear
+# error before booting an emulator if that secret is missing or empty.
 
 on:
   workflow_dispatch:
@@ -49,10 +50,26 @@ jobs:
           # emulator starts, so setup failures are not hidden inside the run step.
           ./arbigentw --help > /dev/null
 
-      - name: Boot Emulator & Run AI UX Agent
-        uses: reactivecircus/android-emulator-runner@v2
+      - name: Write Arbigent Gemini settings
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          # A missing secret expands to an empty string, which Arbigent reports as
+          # "Missing Gemini API key". Fail here instead, before the emulator boots.
+          if [ -z "${GEMINI_API_KEY:-}" ]; then
+            echo "::error::GEMINI_API_KEY is missing or empty. Add it at Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          echo "::add-mask::$GEMINI_API_KEY"
+          # Settings keys are the CLI's long flags minus "--" (gemini-api-key, not
+          # gemini.apikey). Written to the gitignored local settings file so the key
+          # never reaches the repository, a commit, or the uploaded artifact.
+          umask 077
+          printf 'ai-type: gemini\ngemini-model-name: gemini-2.5-flash\ngemini-api-key: "%s"\n' "$GEMINI_API_KEY" \
+            > .arbigent/settings.local.yml
+
+      - name: Boot Emulator & Run AI UX Agent
+        uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
           target: google_apis
@@ -69,3 +86,7 @@ jobs:
         with:
           name: arbigent-ux-report
           path: arbigent-result/
+
+      - name: Remove Arbigent settings (contains the API key)
+        if: always()
+        run: rm -f .arbigent/settings.local.yml

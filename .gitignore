@@ -20,6 +20,11 @@ node_modules/
 .env
 .env.*
 !.env.example
+# Arbigent local settings hold the Gemini API key
+.arbigent/settings.local.yml
+.arbigent/settings.local.yaml
+.arbigent/settings.yml
+.arbigent/settings.yaml
 local.properties
 keystore.properties
 *.jks
