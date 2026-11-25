@@ -21,9 +21,10 @@ permissions:
 jobs:
   ai-ux-test:
     runs-on: ubuntu-latest
-    # The audit is one scenario per screen (10 screens, ~90 AI steps + ~35 image
-    # assertions), so it needs more than the old single-flow run did.
-    timeout-minutes: 45
+    # Ten INDEPENDENT scenarios (each with its own CleanupData + LaunchApp) drive the
+    # real APK: roughly 180 AI steps plus ~14 image assertions. The budget also covers
+    # a cold emulator boot, the APK install and WebView map tiles in the Qibla scenario.
+    timeout-minutes: 55
     # GEMINI_API_KEY is stored on the "Playstore" environment, and environment
     # scoped values are only injected into jobs that name the environment.
     environment: Playstore
@@ -40,6 +41,9 @@ jobs:
       # gemini-3.5-flash-lite is free too, accepts screenshots, and allows
       # roughly 15 requests/minute and 500/day.
       GEMINI_MODEL: ${{ inputs.gemini_model || 'gemini-3.5-flash-lite' }}
+      # Maestro (Arbigent's device driver) boots its instrumentation driver per scenario.
+      # Ten scenarios need more than the 60 s default to avoid startup flakiness.
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: "180000"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -104,6 +108,9 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
+          # KVM is enabled in the step above; a cold boot with Snapshots off is still slow.
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             ./arbigentw run --os=android --project-file=.arbigent/imancore_ux_audit.yaml --ai-type=gemini --gemini-model-name="$GEMINI_MODEL"

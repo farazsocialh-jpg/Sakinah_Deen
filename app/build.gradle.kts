@@ -9,6 +9,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.serialization)
+    // Renders Compose UI on the JVM with Robolectric and writes PNG snapshots.
+    alias(libs.plugins.roborazzi)
 }
 
 // Firebase config is provided per machine/deployment, not in VCS.
@@ -148,6 +150,13 @@ android {
         // Fonts and audio are already compressed formats; do not store them twice.
         noCompress += listOf("ogg", "mp3", "ttf")
     }
+    testOptions {
+        unitTests {
+            // Robolectric needs the merged debug manifest (which declares the Compose test
+            // ComponentActivity) and the merged resources to render real screens.
+            isIncludeAndroidResources = true
+        }
+    }
     sourceSets {
         // Room's MigrationTestHelper reads the exported schemas from the instrumentation assets;
         // without this the migration tests fail with "Cannot find schema file".
@@ -230,6 +239,12 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.ktor.client.mock)
+
+    // JVM UI snapshot matrix: Robolectric + Roborazzi render every screen without an emulator.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi.core)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
 
     // Instrumented tests
     androidTestImplementation(libs.androidx.test.ext.junit)

@@ -1,13 +1,13 @@
 name: Android CI
 
-# One job only: build the debug APK and upload it.
+# Two jobs:
+#   1. build the debug APK and upload it (the installable app);
+#   2. render the exhaustive UI matrix on the JVM (Robolectric + Roborazzi) and upload
+#      every palette / mode / font / layout screenshot plus the HTML report.
 #
-# Everything else (unit tests, lint, emulator device audit, MobSF, release signing,
-# iOS, Cloudflare Worker, workflow validation) has been removed on purpose. This
-# workflow exists to produce a downloadable app-debug.apk quickly.
-#
-# Run it locally with the same command:
+# Run them locally with the same commands:
 #   ./gradlew :app:assembleDebug --build-cache --parallel
+#   ./gradlew :app:recordRoborazziDebug
 
 on:
   push:
@@ -55,3 +55,44 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 7
           if-no-files-found: error
+
+  ui-snapshot-matrix:
+    name: Exhaustive UI snapshot matrix
+    runs-on: ubuntu-latest
+    # ~300 PNGs (17 palettes x 2 modes x every screen, 4 font presets, 19 layouts,
+    # 15 secondary screens) render in a few minutes; the margin covers a cold Gradle cache.
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Record every screen in every theme/font/layout
+        # --no-configuration-cache: Roborazzi injects per-task system properties, which
+        # configuration-cache snapshots would otherwise keep from the first invocation.
+        run: ./gradlew :app:recordRoborazziDebug --no-configuration-cache --stacktrace
+
+      - name: Upload snapshot matrix PNGs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-snapshot-matrix
+          path: |
+            app/build/outputs/roborazzi
+            app/build/reports/tests
+            app/build/reports/roborazzi
+          retention-days: 14
+          if-no-files-found: warn

@@ -1,49 +1,43 @@
 # Deep, screen-by-screen UI/UX audit for ImanCore (Sakinah Deen).
 #
-# Why this file is shaped this way: Arbigent only evaluates `imageAssertions` on the
-# FINAL screenshot of a scenario. The previous run packed whole journeys into one
-# scenario, so defects on the screens in between were never graded - the blank Qibla
-# Map mode, the low-contrast "Magnet-Free" badge, the truncated Salah header, the
-# ambiguous orange checkmark on Dhuhr and the missing "Faraz" name on onboarding step 4
-# all slipped through. Each scenario below therefore ENDS on the screen it grades, and
-# dependencies chain them so one app session walks onboarding -> Salah -> Qibla ->
-# Quran -> Hadith -> Scholar/Tools.
+# Rules this file follows:
+#  * Every scenario is INDEPENDENT: CleanupData + LaunchApp, no `dependency:` chain. One
+#    broken screen can therefore never stop the remaining nine scenarios from running.
+#  * Arbigent only evaluates `imageAssertions` on the FINAL screenshot of a scenario, so
+#    each scenario ends on the exact screen its assertions grade.
+#  * Android runtime permission dialogs are handled inside the goal text: they are denied
+#    when the scenario tests the ungranted state, and accepted only where a screen needs it.
 #
-# Every assertion is written as a statement the image-assertion model has to agree
-# with (>=80% confidence to pass). A FAILING assertion is the deliverable: the model
-# writes why it disagreed, naming the element, into result.yml and report.html.
+# Package note: the applicationId is com.imancore.app. "com.sakinah.deen" is only the Kotlin
+# namespace, so launching that id would never open the app.
 #
-# Package note: the applicationId is com.imancore.app. "com.sakinah.deen" is only the
-# Kotlin namespace, so launching that id would never open the app.
-#
-# Run locally / in CI with:
+# Run with:
 #   arbigentw run --os=android --project-file=.arbigent/imancore_ux_audit.yaml \
 #     --ai-type=gemini --gemini-model-name=gemini-3.5-flash-lite
 settings:
   variables:
     appId: "com.imancore.app"
-  # Default is 3 retries per scenario. Six scenarios on a 500-request/day free tier
-  # must not spend 4x on one flaky screen.
+  # Default is 3 retries per scenario. Ten scenarios on a 500-request/day free tier must
+  # not spend 4x on one flaky screen.
   maxRetry: 1
   prompt:
     appUiStructure: |-
       ImanCore is an Islamic companion app for Android.
-      First launch shows onboarding: Welcome (preferred name), About you (experience
-      level + what to start with), Appearance (System/Light/Dark, colour palette
-      swatches, font sizes, LIVE PREVIEW card), Permissions (Location, Notifications,
-      Exact Alarms, Battery), then "Open ImanCore".
+      First launch shows a 4-step onboarding: Welcome (preferred name), About you
+      (experience level + focus), Appearance (System/Light/Dark, colour palette swatches,
+      font sizes, LIVE PREVIEW card), Permissions (Location, Notifications, Exact Alarms,
+      Battery), then "Open ImanCore". "Skip" is available on the welcome step.
       Bottom navigation: Salah, Quran, Hadith, Scholar, Tools.
-      Salah opens on a "Times" tab: header with date/location, "Today: X/Y Prayed"
+      Salah opens on a "Times" tab: header with Hijri date/location, "Today: X/Y Prayed"
       progress strip, prayer rows (Fajr, Dhuhr, Asr, Maghrib, Isha) with completion
-      controls, and tabs "Times" / "Qibla". Qibla has Compass, Map and Sun modes.
+      circles, and tabs "Times" / "Qibla". Qibla has Compass, Sun and Map modes.
       Quran: surah list -> reader with bookmark icons, reading-mode pills
-      ("Verse by verse", "Mushaf page") and bottom controls.
-      Hadith: Books / Daily / Search / Saved tabs, collection cards with an "Open"
-      button, then chapters and hadith text.
-      Scholar: AI chat with quick prompts and an input bar.
+      ("Verse by verse", "Mushaf page") and a bottom pill bar with Layout controls.
+      Hadith: Books / Daily / Search / Saved tabs, collection cards with an "Open" button.
+      Scholar: AI chat with quick prompts and an input bar above the bottom navigation.
       Tools: sections "Islamic Tools", "Discover", "Settings", "Support & About" with
-      tiles such as Visual Salah Posture Guide, Zakat & Sadaqah Jar,
-      "Appearance & Reading", "Replay Quick Tour", Prayer & Location, About ImanCore.
+      tiles such as Tasbih, Zakat & Sadaqah Jar, Travel / Safar, Visual Salah Posture
+      Guide, "Appearance & Reading", "Replay Quick Tour" and Prayer & Location.
     additionalSystemPrompts:
       - |-
         You are also a senior mobile UX reviewer. Before each action, add a short review
@@ -57,9 +51,7 @@ settings:
 
 scenarios:
   # ------------------------------------------------------------ onboarding
-  # tree: 01-onboarding-monochrome-ux | children: 02-salah-times-ux
-  - id: "01-onboarding-monochrome-ux"
-    # Starts from a clean install, so onboarding is genuinely first-run on every run.
+  - id: "01-onboarding-full-and-monochrome-contrast"
     initializationMethods:
       - type: "CleanupData"
         packageName: "{{appId}}"
@@ -67,130 +59,219 @@ scenarios:
         packageName: "{{appId}}"
     goal: |-
       You are a first-time user on ImanCore's welcome step.
-      0. If any Android system permission dialog appears, choose "Don't allow" (or
-         dismiss it) and return to ImanCore. Never grant a system permission.
-      1. Tap the "Preferred name (optional)" field, type "Faraz", dismiss the on-screen
-         keyboard, then tap "Continue".
-      2. Confirm step 2 greets Faraz by name ("Glad you're here, Faraz"). If the name is
-         missing, note that in your review before moving on. Then select
-         "Practicing Muslim", select "Prayer consistency", and tap "Continue".
-      3. On the Appearance step, under Color Theme select "Dark", then select the
-         monochrome palette swatch (labelled "Black & White" - pure monochrome). Check
-         that the LIVE PREVIEW Arabic text and its translation are still legible in this
-         pure black-and-white dark theme, then tap "Continue".
-      4. On step 4, verify the heading includes "Faraz" (e.g. "Set up once, Faraz").
-         Verify all four permission tiles - Location, Notifications, Exact Alarms and
-         Battery - have readable button text and no blank white-on-white invisible pills.
-         Scroll if needed, then tap "Open ImanCore".
-    maxStep: 20
+      0. If any Android system permission dialog appears, dismiss it ("Don't allow") and
+         return to ImanCore.
+      1. Tap the "Preferred name (optional)" field, type "Faraz", clear it completely,
+         re-type "Faraz", dismiss the on-screen keyboard, then tap "Continue".
+      2. On step 2, verify the greeting contains "Faraz". Tap each journey chip
+         ("New to Islam", "Student of Knowledge", "Practicing Muslim"), then tap two
+         different focus cards (for example "Reading Quran" and "Prayer consistency"),
+         and tap "Continue".
+      3. On the Appearance step, verify the LIVE PREVIEW Arabic and English text is
+         visible. Tap "Dark". Select the "Black & White" (monochrome) palette. Scroll down
+         inside the step to reveal the font controls, tap "Large" overall font size, tap
+         "+" on Arabic Size and on Translation Size, and verify LIVE PREVIEW stays readable.
+         Then tap "Continue".
+      4. On step 4, verify the heading reads "Set up once, Faraz" (the name must not be
+         missing). Inspect all four tiles - Location, Notifications, Exact Alarms, Battery.
+         Do NOT tap "Open ImanCore". Stay on this screen.
+    maxStep: 22
     imageAssertions:
-      - assertionPrompt: "Step 4 permission buttons have high-contrast readable text with no blank white pills or clipped labels."
-      - assertionPrompt: "The heading on this final onboarding step includes a personal name (Faraz) rather than only generic text."
-      - assertionPrompt: "In the monochrome dark theme, all visible text - heading, permission tile titles, reasons, button labels and the primary action - is clearly readable, with no black-on-black or white-on-white elements."
+      - assertionPrompt: "Step 4 displays 'Set up once, Faraz' and all 4 permission tiles and buttons (Allow/Allowed) have clear, high-contrast readable text with no blank white pills."
+
+  # ------------------------------------------- skip + replay onboarding cancel
+  - id: "02-onboarding-skip-and-replay-cancel"
+    initializationMethods:
+      - type: "CleanupData"
+        packageName: "{{appId}}"
+      - type: "LaunchApp"
+        packageName: "{{appId}}"
+    goal: |-
+      0. Dismiss any Android permission dialog.
+      1. Tap "Skip" on the welcome step and confirm the app lands cleanly on the main
+         Salah screen, with the bottom navigation visible and no half-finished overlay.
+      2. Tap "Tools" in the bottom navigation, then open "Settings" / "Appearance &
+         Reading", then tap "Replay Quick Tour" (Replay Onboarding).
+      3. Verify the onboarding wizard opens. Then dismiss it with the Close (X) or
+         "Cancel" control. Verify you are returned to the Settings screen and can still
+         scroll and tap controls (no frozen overlay, no broken back stack).
+    maxStep: 16
+    imageAssertions:
+      - assertionPrompt: "Cancelling Replay Onboarding returns cleanly to the Settings screen with no frozen overlay or broken back stack."
 
   # ------------------------------------------------------------- salah
-  # tree: 01-onboarding-monochrome-ux > 02-salah-times-ux | children: 03-qibla-map-and-sun-ux
-  - id: "02-salah-times-ux"
-    dependency: "01-onboarding-monochrome-ux"
+  - id: "03-salah-taps-progress-and-visual-guide"
+    initializationMethods:
+      - type: "CleanupData"
+        packageName: "{{appId}}"
+      - type: "LaunchApp"
+        packageName: "{{appId}}"
     goal: |-
-      You should now be inside ImanCore on the Salah tab, "Times" view. If another tab
-      is open, tap "Salah" in the bottom bar first.
-      1. Inspect the top header closely: the date line, the location/city line and any
-         warning or banner text (for example a location or exact-alarm warning). Check
-         whether any of these are truncated with an ellipsis, cut off, or stacked so
-         thickly that they push the prayer list down and crowd it.
-      2. Mark Fajr as prayed using Fajr's completion control, and verify the daily
-         progress strip/counter updates from 0/5 to 1/5.
-      3. Look at how a completed prayer is distinguished from the current/active prayer
-         (for example the orange checkmark on Dhuhr). Judge whether completed vs active
-         is unmistakable, or whether the two states look confusingly similar.
-      4. Expand one prayer row (or open its details / "Step-by-Step Guide" / Visual Salah
-         Guide if present), read the content, then return to the Times list.
-    maxStep: 16
+      0. Dismiss any Android permission dialog. Tap "Skip" if onboarding appears.
+      1. On the Salah "Times" view, inspect the top header: the Hijri date line, the city
+         and calculation-method line, the "Qadha" pill and the icon buttons. Check for
+         truncated or ellipsised text.
+      2. Tap Fajr's completion circle and verify the progress reads "Today: 1/5 Prayed"
+         (20%). Tap Dhuhr and verify "2/5 Prayed" (40%). Tap Fajr again to unmark it and
+         verify it returns to "1/5 Prayed".
+      3. Expand one prayer row to inspect its details (time, rakat count, any warning).
+      4. Open the Visual Salah Guide (from a prayer row's guide button, or Tools ->
+         "Visual Salah Posture Guide"), tap through two or three steps, then return to the
+         Salah "Times" screen and stay there.
+    maxStep: 20
     imageAssertions:
-      - assertionPrompt: "Prayer rows, times, and status icons are unambiguous, not cut off, and clearly distinguish completed vs. active prayers."
-      - assertionPrompt: "The Salah top header shows its date and location lines completely, without truncated, clipped or ellipsised text, and the header does not crowd out the prayer list."
+      - assertionPrompt: "Salah rows, times, progress strip, and status icons are clearly legible with no overlapping text, ambiguous icons, or cramped labels."
 
   # ------------------------------------------------------------- qibla
-  # tree: ... > 02-salah-times-ux > 03-qibla-map-and-sun-ux | children: 04-quran-modes-and-bookmark-ux
-  - id: "03-qibla-map-and-sun-ux"
-    dependency: "02-salah-times-ux"
+  - id: "04-qibla-compass-sun-and-map"
+    initializationMethods:
+      - type: "CleanupData"
+        packageName: "{{appId}}"
+      - type: "LaunchApp"
+        packageName: "{{appId}}"
     goal: |-
-      From the Salah screen, tap the "Qibla" tab.
-      1. Stay in Compass mode first. Review the compass/direction indicator, the
-         degree/heading readout, the location line and the badge shown on the card (for
-         example "Magnet-Free"). Judge whether that badge text has readable contrast
-         against its background.
-      2. Tap "Sun" mode and verify it renders cleanly - real graphics and labels, not a
-         blank area, an endless spinner or an error message.
-      3. Tap "Map" mode LAST. Wait several seconds for map tiles to download before
-         judging, and do not tap again while it loads. Then check whether an actual map
-         (streets, land/water shapes, tiles) renders on screen, or whether the map area
-         is an empty solid rectangle.
-      4. Report which mode is currently visible and whether its content loaded.
-    maxStep: 12
-    imageAssertions:
-      - assertionPrompt: "Qibla Map mode renders visible map tiles and graphics (NOT an empty solid rectangle) and all badges have readable contrast."
-      - assertionPrompt: "The Qibla card's badge and readout text, including the 'Magnet-Free' badge, are readable with strong contrast against the monochrome dark background."
-
-  # ------------------------------------------------------------- quran
-  # tree: ... > 03-qibla-map-and-sun-ux > 04-quran-modes-and-bookmark-ux | children: 05-hadith-detail-and-tabs-ux
-  - id: "04-quran-modes-and-bookmark-ux"
-    dependency: "03-qibla-map-and-sun-ux"
-    goal: |-
-      Tap "Quran" in the bottom navigation, then open Surah Al-Fatihah.
-      1. Bookmark ayah 1 using the bookmark icon on that ayah, and confirm the icon
-         visibly changes to its bookmarked state (not just a toast).
-      2. Find the reading-mode controls and the bottom pill bar (for example "Verse by
-         verse" and "Mushaf page"). Tap each reading-mode option once and judge whether
-         the layout switches cleanly, without elements overlapping or disappearing.
-      3. In the reading mode that shows word-by-word or inline meanings, scroll down
-         through the verses and check Arabic, transliteration and translation alignment:
-         right-to-left text should not collide with Latin text, and ayah markers should
-         sit at the end of each ayah.
-      4. Leave the reader on a scrolled position that shows several verses.
-    maxStep: 16
-    imageAssertions:
-      - assertionPrompt: "Quran text, word-by-word meanings, and bottom controls are well-spaced with no overlapping elements."
-      - assertionPrompt: "Arabic, transliteration and translation are visually separated and aligned, with no Latin text colliding with right-to-left Arabic and no clipped ayah markers."
-
-  # ------------------------------------------------------------- hadith
-  # tree: ... > 04-quran-modes-and-bookmark-ux > 05-hadith-detail-and-tabs-ux | children: 06-scholar-and-tools-ux
-  - id: "05-hadith-detail-and-tabs-ux"
-    dependency: "04-quran-modes-and-bookmark-ux"
-    goal: |-
-      Tap "Hadith" in the bottom navigation.
-      1. On the Books tab, tap "Open" on Sahih al-Bukhari. Verify the chapter/hadith list
-         actually loads real content (chapter titles and counts, or hadith text) instead
-         of a spinner, a blank screen or an error.
-      2. Navigate back to the Hadith root.
-      3. Open each of the other tabs - "Daily", "Search" and "Saved" - and check each one
-         reaches a usable state: real content, or a clear intentional empty state with a
-         helpful message. Note any tab that shows a blank or broken screen.
-      4. Finish on the "Saved" tab so its state is judged.
+      0. Dismiss any Android permission dialog. Tap "Skip" if onboarding appears.
+      1. On the Salah screen, switch to the "Qibla" tab.
+      2. In "Compass" mode, inspect the compass/direction indicator, the degree readout,
+         the location line and the status badge (for example "Magnet-Free"). Judge that
+         badge's contrast against its background.
+      3. Tap "Sun" mode and verify it renders cleanly - real graphics and labels, not a
+         blank area or an endless spinner.
+      4. Tap "Map" mode LAST. Wait at least 4 seconds for the WebView/Leaflet tiles to
+         load, without tapping again. Inspect the map area.
     maxStep: 14
     imageAssertions:
-      - assertionPrompt: "Hadith collection details and tabs load real content cleanly with legible typography."
-      - assertionPrompt: "The visible Hadith tab shows either real content or a deliberate, well-designed empty state with a readable message - not a blank or broken screen."
+      - assertionPrompt: "Qibla Map mode renders visible map tiles or graphics (NOT a blank solid-color rectangle) and all badges including Magnet-Free have readable contrast."
 
-  # ------------------------------------------------------ scholar + tools
-  # tree: ... > 05-hadith-detail-and-tabs-ux > 06-scholar-and-tools-ux
-  - id: "06-scholar-and-tools-ux"
-    dependency: "05-hadith-detail-and-tabs-ux"
+  # ------------------------------------------------------------- quran
+  - id: "05-quran-search-layouts-modes-and-persistence"
+    initializationMethods:
+      - type: "CleanupData"
+        packageName: "{{appId}}"
+      - type: "LaunchApp"
+        packageName: "{{appId}}"
     goal: |-
-      1. Tap "Scholar" in the bottom navigation. Verify the quick prompts are visible and
-         that the chat input bar is fully reachable above the bottom navigation bar (not
-         hidden behind it, not under the keyboard, not cut off).
-      2. Tap "Tools" in the bottom navigation and scroll through the available tools
-         (sections "Islamic Tools", "Discover", "Settings", "Support & About"; tiles
-         include Visual Salah Posture Guide, Zakat & Sadaqah Jar, Appearance & Reading,
-         and "Replay Quick Tour" - the replay-onboarding entry).
-      3. Open "Appearance & Reading" (Appearance Settings), verify the theme, palette and
-         typography controls are laid out cleanly, then go back.
-      4. Open the "Replay Quick Tour" tile (Replay Onboarding), confirm it opens a
-         confirmation or the tour, then dismiss it with "Cancel" or the X / close control
-         so nothing is left mid-flow. Finish on the Tools screen.
-    maxStep: 16
+      0. Dismiss any Android permission dialog. Tap "Skip" if onboarding appears.
+      1. Open the "Quran" tab. Type "Kahf" into the surah search bar, verify "Al-Kahf"
+         appears in the results, then clear the search.
+      2. Open "Al-Fatihah".
+      3. Bookmark ayah 1 using the bookmark icon and confirm the icon visibly changes state.
+      4. Tap the bottom pill bar "Layout" and the "Reading Mode" controls to cycle through
+         the reading layouts and modes. Verify Arabic script, word-by-word meanings and
+         translations stay aligned and readable in each.
+      5. Scroll down to show several verses. Leave the Quran reader on a scrolled position
+         that shows the bookmarked ayah and the bottom controls.
+         (Note: Arbigent runs initialization methods once per scenario, so cross-relaunch
+         persistence is exercised by the instrumented suite, not by a process kill here;
+         verify instead that the bookmark and scroll position survive leaving and returning
+         to the Quran tab.)
+    maxStep: 20
     imageAssertions:
-      - assertionPrompt: "Scholar and Tools screens are uncluttered, responsive, and all buttons and inputs have clear contrast."
-      - assertionPrompt: "The Scholar input bar and quick prompts are fully visible above the bottom navigation bar with nothing hidden behind it, and in Tools every tile label and its supporting text is readable and uncut."
+      - assertionPrompt: "Quran Arabic text, transliteration, translation, and bottom bar controls are well-spaced, readable, and free of overlap."
+
+  # ------------------------------------------------------------- hadith
+  - id: "06-hadith-books-detail-search-and-saved"
+    initializationMethods:
+      - type: "CleanupData"
+        packageName: "{{appId}}"
+      - type: "LaunchApp"
+        packageName: "{{appId}}"
+    goal: |-
+      0. Dismiss any Android permission dialog. Tap "Skip" if onboarding appears.
+      1. Open the "Hadith" tab and verify the "Books" tab loads collections such as
+         "Sahih al-Bukhari" and "Sahih Muslim".
+      2. Tap "Open" on "Sahih al-Bukhari", open a chapter and a hadith, verify the Arabic
+         and its translation are both readable, and bookmark that hadith.
+      3. Go back to the Hadith root. Open the "Daily" tab. Then open the "Search" tab,
+         type "prayer" and verify matching results appear; replace it with "zzzzqqq" and
+         verify a clean empty state (not a crash or a blank screen).
+      4. Open the "Saved" tab and confirm the bookmarked hadith appears. Stay there.
+    maxStep: 20
+    imageAssertions:
+      - assertionPrompt: "Hadith screens display legible content, clean cards, and proper empty/saved states."
+
+  # ------------------------------------------------------------- scholar
+  - id: "07-ai-scholar-input-keyboard-and-response"
+    initializationMethods:
+      - type: "CleanupData"
+        packageName: "{{appId}}"
+      - type: "LaunchApp"
+        packageName: "{{appId}}"
+    goal: |-
+      0. Dismiss any Android permission dialog. Tap "Skip" if onboarding appears.
+      1. Open the "Scholar" tab (AI chat).
+      2. Tap a suggested prompt chip once, or tap the message input field and type
+         "What are the conditions of Wudu?". While the keyboard is open, verify the Send
+         button and the input bar are not hidden behind the keyboard.
+      3. Tap Send and wait up to 10 seconds. Accept either a streaming response or a clear
+         offline / not-configured error card; a silent blank screen is a failure.
+      4. Leave the keyboard dismissed and stay on the Scholar screen with the conversation
+         visible.
+    maxStep: 14
+    imageAssertions:
+      - assertionPrompt: "AI Scholar chat input, send button, and message bubbles are unobstructed and clearly readable."
+
+  # ------------------------------------------------------------- tools
+  - id: "08-tools-tasbih-wealth-travel-qadha"
+    initializationMethods:
+      - type: "CleanupData"
+        packageName: "{{appId}}"
+      - type: "LaunchApp"
+        packageName: "{{appId}}"
+    goal: |-
+      0. Dismiss any Android permission dialog. Tap "Skip" if onboarding appears.
+      1. Open "Tools".
+      2. Test Tasbih: tap the counter 5 times and verify the count reads 5, tap Reset and
+         verify it returns to 0. Go back.
+      3. Open "Zakat & Sadaqah Jar" (Wealth): enter "10000" into a numeric asset field and
+         verify the Zakat calculation updates without crashing or clipping. Go back.
+      4. Open "Travel / Safar": verify its toggles/controls work, then go back.
+      5. Open the Qadha tracker from the Salah header's "Qadha" pill, verify it renders,
+         then return. Finish on the Tools hub.
+    maxStep: 24
+    imageAssertions:
+      - assertionPrompt: "Tools, Zakat inputs, Tasbih, and Travel screens are responsive, uncluttered, and readable."
+
+  # ------------------------------------------------------- settings/profile
+  - id: "09-settings-notifications-and-profile"
+    initializationMethods:
+      - type: "CleanupData"
+        packageName: "{{appId}}"
+      - type: "LaunchApp"
+        packageName: "{{appId}}"
+    goal: |-
+      0. Dismiss any Android permission dialog. Tap "Skip" if onboarding appears.
+      1. Open "Tools" -> "Settings" (Appearance & Reading). Switch the palette to
+         "Madinah Sand" and verify the change applies immediately with readable contrast.
+      2. Open Notification Settings (from the Salah header bell or Settings) and toggle
+         one notification preference; verify it responds without a crash.
+      3. Open the Profile screen (if available) and edit the display name if it is
+         editable; verify the change is reflected.
+      4. Open "About ImanCore" / the info screens and verify they render. Finish on the
+         Notification Settings screen.
+    maxStep: 22
+    imageAssertions:
+      - assertionPrompt: "Settings, Notification Settings, and Profile screens render cleanly in the selected theme with clear contrast."
+
+  # ------------------------------------------------- large font light stress
+  - id: "10-large-font-light-mode-stress-test"
+    initializationMethods:
+      - type: "CleanupData"
+        packageName: "{{appId}}"
+      - type: "LaunchApp"
+        packageName: "{{appId}}"
+    goal: |-
+      0. Dismiss any Android permission dialog.
+      1. Complete onboarding: keep or enter a name, tap "Continue" on the journey step,
+         then on the Appearance step select "Light" mode and "Emerald Sanctuary" (or
+         "Madinah Sand"), set the overall font size to "Large", and tap "Continue".
+         On the permissions step tap "Open ImanCore".
+      2. Visit "Salah" and inspect prayer names, times and the progress strip for clipped
+         or wrapping text.
+      3. Visit "Quran" and inspect the reader header and bottom controls.
+      4. Visit "Hadith" and inspect the tab labels and collection cards.
+      5. Visit "Tools" and inspect the tile labels and their supporting text. Finish on
+         the Tools hub.
+    maxStep: 24
+    imageAssertions:
+      - assertionPrompt: "At Large font size in Light mode, all titles, prayer rows, buttons, and bottom navigation labels remain readable without clipping or overlap."
