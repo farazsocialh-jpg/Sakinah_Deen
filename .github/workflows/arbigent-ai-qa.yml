@@ -1,10 +1,18 @@
 name: AI Human QA (Arbigent)
 
-# Manual only: every run spends Gemini API credits.
-# Requires GEMINI_API_KEY, either as a repository secret/variable or as one
-# scoped to the "Playstore" environment (Settings -> Secrets and variables ->
-# Actions). The job stops with a clear error before booting an emulator if it
-# cannot find a non-empty value.
+# Manual only: every run spends free-tier AI quota.
+#
+# Providers are tried in a fixed, cheapest-first chain, and each tier is skipped
+# cheaply when its key is absent or its endpoint says no:
+#   1. github      GitHub Models        (GITHUB_TOKEN, needs `models: read`)
+#   2. groq        Groq                 (GROQ_API_KEY)
+#   3. gemini      Google Gemini        (GEMINI_API_KEY)
+#   4. openrouter  OpenRouter           (OPENROUTER_API_KEY)
+#
+# Only the endpoint/key that actually answered is used; a provider that returns
+# 401/403/429/503 is skipped by the pre-flight probe, and a mid-run rate limit
+# falls through to the next provider for just the scenarios that did not finish.
+# A real UI/assertion failure never retries: it fails the job so the bug is visible.
 
 on:
   workflow_dispatch:
@@ -14,17 +22,25 @@ on:
         required: false
         default: gemini-3.5-flash-lite
         type: string
+      scenario_ids:
+        description: "Optional comma-separated scenario ids to run (e.g. 04-qibla-compass-sun-and-map,08a-wealth-and-guide). Empty runs all."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
+  # Lets the default GITHUB_TOKEN authenticate to GitHub Models (tier 1).
+  models: read
 
 jobs:
   ai-ux-test:
     runs-on: ubuntu-latest
-    # Ten INDEPENDENT scenarios (each with its own CleanupData + LaunchApp) drive the
-    # real APK: roughly 180 AI steps plus ~14 image assertions. The budget also covers
-    # a cold emulator boot, the APK install and WebView map tiles in the Qibla scenario.
-    timeout-minutes: 55
+    # Eleven INDEPENDENT scenarios (each with its own CleanupData + LaunchApp) drive the
+    # real APK: roughly 180 AI steps plus ~14 image assertions. The budget also covers a
+    # cold emulator boot, the APK install, WebView map tiles in the Qibla scenario, and a
+    # fallback provider re-running whatever a quota-limited provider could not finish.
+    timeout-minutes: 75
     # GEMINI_API_KEY is stored on the "Playstore" environment, and environment
     # scoped values are only injected into jobs that name the environment.
     environment: Playstore
@@ -33,16 +49,28 @@ jobs:
       # app repo, so it bootstraps one from this version on first run.
       ARBIGENT_VERSION: "0.89.0"
       # Overridable from the Run workflow form, so a renamed/deprecated model
-      # does not need a code change. 2.5-flash returns 404 for new API keys.
+      # does not need a code change.
       #
-      # Free-tier quotas decide the default: gemini-3.8-flash allows only 5
-      # requests/minute and 20/day, which a multi-step audit exhausts at once
-      # (429 RESOURCE_EXHAUSTED, generate_content_free_tier_requests).
-      # gemini-3.5-flash-lite is free too, accepts screenshots, and allows
-      # roughly 15 requests/minute and 500/day.
+      # Free-tier quotas decide the default: gemini-2.5-flash returns 404 for new
+      # API keys, and gemini-3.8-flash allows only 5 requests/minute and 20/day,
+      # which a multi-step audit exhausts at once (429 RESOURCE_EXHAUSTED,
+      # generate_content_free_tier_requests). gemini-3.5-flash-lite is free too,
+      # accepts screenshots, and allows roughly 15 requests/minute and 500/day.
       GEMINI_MODEL: ${{ inputs.gemini_model || 'gemini-3.5-flash-lite' }}
+      # Vision models, one per free tier. All four speak the OpenAI chat-completions
+      # schema, so they run through Arbigent's `--ai-type=openai` provider with a
+      # custom `--openai-endpoint`. Model ids are env vars so a catalogue rename is
+      # a one-line change here rather than a rewrite of the run script.
+      GITHUB_MODEL: "openai/gpt-4o-mini"
+      GROQ_MODEL: "meta-llama/llama-4-scout-17b-16e-instruct"
+      # OpenRouter rotates its individual ":free" vision ids constantly; the
+      # auto-router only ever falls back to another free model, which keeps the
+      # tier at $0 instead of silently billing a paid model.
+      OPENROUTER_MODEL: "openrouter/free"
+      # Comma-separated scenario ids from the Run workflow form ("" = every scenario).
+      ARBIGENT_SCENARIO_IDS: ${{ inputs.scenario_ids }}
       # Maestro (Arbigent's device driver) boots its instrumentation driver per scenario.
-      # Ten scenarios need more than the 60 s default to avoid startup flakiness.
+      # Eleven scenarios need more than the 60 s default to avoid startup flakiness.
       MAESTRO_DRIVER_STARTUP_TIMEOUT: "180000"
     steps:
       - name: Checkout
@@ -75,33 +103,49 @@ jobs:
           # emulator starts, so setup failures are not hidden inside the run step.
           ./arbigentw --help > /dev/null
 
-      - name: Write Arbigent Gemini settings
+      - name: Verify at least one AI provider is configured
         env:
-          # Either source works: an environment/repository secret, or an
-          # environment/repository variable (the Variables tab uses vars.*).
+          GITHUB_TOKEN_FOR_MODELS: ${{ secrets.GITHUB_TOKEN }}
+          GROQ_KEY: ${{ secrets.GROQ_API_KEY }}
           GEMINI_KEY_SECRET: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_KEY_VARIABLE: ${{ vars.GEMINI_API_KEY }}
+          OPENROUTER_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
-          # Unset values expand to an empty string, which Arbigent reports as
-          # "Missing Gemini API key". Fail here instead, before the emulator boots.
-          GEMINI_API_KEY="${GEMINI_KEY_SECRET:-}"
-          if [ -z "$GEMINI_API_KEY" ]; then
-            GEMINI_API_KEY="${GEMINI_KEY_VARIABLE:-}"
-          fi
-          if [ -z "$GEMINI_API_KEY" ]; then
-            echo "::error::No GEMINI_API_KEY for environment 'Playstore'. Add it under Settings -> Secrets and variables -> Actions (Secrets or Variables, name GEMINI_API_KEY, environment Playstore)."
+          # Unset values expand to an empty string. Fail here, before the emulator
+          # boots, instead of burning 15 minutes to reach "Missing API key".
+          available=""
+          gemini_key="${GEMINI_KEY_SECRET:-${GEMINI_KEY_VARIABLE:-}}"
+          for pair in "github:${GITHUB_TOKEN_FOR_MODELS:-}" "groq:${GROQ_KEY:-}" \
+                      "gemini:${gemini_key}" "openrouter:${OPENROUTER_KEY:-}"; do
+            name="${pair%%:*}"
+            value="${pair#*:}"
+            if [ -n "$value" ]; then
+              available="$available $name"
+              echo "::add-mask::$value"
+            fi
+          done
+          if [ -z "$available" ]; then
+            echo "::error::No AI provider secret found. Add GROQ_API_KEY, GEMINI_API_KEY or OPENROUTER_API_KEY under Settings -> Secrets and variables -> Actions (environment 'Playstore' or repository level). GITHUB_TOKEN is always present but GitHub Models was retired on 2026-07-30, so tier 1 may answer 404."
             exit 1
           fi
-          echo "::add-mask::$GEMINI_API_KEY"
-          # Settings keys are the CLI's long flags minus "--" (gemini-api-key, not
-          # gemini.apikey). Written to the gitignored local settings file so the key
-          # never reaches the repository, a commit, or the uploaded artifact.
-          umask 077
-          printf 'ai-type: gemini\ngemini-model-name: %s\ngemini-api-key: "%s"\n' "$GEMINI_MODEL" "$GEMINI_API_KEY" \
-            > .arbigent/settings.local.yml
+          echo "AI provider tiers with a usable key:$available"
+          # A leftover settings file from an older revision would override the
+          # per-provider flags below, including a stale model or key.
+          rm -f .arbigent/settings.local.yml
+          rm -rf arbigent-result
 
       - name: Boot Emulator & Run AI UX Agent
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          # Tier 1. The default token, granted `models: read` above, so GitHub Models
+          # can be probed without a separate secret.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Tier 2.
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          # Tier 3. Secrets or Variables both work, as in the check step above.
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || vars.GEMINI_API_KEY }}
+          # Tier 4 (optional; skipped when unset).
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         with:
           api-level: 34
           target: google_apis
@@ -112,16 +156,237 @@ jobs:
           emulator-boot-timeout: 900
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
+            # Provider fallback chain for Arbigent.
+            #
+            # `arbigentw run` exits 0 even when scenarios fail (only `arbigentw sort`
+            # sets an exit code), so the verdict is read from
+            # arbigent-result/result.yml, which lists every scenario with an
+            # `executionStatus`. Both signals are checked: a crash (non-zero) and a
+            # failed scenario (zero exit) are treated the same.
+            #
+            # Kept POSIX sh: android-emulator-runner runs this through /bin/sh, so
+            # no arrays, no `pipefail`, no process substitution.
+            set -u
+
+            LOG=arbigent-run.log
+            ATTEMPT_LOG=arbigent-attempt.log
+            PROBE_BODY=arbigent-probe.json
+            EXIT_FILE=arbigent-exit-code
+            RESULT_FILE=arbigent-result/result.yml
+
+            # Anything in the CLI log that means "the provider, not the app, failed".
+            API_ERROR_PATTERN='429|RESOURCE_EXHAUSTED|[Rr]ate.?limit|[Qq]uota|503|Service Unavailable|overloaded|401|403|Missing (Gemini|OpenAI) API key|invalid.?api.?key'
+
+            : > "$LOG"
+            rm -f "$EXIT_FILE" "$PROBE_BODY"
+
+            run_args="--os=android --project-file=.arbigent/imancore_ux_audit.yaml"
+            initial_ids="${ARBIGENT_SCENARIO_IDS:-}"
+            if [ -n "$initial_ids" ]; then
+              echo "Limiting this run to scenario ids: $initial_ids"
+            fi
+
+            # --- provider configuration -------------------------------------------
+            # Sets MODEL / ENDPOINT / KEY / API_ENV and AI_ARGS. The key is never put
+            # on the command line: Arbigent reads OPENAI_API_KEY / GEMINI_API_KEY from
+            # the environment, and the CLI masks those values in its own output.
+            configure_provider() {
+              MODEL=""; ENDPOINT=""; KEY=""; API_ENV=""
+              case "$1" in
+                github)
+                  [ -n "${GITHUB_TOKEN:-}" ] || return 1
+                  MODEL="$GITHUB_MODEL"
+                  ENDPOINT="https://models.github.ai/inference"
+                  KEY="$GITHUB_TOKEN"
+                  API_ENV=openai
+                  ;;
+                groq)
+                  [ -n "${GROQ_API_KEY:-}" ] || return 1
+                  MODEL="$GROQ_MODEL"
+                  ENDPOINT="https://api.groq.com/openai/v1"
+                  KEY="$GROQ_API_KEY"
+                  API_ENV=openai
+                  ;;
+                gemini)
+                  [ -n "${GEMINI_API_KEY:-}" ] || return 1
+                  MODEL="$GEMINI_MODEL"
+                  KEY="$GEMINI_API_KEY"
+                  API_ENV=gemini
+                  ;;
+                openrouter)
+                  [ -n "${OPENROUTER_API_KEY:-}" ] || return 1
+                  MODEL="$OPENROUTER_MODEL"
+                  ENDPOINT="https://openrouter.ai/api/v1"
+                  KEY="$OPENROUTER_API_KEY"
+                  API_ENV=openai
+                  ;;
+                *)
+                  return 1
+                  ;;
+              esac
+              if [ "$API_ENV" = openai ]; then
+                AI_ARGS="--ai-type=openai --openai-endpoint=$ENDPOINT/ --openai-model-name=$MODEL"
+              else
+                AI_ARGS="--ai-type=gemini --gemini-model-name=$MODEL"
+              fi
+              return 0
+            }
+
+            # --- pre-flight probes -------------------------------------------------
+            # One-token request: cheap proof that the key works and the endpoint is
+            # alive. A dead tier costs a couple of seconds instead of a full run that
+            # dies on its first step.
+            probe_openai() {
+              url="${1%/}/chat/completions"
+              body=$(printf '{"model":"%s","messages":[{"role":"user","content":"ping"}],"max_tokens":1}' "$3")
+              code=$(curl -sS --max-time 45 -o "$PROBE_BODY" -w '%{http_code}' \
+                -H "Authorization: Bearer $2" \
+                -H 'Content-Type: application/json' \
+                --data "$body" "$url" 2>/dev/null) || code=000
+              case "$code" in
+                200) echo "  probe: HTTP 200"; return 0 ;;
+              esac
+              echo "  probe: HTTP $code $(head -c 300 "$PROBE_BODY" 2>/dev/null | tr '\n' ' ')"
+              return 1
+            }
+
+            probe_gemini() {
+              url="https://generativelanguage.googleapis.com/v1beta/models/$2:generateContent"
+              code=$(curl -sS --max-time 45 -o "$PROBE_BODY" -w '%{http_code}' \
+                -H "x-goog-api-key: $1" \
+                -H 'Content-Type: application/json' \
+                --data '{"contents":[{"parts":[{"text":"ping"}]}],"generationConfig":{"maxOutputTokens":1}}' \
+                "$url" 2>/dev/null) || code=000
+              case "$code" in
+                200) echo "  probe: HTTP 200"; return 0 ;;
+              esac
+              echo "  probe: HTTP $code $(head -c 300 "$PROBE_BODY" 2>/dev/null | tr '\n' ' ')"
+              return 1
+            }
+
+            probe_provider() {
+              if [ "$API_ENV" = openai ]; then
+                probe_openai "$ENDPOINT" "$KEY" "$MODEL"
+              else
+                probe_gemini "$KEY" "$MODEL"
+              fi
+            }
+
+            # Runs one provider over `$2` (comma-separated scenario ids, empty = the
+            # whole suite). Output is streamed and also kept in $LOG; the CLI's exit
+            # status lands in $EXIT_FILE because a pipeline only reports tee's status.
+            run_with_provider() {
+              # A retry names just the unfinished scenarios; otherwise the run keeps
+              # the dispatch input's filter. Only ever one --scenario-ids flag.
+              filter="${2:-}"
+              [ -n "$filter" ] || filter="$initial_ids"
+              if [ -n "$filter" ]; then
+                attempt_args="$run_args --scenario-ids=$filter"
+              else
+                attempt_args="$run_args"
+              fi
+              log_start=$(wc -c < "$LOG" | tr -d ' ')
+              echo "::group::Arbigent on $1 ($MODEL)"
+              {
+                if [ "$API_ENV" = openai ]; then
+                  OPENAI_API_KEY="$KEY" ./arbigentw run $AI_ARGS $attempt_args 2>&1 && rc=0 || rc=$?
+                else
+                  ./arbigentw run $AI_ARGS $attempt_args 2>&1 && rc=0 || rc=$?
+                fi
+                echo "$rc" > "$EXIT_FILE"
+              } | tee -a "$LOG"
+              echo "::endgroup::"
+              tail -c "+$((log_start + 1))" "$LOG" > "$ATTEMPT_LOG"
+              return 0
+            }
+
+            # Scenario ids that did not succeed, comma-separated, read from the CLI's
+            # own report. Empty means every selected scenario passed.
+            failed_scenario_ids() {
+              [ -f "$RESULT_FILE" ] || return 0
+              awk '
+                /^[[:space:]]*-[[:space:]]*id:/ {
+                  s = $0
+                  sub(/^[[:space:]]*-[[:space:]]*id:[[:space:]]*/, "", s)
+                  gsub(/"/, "", s)
+                  sub(/[[:space:]]+$/, "", s)
+                  id = s
+                  next
+                }
+                id != "" && /^[[:space:]]*executionStatus:/ {
+                  s = $0
+                  sub(/^[^:]*:[[:space:]]*/, "", s)
+                  gsub(/"/, "", s)
+                  sub(/[[:space:]]+$/, "", s)
+                  print id "\t" s
+                  id = ""
+                }
+              ' "$RESULT_FILE" | awk -F'\t' 'tolower($2) ~ /fail|error|timeout|cancel/ { print $1 }' | paste -sd, -
+            }
+
+            provider_hit_api_error() {
+              [ -f "$ATTEMPT_LOG" ] || return 1
+              grep -qEi "$API_ERROR_PATTERN" "$ATTEMPT_LOG"
+            }
+
+            # --- the chain ---------------------------------------------------------
             adb install -r app/build/outputs/apk/debug/app-debug.apk
-            ./arbigentw run --os=android --project-file=.arbigent/imancore_ux_audit.yaml --ai-type=gemini --gemini-model-name="$GEMINI_MODEL"
+
+            provider=""
+            retry_ids=""
+            for candidate in github groq gemini openrouter; do
+              echo "--- provider: $candidate"
+              if ! configure_provider "$candidate"; then
+                echo "  skipped: no key configured"
+                continue
+              fi
+              echo "  model: $MODEL"
+              if ! probe_provider; then
+                echo "  skipped: pre-flight probe rejected this provider"
+                continue
+              fi
+
+              run_with_provider "$candidate" "$retry_ids"
+              rc=$(cat "$EXIT_FILE" 2>/dev/null || echo 1)
+              failed_ids=$(failed_scenario_ids)
+
+              if [ -z "$failed_ids" ] && [ "$rc" = "0" ]; then
+                echo "::notice::All selected scenarios passed on the $candidate provider ($MODEL)."
+                rm -f "$PROBE_BODY" "$EXIT_FILE" "$ATTEMPT_LOG"
+                exit 0
+              fi
+
+              if [ "$rc" != "0" ] && [ -z "$failed_ids" ] && ! provider_hit_api_error; then
+                echo "::error::arbigent failed to run on $candidate (exit $rc) without an API error and without writing results. See arbigent-run.log."
+                exit 1
+              fi
+
+              if provider_hit_api_error; then
+                echo "::warning::$candidate hit a rate limit, quota or transport error; trying the next provider for: ${failed_ids:-all scenarios}"
+                retry_ids="$failed_ids"
+                provider="$candidate"
+                continue
+              fi
+
+              # Failures with no API error in the log are real UI bugs. Stop here so a
+              # broken screen is reported instead of being hidden by a retry.
+              echo "::error::Scenarios failed on the $candidate provider for non-API reasons: ${failed_ids:-unknown}. This is a UI/assertion failure, not a quota problem."
+              exit 1
+            done
+
+            echo "::error::No provider completed the suite. Tried up to github, groq, gemini and openrouter; each was missing a key, rejected its probe, or exhausted its free tier. Last provider: ${provider:-none}."
+            exit 1
 
       - name: Upload AI QA Report & Screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: arbigent-ux-report
-          path: arbigent-result/
+          path: |
+            arbigent-result/
+            arbigent-run.log
+          if-no-files-found: warn
 
       - name: Remove Arbigent settings (contains the API key)
         if: always()
-        run: rm -f .arbigent/settings.local.yml
+        run: rm -f .arbigent/settings.local.yml arbigent-probe.json arbigent-exit-code arbigent-attempt.log
