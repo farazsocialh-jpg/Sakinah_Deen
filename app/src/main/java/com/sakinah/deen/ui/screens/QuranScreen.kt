@@ -30,7 +30,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FormatQuote
@@ -47,8 +46,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -163,6 +160,7 @@ fun QuranScreen(
     var hifzOverlayActive by remember { mutableStateOf(false) }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var showQuranOptions by remember { mutableStateOf(false) }
+    var showWbwLanguageSheet by remember { mutableStateOf(false) }
     var showBookmarks by remember { mutableStateOf(false) }
     // 0 means no ayah action bar; any other value is the ayah it acts on.
     var actionBarAyah by remember { mutableIntStateOf(0) }
@@ -566,13 +564,35 @@ fun QuranScreen(
                 menuContentDescription = stringResource(R.string.quran_options_title),
                 modifier = Modifier.align(Alignment.BottomCenter),
                 actions = {
-                    ReaderPillLayoutMenu(
+                    ReaderPillLayoutToggle(
                         selected = readingLayout,
-                        onSelect = { appearancePrefs.updateQuranReadingLayout(it) }
+                        onClick = {
+                            val next = if (readingLayout == QuranReadingLayout.SPLIT_COLUMN) {
+                                QuranReadingLayout.THUMB_BOTTOM_DOCK
+                            } else {
+                                QuranReadingLayout.SPLIT_COLUMN
+                            }
+                            appearancePrefs.updateQuranReadingLayout(next)
+                        }
                     )
                     ReaderPillModeButton(
                         studyMode = state.isStudyMode,
                         onClick = { vm.onIntent(QuranUiIntent.ToggleReadingMode) }
+                    )
+                    ReaderPillToggleIcon(
+                        icon = if (hifzOverlayActive) Icons.Default.VisibilityOff
+                        else Icons.Default.Visibility,
+                        description = "Toggle Hifz mistake highlighting",
+                        active = hifzOverlayActive,
+                        onClick = { hifzOverlayActive = !hifzOverlayActive }
+                    )
+                    ReaderPillToggleIcon(
+                        icon = Icons.Default.Translate,
+                        description = "Toggle word-by-word",
+                        active = state.wbwEnabled,
+                        onClick = {
+                            vm.onIntent(QuranUiIntent.SetWbwEnabled(!state.wbwEnabled))
+                        }
                     )
                 }
             )
@@ -619,12 +639,6 @@ fun QuranScreen(
                         )
                     }
                 }
-
-                SegmentedPillBar(
-                    options = listOf("Surah", "Translation", "Tafsir"),
-                    selectedIndex = studioSheetTab.coerceIn(0, 2),
-                    onSelect = { studioSheetTab = it }
-                )
 
                 when (studioSheetTab) {
                     0 -> {
@@ -969,57 +983,105 @@ fun QuranScreen(
     }
 
     if (showQuranOptions) {
-        ModalBottomSheet(onDismissRequest = { showQuranOptions = false }) {
-            QuranReadingOptionsSheet(
-                readingMode = state.readingMode,
-                onReadingModeSelect = { mode ->
-                    vm.onIntent(QuranUiIntent.SetReadingMode(mode))
-                },
-                readingLayout = readingLayout,
-                onReadingLayoutSelect = { layout ->
-                    appearancePrefs.updateQuranReadingLayout(layout)
-                },
-                wbwEnabled = state.wbwEnabled,
-                onWbwEnabledChange = { enabled ->
-                    vm.onIntent(QuranUiIntent.SetWbwEnabled(enabled))
-                },
-                wbwScript = state.qulScript,
-                onWbwScriptSelect = { script ->
-                    vm.onIntent(QuranUiIntent.SelectQulScript(script))
-                },
-                wbwLanguages = state.availableWbwLanguages,
-                wbwLanguage = state.wbwLanguage,
-                onWbwLanguageSelect = { code ->
-                    vm.onIntent(QuranUiIntent.SelectWbwLanguage(code))
-                },
-                translationLanguage = state.selectedTranslationLanguage,
-                onSearch = {
-                    searchExpanded = true
-                    showQuranOptions = false
-                },
-                onBookmarks = {
-                    showBookmarks = true
-                    showQuranOptions = false
-                },
-                onTranslation = {
-                    studioSheetTab = 1
-                    showQuranOptions = false
-                },
-                onTafsir = {
-                    studioSheetTab = 2
-                    showQuranOptions = false
-                },
-                hifzEnabled = hifzOverlayActive,
-                onHifzChange = { hifzOverlayActive = it },
-                offlineSummary = state.offlineStatus?.let { status ->
-                    pluralStringResource(
-                        R.plurals.quran_offline_compact,
-                        status.totalAyahs,
-                        status.ayahsAvailable,
-                        status.totalAyahs
+        ModalBottomSheet(
+            onDismissRequest = { showQuranOptions = false },
+            sheetState = sheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = "Reader menu",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+                ReaderOverflowItem(
+                    icon = Icons.Default.Translate,
+                    label = "Translation",
+                    onClick = {
+                        studioSheetTab = 1
+                        showQuranOptions = false
+                    }
+                )
+                ReaderOverflowItem(
+                    icon = Icons.Default.Book,
+                    label = "Tafsir",
+                    onClick = {
+                        studioSheetTab = 2
+                        showQuranOptions = false
+                    }
+                )
+                ReaderOverflowItem(
+                    icon = Icons.Default.Translate,
+                    label = "Word-by-Word Language",
+                    onClick = {
+                        showWbwLanguageSheet = true
+                        showQuranOptions = false
+                    }
+                )
+            }
+        }
+    }
+
+    if (showWbwLanguageSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showWbwLanguageSheet = false },
+            sheetState = sheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Word-by-Word Language",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                if (state.availableWbwLanguages.isEmpty()) {
+                    Text(
+                        text = "No word-by-word languages are available yet.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        state.availableWbwLanguages.forEach { code ->
+                            val selected = code == state.wbwLanguage
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.clickable {
+                                    vm.onIntent(QuranUiIntent.SelectWbwLanguage(code))
+                                    showWbwLanguageSheet = false
+                                }
+                            ) {
+                                Text(
+                                    text = wbwLanguageLabel(code),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (selected) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
                 }
-            )
+            }
         }
     }
 
@@ -1229,46 +1291,80 @@ internal fun QuranReadingMode.localizedLabel(): String = when (this) {
     QuranReadingMode.MUSHAF -> stringResource(R.string.quran_mode_mushaf)
 }
 
-/** Layout picker shown inside the bottom reader pill. */
+/** One-tap switch between Split-column study and Thumb-zone dock. */
 @Composable
-private fun ReaderPillLayoutMenu(
+private fun ReaderPillLayoutToggle(
     selected: QuranReadingLayout,
-    onSelect: (QuranReadingLayout) -> Unit
+    onClick: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        IconButton(
-            onClick = { expanded = true }
+    val target = if (selected == QuranReadingLayout.SPLIT_COLUMN) {
+        QuranReadingLayout.THUMB_BOTTOM_DOCK
+    } else {
+        QuranReadingLayout.SPLIT_COLUMN
+    }
+    IconButton(onClick = onClick) {
+        Icon(
+            imageVector = when (target) {
+                QuranReadingLayout.SPLIT_COLUMN -> Icons.Default.ViewColumn
+                QuranReadingLayout.THUMB_BOTTOM_DOCK -> Icons.Default.ViewAgenda
+            },
+            contentDescription = target.localizedLabel(),
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(19.dp)
+        )
+    }
+}
+
+/** Compact toggle icon used by the bottom reader dock. */
+@Composable
+private fun ReaderPillToggleIcon(
+    icon: ImageVector,
+    description: String,
+    active: Boolean,
+    onClick: () -> Unit
+) {
+    IconButton(onClick = onClick) {
+        Icon(
+            imageVector = icon,
+            contentDescription = description,
+            tint = if (active) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(19.dp)
+        )
+    }
+}
+
+/** Single row in the three-dot reader overflow sheet. */
+@Composable
+private fun ReaderOverflowItem(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.ViewColumn,
-                contentDescription = stringResource(R.string.quran_pill_layout),
+                imageVector = icon,
+                contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(19.dp)
+                modifier = Modifier.size(18.dp)
             )
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            QuranReadingLayout.entries.forEach { layout ->
-                DropdownMenuItem(
-                    text = { Text(text = layout.localizedLabel(), fontSize = 13.sp) },
-                    onClick = {
-                        expanded = false
-                        onSelect(layout)
-                    },
-                    leadingIcon = {
-                        if (layout == selected) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        } else {
-                            Spacer(Modifier.size(16.dp))
-                        }
-                    }
-                )
-            }
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }
