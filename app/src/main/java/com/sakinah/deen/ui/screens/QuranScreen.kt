@@ -1,9 +1,15 @@
 package com.sakinah.deen.ui.screens
 
 import android.content.Intent
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -215,6 +221,8 @@ fun QuranScreen(
     var overscrollHandled by remember { mutableStateOf(false) }
     // 0 means no ayah action bar; any other value is the ayah it acts on.
     var actionBarAyah by remember { mutableIntStateOf(0) }
+    // Downward reading collapses the dock; upward/top/tap restores the full six actions.
+    var dockCollapsed by remember { mutableStateOf(false) }
 
     val appearancePrefs = rememberInject<AppearancePreferences>()
     val appearanceConfig by appearancePrefs.effectiveConfig.collectAsStateWithLifecycle()
@@ -264,6 +272,14 @@ fun QuranScreen(
     LaunchedEffect(surah.number) {
         quickJumpSurah = surah.number
         actionBarAyah = 0
+        dockCollapsed = false
+    }
+
+    LaunchedEffect(dockCollapsed) {
+        if (dockCollapsed) {
+            showFontSlider = false
+            actionBarAyah = 0
+        }
     }
 
     LaunchedEffect(showFontSlider) {
@@ -282,6 +298,27 @@ fun QuranScreen(
         snapshotFlow { listState.isScrollInProgress }
             .filter { it }
             .collect { showFontSlider = false }
+    }
+
+    // Track direction from the lazy list itself so the dock can recede while the reader
+    // moves forward, without interfering with the scrubber or the saved scroll position.
+    LaunchedEffect(listState, surah.number, state.readingMode, readingLayout, focusMode) {
+        var lastIndex = listState.firstVisibleItemIndex
+        var lastOffset = listState.firstVisibleItemScrollOffset
+        snapshotFlow {
+            listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+        }.collect { (index, offset) ->
+            val atTop = index == 0 && offset < 8
+            val delta = (index - lastIndex) * 1_000_000 + (offset - lastOffset)
+            dockCollapsed = when {
+                atTop -> false
+                delta < -4 -> false
+                delta > 4 && !showFontSlider && actionBarAyah == 0 && !focusMode -> true
+                else -> dockCollapsed
+            }
+            lastIndex = index
+            lastOffset = offset
+        }
     }
 
     LaunchedEffect(
@@ -643,15 +680,7 @@ fun QuranScreen(
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                     if (surah.number != 1 && surah.number != 9) {
-                                        Text(
-                                            text = "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
-                                            fontFamily = UthmanicFontFamily,
-                                            fontSize = 22.sp,
-                                            lineHeight = 40.sp,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            textAlign = TextAlign.Center,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
+                                        BismillahHeader()
                                     }
                                 }
                             }
@@ -740,104 +769,154 @@ fun QuranScreen(
             }
 
             if (!focusMode) {
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(26.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
-                    shadowElevation = 8.dp
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        StudyDockIcon(
-                            description = "Toggle reading layout",
-                            active = false,
-                            onClick = {
-                                val next = if (readingLayout == QuranReadingLayout.SPLIT_COLUMN) {
-                                    QuranReadingLayout.THUMB_BOTTOM_DOCK
-                                } else {
-                                    QuranReadingLayout.SPLIT_COLUMN
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val collapseOffset by animateDpAsState(
+                        targetValue = if (dockCollapsed) maxOf(0.dp, (maxWidth - 64.dp) / 2) else 0.dp,
+                        animationSpec = spring()
+                    )
+                    AnimatedContent(
+                        targetState = dockCollapsed,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 8.dp)
+                            .offset(x = collapseOffset),
+                        transitionSpec = {
+                            (fadeIn(animationSpec = spring()) + scaleIn(
+                                initialScale = 0.82f,
+                                animationSpec = spring()
+                            )) togetherWith
+                                (fadeOut(animationSpec = spring()) + scaleOut(
+                                    targetScale = 0.82f,
+                                    animationSpec = spring()
+                                ))
+                        }
+                    ) { collapsed ->
+                        if (collapsed) {
+                            Surface(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clickable { dockCollapsed = false }
+                                    .semantics { contentDescription = "Expand study controls" },
+                                shape = RoundedCornerShape(50),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                                ),
+                                shadowElevation = 8.dp
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.MoreHoriz,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
                                 }
-                                appearancePrefs.updateQuranReadingLayout(next)
                             }
-                        ) { color ->
-                            Icon(
-                                imageVector = if (readingLayout == QuranReadingLayout.SPLIT_COLUMN) {
-                                    Icons.Outlined.ViewAgenda
-                                } else {
-                                    Icons.Outlined.ViewColumn
-                                },
-                                contentDescription = null,
-                                tint = color,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        StudyDockIcon(
-                            description = stringResource(R.string.quran_pill_reading_mode),
-                            active = state.isStudyMode,
-                            onClick = toggleStudyMode
-                        ) { color ->
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Outlined.MenuBook,
-                                contentDescription = null,
-                                tint = color,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        StudyDockIcon(
-                            description = "Toggle Hifz mistake highlighting",
-                            active = hifzOverlayActive,
-                            onClick = { hifzOverlayActive = !hifzOverlayActive }
-                        ) { color ->
-                            Icon(
-                                imageVector = Icons.Outlined.Psychology,
-                                contentDescription = null,
-                                tint = color,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        StudyDockIcon(
-                            description = "Toggle word-by-word",
-                            active = state.wbwEnabled,
-                            onClick = {
-                                vm.onIntent(QuranUiIntent.SetWbwEnabled(!state.wbwEnabled))
+                        } else {
+                            Surface(
+                                modifier = Modifier.padding(horizontal = 8.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                border = BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                                ),
+                                shadowElevation = 8.dp
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceEvenly
+                                ) {
+                                    StudyDockIcon(
+                                        description = "Toggle reading layout",
+                                        active = false,
+                                        onClick = {
+                                            val next = if (readingLayout == QuranReadingLayout.SPLIT_COLUMN) {
+                                                QuranReadingLayout.THUMB_BOTTOM_DOCK
+                                            } else {
+                                                QuranReadingLayout.SPLIT_COLUMN
+                                            }
+                                            appearancePrefs.updateQuranReadingLayout(next)
+                                        }
+                                    ) { color ->
+                                        Icon(
+                                            imageVector = if (readingLayout == QuranReadingLayout.SPLIT_COLUMN) {
+                                                Icons.Outlined.ViewAgenda
+                                            } else {
+                                                Icons.Outlined.ViewColumn
+                                            },
+                                            contentDescription = null,
+                                            tint = color,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                    StudyDockIcon(
+                                        description = stringResource(R.string.quran_pill_reading_mode),
+                                        active = state.isStudyMode,
+                                        onClick = toggleStudyMode
+                                    ) { color ->
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Outlined.MenuBook,
+                                            contentDescription = null,
+                                            tint = color,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                    StudyDockIcon(
+                                        description = "Toggle Hifz mistake highlighting",
+                                        active = hifzOverlayActive,
+                                        onClick = { hifzOverlayActive = !hifzOverlayActive }
+                                    ) { color ->
+                                        Icon(
+                                            imageVector = Icons.Outlined.Psychology,
+                                            contentDescription = null,
+                                            tint = color,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                    StudyDockIcon(
+                                        description = "Toggle word-by-word",
+                                        active = state.wbwEnabled,
+                                        onClick = {
+                                            vm.onIntent(QuranUiIntent.SetWbwEnabled(!state.wbwEnabled))
+                                        }
+                                    ) { color ->
+                                        Icon(
+                                            imageVector = Icons.Outlined.Translate,
+                                            contentDescription = null,
+                                            tint = color,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                    StudyDockIcon(
+                                        description = "Adjust reading font size",
+                                        active = showFontSlider,
+                                        onClick = { showFontSlider = !showFontSlider }
+                                    ) { color ->
+                                        Icon(
+                                            imageVector = Icons.Outlined.FormatSize,
+                                            contentDescription = null,
+                                            tint = color,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                    StudyDockIcon(
+                                        description = stringResource(R.string.quran_options_title),
+                                        active = showQuranOptions,
+                                        onClick = { showQuranOptions = true }
+                                    ) { color ->
+                                        Icon(
+                                            imageVector = Icons.Default.MoreHoriz,
+                                            contentDescription = null,
+                                            tint = color,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                }
                             }
-                        ) { color ->
-                            Icon(
-                                imageVector = Icons.Outlined.Translate,
-                                contentDescription = null,
-                                tint = color,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        StudyDockIcon(
-                            description = "Adjust reading font size",
-                            active = showFontSlider,
-                            onClick = { showFontSlider = !showFontSlider }
-                        ) { color ->
-                            Icon(
-                                imageVector = Icons.Outlined.FormatSize,
-                                contentDescription = null,
-                                tint = color,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        StudyDockIcon(
-                            description = stringResource(R.string.quran_options_title),
-                            active = showQuranOptions,
-                            onClick = { showQuranOptions = true }
-                        ) { color ->
-                            Icon(
-                                imageVector = Icons.Default.MoreHoriz,
-                                contentDescription = null,
-                                tint = color,
-                                modifier = Modifier.size(24.dp)
-                            )
                         }
                     }
                 }
@@ -1590,6 +1669,20 @@ private fun FastAyahScrubber(
             }
         }
     }
+}
+
+/** Shared verbatim Bismillah header for the Mushaf page and verse-by-verse reader. */
+@Composable
+internal fun BismillahHeader(modifier: Modifier = Modifier) {
+    Text(
+        text = "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
+        fontFamily = UthmanicFontFamily,
+        fontSize = 22.sp,
+        lineHeight = 40.sp,
+        color = MaterialTheme.colorScheme.onSurface,
+        textAlign = TextAlign.Center,
+        modifier = modifier.fillMaxWidth()
+    )
 }
 
 /** Equal touch target for each of the six bottom study actions. */
