@@ -24,6 +24,19 @@ class QuranReaderPreferencesTest {
     }
 
     @Test
+    fun wordByWordIsOffByDefault_andStoredChoicesSurvive() {
+        val p = prefs()
+        assertFalse(p.wbwEnabled)
+
+        p.wbwEnabled = true
+        assertTrue(p.wbwEnabled)
+
+        val legacyChoice = FakeSharedPreferences()
+        legacyChoice.edit().putBoolean("quran_wbw_enabled", true).apply()
+        assertTrue(QuranReaderPreferences(legacyChoice).wbwEnabled)
+    }
+
+    @Test
     fun unknownReadingModeFallsBackToStudy() {
         val fake = FakeSharedPreferences()
         fake.edit().putString("quran_reading_mode", "BOOK_SCROLL").apply()

@@ -28,6 +28,9 @@ class AppearancePreferencesTest {
         val initial = store.config.value
         assertFalse(initial.onboardingCompleted)
         assertEquals(UserObjective.ALL_IN_ONE, initial.objective)
+        assertEquals(ThemeMode.SYSTEM, initial.themeMode)
+        assertEquals(SakinahPalette.EMERALD_SANCTUARY, initial.palette)
+        assertEquals(QuranReadingLayout.THUMB_BOTTOM_DOCK, initial.quranReadingLayout)
         assertEquals("DailySalah", UserObjective.PRAYER_COMPASS.recommendedStartTab)
         assertEquals("Quran", UserObjective.QURAN_STUDY.recommendedStartTab)
         assertEquals("Hadith", UserObjective.HADITH_SCHOLAR.recommendedStartTab)
@@ -109,7 +112,7 @@ class AppearancePreferencesTest {
 
         fake.edit().putString("quran_reading_layout", "OBSOLETE_LAYOUT").apply()
         assertEquals(
-            QuranReadingLayout.SPLIT_COLUMN,
+            QuranReadingLayout.THUMB_BOTTOM_DOCK,
             AppearancePreferences(fake).config.value.quranReadingLayout
         )
     }

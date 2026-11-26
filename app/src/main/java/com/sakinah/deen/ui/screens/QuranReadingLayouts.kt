@@ -77,7 +77,7 @@ internal data class QuranAyahUiState(
     val focusMode: Boolean,
     val bookmarkedAyahNumbers: Set<Int> = emptySet(),
     /** False hides the word-by-word strip without losing the reader's choice. */
-    val wbwEnabled: Boolean = true,
+    val wbwEnabled: Boolean = false,
     val selectedWbwWordKey: String? = null
 )
 

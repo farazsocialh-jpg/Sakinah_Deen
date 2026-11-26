@@ -176,7 +176,7 @@ class QuranReaderPreferences internal constructor(
 
     /** Whether the word-by-word strip is shown under each ayah at all. */
     var wbwEnabled: Boolean
-        get() = prefs.getBoolean(KEY_WBW_ENABLED, true)
+        get() = prefs.getBoolean(KEY_WBW_ENABLED, false)
         set(value) = prefs.edit { putBoolean(KEY_WBW_ENABLED, value) }
 
     /** Mushaf page layout key bundled in the QUL database. */

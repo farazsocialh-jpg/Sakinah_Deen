@@ -99,7 +99,7 @@ data class QuranUiState(
     /** The single persisted word-by-word presentation, retained for preference migration. */
     val wbwLayoutMode: WbwLayoutMode = WbwLayoutMode.DEFAULT,
     /** False hides the word-by-word strip entirely; the choice is remembered. */
-    val wbwEnabled: Boolean = true,
+    val wbwEnabled: Boolean = false,
     val mushafLayout: String = QuranReaderPreferences.DEFAULT_MUSHAF_LAYOUT,
     /** Word whose morphology sheet is open, plus its root occurrences. */
     val selectedQulWord: QulWord? = null,
@@ -216,7 +216,7 @@ class QuranViewModel(
             mushafLayout = quranReaderPreferences?.mushafLayout
                 ?: QuranReaderPreferences.DEFAULT_MUSHAF_LAYOUT,
             wbwLayoutMode = quranReaderPreferences?.wbwLayoutMode ?: WbwLayoutMode.DEFAULT,
-            wbwEnabled = quranReaderPreferences?.wbwEnabled ?: true
+            wbwEnabled = quranReaderPreferences?.wbwEnabled ?: false
         )
     )
     val uiState: StateFlow<QuranUiState> = _uiState.asStateFlow()

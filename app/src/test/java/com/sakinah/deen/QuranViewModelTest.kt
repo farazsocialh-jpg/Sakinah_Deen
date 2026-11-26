@@ -31,6 +31,8 @@ class QuranViewModelTest {
         val state = vm.uiState.value
         assertEquals("Al-Fatihah", state.currentSurah.nameEnglish)
         assertTrue(state.surahs.isNotEmpty())
+        assertTrue(state.isStudyMode)
+        assertFalse(state.wbwEnabled)
     }
 
     @Test

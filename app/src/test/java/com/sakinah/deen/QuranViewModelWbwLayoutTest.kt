@@ -19,6 +19,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -75,6 +76,23 @@ class QuranViewModelWbwLayoutTest {
         override suspend fun getAyahTopics(ayahKey: String): List<Pair<String, String?>> = emptyList()
 
         override suspend fun isAvailable(): Boolean = true
+    }
+
+    @Test
+    fun wordByWordStartsOff_andTheDockTogglePersistsTheChoice() = runTest(testDispatcher) {
+        val fake = FakeSharedPreferences()
+        val prefs = QuranReaderPreferences(fake)
+        val vm = QuranViewModel(quranReaderPreferences = prefs, qulDatabase = FakeQul())
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.wbwEnabled)
+        assertFalse(prefs.wbwEnabled)
+
+        vm.onIntent(QuranUiIntent.SetWbwEnabled(true))
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.wbwEnabled)
+        assertTrue(QuranReaderPreferences(fake).wbwEnabled)
     }
 
     @Test
