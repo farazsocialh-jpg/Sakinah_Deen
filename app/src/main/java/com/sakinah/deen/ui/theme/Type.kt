@@ -9,11 +9,13 @@ import androidx.compose.ui.unit.sp
 import com.sakinah.deen.R
 
 /**
- * KFGQPC Uthmanic Hafs preserves Quranic diacritics and waqf marks; Amiri is a
- * classical Naskh face used for Hadith matn, tafsir, and Arabic quotations.
+ * Official KFGQPC Uthmanic Hafs v18 (UthmanicHafs1Ver18.ttf), shipped verbatim from
+ * the quran.com/QUL font assets. Its Unicode cmap carries the full Uthmani annotation
+ * range U+06D6–U+06ED natively, including U+06DF (۟), so no text substitution is needed.
+ * Amiri is a classical Naskh face used for Hadith matn, tafsir, and Arabic quotations.
  */
 val UthmanicFontFamily = FontFamily(
-    Font(R.font.uthmanic_hafs, FontWeight.Normal)
+    Font(R.font.uthmanic_hafs1_ver18, FontWeight.Normal)
 )
 
 val AmiriFontFamily = FontFamily(
