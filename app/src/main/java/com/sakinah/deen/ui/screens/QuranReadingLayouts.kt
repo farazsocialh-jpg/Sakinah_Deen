@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -48,7 +50,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -96,16 +102,19 @@ private fun hifzTagFor(surah: SurahModel, ayah: AyahModel, state: QuranAyahUiSta
 private fun AyahNumberBadge(number: Int, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .size(20.dp)
+            .defaultMinSize(minWidth = 28.dp, minHeight = 28.dp)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primary),
+            .background(MaterialTheme.colorScheme.primary)
+            .padding(horizontal = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = "$number",
-            fontSize = 9.sp,
+            fontSize = 11.sp,
+            lineHeight = 11.sp,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onPrimary
+            color = MaterialTheme.colorScheme.onPrimary,
+            style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
         )
     }
 }
@@ -241,11 +250,20 @@ private fun SplitColumnLayout(
                 if (index == 0 && surah.number != 1 && surah.number != 9) {
                     BismillahHeader(modifier = Modifier.padding(bottom = 8.dp))
                 }
+                val dividerColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(IntrinsicSize.Min)
-                        .clickable { onAyahClick(ayah) },
+                        .clickable { onAyahClick(ayah) }
+                        .drawBehind {
+                            val dividerX = size.width * 0.48f
+                            drawLine(
+                                color = dividerColor,
+                                start = Offset(dividerX, 0f),
+                                end = Offset(dividerX, size.height),
+                                strokeWidth = 1.dp.toPx()
+                            )
+                        },
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Column(
@@ -269,12 +287,6 @@ private fun SplitColumnLayout(
                         HifzTagRow(surah, ayah, state, onTagMistake)
                         TafseerLink(onClick = { onTafseer(ayah) })
                     }
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .fillMaxHeight()
-                            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
-                    )
                     Column(
                         modifier = Modifier
                             .weight(0.52f)
@@ -416,8 +428,11 @@ private fun WbwInterlinear(
     fontSizeSp: Int,
     onWordClick: (QulWord) -> Unit
 ) {
+    // No height cap and no take(n): every word of the ayah wraps into the FlowRow.
     FlowRow(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .wrapContentHeight(),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.Start),
         verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
