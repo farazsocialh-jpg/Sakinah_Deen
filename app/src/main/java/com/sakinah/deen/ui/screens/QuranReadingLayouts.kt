@@ -247,8 +247,8 @@ private fun SplitColumnLayout(
                 Column(
                     modifier = Modifier
                         .weight(0.48f)
-                        .padding(vertical = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -274,7 +274,7 @@ private fun SplitColumnLayout(
                 Column(
                     modifier = Modifier
                         .weight(0.52f)
-                        .padding(vertical = 6.dp)
+                        .padding(vertical = 4.dp)
                 ) {
                     AyahArabic(ayah, state.arabicFontSizeSp)
                     WbwWordsBlock(
@@ -314,8 +314,8 @@ private fun ThumbBottomDockLayout(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 112.dp),
-        verticalArrangement = Arrangement.spacedBy(5.dp)
+        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 112.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         itemsIndexed(
             items = ayahs,
@@ -326,8 +326,8 @@ private fun ThumbBottomDockLayout(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onAyahClick(ayah) }
-                    .padding(vertical = 3.dp),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
+                    .padding(vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -409,7 +409,7 @@ private fun WbwInterlinear(
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.Start),
-        verticalArrangement = Arrangement.spacedBy(9.dp)
+        verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
         words.forEach { word ->
             key(word.wordKey) {

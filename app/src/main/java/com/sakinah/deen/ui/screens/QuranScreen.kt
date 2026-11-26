@@ -3,29 +3,40 @@ package com.sakinah.deen.ui.screens
 import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Book
@@ -65,10 +76,12 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -76,16 +89,21 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -99,6 +117,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -112,6 +131,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.R
 import com.sakinah.deen.data.model.AyahModel
 import com.sakinah.deen.data.model.QuranArabicScript
+import com.sakinah.deen.data.model.SurahModel
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.QuranReadingLayout
 import com.sakinah.deen.data.prefs.QuranReadingMode
@@ -119,7 +139,6 @@ import com.sakinah.deen.data.quran.QulWord
 import com.sakinah.deen.ui.components.ArabicVerseBlock
 import com.sakinah.deen.ui.components.QuranOfflineStatusBanner
 import com.sakinah.deen.ui.components.SakinahCard
-import com.sakinah.deen.ui.components.UnifiedReaderPill
 import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.components.StatusBadge
 import com.sakinah.deen.ui.rememberInject
@@ -132,6 +151,7 @@ import com.sakinah.deen.ui.viewmodel.QuranViewModel
 import com.sakinah.deen.util.ArabicNormalizer
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.filter
 import kotlin.math.roundToInt
 import org.koin.androidx.compose.koinViewModel
@@ -180,6 +200,11 @@ fun QuranScreen(
     var showWbwLanguageSheet by remember { mutableStateOf(false) }
     var showFontSlider by remember { mutableStateOf(false) }
     var showBookmarks by remember { mutableStateOf(false) }
+    var quickJumpQuery by remember { mutableStateOf("") }
+    var quickJumpSurah by remember { mutableIntStateOf(surah.number) }
+    var scrubberActive by remember { mutableStateOf(false) }
+    var scrubberAyah by remember { mutableIntStateOf(1) }
+    var overscrollHandled by remember { mutableStateOf(false) }
     // 0 means no ayah action bar; any other value is the ayah it acts on.
     var actionBarAyah by remember { mutableIntStateOf(0) }
 
@@ -193,6 +218,13 @@ fun QuranScreen(
 
     val listState = rememberLazyListState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val atEndOfSurah by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            info.totalItemsCount > 0 &&
+                info.visibleItemsInfo.lastOrNull()?.index == info.totalItemsCount - 1
+        }
+    }
 
     // Both presentations prepend a header item in the continuous page; the verse layouts do not.
     val usesHeaderItem = !state.isStudyMode
@@ -219,6 +251,10 @@ fun QuranScreen(
             vm.onIntent(QuranUiIntent.SelectSurahAtAyah(initialSurahNumber, initialAyahNumber))
             selectedAyahNumber = initialAyahNumber
         }
+    }
+
+    LaunchedEffect(surah.number) {
+        quickJumpSurah = surah.number
     }
 
     LaunchedEffect(
@@ -345,6 +381,22 @@ fun QuranScreen(
     val toggleStudyMode: () -> Unit = {
         vm.onIntent(QuranUiIntent.ToggleReadingMode)
     }
+    val jumpToSurah: (Int) -> Unit = { number ->
+        val target = number.coerceIn(1, 114)
+        vm.onIntent(QuranUiIntent.SelectSurahAtAyah(target, 1))
+        selectedAyahNumber = 1
+        studioSheetTab = -1
+        overscrollHandled = false
+    }
+    val jumpToAyah: (Int, Int) -> Unit = { number, ayah ->
+        vm.onIntent(QuranUiIntent.SelectSurahAtAyah(number, ayah))
+        selectedAyahNumber = ayah
+        studioSheetTab = -1
+    }
+    val previousSurah = (surah.number - 1).coerceAtLeast(1)
+    val nextSurah = (surah.number + 1).coerceAtMost(114)
+    val nextSurahName = state.surahs.firstOrNull { it.number == nextSurah }?.nameEnglish
+        ?: "Surah $nextSurah"
 
     Box(modifier = modifier.fillMaxSize()) {
             Column(
@@ -354,15 +406,44 @@ fun QuranScreen(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (readingLayout == QuranReadingLayout.THUMB_BOTTOM_DOCK) {
-                    Text(
-                        text = "${surah.number}. ${surah.nameEnglish} · ${surah.revelationType} · ${surah.ayahCount} Ayahs",
+                if (!focusMode) {
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        StudyChevron(
+                            glyph = "‹",
+                            description = "Previous Surah",
+                            enabled = surah.number > 1,
+                            onClick = { jumpToSurah(previousSurah) }
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 6.dp)
+                                .clickable { studioSheetTab = 0 }
+                        ) {
+                            Text(
+                                text = "${surah.number}. ${surah.nameEnglish} ▾ · ${surah.revelationType} · ${surah.ayahCount} Ayahs",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                        StudyChevron(
+                            glyph = "›",
+                            description = "Next Surah",
+                            enabled = surah.number < 114,
+                            onClick = { jumpToSurah(nextSurah) }
+                        )
+                    }
                 }
 
                 if (!focusMode) {
@@ -464,6 +545,46 @@ fun QuranScreen(
                                 vm.onIntent(QuranUiIntent.SelectQulWord(word.wordKey))
                             }
                         )
+                        FastAyahScrubber(
+                            ayahCount = displaySurah.ayahs.size,
+                            listState = listState,
+                            active = scrubberActive,
+                            activeAyah = scrubberAyah,
+                            onActiveChange = { scrubberActive = it },
+                            onAyahChange = { scrubberAyah = it }
+                        )
+                        if (atEndOfSurah && surah.number < 114 && !focusMode) {
+                            Surface(
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    .pointerInput(nextSurah) {
+                                        detectVerticalDragGestures(
+                                            onDragEnd = { overscrollHandled = false },
+                                            onDragCancel = { overscrollHandled = false }
+                                        ) { _, dragAmount ->
+                                            if (dragAmount < -6f && !overscrollHandled) {
+                                                overscrollHandled = true
+                                                jumpToSurah(nextSurah)
+                                            }
+                                        }
+                                    }
+                                    .clickable { jumpToSurah(nextSurah) },
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+                                shadowElevation = 4.dp
+                            ) {
+                                Text(
+                                    text = "Pull up or tap for Next Surah: $nextSurahName ↑",
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
                     }
                 } else {
                     // The mus-haf page used to build one AnnotatedString for the whole
@@ -577,21 +698,24 @@ fun QuranScreen(
                 )
             }
 
-            UnifiedReaderPill(
-                title = "${surah.number}. ${surah.nameEnglish} ▾",
-                onTitleClick = { studioSheetTab = 0 },
-                onMenuClick = { showQuranOptions = true },
-                menuContentDescription = stringResource(R.string.quran_options_title),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = 8.dp),
-                actions = {
+            if (!focusMode) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(26.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+                    shadowElevation = 8.dp
+                ) {
                     Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
-                        ReaderPillLayoutToggle(
-                            selected = readingLayout,
+                        StudyDockIcon(
+                            description = "Toggle reading layout",
+                            active = false,
                             onClick = {
                                 val next = if (readingLayout == QuranReadingLayout.SPLIT_COLUMN) {
                                     QuranReadingLayout.THUMB_BOTTOM_DOCK
@@ -600,32 +724,51 @@ fun QuranScreen(
                                 }
                                 appearancePrefs.updateQuranReadingLayout(next)
                             }
-                        )
-                        ReaderPillModeButton(
-                            studyMode = state.isStudyMode,
-                            onClick = { vm.onIntent(QuranUiIntent.ToggleReadingMode) }
-                        )
-                        ReaderPillToggleIcon(
-                            icon = hifzBrainIcon,
+                        ) { color -> LayoutToggleGlyph(color, readingLayout) }
+                        StudyDockIcon(
+                            description = stringResource(R.string.quran_pill_reading_mode),
+                            active = state.isStudyMode,
+                            onClick = toggleStudyMode
+                        ) { color -> ReadingViewGlyph(color) }
+                        StudyDockIcon(
                             description = "Toggle Hifz mistake highlighting",
                             active = hifzOverlayActive,
                             onClick = { hifzOverlayActive = !hifzOverlayActive }
-                        )
-                        ReaderPillCanvasToggle(
+                        ) { color ->
+                            Icon(
+                                imageVector = hifzBrainIcon,
+                                contentDescription = null,
+                                tint = color,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        StudyDockIcon(
                             description = "Toggle word-by-word",
                             active = state.wbwEnabled,
                             onClick = {
                                 vm.onIntent(QuranUiIntent.SetWbwEnabled(!state.wbwEnabled))
                             }
-                        ) { color -> WbwStackedGlyph(color) }
-                        ReaderPillCanvasToggle(
+                        ) { color -> WbwInterlinearGlyph(color) }
+                        StudyDockIcon(
                             description = "Adjust reading font size",
                             active = showFontSlider,
                             onClick = { showFontSlider = !showFontSlider }
-                        ) { color -> FontScaleGlyph(color) }
+                        ) { color -> FontScaleTtGlyph(color) }
+                        StudyDockIcon(
+                            description = stringResource(R.string.quran_options_title),
+                            active = showQuranOptions,
+                            onClick = { showQuranOptions = true }
+                        ) { color ->
+                            Text(
+                                text = "•••",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = color
+                            )
+                        }
                     }
                 }
-            )
+            }
 
             if (showFontSlider) {
                 Popup(
@@ -676,7 +819,11 @@ fun QuranScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Quran Study Studio",
+                        text = when (studioSheetTab) {
+                            0 -> "Surah & Ayah Quick Jump"
+                            1 -> "Translation"
+                            else -> "Tafsir"
+                        },
                         fontFamily = FontFamily.Serif,
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp,
@@ -692,74 +839,23 @@ fun QuranScreen(
 
                 when (studioSheetTab) {
                     0 -> {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 420.dp)
-                        ) {
-                            state.surahInfo?.summary?.takeIf { it.isNotBlank() }?.let { summary ->
-                                item(key = "surah-info") {
-                                    SakinahCard(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                        contentPadding = 12.dp
-                                    ) {
-                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text(
-                                                text = "About ${surah.nameEnglish}",
-                                                fontWeight = FontWeight.SemiBold,
-                                                fontSize = 12.sp,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                            Text(
-                                                text = summary,
-                                                fontSize = 11.sp,
-                                                lineHeight = 16.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            items(state.surahs, key = { it.number }) { item ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            vm.onIntent(QuranUiIntent.SelectSurah(item.number))
-                                            selectedAyahNumber = 1
-                                            studioSheetTab = -1
-                                        }
-                                        .padding(horizontal = 8.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "${item.number}",
-                                        modifier = Modifier.width(34.dp),
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = item.nameEnglish,
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 14.sp,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            text = "${item.ayahCount} ayat · ${item.revelationType}",
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Text(
-                                        text = item.nameArabic,
-                                        fontFamily = UthmanicFontFamily,
-                                        fontSize = 15.sp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-                        }
+                        val ayahCountForJump = (
+                            state.surahs.firstOrNull { it.number == quickJumpSurah }?.ayahCount
+                                ?: if (quickJumpSurah == surah.number) surah.ayahs.size else 0
+                            ).coerceAtLeast(0)
+                        QuickJumpSheet(
+                            query = quickJumpQuery,
+                            onQueryChange = { quickJumpQuery = it },
+                            surahs = state.surahs,
+                            selectedSurah = quickJumpSurah,
+                            onSelectSurah = { quickJumpSurah = it },
+                            ayahCount = ayahCountForJump,
+                            onJump = { number, ayah -> jumpToAyah(number, ayah) },
+                            onPrevious = { jumpToSurah(previousSurah) },
+                            onNext = { jumpToSurah(nextSurah) },
+                            canGoPrevious = surah.number > 1,
+                            canGoNext = surah.number < 114
+                        )
                     }
 
                     1 -> {
@@ -1326,6 +1422,395 @@ fun QuranScreen(
 internal fun QuranReadingLayout.localizedLabel(): String = when (this) {
     QuranReadingLayout.SPLIT_COLUMN -> stringResource(R.string.quran_layout_split_column)
     QuranReadingLayout.THUMB_BOTTOM_DOCK -> stringResource(R.string.quran_layout_thumb_bottom_dock)
+}
+
+/** Subtle chapter stepper used on either side of the top surah pill. */
+@Composable
+private fun StudyChevron(
+    glyph: String,
+    description: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    IconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .size(36.dp)
+            .semantics { contentDescription = description }
+    ) {
+        Text(
+            text = glyph,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (enabled) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+        )
+    }
+}
+
+/** Right-edge fast ayah scrubber; only its narrow strip consumes pointer input. */
+@Composable
+private fun FastAyahScrubber(
+    ayahCount: Int,
+    listState: LazyListState,
+    active: Boolean,
+    activeAyah: Int,
+    onActiveChange: (Boolean) -> Unit,
+    onAyahChange: (Int) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    if (ayahCount <= 1) return
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val thumbHeight = 36.dp
+        val travel = (maxHeight - thumbHeight).coerceAtLeast(0.dp)
+        val fraction = (listState.firstVisibleItemIndex.toFloat() / (ayahCount - 1))
+            .coerceIn(0f, 1f)
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .width(18.dp)
+                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+                .pointerInput(ayahCount) {
+                    detectDragGestures(
+                        onDragStart = { onActiveChange(true) },
+                        onDragEnd = { onActiveChange(false) },
+                        onDragCancel = { onActiveChange(false) }
+                    ) { change, _ ->
+                        val y = change.position.y.coerceIn(0f, size.height.toFloat())
+                        val index = ((y / size.height) * (ayahCount - 1))
+                            .roundToInt()
+                            .coerceIn(0, ayahCount - 1)
+                        onAyahChange(index + 1)
+                        scope.launch { listState.animateScrollToItem(index) }
+                    }
+                },
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(thumbHeight)
+                    .offset(y = travel * fraction)
+                    .background(
+                        MaterialTheme.colorScheme.primary,
+                        RoundedCornerShape(50)
+                    )
+            )
+        }
+        if (active) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 22.dp),
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.primary,
+                shadowElevation = 4.dp
+            ) {
+                Text(
+                    text = "Ayah $activeAyah",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+        }
+    }
+}
+
+/** Equal touch target for each of the six bottom study actions. */
+@Composable
+private fun StudyDockIcon(
+    description: String,
+    active: Boolean,
+    onClick: () -> Unit,
+    content: @Composable (Color) -> Unit
+) {
+    val container = if (active) MaterialTheme.colorScheme.secondaryContainer
+    else Color.Transparent
+    val tint = if (active) MaterialTheme.colorScheme.primary
+    else MaterialTheme.colorScheme.onSurfaceVariant
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .background(container, RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center
+    ) {
+        content(tint)
+    }
+}
+
+/** Split-column rectangle when split is active, stacked lines for the thumb dock. */
+@Composable
+private fun LayoutToggleGlyph(color: Color, layout: QuranReadingLayout) {
+    Canvas(modifier = Modifier.size(24.dp)) {
+        if (layout == QuranReadingLayout.SPLIT_COLUMN) {
+            drawRect(
+                color = color,
+                topLeft = Offset(1f, 2f),
+                size = Size(9f, 20f),
+                style = Stroke(1.6f)
+            )
+            drawRect(
+                color = color,
+                topLeft = Offset(14f, 2f),
+                size = Size(9f, 20f),
+                style = Stroke(1.6f)
+            )
+        } else {
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(2f, 3f),
+                size = Size(20f, 18f),
+                cornerRadius = CornerRadius(4f),
+                style = Stroke(1.6f)
+            )
+            listOf(8f, 12f, 16f).forEach { y ->
+                drawLine(color, Offset(5f, y), Offset(19f, y), 1.4f)
+            }
+        }
+    }
+}
+
+/** Rounded page outline with stacked reading lines. */
+@Composable
+private fun ReadingViewGlyph(color: Color) {
+    Canvas(modifier = Modifier.size(24.dp)) {
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(2f, 3f),
+            size = Size(20f, 18f),
+            cornerRadius = CornerRadius(4f),
+            style = Stroke(1.6f)
+        )
+        listOf(8f, 12f, 16f).forEach { y ->
+            drawLine(color, Offset(5f, y), Offset(19f, y), 1.4f)
+        }
+    }
+}
+
+/** Interlinear word strip: top bar branching into three words above `WbW`. */
+@Composable
+private fun WbwInterlinearGlyph(color: Color) {
+    val measurer = rememberTextMeasurer()
+    Canvas(modifier = Modifier.size(24.dp)) {
+        drawLine(color, Offset(2f, 4f), Offset(22f, 4f), 1.5f)
+        listOf(5f, 12f, 19f).forEach { x ->
+            drawLine(color, Offset(x, 4f), Offset(x, 9f), 1.5f)
+        }
+        val style = TextStyle(
+            fontSize = 8.sp,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
+        val label = measurer.measure("WbW", style = style)
+        drawText(
+            measurer,
+            "WbW",
+            topLeft = Offset((size.width - label.size.width) / 2f, 10f),
+            style = style
+        )
+    }
+}
+
+/** Crisp `tT` typography glyph with a slider baseline. */
+@Composable
+private fun FontScaleTtGlyph(color: Color) {
+    val measurer = rememberTextMeasurer()
+    Canvas(modifier = Modifier.size(24.dp)) {
+        val style = TextStyle(
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
+        val label = measurer.measure("tT", style = style)
+        drawText(
+            measurer,
+            "tT",
+            topLeft = Offset(
+                (size.width - label.size.width) / 2f,
+                (size.height - label.size.height) / 2f - 2f
+            ),
+            style = style
+        )
+        drawLine(color, Offset(3f, 20f), Offset(21f, 20f), 1.4f)
+        drawCircle(color, radius = 2f, center = Offset(12f, 20f))
+    }
+}
+
+/** Search, prev/next, and a split Surah + Ayah picker for quick navigation. */
+@Composable
+private fun QuickJumpSheet(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    surahs: List<SurahModel>,
+    selectedSurah: Int,
+    onSelectSurah: (Int) -> Unit,
+    ayahCount: Int,
+    onJump: (Int, Int) -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    canGoPrevious: Boolean,
+    canGoNext: Boolean
+) {
+    val keyboard = LocalSoftwareKeyboardController.current
+    val jumpMatch = Regex("^(\\d{1,3})\\s*:\\s*(\\d{1,3})$").matchEntire(query.trim())
+    val jumpSurah = jumpMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
+    val jumpAyah = jumpMatch?.groupValues?.getOrNull(2)?.toIntOrNull()
+    val canJump = jumpSurah != null && jumpSurah in 1..114 && jumpAyah != null && jumpAyah > 0
+    val trimmed = query.trim()
+    val filtered = if (trimmed.isBlank() || canJump) {
+        surahs
+    } else {
+        surahs.filter {
+            it.number.toString().contains(trimmed) ||
+                it.nameEnglish.contains(trimmed, ignoreCase = true)
+        }
+    }
+    val submitJump = {
+        if (canJump) {
+            onJump(jumpSurah, jumpAyah)
+            keyboard?.hide()
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Search Surah or jump e.g. 2:255", fontSize = 12.sp) },
+            leadingIcon = {
+                Icon(Icons.Default.Search, contentDescription = "Search Surah")
+            },
+            trailingIcon = {
+                if (canJump) {
+                    IconButton(onClick = { submitJump() }) {
+                        Icon(Icons.Default.Search, contentDescription = "Jump to ayah")
+                    }
+                }
+            },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { submitJump() }),
+            shape = RoundedCornerShape(14.dp)
+        )
+        if (canJump) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { submitJump() },
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Text(
+                    text = "Jump to $jumpSurah:$jumpAyah",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(onClick = onPrevious, enabled = canGoPrevious, modifier = Modifier.weight(1f)) {
+                Text("‹ Previous", fontSize = 11.sp)
+            }
+            Button(onClick = onNext, enabled = canGoNext, modifier = Modifier.weight(1f)) {
+                Text("Next ›", fontSize = 11.sp)
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 420.dp)
+        ) {
+            LazyColumn(modifier = Modifier.weight(0.42f)) {
+                items(filtered, key = { it.number }) { item ->
+                    val selected = item.number == selectedSurah
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelectSurah(item.number) }
+                            .background(
+                                if (selected) MaterialTheme.colorScheme.secondaryContainer
+                                else Color.Transparent,
+                                RoundedCornerShape(10.dp)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${item.number}.",
+                            modifier = Modifier.width(28.dp),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = item.nameEnglish,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+            )
+            Column(modifier = Modifier.weight(0.58f)) {
+                Text(
+                    text = "Ayahs · $selectedSurah",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 44.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                ) {
+                    items(count = ayahCount) { index ->
+                        val ayahNumber = index + 1
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .padding(2.dp)
+                                .clickable { onJump(selectedSurah, ayahNumber) }
+                        ) {
+                            Text(
+                                text = "$ayahNumber",
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** Compact name for the two-option segmented bar, where long labels would wrap. */
