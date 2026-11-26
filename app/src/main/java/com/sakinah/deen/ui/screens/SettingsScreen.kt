@@ -177,6 +177,7 @@ fun SettingsScreen(
     val tafseerPackages by tafseerRepository.packages.collectAsStateWithLifecycle(initialValue = emptyList())
     var downloadingPackId by remember { mutableStateOf<String?>(null) }
     var packDownloadProgress by remember { mutableFloatStateOf(0f) }
+    var tafseerLanguageFilter by remember { mutableStateOf("all") }
 
     var translationCatalog by remember { mutableStateOf<List<QuranTranslationResource>>(emptyList()) }
     var isLoadingCatalog by remember { mutableStateOf(false) }
@@ -191,6 +192,7 @@ fun SettingsScreen(
 
     LaunchedEffect(section, tafseerRepository) {
         if (section == SettingsSection.QURAN_OFFLINE) {
+            tafseerRepository.refreshCatalog()
             tafseerRepository.refreshDownloadStatus()
         }
     }
@@ -1020,80 +1022,130 @@ fun SettingsScreen(
                         }) { Text(stringResource(R.string.settings_clear_cache)) }
 
                         Text("Tafseer Packs", style = MaterialTheme.typography.titleSmall)
-                        tafseerPackages.forEach { pack ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(pack.author, fontSize = 12.sp)
-                                    Text(
-                                        text = "${pack.languageCode.uppercase()} · Quran.com v4 · ${pack.statusLabel}",
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    if (downloadingPackId == pack.id) {
-                                        LinearProgressIndicator(
-                                            progress = { packDownloadProgress },
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(top = 4.dp)
-                                        )
-                                    }
-                                }
-                                if (pack.downloadedChapters > 0) {
-                                    TextButton(
-                                        enabled = downloadingPackId == null,
-                                        onClick = {
-                                            scope.launch {
-                                                tafseerRepository.removeTafseerPackage(pack.id)
-                                                tafseerRepository.refreshDownloadStatus()
-                                                snackbarHostState.showSnackbar(
-                                                    "${pack.author} removed."
-                                                )
-                                            }
-                                        }
-                                    ) {
-                                        Text(
-                                            "Remove",
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    }
+                        Text(
+                            text = "Quran.com editions in every available language · " +
+                                "${tafseerPackages.size} catalog entries",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        val tafseerLanguages = listOf("all") +
+                            tafseerPackages.map { it.languageCode }.distinct().sorted()
+                        val effectiveTafseerFilter = if (tafseerLanguages.contains(tafseerLanguageFilter)) {
+                            tafseerLanguageFilter
+                        } else {
+                            "all"
+                        }
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            tafseerLanguages.forEach { code ->
+                                val selected = effectiveTafseerFilter == code
+                                val label = if (code == "all") {
+                                    "All"
                                 } else {
-                                    TextButton(
-                                        enabled = downloadingPackId == null,
-                                        onClick = {
-                                            downloadingPackId = pack.id
-                                            packDownloadProgress = 0f
-                                            scope.launch {
-                                                val result = tafseerRepository
-                                                    .downloadTafseerPackage(pack.id) { progress ->
-                                                        packDownloadProgress = progress
-                                                    }
-                                                tafseerRepository.refreshDownloadStatus()
-                                                downloadingPackId = null
-                                                packDownloadProgress = 0f
-                                                snackbarHostState.showSnackbar(
-                                                    result.fold(
-                                                        onSuccess = { chapters ->
-                                                            "${pack.author}: $chapters surahs cached offline."
-                                                        },
-                                                        onFailure = { error ->
-                                                            "Tafseer download failed: " +
-                                                                (error.message ?: "network error")
-                                                        }
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    ) {
-                                        if (downloadingPackId == pack.id) {
-                                            Text(
-                                                "${(packDownloadProgress * 100).toInt()}%",
-                                                fontSize = 11.sp
-                                            )
+                                    tafseerPackages.firstOrNull { it.languageCode == code }
+                                        ?.languageName
+                                        ?.takeIf { it.isNotBlank() && it != "Unknown" }
+                                        ?: IslamicDataRepository.languageDisplayName(code, code)
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (selected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    },
+                                    modifier = Modifier.clickable { tafseerLanguageFilter = code }
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (selected) {
+                                            MaterialTheme.colorScheme.onPrimary
                                         } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                        tafseerPackages
+                            .filter { pack ->
+                                effectiveTafseerFilter == "all" ||
+                                    pack.languageCode == effectiveTafseerFilter
+                            }
+                            .forEach { pack ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(pack.title, fontSize = 12.sp)
+                                        Text(
+                                            text = "${pack.author} · ${pack.languageName} · Quran.com v4 · " +
+                                                pack.statusLabel,
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        if (downloadingPackId == pack.id) {
+                                            LinearProgressIndicator(
+                                                progress = { packDownloadProgress },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(top = 4.dp)
+                                            )
+                                        }
+                                    }
+                                    if (pack.downloadedChapters > 0) {
+                                        TextButton(
+                                            enabled = downloadingPackId == null,
+                                            onClick = {
+                                                scope.launch {
+                                                    tafseerRepository.removeTafseerPackage(pack.id)
+                                                    tafseerRepository.refreshDownloadStatus()
+                                                    snackbarHostState.showSnackbar(
+                                                        "${pack.title} removed."
+                                                    )
+                                                }
+                                            }
+                                        ) {
+                                            Text(
+                                                "Delete",
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                    } else {
+                                        TextButton(
+                                            enabled = downloadingPackId == null,
+                                            onClick = {
+                                                downloadingPackId = pack.id
+                                                packDownloadProgress = 0f
+                                                scope.launch {
+                                                    val result = tafseerRepository
+                                                        .downloadTafseerPackage(pack.id) { progress ->
+                                                            packDownloadProgress = progress
+                                                        }
+                                                    tafseerRepository.refreshDownloadStatus()
+                                                    downloadingPackId = null
+                                                    packDownloadProgress = 0f
+                                                    snackbarHostState.showSnackbar(
+                                                        result.fold(
+                                                            onSuccess = { chapters ->
+                                                                "${pack.title}: $chapters surahs cached offline."
+                                                            },
+                                                            onFailure = { error ->
+                                                                "Tafseer download failed: " +
+                                                                    (error.message ?: "network error")
+                                                            }
+                                                        )
+                                                    )
+                                                }
+                                            }
+                                        ) {
                                             Text(
                                                 if (pack.isPartiallyDownloaded) "Resume" else "Download",
                                                 fontSize = 11.sp
@@ -1102,7 +1154,6 @@ fun SettingsScreen(
                                     }
                                 }
                             }
-                        }
                     }
                 }
             }

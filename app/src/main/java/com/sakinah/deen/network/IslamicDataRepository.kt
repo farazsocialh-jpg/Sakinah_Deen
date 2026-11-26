@@ -11,6 +11,8 @@ import com.sakinah.deen.data.database.entity.QuranTranslationEntity
 import com.sakinah.deen.data.model.HadithBookCatalog
 import com.sakinah.deen.data.model.HadithEditionResource
 import com.sakinah.deen.data.model.QuranTranslationResource
+import com.sakinah.deen.data.model.TafsirResource
+import com.sakinah.deen.data.model.TafsirText
 import com.sakinah.deen.data.quran.QuranOfflineStatus
 import com.sakinah.deen.data.database.entity.SurahMetadataEntity
 import com.sakinah.deen.data.database.entity.TafsirEntryEntity
@@ -74,7 +76,9 @@ class IslamicDataRepository(
      */
     private val offlineContent: OfflineContentSeeder? = null,
     /** Optional context used to cache the translation catalog for offline use. */
-    private val appContext: android.content.Context? = null
+    private val appContext: android.content.Context? = null,
+    /** Injectable so unit tests can drain HTTP continuations with their test dispatcher. */
+    private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO
 ) {
 
     companion object {
@@ -97,6 +101,7 @@ class IslamicDataRepository(
         /** Preferences files and key for the two catalogs cached for offline use. */
         private const val QURAN_CATALOG_PREFS = "sakinah_quran_translations"
         private const val HADITH_CATALOG_PREFS = "sakinah_hadith_catalog"
+        private const val TAFSIR_CATALOG_PREFS = "sakinah_tafsir_catalog"
         private const val CATALOG_KEY = "catalog_json"
 
         val SUPPORTED_HADITH_BOOKS = listOf(
@@ -105,19 +110,8 @@ class IslamicDataRepository(
         )
 
         private const val USER_AGENT = "ImanCore-Android/1.0 (offline-first Islamic companion)"
-        private val HTML_TAG = Regex("<[^>]+>")
-        /** Footnote markers (`<sup foot_note=..>1</sup>`) carry no meaning in a cached verse. */
-        private val SUP_TAG = Regex("<sup[^>]*>.*?</sup>", RegexOption.DOT_MATCHES_ALL)
-        private val WHITESPACE = Regex("\\s+")
 
-        private fun cleanText(raw: String): String =
-            raw.replace(SUP_TAG, "")
-                .replace(HTML_TAG, " ")
-                .replace("&quot;", "\"")
-                .replace("&amp;", "&")
-                .replace("&#39;", "'")
-                .replace(WHITESPACE, " ")
-                .trim()
+        private fun cleanText(raw: String): String = TafsirText.clean(raw)
 
         private val defaultJson = Json {
             ignoreUnknownKeys = true
@@ -176,6 +170,7 @@ class IslamicDataRepository(
                 "yor", "yo" -> "Yoruba"
                 "amh", "am" -> "Amharic"
                 "kaz", "kk" -> "Kazakh"
+                "kur", "ku", "ckb" -> "Kurdish"
                 "uzb", "uz" -> "Uzbek"
                 "tgl", "tl" -> "Tagalog"
                 "tha", "th" -> "Thai"
@@ -183,6 +178,84 @@ class IslamicDataRepository(
                 else -> ""
             }
             return name.ifBlank { fallback.ifBlank { code.uppercase() } }
+        }
+
+        /**
+         * Normalizes Quran.com's free-form `language_name` ("english", "Kurdish", "urdu") to an
+         * ISO code. Also accepts codes already supplied by callers, so persisted selections stay
+         * stable when the catalog refreshes.
+         */
+        fun tafsirLanguageCode(languageNameOrCode: String): String {
+            val value = languageNameOrCode.trim().lowercase()
+                .replace('_', ' ').replace('-', ' ')
+            val mapped = when (value) {
+                "en", "eng", "english" -> "en"
+                "ar", "ara", "arabic" -> "ar"
+                "ur", "urd", "urdu" -> "ur"
+                "bn", "ben", "bengali", "bangla" -> "bn"
+                "ru", "rus", "russian" -> "ru"
+                "ku", "kur", "ckb", "kurdish", "sorani", "central kurdish" -> "ku"
+                "fa", "fas", "per", "persian", "farsi" -> "fa"
+                "id", "ind", "indonesian" -> "id"
+                "tr", "tur", "turkish" -> "tr"
+                "fr", "fra", "fre", "french" -> "fr"
+                "ta", "tam", "tamil" -> "ta"
+                "hi", "hin", "hindi" -> "hi"
+                "es", "spa", "spanish" -> "es"
+                "de", "deu", "ger", "german" -> "de"
+                "ms", "msa", "may", "malay" -> "ms"
+                "sw", "swa", "swahili" -> "sw"
+                "zh", "zho", "chi", "chinese" -> "zh"
+                "ja", "jpn", "japanese" -> "ja"
+                "ko", "kor", "korean" -> "ko"
+                "pt", "por", "portuguese" -> "pt"
+                "it", "ita", "italian" -> "it"
+                "nl", "nld", "dut", "dutch" -> "nl"
+                "az", "aze", "azerbaijani" -> "az"
+                "bs", "bos", "bosnian" -> "bs"
+                "sq", "sqi", "alb", "albanian" -> "sq"
+                "so", "som", "somali" -> "so"
+                "ha", "hau", "hausa" -> "ha"
+                "yo", "yor", "yoruba" -> "yo"
+                "am", "amh", "amharic" -> "am"
+                "kk", "kaz", "kazakh" -> "kk"
+                "uz", "uzb", "uzbek" -> "uz"
+                "tl", "tgl", "tagalog" -> "tl"
+                "th", "tha", "thai" -> "th"
+                "vi", "vie", "vietnamese" -> "vi"
+                "ps", "pus", "pashto" -> "ps"
+                "sd", "snd", "sindhi" -> "sd"
+                else -> ""
+            }
+            return mapped.ifBlank { value.takeIf { it.length == 2 } ?: value }
+        }
+
+        /** Parses the full Quran.com v4 tafsir catalog, including its translated names. */
+        fun parseTafseerCatalog(
+            body: String,
+            json: Json = defaultJson
+        ): List<TafsirResource> {
+            val root = runCatching { json.parseToJsonElement(body) as? JsonObject }.getOrNull()
+                ?: return emptyList()
+            val editions = root["tafsirs"] as? JsonArray ?: return emptyList()
+            return editions.mapNotNull { element ->
+                val obj = element as? JsonObject ?: return@mapNotNull null
+                val id = (obj["id"] as? JsonPrimitive)?.intOrNull ?: return@mapNotNull null
+                val translated = obj["translated_name"] as? JsonObject
+                val languageName = (obj["language_name"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+                    .ifBlank {
+                        (translated?.get("language_name") as? JsonPrimitive)?.contentOrNull.orEmpty()
+                    }
+                TafsirResource(
+                    id = id,
+                    name = (obj["name"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                    authorName = (obj["author_name"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                    slug = (obj["slug"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                    languageName = languageName,
+                    translatedName = (translated?.get("name") as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                    languageCode = tafsirLanguageCode(languageName)
+                )
+            }.distinctBy { it.id }
         }
 
         fun parseQuranComTranslations(
@@ -558,6 +631,29 @@ class IslamicDataRepository(
 
     fun parseQuranApiTranslations(body: String): List<QuranTranslationResource> =
         Companion.parseQuranApiTranslations(body, json)
+
+    // ------------------------------------------------------------------ Tafsir catalog
+
+    /** Refreshes the edition catalog from Quran.com; falls back to the last cached copy. */
+    suspend fun fetchTafseerCatalog(): List<TafsirResource> {
+        val remote = runCatching {
+            parseTafseerCatalog(fetch("$QURAN_API_BASE/resources/tafsirs?language=en"))
+        }.getOrDefault(emptyList())
+        if (remote.isNotEmpty()) {
+            cacheTafseerCatalog(remote)
+            return remote
+        }
+        return loadCachedTafseerCatalog()
+    }
+
+    fun parseTafseerCatalog(body: String): List<TafsirResource> =
+        Companion.parseTafseerCatalog(body, json)
+
+    private fun cacheTafseerCatalog(catalog: List<TafsirResource>) =
+        cacheCatalog(TAFSIR_CATALOG_PREFS, catalog, ListSerializer(TafsirResource.serializer()))
+
+    private fun loadCachedTafseerCatalog(): List<TafsirResource> =
+        loadCachedCatalog(TAFSIR_CATALOG_PREFS, ListSerializer(TafsirResource.serializer()))
 
     private fun cacheTranslationCatalog(catalog: List<QuranTranslationResource>) =
         cacheCatalog(QURAN_CATALOG_PREFS, catalog, ListSerializer(QuranTranslationResource.serializer()))
@@ -1101,6 +1197,33 @@ class IslamicDataRepository(
         tafsirId: Int = IBN_KATHIR_TAFSIR_ID
     ): TafsirEntryEntity? = tafsirDao.getTafsir("tafsir_$tafsirId", surahNumber, ayahNumber)
 
+    /**
+     * Reads one ayah's commentary live with `by_ayah` without claiming the pack is offline.
+     * HTML is stripped here so callers never have to render raw `<p>`/`<span>` markup.
+     */
+    suspend fun fetchTafsirForAyah(
+        surahNumber: Int,
+        ayahNumber: Int,
+        tafsirId: Int,
+        languageCode: String = "en"
+    ): TafsirEntryEntity? {
+        val dto = json.decodeFromString<TafsirResponse>(
+            fetchWithRetry {
+                fetch("$QURAN_API_BASE/tafsirs/$tafsirId/by_ayah/$surahNumber:$ayahNumber")
+            }
+        ).tafsir ?: return null
+        val text = cleanText(dto.text)
+        if (text.isBlank()) return null
+        return TafsirEntryEntity(
+            sourceKey = "tafsir_$tafsirId",
+            sourceName = dto.resourceName.ifBlank { "Tafsir $tafsirId" },
+            surahNumber = surahNumber,
+            ayahNumber = ayahNumber,
+            languageCode = languageCode,
+            text = text
+        )
+    }
+
     // ------------------------------------------------------------------ Parsing
 
     private suspend fun fetchChapters(): List<com.sakinah.deen.network.model.ChapterDto> =
@@ -1132,7 +1255,7 @@ class IslamicDataRepository(
         throw lastError ?: IllegalStateException("Request failed")
     }
 
-    private suspend fun fetch(url: String): String {
+    private suspend fun fetch(url: String): String = kotlinx.coroutines.withContext(ioDispatcher) {
         val response = client.get(url) {
             header(HttpHeaders.UserAgent, USER_AGENT)
             header(HttpHeaders.Accept, "application/json")
@@ -1140,7 +1263,7 @@ class IslamicDataRepository(
         if (!response.status.isSuccess()) {
             error("HTTP ${response.status.value} from $url")
         }
-        return response.bodyAsText()
+        response.bodyAsText()
     }
 
     /**
@@ -1247,14 +1370,7 @@ class IslamicDataRepository(
         return primitive.intOrNull ?: primitive.contentOrNull?.trim()?.toIntOrNull()
     }
 
-    private fun cleanText(raw: String): String =
-        raw.replace(SUP_TAG, "")
-            .replace(HTML_TAG, " ")
-            .replace("&quot;", "\"")
-            .replace("&amp;", "&")
-            .replace("&#39;", "'")
-            .replace(WHITESPACE, " ")
-            .trim()
+    private fun cleanText(raw: String): String = TafsirText.clean(raw)
 
     private fun com.sakinah.deen.network.model.ChapterDto.toEntity(): SurahMetadataEntity =
         SurahMetadataEntity(

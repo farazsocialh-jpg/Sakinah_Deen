@@ -87,6 +87,8 @@ class SakinahPreferences internal constructor(
         private const val KEY_QURAN_TRANSLATION_EDITION_KEY = "quran_translation_edition_key"
         private const val KEY_QURAN_TRANSLATION_SOURCE = "quran_translation_source"
         private const val KEY_QURAN_ARABIC_SCRIPT = "quran_arabic_script"
+        private const val KEY_TAFSIR_ID = "quran_tafsir_id"
+        private const val KEY_TAFSIR_LANGUAGE = "quran_tafsir_language"
         private const val KEY_HADITH_LANGUAGE = "hadith_language_code"
         private const val KEY_BOOKMARKED_HADITH_IDS = "bookmarked_hadith_ids"
         private const val KEY_HADITH_BOOKMARKS_INITIALIZED = "hadith_bookmarks_initialized"
@@ -348,6 +350,15 @@ class SakinahPreferences internal constructor(
     var quranArabicScript: QuranArabicScript
         get() = QuranArabicScript.fromKey(prefs.getString(KEY_QURAN_ARABIC_SCRIPT, null))
         set(value) = prefs.edit { putString(KEY_QURAN_ARABIC_SCRIPT, value.name) }
+
+    /** Quran.com tafsir edition and ISO language remembered across reader restarts. */
+    var selectedTafsirId: Int
+        get() = prefs.getInt(KEY_TAFSIR_ID, IslamicDataRepository.IBN_KATHIR_TAFSIR_ID)
+        set(value) = prefs.edit { putInt(KEY_TAFSIR_ID, value) }
+
+    var selectedTafseerLanguage: String
+        get() = prefs.getString(KEY_TAFSIR_LANGUAGE, "en") ?: "en"
+        set(value) = prefs.edit { putString(KEY_TAFSIR_LANGUAGE, value) }
 
     /**
      * Background Azaan scheduling is on after onboarding (or whenever a location has already

@@ -11,6 +11,7 @@ import com.sakinah.deen.data.model.AyahModel
 import com.sakinah.deen.data.model.QuranArabicScript
 import com.sakinah.deen.data.model.QuranTranslationResource
 import com.sakinah.deen.data.model.SurahModel
+import com.sakinah.deen.data.model.TafsirText
 import com.sakinah.deen.data.prefs.AyahBookmark
 import com.sakinah.deen.data.prefs.QuranReaderPreferences
 import com.sakinah.deen.data.prefs.QuranReadingMode
@@ -67,7 +68,12 @@ data class QuranUiState(
     val selectedTafseerContent: String = "",
     /** Download/lookup failure shown inside the Tafseer sheet. */
     val tafseerErrorMessage: String? = null,
-    val selectedScholar: String = "Ibn Kathir",
+    /** Quran.com tafsir resource id; any catalog edition can be selected or downloaded. */
+    val selectedTafsirId: Int = IslamicDataRepository.IBN_KATHIR_TAFSIR_ID,
+    /** ISO code (en, ar, ur, bn, ru, ku, …) persisted with [selectedTafsirId]. */
+    val selectedTafseerLanguage: String = "en",
+    /** Display title of the selected edition, kept in sync with the merged catalog. */
+    val selectedTafseerTitle: String = "Ibn Kathir (Abridged)",
     val hifzMistakes: Map<Pair<Int, Int>, String> = emptyMap(),
     val isDownloadingTafseer: Boolean = false,
     /** Share of the 114 chapters fetched from Quran.com for the current tafsir download. */
@@ -114,6 +120,10 @@ data class QuranUiState(
     /** Convenience for the reader branches that render one presentation or the other. */
     val isStudyMode: Boolean get() = readingMode == QuranReadingMode.STUDY
 
+    /** Every catalog edition, used for the reader's language filter and edition rows. */
+    val allTafseers: List<TafseerPackage>
+        get() = (downloadedTafseers + availableTafseers).distinctBy { it.tafsirId }
+
     /** Ayah numbers of the current surah that are bookmarked. */
     val bookmarkedAyahNumbers: Set<Int>
         get() = bookmarks.asSequence()
@@ -134,9 +144,17 @@ sealed class QuranUiIntent {
     data class SelectMushafLayout(val layout: String) : QuranUiIntent()
     data class SelectQulWord(val wordKey: String) : QuranUiIntent()
     data object ClearQulWord : QuranUiIntent()
+    /** Legacy scholar chip; maps to a tafsir id without limiting the dynamic catalog. */
     data class SelectScholar(val scholarName: String) : QuranUiIntent()
+    data class SelectTafsir(
+        val tafsirId: Int,
+        val languageCode: String = "",
+        val title: String = ""
+    ) : QuranUiIntent()
+    data object FetchTafseerAyah : QuranUiIntent()
+    data object RefreshTafseerCatalog : QuranUiIntent()
     data class SetHifzMistakeTag(val surah: Int, val ayah: Int, val wordPos: Int, val tag: String) : QuranUiIntent()
-    data class DownloadTafseerPack(val packageId: String) : QuranUiIntent()
+    data class DownloadTafseerPack(val tafsirId: Int) : QuranUiIntent()
     data class SearchAyahs(val query: String) : QuranUiIntent()
     data object ClearSearch : QuranUiIntent()
     data object RetrySync : QuranUiIntent()
@@ -190,7 +208,16 @@ class QuranViewModel(
         )
     )
 
+    companion object {
+        /** QUL-only edition with no Quran.com resource id; kept for legacy scholar chips. */
+        const val QUL_JALALAYN_TAFSIR_ID = -1
+    }
+
     private val selectedSurahNumber = MutableStateFlow(1)
+    private val selectedTafsirIdFlow = MutableStateFlow(
+        sakinahPreferences?.selectedTafsirId
+            ?: IslamicDataRepository.IBN_KATHIR_TAFSIR_ID
+    )
     private val selectedTranslationIdFlow = MutableStateFlow(
         sakinahPreferences?.quranTranslationId
             ?: settingsRepository?.settings?.value?.appearance?.translationId
@@ -207,6 +234,8 @@ class QuranViewModel(
             currentSurah = sampleSurah,
             surahs = listOf(sampleSurah.copy(ayahs = emptyList())),
             selectedTafseerContent = sampleSurah.ayahs[0].tafseerIbnKathir,
+            selectedTafsirId = selectedTafsirIdFlow.value,
+            selectedTafseerLanguage = sakinahPreferences?.selectedTafseerLanguage ?: "en",
             readingMode = quranReaderPreferences?.readingMode ?: QuranReadingMode.STUDY,
             bookmarks = quranReaderPreferences?.bookmarks.orEmpty(),
             wbwLanguage = quranReaderPreferences?.wbwLanguage
@@ -248,7 +277,10 @@ class QuranViewModel(
         observeOfflineStatus()
         observeSharedSettings()
         observeTafseerPackages()
-        viewModelScope.launch { tafseerRepository?.refreshDownloadStatus() }
+        viewModelScope.launch {
+            tafseerRepository?.refreshCatalog()
+            tafseerRepository?.refreshDownloadStatus()
+        }
         observeRoomSurahs()
         observeSelectedSurahAyahs()
         observeQulData()
@@ -277,11 +309,20 @@ class QuranViewModel(
                 )
             }
             is QuranUiIntent.SelectScholar -> {
-                _uiState.update { it.copy(selectedScholar = intent.scholarName) }
-                onIntent(QuranUiIntent.SelectAyahForTafseer(_uiState.value.activeHighlightedAyah))
+                val legacy = legacyTafsirSelection(intent.scholarName)
+                selectTafsir(legacy.first, legacy.second, legacy.third)
+            }
+            is QuranUiIntent.SelectTafsir -> selectTafsir(
+                intent.tafsirId,
+                intent.languageCode,
+                intent.title
+            )
+            is QuranUiIntent.FetchTafseerAyah -> fetchTafseerAyahLive()
+            is QuranUiIntent.RefreshTafseerCatalog -> viewModelScope.launch {
+                tafseerRepository?.refreshCatalog()
             }
             is QuranUiIntent.SetHifzMistakeTag -> setHifzMistakeTag(intent.surah, intent.ayah, intent.wordPos, intent.tag)
-            is QuranUiIntent.DownloadTafseerPack -> downloadTafseerPack(intent.packageId)
+            is QuranUiIntent.DownloadTafseerPack -> downloadTafseerPack(intent.tafsirId)
             is QuranUiIntent.SearchAyahs -> searchAyahs(intent.query)
             is QuranUiIntent.ClearSearch -> {
                 searchJob?.cancel()
@@ -744,10 +785,20 @@ class QuranViewModel(
         }
     }
 
-    /** QUL tafsir slug for a scholar chip; only bundled editions are mapped. */
-    private fun qulTafsirSlug(scholar: String): String? = when (scholar) {
-        "Ibn Kathir" -> "ibn-kathir"
-        "Al-Jalalayn", "Jalalayn" -> "jalalayn"
+    /** Legacy scholar chip -> (Quran.com tafsir id, language code, display title). */
+    private fun legacyTafsirSelection(scholar: String): Triple<Int, String, String> = when (scholar) {
+        "Al-Tabari" -> Triple(15, "ar", "Tafsir al-Tabari")
+        "Al-Qurtubi" -> Triple(90, "ar", "Al-Qurtubi")
+        "Al-Sa'di" -> Triple(91, "ar", "Al-Sa'di")
+        "Ma'ariful Quran" -> Triple(168, "en", "Ma'arif al-Qur'an")
+        "Al-Jalalayn", "Jalalayn" -> Triple(QUL_JALALAYN_TAFSIR_ID, "ar", "Al-Jalalayn")
+        else -> Triple(IslamicDataRepository.IBN_KATHIR_TAFSIR_ID, "en", "Ibn Kathir (Abridged)")
+    }
+
+    /** QUL ships a few fixed editions; other tafsir ids use the Room/Quran.com path only. */
+    private fun qulTafsirSlug(tafsirId: Int, title: String): String? = when {
+        tafsirId == IslamicDataRepository.IBN_KATHIR_TAFSIR_ID -> "ibn-kathir"
+        tafsirId == QUL_JALALAYN_TAFSIR_ID || title.contains("Jalalayn", true) -> "jalalayn"
         else -> null
     }
 
@@ -778,12 +829,33 @@ class QuranViewModel(
         )
     }
 
+    /** Selects any catalog edition by id and reloads the currently open ayah. */
+    private fun selectTafsir(tafsirId: Int, languageCode: String, title: String) {
+        val pack = _uiState.value.allTafseers.firstOrNull { it.tafsirId == tafsirId }
+        val resolvedLanguage = languageCode.ifBlank { pack?.languageCode }.orEmpty().ifBlank { "en" }
+        val resolvedTitle = title.ifBlank { pack?.title }.orEmpty().ifBlank { "Tafsir $tafsirId" }
+        selectedTafsirIdFlow.value = tafsirId
+        sakinahPreferences?.selectedTafsirId = tafsirId
+        sakinahPreferences?.selectedTafseerLanguage = resolvedLanguage
+        _uiState.update {
+            it.copy(
+                selectedTafsirId = tafsirId,
+                selectedTafseerLanguage = resolvedLanguage,
+                selectedTafseerTitle = resolvedTitle,
+                selectedTafseerContent = "",
+                contentNotice = null,
+                tafseerErrorMessage = null
+            )
+        }
+        selectAyahForTafseer(_uiState.value.activeHighlightedAyah)
+    }
+
     private fun selectAyahForTafseer(ayahNumber: Int) {
         val state = _uiState.value
-        val ayah = state.currentSurah.ayahs.find { it.numberInSurah == ayahNumber }
-            ?: return
-        val scholar = state.selectedScholar
+        if (state.currentSurah.ayahs.none { it.numberInSurah == ayahNumber }) return
+        val tafsirId = state.selectedTafsirId
         val surahNumber = state.currentSurah.number
+        val title = state.selectedTafseerTitle
 
         _uiState.update {
             it.copy(
@@ -793,37 +865,19 @@ class QuranViewModel(
             )
         }
 
-        val cached = when (scholar) {
-            "Ibn Kathir" -> ayah.tafseerIbnKathir
-            "Al-Tabari" -> ayah.tafseerTabari
-            "Al-Qurtubi" -> ayah.tafseerQurtubi
-            "Al-Sa'di" -> ayah.tafseerSadi
-            "Ma'ariful Quran" -> ayah.tafseerMaarifulQuran
-            else -> ""
-        }
-
-        if (cached.isNotBlank()) {
-            _uiState.update {
-                it.copy(
-                    selectedTafseerContent = cached,
-                    contentNotice = null,
-                    tafseerErrorMessage = null
-                )
-            }
-            return
-        }
-
-        // Clear the previous scholar's text while the correctly mapped tafsir is loaded.
+        // Clear the previous edition's text while the correctly mapped tafsir is loaded.
+        // Room (`tafsir_<id>`) is checked first so a downloaded pack always wins over the
+        // bundled sample commentary used only before the reader has an open ayah.
         _uiState.update {
             it.copy(
                 selectedTafseerContent = "",
-                contentNotice = "Loading $scholar commentary…"
+                contentNotice = "Loading $title commentary…"
             )
         }
 
-        // The bundled QUL editions are read-only and always offline: try them before the
-        // encrypted cache/network path, and surface the ayah's topics either way.
-        val slug = qulTafsirSlug(scholar)
+        // Bundled QUL editions are read-only and always offline: try them before Room, and
+        // surface the ayah's topics either way.
+        val slug = qulTafsirSlug(tafsirId, title)
         if (slug != null && qulDatabase != null) {
             viewModelScope.launch {
                 val ayahKey = "$surahNumber:$ayahNumber"
@@ -831,14 +885,11 @@ class QuranViewModel(
                 val topics = qulDatabase.getAyahTopics(ayahKey)
                 if (qulText != null) {
                     _uiState.update { current ->
-                        if (current.selectedScholar != scholar ||
-                            current.currentSurah.number != surahNumber ||
-                            current.activeHighlightedAyah != ayahNumber
-                        ) {
+                        if (!current.matchesTafsirRequest(tafsirId, surahNumber, ayahNumber)) {
                             current
                         } else {
                             current.copy(
-                                selectedTafseerContent = qulText,
+                                selectedTafseerContent = TafsirText.clean(qulText),
                                 contentNotice = null,
                                 tafseerErrorMessage = null,
                                 ayahTopics = topics
@@ -856,42 +907,53 @@ class QuranViewModel(
                         current
                     }
                 }
-                loadRemoteTafsir(ayahNumber, surahNumber, scholar)
+                loadCachedTafsir(ayahNumber, surahNumber, tafsirId, title)
             }
             return
         }
-        loadRemoteTafsir(ayahNumber, surahNumber, scholar)
+        loadCachedTafsir(ayahNumber, surahNumber, tafsirId, title)
     }
 
-    /** Existing encrypted-cache/network tafsir path, unchanged but reusable. */
-    private fun loadRemoteTafsir(ayahNumber: Int, surahNumber: Int, scholar: String) {
-        val repo = islamicRepository ?: return
-        val tafsirId = TafseerDownloadRepository.tafsirIdForScholar(scholar)
-            ?: IslamicDataRepository.IBN_KATHIR_TAFSIR_ID
+    private fun QuranUiState.matchesTafsirRequest(
+        tafsirId: Int,
+        surahNumber: Int,
+        ayahNumber: Int
+    ): Boolean = selectedTafsirId == tafsirId &&
+        currentSurah.number == surahNumber &&
+        activeHighlightedAyah == ayahNumber
+
+    /** Room is the offline source of truth; source key is always `tafsir_<id>`. */
+    private fun loadCachedTafsir(
+        ayahNumber: Int,
+        surahNumber: Int,
+        tafsirId: Int,
+        title: String
+    ) {
+        val repo = islamicRepository
+        if (repo == null && tafseerRepository == null) return
         viewModelScope.launch {
             try {
-                val tafsir = repo.getTafsir(
-                    ayahNumber = ayahNumber,
-                    surahNumber = surahNumber,
-                    tafsirId = tafsirId
-                )
+                val entry = tafseerRepository?.getCachedTafsir(tafsirId, surahNumber, ayahNumber)
+                    ?: repo?.getTafsir(
+                        ayahNumber = ayahNumber,
+                        surahNumber = surahNumber,
+                        tafsirId = tafsirId
+                    )
                 _uiState.update { current ->
-                    if (current.selectedScholar != scholar ||
-                        current.currentSurah.number != surahNumber ||
-                        current.activeHighlightedAyah != ayahNumber
-                    ) {
+                    if (!current.matchesTafsirRequest(tafsirId, surahNumber, ayahNumber)) {
                         current
-                    } else if (tafsir != null) {
+                    } else if (entry != null) {
                         current.copy(
-                            selectedTafseerContent = tafsir.text,
+                            selectedTafseerContent = TafsirText.clean(entry.text),
                             contentNotice = null,
                             tafseerErrorMessage = null
                         )
                     } else {
                         current.copy(
                             selectedTafseerContent = "",
-                            contentNotice = "No cached commentary for ${current.currentSurah.nameEnglish} " +
-                                "$ayahNumber in $scholar. Download the tafsir pack to read it offline."
+                            contentNotice = "No offline $title commentary for " +
+                                "${current.currentSurah.nameEnglish} $ayahNumber. " +
+                                "Download the pack or read this ayah online."
                         )
                     }
                 }
@@ -899,10 +961,55 @@ class QuranViewModel(
                 throw e
             } catch (e: Exception) {
                 _uiState.update { current ->
-                    if (current.selectedScholar != scholar) current
+                    if (!current.matchesTafsirRequest(tafsirId, surahNumber, ayahNumber)) current
                     else current.copy(
                         contentNotice = null,
-                        tafseerErrorMessage = friendlyTafseerError(scholar, e)
+                        tafseerErrorMessage = friendlyTafseerError(title, e)
+                    )
+                }
+            }
+        }
+    }
+
+    /** Explicit "read online" path; it never marks the edition as downloaded. */
+    private fun fetchTafseerAyahLive() {
+        val repo = islamicRepository ?: return
+        val state = _uiState.value
+        val tafsirId = state.selectedTafsirId
+        if (tafsirId <= 0) return
+        val surahNumber = state.currentSurah.number
+        val ayahNumber = state.activeHighlightedAyah
+        val title = state.selectedTafseerTitle
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(contentNotice = "Loading $title commentary from Quran.com…", tafseerErrorMessage = null)
+            }
+            try {
+                val entry = repo.fetchTafsirForAyah(
+                    surahNumber = surahNumber,
+                    ayahNumber = ayahNumber,
+                    tafsirId = tafsirId,
+                    languageCode = state.selectedTafseerLanguage
+                )
+                _uiState.update { current ->
+                    if (!current.matchesTafsirRequest(tafsirId, surahNumber, ayahNumber)) current
+                    else if (entry != null) current.copy(
+                        selectedTafseerContent = TafsirText.clean(entry.text),
+                        contentNotice = null,
+                        tafseerErrorMessage = null
+                    ) else current.copy(
+                        selectedTafseerContent = "",
+                        contentNotice = "Quran.com returned no $title commentary for this ayah."
+                    )
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { current ->
+                    if (!current.matchesTafsirRequest(tafsirId, surahNumber, ayahNumber)) current
+                    else current.copy(
+                        contentNotice = null,
+                        tafseerErrorMessage = friendlyTafseerError(title, e)
                     )
                 }
             }
@@ -961,10 +1068,15 @@ class QuranViewModel(
         val repo = tafseerRepository ?: return
         viewModelScope.launch {
             repo.packages.collect { pkgs ->
-                _uiState.update {
-                    it.copy(
+                _uiState.update { current ->
+                    val selected = pkgs.firstOrNull { it.tafsirId == current.selectedTafsirId }
+                    current.copy(
                         downloadedTafseers = pkgs.filter { p -> p.isDownloaded },
-                        availableTafseers = pkgs.filter { p -> !p.isDownloaded }
+                        availableTafseers = pkgs.filter { p -> !p.isDownloaded },
+                        selectedTafseerTitle = selected?.title.takeIf { !it.isNullOrBlank() }
+                            ?: current.selectedTafseerTitle,
+                        selectedTafseerLanguage = selected?.languageCode.takeIf { !it.isNullOrBlank() }
+                            ?: current.selectedTafseerLanguage
                     )
                 }
             }
@@ -1065,13 +1177,12 @@ class QuranViewModel(
         }
     }
 
-    private fun downloadTafseerPack(packageId: String) {
+    private fun downloadTafseerPack(tafsirId: Int) {
         val repo = islamicRepository
         val packRepo = tafseerRepository
-        val tafsirId = TafseerDownloadRepository.tafsirIdForPack(packageId)
-        if (repo == null || tafsirId == null) {
+        if (tafsirId <= 0 || (repo == null && packRepo == null)) {
             _uiState.update {
-                it.copy(tafseerErrorMessage = "Could not identify this tafsir pack. Please choose another scholar.")
+                it.copy(tafseerErrorMessage = "This edition is bundled offline or is not available from Quran.com.")
             }
             return
         }
@@ -1079,7 +1190,7 @@ class QuranViewModel(
         val state = _uiState.value
         val surahNumber = state.currentSurah.number
         val ayahNumber = state.activeHighlightedAyah
-        val scholar = state.selectedScholar
+        val title = state.selectedTafseerTitle
 
         viewModelScope.launch {
             _uiState.update {
@@ -1092,23 +1203,23 @@ class QuranViewModel(
             }
             try {
                 val result = if (packRepo != null) {
-                    packRepo.downloadTafseerPackage(packageId) { progress ->
+                    packRepo.downloadTafseerPackage(tafsirId) { progress ->
                         _uiState.update { it.copy(tafseerDownloadProgress = progress) }
                     }
                 } else {
-                    repo.syncTafsirForSurah(surahNumber = surahNumber, tafsirId = tafsirId)
+                    repo!!.syncTafsirForSurah(surahNumber = surahNumber, tafsirId = tafsirId)
                 }
                 val error = result.exceptionOrNull()
                 val savedChapters = result.getOrNull() ?: 0
 
                 if (error != null) {
                     _uiState.update {
-                        it.copy(tafseerErrorMessage = friendlyTafseerError(scholar, error))
+                        it.copy(tafseerErrorMessage = friendlyTafseerError(title, error))
                     }
                 } else if (savedChapters <= 0) {
                     _uiState.update {
                         it.copy(
-                            tafseerErrorMessage = "No $scholar commentary was returned for Surah $surahNumber. " +
+                            tafseerErrorMessage = "No $title commentary was returned for Surah $surahNumber. " +
                                 "Check your connection and try again."
                         )
                     }
@@ -1128,7 +1239,7 @@ class QuranViewModel(
                 throw e
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(tafseerErrorMessage = friendlyTafseerError(scholar, e))
+                    it.copy(tafseerErrorMessage = friendlyTafseerError(title, e))
                 }
             } finally {
                 _uiState.update {
@@ -1138,7 +1249,7 @@ class QuranViewModel(
         }
     }
 
-    private fun friendlyTafseerError(scholar: String, error: Throwable): String {
+    private fun friendlyTafseerError(title: String, error: Throwable): String {
         val message = error.message.orEmpty().lowercase()
         val offline = error is java.io.IOException ||
             message.contains("connect") ||
@@ -1146,9 +1257,9 @@ class QuranViewModel(
             message.contains("network") ||
             message.contains("unable to resolve")
         return if (offline) {
-            "Offline: couldn't download $scholar commentary. Check your internet connection and try again."
+            "Offline: couldn't download $title commentary. Check your internet connection and try again."
         } else {
-            "Couldn't download $scholar commentary: ${error.message ?: "unknown error"}"
+            "Couldn't download $title commentary: ${error.message ?: "unknown error"}"
         }
     }
 
