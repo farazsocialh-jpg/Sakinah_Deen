@@ -41,8 +41,15 @@ class MainActivity : ComponentActivity() {
     private val pendingNavigation = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        splashScreen.setOnExitAnimationListener { provider ->
+            provider.view.animate()
+                .alpha(0f)
+                .setDuration(120L)
+                .withEndAction { provider.remove() }
+                .start()
+        }
         enableEdgeToEdge()
         // An overlay must not be able to aim a tap at a destructive or financial control.
         enableTapjackingProtection()

@@ -2,8 +2,12 @@ package com.sakinah.deen.ui.screens
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,19 +26,14 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -46,6 +45,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -54,22 +55,23 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.BatterySaver
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Mosque
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SelfImprovement
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -93,10 +95,10 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -104,11 +106,12 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.sakinah.deen.R
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
 import com.sakinah.deen.data.model.PrayerType
+import com.sakinah.deen.data.model.QuranTranslationResource
 import com.sakinah.deen.data.prefs.HadithReadingLayout
+import com.sakinah.deen.data.prefs.QuranReaderPreferences
 import com.sakinah.deen.data.prefs.QuranReadingLayout
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.prefs.SalahHomeLayout
@@ -116,10 +119,10 @@ import com.sakinah.deen.data.prayer.SunniMethodMapper
 import com.sakinah.deen.data.prayer.englishName
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl
 import com.sakinah.deen.domain.astronomy.UserLocationProvider
+import com.sakinah.deen.network.IslamicDataRepository
 import com.sakinah.deen.ui.components.HomeCity
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
 import com.sakinah.deen.ui.components.SakinahCard
-import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.theme.FontScalePreset
 import com.sakinah.deen.ui.theme.PrayerGuideGender
 import com.sakinah.deen.ui.theme.SakinahPalette
@@ -128,39 +131,53 @@ import com.sakinah.deen.ui.theme.ThemeMode
 import com.sakinah.deen.ui.theme.UserAppearanceConfig
 import com.sakinah.deen.ui.theme.UserObjective
 import com.sakinah.deen.util.TimeZoneResolver
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import org.koin.core.context.GlobalContext
 import java.util.Locale
 
-/** Emerald & Alabaster default look, used until the live theme preview takes over. */
-private val AlabasterHero = Color(0xFFFBF8F3)
-private val ElevatedSheet = Color(0xFFFFFFFF)
-private val ForestEmerald = Color(0xFF1F5E4B)
-private val SoftSage = Color(0xFFE8F3EE)
-
-private const val TOTAL_STEPS = 4
+private const val TOTAL_STEPS = 6
 private const val ARABIC_FONT_MIN = 18
 private const val ARABIC_FONT_MAX = 36
 private const val TRANSLATION_FONT_MIN = 12
 private const val TRANSLATION_FONT_MAX = 24
 
-private const val EXPERIENCE_NEW = "New to Islam"
-private const val EXPERIENCE_PRACTICING = "Practicing Muslim"
-private const val EXPERIENCE_STUDENT = "Student of Knowledge"
-
 private val LogoGreen = Color(0xFF0F6B5E)
 private val LogoIvory = Color(0xFFF7F8F5)
 private val LogoGold = Color(0xFFC5A059)
 
-/**
- * The adaptive-icon mark assembling itself: crescent from the left, dome and Qibla diamond
- * from the centre, then the gold Quran sweep from the bottom. Every path is the exact path
- * used by the launcher icon, scaled from the shared 108f viewport.
- */
+/** Goals shown in Step 1. */
+private data class OnboardingGoal(
+    val label: String,
+    val objective: UserObjective,
+    val icon: ImageVector
+)
+
+private val GOALS = listOf(
+    OnboardingGoal("Learn more about Islam", UserObjective.ALL_IN_ONE, Icons.Default.Explore),
+    OnboardingGoal("Become more proficient in prayers", UserObjective.PRAYER_COMPASS, Icons.Default.Mosque),
+    OnboardingGoal("Find references in Quran & Hadith", UserObjective.HADITH_SCHOLAR, Icons.AutoMirrored.Filled.LibraryBooks),
+    OnboardingGoal("Memorize Quran or Hadith", UserObjective.QURAN_STUDY, Icons.AutoMirrored.Filled.MenuBook),
+    OnboardingGoal("Learn daily practices of Islam", UserObjective.PRAYER_COMPASS, Icons.Default.SelfImprovement)
+)
+
+private data class LanguageOption(
+    val displayName: String,
+    val isoCode: String
+)
+
+private data class EditionOption(
+    val label: String,
+    val languageName: String,
+    val isoCode: String,
+    val quranTranslation: QuranTranslationResource?
+)
+
 @Composable
 fun SakinahAnimatedLogo(
     modifier: Modifier = Modifier,
@@ -172,16 +189,16 @@ fun SakinahAnimatedLogo(
     val quranAnim = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
-        launch { crescentAnim.animateTo(1f, tween(520, easing = FastOutSlowInEasing)) }
+        launch { crescentAnim.animateTo(1f, tween(900, easing = FastOutSlowInEasing)) }
         launch {
-            delay(160)
-            domeAnim.animateTo(1f, tween(520, easing = FastOutSlowInEasing))
+            delay(450)
+            domeAnim.animateTo(1f, tween(900, easing = FastOutSlowInEasing))
         }
         launch {
-            delay(300)
-            quranAnim.animateTo(1f, tween(520, easing = FastOutSlowInEasing))
+            delay(900)
+            quranAnim.animateTo(1f, tween(900, easing = FastOutSlowInEasing))
         }
-        delay(900)
+        delay(2100)
         onAssembled()
     }
 
@@ -221,23 +238,20 @@ fun SakinahAnimatedLogo(
         Canvas(modifier = Modifier.fillMaxSize()) {
             val scaleFactor = this.size.minDimension / 108f
             scale(scaleFactor, scaleFactor, pivot = Offset.Zero) {
-                // 1. Crescent slides in from left.
-                val crescentProgress = crescentAnim.value
-                translate(left = (1f - crescentProgress) * -22f) {
-                    drawPath(crescentPath, color = LogoIvory.copy(alpha = crescentProgress))
+                val cProg = crescentAnim.value
+                translate(left = (1f - cProg) * -22f) {
+                    drawPath(crescentPath, color = LogoIvory.copy(alpha = cProg))
                 }
-                // 2. Mosque dome and its negative-space Qibla diamond rise into the centre.
-                val domeProgress = domeAnim.value
-                translate(top = (1f - domeProgress) * 18f) {
-                    drawPath(domePath, color = LogoIvory.copy(alpha = domeProgress))
-                    drawPath(qiblaOuterPath, color = LogoGreen.copy(alpha = domeProgress))
-                    drawPath(qiblaInnerPath, color = LogoIvory.copy(alpha = domeProgress))
+                val dProg = domeAnim.value
+                translate(top = (1f - dProg) * 18f) {
+                    drawPath(domePath, color = LogoIvory.copy(alpha = dProg))
+                    drawPath(qiblaOuterPath, color = LogoGreen.copy(alpha = dProg))
+                    drawPath(qiblaInnerPath, color = LogoIvory.copy(alpha = dProg))
                 }
-                // 3. Gold Quran sweep unfolds upward.
-                val quranProgress = quranAnim.value
-                translate(top = (1f - quranProgress) * 20f) {
-                    drawPath(quranTopPath, color = LogoGold.copy(alpha = quranProgress))
-                    drawPath(quranBottomPath, color = LogoGold.copy(alpha = quranProgress))
+                val qProg = quranAnim.value
+                translate(top = (1f - qProg) * 20f) {
+                    drawPath(quranTopPath, color = LogoGold.copy(alpha = qProg))
+                    drawPath(quranBottomPath, color = LogoGold.copy(alpha = qProg))
                 }
             }
         }
@@ -268,13 +282,13 @@ private val UserAppearanceConfigSaver = listSaver<UserAppearanceConfig, String>(
         UserAppearanceConfig(
             userName = values[0],
             experienceLevel = values[1],
-            objective = UserObjective.valueOf(values[2]),
-            themeMode = ThemeMode.valueOf(values[3]),
-            palette = SakinahPalette.valueOf(values[4]),
-            fontScale = FontScalePreset.valueOf(values[5]),
+            objective = runCatching { UserObjective.valueOf(values[2]) }.getOrDefault(UserObjective.ALL_IN_ONE),
+            themeMode = runCatching { ThemeMode.valueOf(values[3]) }.getOrDefault(ThemeMode.SYSTEM),
+            palette = runCatching { SakinahPalette.valueOf(values[4]) }.getOrDefault(SakinahPalette.EMERALD_SANCTUARY),
+            fontScale = runCatching { FontScalePreset.valueOf(values[5]) }.getOrDefault(FontScalePreset.STANDARD),
             focusModeHideDistractions = values[6].toBoolean(),
             autoHideBarsOnScroll = values[7].toBoolean(),
-            prayerGuideGender = PrayerGuideGender.valueOf(values[8]),
+            prayerGuideGender = runCatching { PrayerGuideGender.valueOf(values[8]) }.getOrDefault(PrayerGuideGender.MALE),
             salahHomeLayout = values.getOrNull(9)
                 ?.let { runCatching { SalahHomeLayout.valueOf(it) }.getOrNull() }
                 ?: SalahHomeLayout.CLASSIC_COMPACT,
@@ -283,7 +297,6 @@ private val UserAppearanceConfigSaver = listSaver<UserAppearanceConfig, String>(
             hadithReadingLayout = values.getOrNull(11)
                 ?.let { runCatching { HadithReadingLayout.valueOf(it) }.getOrNull() }
                 ?: HadithReadingLayout.COMPACT_DROPDOWN,
-            // Older saved states stop at index 12; the default stays safe when absent.
             onboardingCompleted = values.getOrNull(15)?.toBoolean()
                 ?: values.getOrNull(12)?.toBoolean()
                 ?: false,
@@ -299,7 +312,9 @@ private val UserAppearanceConfigSaver = listSaver<UserAppearanceConfig, String>(
 
 private data class PermissionState(
     val location: Boolean,
-    val notifications: Boolean
+    val notifications: Boolean,
+    val exactAlarms: Boolean,
+    val batteryOptimizationIgnored: Boolean
 )
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -310,7 +325,6 @@ fun PersonalizedOnboardingScreen(
     onConfigPreviewChange: (UserAppearanceConfig) -> Unit = {},
     onComplete: (UserAppearanceConfig) -> Unit,
     onDismiss: (() -> Unit)? = null,
-    /** Set by RootNavHost so Step 2 can confirm the calculation method and madhhab. */
     appPrefs: SakinahPreferences? = null,
     locationProvider: UserLocationProvider? = null
 ) {
@@ -319,10 +333,22 @@ fun PersonalizedOnboardingScreen(
         mutableStateOf(initialConfig)
     }
     var showGreeting by rememberSaveable { mutableStateOf(false) }
-    var remindersEnabled by rememberSaveable(appPrefs) {
-        mutableStateOf(appPrefs?.alarmsEnabled == true)
-    }
-    var remindersTouched by rememberSaveable { mutableStateOf(false) }
+    var selectedGoalIndices by rememberSaveable { mutableStateOf(setOf<Int>()) }
+    var languageSearch by rememberSaveable { mutableStateOf("") }
+    var selectedLanguageIso by rememberSaveable { mutableStateOf("") }
+    var selectedLanguageName by rememberSaveable { mutableStateOf("") }
+    var selectedEditionKey by rememberSaveable { mutableStateOf("") }
+    var selectedEditionLabel by rememberSaveable { mutableStateOf("") }
+    var translationResources by remember { mutableStateOf<List<QuranTranslationResource>>(emptyList()) }
+    var availableLanguages by remember { mutableStateOf<List<LanguageOption>>(emptyList()) }
+    var permissionTick by remember { mutableIntStateOf(0) }
+    var prefsTick by remember { mutableIntStateOf(0) }
+    var showCityPicker by rememberSaveable { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val quranReaderPrefs = remember(context) { QuranReaderPreferences(context) }
 
     BackHandler(enabled = step > 0) { step-- }
 
@@ -331,13 +357,25 @@ fun PersonalizedOnboardingScreen(
         onConfigPreviewChange(updated)
     }
 
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var permissionTick by remember { mutableIntStateOf(0) }
-    var prefsTick by remember { mutableIntStateOf(0) }
-    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(Unit) {
+        val repo = runCatching { GlobalContext.get().get<IslamicDataRepository>() }.getOrNull()
+        val fetched = runCatching { repo?.fetchTranslationCatalog().orEmpty() }.getOrDefault(emptyList())
+        val resources = fetched.ifEmpty { defaultTranslationResources() }
+        translationResources = resources
+        availableLanguages = buildLanguageOptions(resources)
+        // Preselect existing language if present
+        val existingIso = appPrefs?.quranTranslationLanguage?.takeIf { it.isNotBlank() }
+        if (selectedLanguageIso.isBlank() && !existingIso.isNullOrBlank()) {
+            val match = availableLanguages.firstOrNull {
+                it.displayName.equals(existingIso, true) || it.isoCode.equals(existingIso, true)
+            }
+            if (match != null) {
+                selectedLanguageIso = match.isoCode
+                selectedLanguageName = match.displayName
+            }
+        }
+    }
 
-    // Returning from a system settings screen must refresh the location state.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) permissionTick++
@@ -354,61 +392,85 @@ fun PersonalizedOnboardingScreen(
         permissionTick++
         val granted = results[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             results[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (!granted) return@rememberLauncherForActivityResult
-        scope.launch {
-            val resolved = (locationProvider ?: UserLocationProvider(context))
-                .getFreshOrCachedLocation()
-            val label = if (resolved.countryName.isNotBlank()) {
-                "${resolved.cityName}, ${resolved.countryName}"
-            } else {
-                resolved.cityName
+        if (granted) {
+            scope.launch {
+                val resolved = (locationProvider ?: UserLocationProvider(context)).getFreshOrCachedLocation()
+                val label = if (resolved.countryName.isNotBlank()) {
+                    "${resolved.cityName}, ${resolved.countryName}"
+                } else {
+                    resolved.cityName
+                }
+                val zone = TimeZoneResolver.resolveZoneIdString(
+                    cityLabel = label,
+                    countryCode = resolved.countryCode,
+                    longitude = resolved.longitude
+                )
+                appPrefs?.saveGpsLocation(
+                    latitude = resolved.latitude,
+                    longitude = resolved.longitude,
+                    label = label,
+                    countryCode = resolved.countryCode,
+                    timeZoneId = zone
+                )
+                prefsTick++
             }
-            val zone = TimeZoneResolver.resolveZoneIdString(
-                cityLabel = label,
-                countryCode = resolved.countryCode,
-                longitude = resolved.longitude
-            )
-            appPrefs?.saveGpsLocation(
-                latitude = resolved.latitude,
-                longitude = resolved.longitude,
-                label = label,
-                countryCode = resolved.countryCode,
-                timeZoneId = zone
-            )
-            prefsTick++
         }
     }
     val notificationLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        permissionTick++
-        // A denied prompt must not leave the toggle claiming reminders are on.
-        if (!granted) remindersEnabled = false
+    ) { _ -> permissionTick++ }
+    val exactAlarmLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { permissionTick++ }
+    val batteryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { permissionTick++ }
+
+    fun applyLanguageAndEdition(language: LanguageOption, edition: EditionOption?) {
+        val iso = language.isoCode.ifBlank { "en" }
+        val langName = language.displayName.ifBlank { "English" }
+        selectedLanguageIso = iso
+        selectedLanguageName = langName
+        selectedEditionKey = edition?.quranTranslation?.editionKey ?: edition?.label ?: ""
+        selectedEditionLabel = edition?.label ?: ""
+
+        val quranRes = edition?.quranTranslation
+        appPrefs?.quranTranslationLanguage = langName
+        if (quranRes != null) {
+            appPrefs?.quranTranslationId = quranRes.id
+            appPrefs?.quranTranslationEditionKey = quranRes.editionKey
+            appPrefs?.quranTranslationSource = quranRes.source
+        }
+        // WBW - map to iso code; fallback to en
+        quranReaderPrefs.wbwLanguage = normalizeWbwLanguage(iso)
+        // Hadith - use iso2-like code; fallback to eng for English
+        appPrefs?.hadithLanguageCode = normalizeHadithLanguage(iso)
+        // Tafseer - map to language code; fallback to en
+        appPrefs?.selectedTafseerLanguage = normalizeTafsirLanguage(iso)
+        val tafsirId = defaultTafsirIdForLanguage(normalizeTafsirLanguage(iso))
+        if (tafsirId != null) appPrefs?.selectedTafsirId = tafsirId
+    }
+
+    val editionsForSelectedLanguage = remember(translationResources, selectedLanguageIso, selectedLanguageName) {
+        editionsForLanguage(translationResources, selectedLanguageIso, selectedLanguageName)
     }
 
     val darkTheme = when (config.themeMode) {
         ThemeMode.DARK -> true
         ThemeMode.LIGHT -> false
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
     }
-    val themePreviewActive = config.themeMode != initialConfig.themeMode ||
-        config.palette != initialConfig.palette
-    val defaultLook = !darkTheme && !themePreviewActive
+    val accent = MaterialTheme.colorScheme.primary
+    val onAccent = MaterialTheme.colorScheme.onPrimary
+    val accentSoft = MaterialTheme.colorScheme.primaryContainer
+    val onAccentSoft = MaterialTheme.colorScheme.onPrimaryContainer
 
-    val heroColor = if (defaultLook) AlabasterHero else MaterialTheme.colorScheme.background
-    val sheetColor = if (defaultLook) ElevatedSheet else MaterialTheme.colorScheme.surface
-    val accent = if (defaultLook) ForestEmerald else MaterialTheme.colorScheme.primary
-    val onAccent = if (defaultLook) Color.White else MaterialTheme.colorScheme.onPrimary
-    val accentSoft = if (defaultLook) SoftSage else MaterialTheme.colorScheme.primaryContainer
-    val onAccentSoft = if (defaultLook) ForestEmerald else MaterialTheme.colorScheme.onPrimaryContainer
-
-    val finish = {
-        // Only an explicit Step 3 opt-in (or opt-out) touches the background alarm flag.
-        if (remindersTouched) appPrefs?.alarmsEnabled = remindersEnabled
-        onComplete(config.copy(onboardingCompleted = true))
+    fun finish() {
+        val saved = config.copy(onboardingCompleted = true)
+        appPrefs?.alarmsEnabled = true
+        onComplete(saved)
     }
 
-    // The live draft drives the theme so Dark mode and palette changes render immediately.
     SakinahTheme(
         darkTheme = darkTheme,
         palette = config.palette,
@@ -417,26 +479,24 @@ fun PersonalizedOnboardingScreen(
         BoxWithConstraints(
             modifier = modifier
                 .fillMaxSize()
-                .background(heroColor)
+                .background(MaterialTheme.colorScheme.background)
                 .statusBarsPadding()
                 .navigationBarsPadding()
                 .imePadding(),
             contentAlignment = Alignment.TopCenter
         ) {
-            val bodyMaxHeight = (maxHeight * 0.50f).coerceAtLeast(180.dp)
-
+            val bodyMaxHeight = (maxHeight * 0.52f).coerceAtLeast(200.dp)
             Column(
                 modifier = Modifier
                     .widthIn(max = 600.dp)
                     .fillMaxSize()
             ) {
                 HeroZone(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
                     step = step,
                     userName = config.userName,
                     showGreeting = showGreeting,
+                    selectedLanguageName = selectedLanguageName,
                     accent = accent,
                     accentSoft = accentSoft,
                     onAccentSoft = onAccentSoft,
@@ -448,7 +508,7 @@ fun PersonalizedOnboardingScreen(
                 OnboardingSheet(
                     step = step,
                     bodyMaxHeight = bodyMaxHeight,
-                    sheetColor = sheetColor,
+                    sheetColor = MaterialTheme.colorScheme.surface,
                     accent = accent,
                     accentSoft = accentSoft
                 ) { currentStep ->
@@ -457,79 +517,172 @@ fun PersonalizedOnboardingScreen(
                             config = config,
                             showGreeting = showGreeting,
                             accent = accent,
-                            accentSoft = accentSoft,
                             onConfigChange = ::updateConfig
                         )
-                        1 -> JourneyStep(
-                            config = config,
+                        1 -> GoalsStep(
+                            userName = config.userName,
+                            selectedGoalIndices = selectedGoalIndices,
                             accent = accent,
                             accentSoft = accentSoft,
                             onAccent = onAccent,
-                            onConfigChange = ::updateConfig
+                            onToggle = { index ->
+                                selectedGoalIndices = if (index in selectedGoalIndices) {
+                                    selectedGoalIndices - index
+                                } else {
+                                    selectedGoalIndices + index
+                                }
+                                updateConfig(config.copy(objective = objectiveForGoals(selectedGoalIndices)))
+                            },
+                            onSelectAll = {
+                                selectedGoalIndices = GOALS.indices.toSet()
+                                updateConfig(config.copy(objective = UserObjective.ALL_IN_ONE))
+                            }
                         )
-                        2 -> LocationAndMethodStep(
-                            appPrefs = appPrefs,
-                            prefsTick = prefsTick,
-                            locationGranted = permissions.location,
+                        2 -> LanguageStep(
+                            search = languageSearch,
+                            onSearchChange = { languageSearch = it },
+                            languages = availableLanguages,
+                            selectedIso = selectedLanguageIso,
+                            accent = accent,
+                            accentSoft = accentSoft,
+                            onSelect = { lang ->
+                                selectedLanguageIso = lang.isoCode
+                                selectedLanguageName = lang.displayName
+                                selectedEditionKey = ""
+                                selectedEditionLabel = ""
+                            }
+                        )
+                        3 -> EditionStep(
+                            languageName = selectedLanguageName.ifBlank { "English" },
+                            editions = editionsForSelectedLanguage,
+                            selectedEditionKey = selectedEditionKey,
+                            accent = accent,
+                            accentSoft = accentSoft,
+                            onSelect = { edition ->
+                                val lang = LanguageOption(selectedLanguageName.ifBlank { "English" }, selectedLanguageIso.ifBlank { "en" })
+                                applyLanguageAndEdition(lang, edition)
+                            }
+                        )
+                        4 -> PermissionsStep(
+                            permissions = permissions,
                             accent = accent,
                             onAccent = onAccent,
                             accentSoft = accentSoft,
-                            onAccentSoft = onAccentSoft,
                             onAllowLocation = {
                                 locationLauncher.launch(
-                                    arrayOf(
-                                        Manifest.permission.ACCESS_FINE_LOCATION,
-                                        Manifest.permission.ACCESS_COARSE_LOCATION
+                                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+                                )
+                            },
+                            onEnterCityManually = { showCityPicker = true },
+                            onAllowNotifications = {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                } else {
+                                    permissionTick++
+                                }
+                            },
+                            onAllowExactAlarms = {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    exactAlarmLauncher.launch(
+                                        Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                            data = Uri.parse("package:${context.packageName}")
+                                        }
                                     )
-                                )
+                                } else {
+                                    permissionTick++
+                                }
                             },
-                            onCitySelected = { city ->
-                                appPrefs?.saveManualLocation(
-                                    latitude = city.latitude,
-                                    longitude = city.longitude,
-                                    label = city.name,
-                                    countryCode = city.countryCode,
-                                    timeZoneId = city.timeZoneId
+                            onAllowBattery = {
+                                batteryLauncher.launch(
+                                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                        data = Uri.parse("package:${context.packageName}")
+                                    }
                                 )
-                                prefsTick++
-                            },
-                            onPrefsChanged = { prefsTick++ }
+                            }
                         )
-                        else -> FirstWinAndRemindersStep(
+                        else -> FirstWinStep(
+                            userName = config.userName,
+                            selectedLanguageName = selectedLanguageName.ifBlank { appPrefs?.quranTranslationLanguage ?: "English" },
+                            selectedEditionLabel = selectedEditionLabel.ifBlank { selectedEditionKey.ifBlank { "Default" } },
                             appPrefs = appPrefs,
                             prefsTick = prefsTick,
-                            remindersEnabled = remindersEnabled,
-                            onRemindersChange = { enabled ->
-                                remindersTouched = true
-                                remindersEnabled = enabled
-                                if (enabled && !permissions.notifications &&
-                                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                                ) {
-                                    notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                }
-                            }
+                            accent = accent,
+                            accentSoft = accentSoft
                         )
                     }
                 }
 
+                val ctaLabel = when (step) {
+                    0 -> "Continue"
+                    1, 2, 3 -> "Continue"
+                    4 -> "Continue"
+                    else -> "Start Using Sakinah"
+                }
+                val showCta = step > 0 || showGreeting
                 AnimatedVisibility(
-                    visible = step > 0 || showGreeting,
+                    visible = showCta,
                     enter = fadeIn(tween(300)) + slideInVertically(initialOffsetY = { it / 4 }),
                     exit = fadeOut(tween(220)) + slideOutVertically(targetOffsetY = { it / 4 })
                 ) {
                     OnboardingCta(
-                        label = when {
-                            step < TOTAL_STEPS - 1 -> stringResource(R.string.onboarding_continue)
-                            remindersEnabled -> stringResource(R.string.onboarding_enable_reminders)
-                            else -> stringResource(R.string.onboarding_enter_app)
-                        },
+                        label = ctaLabel,
                         accent = accent,
                         onAccent = onAccent,
                         onClick = {
-                            if (step < TOTAL_STEPS - 1) step++ else finish()
+                            when (step) {
+                                0 -> step = 1
+                                1 -> step = 2
+                                2 -> {
+                                    val lang = LanguageOption(
+                                        selectedLanguageName.ifBlank { "English" },
+                                        selectedLanguageIso.ifBlank { "en" }
+                                    )
+                                    if (selectedLanguageName.isBlank()) {
+                                        selectedLanguageName = "English"
+                                        selectedLanguageIso = "en"
+                                    }
+                                    val editions = editionsForLanguage(translationResources, lang.isoCode, lang.displayName)
+                                    if (editions.size > 1) {
+                                        step = 3
+                                    } else {
+                                        applyLanguageAndEdition(lang, editions.firstOrNull())
+                                        step = 4
+                                    }
+                                }
+                                3 -> {
+                                    if (selectedEditionKey.isBlank()) {
+                                        val lang = LanguageOption(selectedLanguageName.ifBlank { "English" }, selectedLanguageIso.ifBlank { "en" })
+                                        val editions = editionsForLanguage(translationResources, lang.isoCode, lang.displayName)
+                                        applyLanguageAndEdition(lang, editions.firstOrNull())
+                                    }
+                                    step = 4
+                                }
+                                4 -> step = 5
+                                else -> finish()
+                            }
                         }
                     )
                 }
+            }
+
+            if (showCityPicker) {
+                HomeLocationCityPickerDialog(
+                    title = "Choose your city",
+                    subtitle = "Used for accurate Salah times and Qibla.",
+                    onDismiss = { showCityPicker = false },
+                    onCitySelected = { city ->
+                        appPrefs?.saveManualLocation(
+                            latitude = city.latitude,
+                            longitude = city.longitude,
+                            label = city.name,
+                            countryCode = city.countryCode,
+                            timeZoneId = city.timeZoneId
+                        )
+                        prefsTick++
+                        permissionTick++
+                        showCityPicker = false
+                    }
+                )
             }
         }
     }
@@ -541,6 +694,7 @@ private fun HeroZone(
     step: Int,
     userName: String,
     showGreeting: Boolean,
+    selectedLanguageName: String,
     accent: Color,
     accentSoft: Color,
     onAccentSoft: Color,
@@ -549,7 +703,6 @@ private fun HeroZone(
     onSkip: () -> Unit
 ) {
     val name = userName.trim()
-
     Box(modifier = modifier) {
         Row(
             modifier = Modifier
@@ -563,7 +716,7 @@ private fun HeroZone(
                 IconButton(onClick = onBack) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.onboarding_back),
+                        contentDescription = "Back",
                         tint = accent
                     )
                 }
@@ -583,7 +736,7 @@ private fun HeroZone(
                         modifier = Modifier.clickable(onClick = onSkip)
                     ) {
                         Text(
-                            text = stringResource(R.string.onboarding_skip),
+                            text = "Skip",
                             modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -608,7 +761,7 @@ private fun HeroZone(
                 0 -> {
                     SakinahAnimatedLogo(onAssembled = onAssembled)
                     Text(
-                        text = stringResource(R.string.onboarding_brand),
+                        text = "Sakinah",
                         fontFamily = FontFamily.Serif,
                         fontSize = 30.sp,
                         fontWeight = FontWeight.Bold,
@@ -616,11 +769,11 @@ private fun HeroZone(
                     )
                     AnimatedVisibility(
                         visible = showGreeting,
-                        enter = fadeIn(tween(300)) + slideInVertically(initialOffsetY = { it / 4 }),
-                        exit = fadeOut(tween(220)) + slideOutVertically(targetOffsetY = { it / 4 })
+                        enter = fadeIn(tween(600)),
+                        exit = fadeOut(tween(220))
                     ) {
                         Text(
-                            text = stringResource(R.string.onboarding_welcome_salam),
+                            text = "As-salamu alaykum",
                             fontFamily = FontFamily.Serif,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
@@ -629,14 +782,9 @@ private fun HeroZone(
                         )
                     }
                 }
-
                 1 -> {
                     Text(
-                        text = if (name.isNotBlank()) {
-                            stringResource(R.string.onboarding_journey_greeting_named, name)
-                        } else {
-                            stringResource(R.string.onboarding_journey_greeting)
-                        },
+                        text = if (name.isNotBlank()) "Nice to meet you, $name" else "Welcome",
                         fontFamily = FontFamily.Serif,
                         fontSize = 26.sp,
                         fontWeight = FontWeight.Bold,
@@ -644,55 +792,16 @@ private fun HeroZone(
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = stringResource(R.string.onboarding_journey_subtitle),
+                        text = "What brings you here? Select one or more.",
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-
                 2 -> {
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(CircleShape)
-                            .background(accentSoft),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LocationOn,
-                            contentDescription = null,
-                            tint = accent,
-                            modifier = Modifier.size(30.dp)
-                        )
-                    }
+                    StepHeroIcon(Icons.Default.Search, accent, accentSoft)
                     Text(
-                        text = stringResource(R.string.onboarding_location_title),
-                        fontFamily = FontFamily.Serif,
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-
-                else -> {
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(CircleShape)
-                            .background(accentSoft),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Notifications,
-                            contentDescription = null,
-                            tint = accent,
-                            modifier = Modifier.size(30.dp)
-                        )
-                    }
-                    Text(
-                        text = stringResource(R.string.onboarding_next_prayer),
+                        text = "Choose your default language",
                         fontFamily = FontFamily.Serif,
                         fontSize = 26.sp,
                         fontWeight = FontWeight.Bold,
@@ -700,16 +809,75 @@ private fun HeroZone(
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = stringResource(R.string.onboarding_reminders_detail),
+                        text = "Applies across Quran, Word-by-Word, Hadith, and Tafseer.",
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                3 -> {
+                    StepHeroIcon(Icons.AutoMirrored.Filled.MenuBook, accent, accentSoft)
+                    Text(
+                        text = "Choose your ${selectedLanguageName.ifBlank { "English" }} edition",
+                        fontFamily = FontFamily.Serif,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = "Select your preferred translation style across Quran, WBW, Hadith, and Tafseer.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                4 -> {
+                    StepHeroIcon(Icons.Default.Notifications, accent, accentSoft)
+                    Text(
+                        text = "Enable helpful permissions",
+                        fontFamily = FontFamily.Serif,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = "Only what's needed for accurate Salah times and reliable reminders.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                else -> {
+                    StepHeroIcon(Icons.Default.Mosque, accent, accentSoft)
+                    Text(
+                        text = if (name.isNotBlank()) "You're all set, $name" else "You're all set",
+                        fontFamily = FontFamily.Serif,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 }
             }
         }
     }
 }
+
+@Composable
+private fun StepHeroIcon(icon: ImageVector, accent: Color, accentSoft: Color) {
+    Box(
+        modifier = Modifier
+            .size(64.dp)
+            .clip(CircleShape)
+            .background(accentSoft),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(imageVector = icon, contentDescription = null, tint = accent, modifier = Modifier.size(30.dp))
+    }
+}
+
 
 @Composable
 private fun OnboardingSheet(
@@ -740,9 +908,7 @@ private fun OnboardingSheet(
                     .clip(RoundedCornerShape(2.dp))
                     .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f))
             )
-
             Spacer(Modifier.height(10.dp))
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
@@ -760,22 +926,15 @@ private fun OnboardingSheet(
                     )
                 }
             }
-
             Spacer(Modifier.height(16.dp))
 
             AnimatedContent(
                 targetState = step,
                 transitionSpec = {
-                    val forward = targetState > initialState
-                    val enter = slideInHorizontally(animationSpec = tween(300)) { width ->
-                        if (forward) width / 3 else -width / 3
-                    } + fadeIn(tween(300))
-                    val exit = slideOutHorizontally(animationSpec = tween(220)) { width ->
-                        if (forward) -width / 3 else width / 3
-                    } + fadeOut(tween(220))
-                    enter togetherWith exit
+                    slideInHorizontally { it / 3 } + fadeIn(tween(300)) togetherWith
+                        slideOutHorizontally { -it / 3 } + fadeOut(tween(220))
                 },
-                label = "onboarding_sheet_step"
+                label = "onboarding_step"
             ) { animatedStep ->
                 Column(
                     modifier = Modifier
@@ -817,464 +976,479 @@ private fun WelcomeStep(
     config: UserAppearanceConfig,
     showGreeting: Boolean,
     accent: Color,
-    accentSoft: Color,
     onConfigChange: (UserAppearanceConfig) -> Unit
 ) {
     AnimatedVisibility(
         visible = showGreeting,
-        enter = fadeIn(tween(300)) + slideInVertically(initialOffsetY = { it / 4 }),
-        exit = fadeOut(tween(220)) + slideOutVertically(targetOffsetY = { it / 4 })
+        enter = fadeIn(tween(600)),
+        exit = fadeOut(tween(220))
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
-                text = stringResource(R.string.onboarding_mission),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Text(
-                text = stringResource(R.string.onboarding_welcome_headline),
+                text = "Welcome to Sakinah. What should we call you?",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
             )
-
             OutlinedTextField(
                 value = config.userName,
                 onValueChange = { onConfigChange(config.copy(userName = it)) },
-                label = { Text(stringResource(R.string.onboarding_name_label)) },
-                placeholder = { Text(stringResource(R.string.onboarding_name_placeholder)) },
+                label = { Text("Your name") },
+                placeholder = { Text("Enter your name") },
                 singleLine = true,
                 shape = RoundedCornerShape(16.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = accent,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
                     cursorColor = accent,
                     focusedLabelColor = accent
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
-
             Text(
-                text = stringResource(R.string.onboarding_privacy_microcopy),
+                text = "You can skip this and continue anytime.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-
-            // Soft sage rule keeps the sheet's emerald identity visible in every palette.
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(3.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(accentSoft)
-            )
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun JourneyStep(
-    config: UserAppearanceConfig,
+private fun GoalsStep(
+    userName: String,
+    selectedGoalIndices: Set<Int>,
     accent: Color,
     accentSoft: Color,
     onAccent: Color,
-    onConfigChange: (UserAppearanceConfig) -> Unit
+    onToggle: (Int) -> Unit,
+    onSelectAll: () -> Unit
 ) {
-    val experiences = listOf(EXPERIENCE_NEW, EXPERIENCE_PRACTICING, EXPERIENCE_STUDENT)
-
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        experiences.forEach { level ->
-            val selected = config.experienceLevel == level
-            FilterChip(
+    val allSelected = selectedGoalIndices.size == GOALS.size
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        GOALS.forEachIndexed { index, goal ->
+            val selected = index in selectedGoalIndices
+            GoalRow(
+                label = goal.label,
+                icon = goal.icon,
                 selected = selected,
-                onClick = { onConfigChange(config.copy(experienceLevel = level)) },
-                label = { Text(experienceLabel(level), fontSize = 12.sp) },
-                shape = RoundedCornerShape(50),
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = accentSoft,
-                    selectedLabelColor = accent,
-                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = selected,
-                    borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                    selectedBorderColor = accent
-                )
+                accent = accent,
+                accentSoft = accentSoft,
+                onAccent = onAccent,
+                onClick = { onToggle(index) }
             )
         }
-    }
-
-    Text(
-        text = stringResource(R.string.onboarding_focus_question),
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface
-    )
-
-    val objectives = UserObjective.entries
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        objectives.chunked(2).forEach { rowItems ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                rowItems.forEach { objective ->
-                    FocusTile(
-                        objective = objective,
-                        selected = config.objective == objective,
-                        accent = accent,
-                        accentSoft = accentSoft,
-                        onAccent = onAccent,
-                        modifier = Modifier.weight(1f),
-                        // Tapping a focus must not overwrite an already chosen palette or Focus Mode.
-                        onClick = { onConfigChange(config.copy(objective = objective)) }
-                    )
-                }
-                if (rowItems.size == 1) Spacer(Modifier.weight(1f))
-            }
-        }
+        GoalRow(
+            label = "Select all of the above",
+            icon = Icons.Default.Check,
+            selected = allSelected,
+            accent = accent,
+            accentSoft = accentSoft,
+            onAccent = onAccent,
+            onClick = onSelectAll
+        )
     }
 }
 
 @Composable
-private fun FocusTile(
-    objective: UserObjective,
+private fun GoalRow(
+    label: String,
+    icon: ImageVector,
     selected: Boolean,
     accent: Color,
     accentSoft: Color,
     onAccent: Color,
-    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    Surface(
-        modifier = modifier
-            .fillMaxHeight()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        color = if (selected) accentSoft else MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, if (selected) accent else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+    SakinahCard(
+        onClick = onClick,
+        containerColor = if (selected) accentSoft else MaterialTheme.colorScheme.surface,
+        contentPadding = 14.dp
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(34.dp)
                     .clip(CircleShape)
-                    .background(if (selected) accent else accentSoft),
+                    .background(if (selected) accent else MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = objectiveIcon(objective),
+                    imageVector = icon,
                     contentDescription = null,
-                    tint = if (selected) onAccent else accent,
-                    modifier = Modifier.size(17.dp)
+                    tint = if (selected) onAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
                 )
             }
             Text(
-                text = objectiveLabel(objective),
-                fontSize = 12.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 color = if (selected) accent else MaterialTheme.colorScheme.onSurface,
-                maxLines = 2
+                modifier = Modifier.weight(1f)
             )
+            if (selected) {
+                Icon(Icons.Default.Check, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+            }
         }
     }
 }
 
 @Composable
-private fun LocationAndMethodStep(
-    appPrefs: SakinahPreferences?,
-    prefsTick: Int,
-    locationGranted: Boolean,
+private fun LanguageStep(
+    search: String,
+    onSearchChange: (String) -> Unit,
+    languages: List<LanguageOption>,
+    selectedIso: String,
     accent: Color,
-    onAccent: Color,
     accentSoft: Color,
-    onAccentSoft: Color,
-    onAllowLocation: () -> Unit,
-    onCitySelected: (HomeCity) -> Unit,
-    onPrefsChanged: () -> Unit
+    onSelect: (LanguageOption) -> Unit
 ) {
-    var showCityPicker by rememberSaveable { mutableStateOf(false) }
-    var showMethodPicker by rememberSaveable { mutableStateOf(false) }
-
-    val method = remember(prefsTick) {
-        appPrefs?.calculationMethodOverride ?: appPrefs?.calculationMethod
-        ?: CalculationMethod.MUSLIM_WORLD_LEAGUE
+    val filtered = remember(search, languages) {
+        val q = search.trim().lowercase(Locale.getDefault())
+        if (q.isBlank()) languages
+        else languages.filter {
+            it.displayName.lowercase(Locale.getDefault()).contains(q) ||
+                it.isoCode.lowercase(Locale.getDefault()).contains(q)
+        }
     }
-    val school = remember(prefsTick) { appPrefs?.madhhab ?: Madhhab.HANAFI }
-    val savedLocation = remember(prefsTick) { appPrefs?.locationLabel?.takeIf(String::isNotBlank) }
-
-    SakinahCard(containerColor = accentSoft) {
-        Text(
-            text = stringResource(R.string.onboarding_location_title),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = onAccentSoft
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        OutlinedTextField(
+            value = search,
+            onValueChange = onSearchChange,
+            label = { Text("Search languages...") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            singleLine = true,
+            shape = RoundedCornerShape(16.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = accent,
+                cursorColor = accent,
+                focusedLabelColor = accent
+            ),
+            modifier = Modifier.fillMaxWidth()
         )
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            filtered.forEach { lang ->
+                val selected = lang.isoCode.equals(selectedIso, true)
+                SakinahCard(
+                    onClick = { onSelect(lang) },
+                    containerColor = if (selected) accentSoft else MaterialTheme.colorScheme.surface,
+                    contentPadding = 14.dp
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = lang.displayName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                            color = if (selected) accent else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (selected) {
+                            Icon(Icons.Default.Check, contentDescription = null, tint = accent)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditionStep(
+    languageName: String,
+    editions: List<EditionOption>,
+    selectedEditionKey: String,
+    accent: Color,
+    accentSoft: Color,
+    onSelect: (EditionOption) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
-            text = stringResource(R.string.onboarding_location_privacy),
+            text = "Select your preferred translation style across Quran, WBW, Hadith, and Tafseer.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Button(
-            onClick = onAllowLocation,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = onAccent)
-        ) {
-            Text(
-                text = if (savedLocation != null && locationGranted) {
-                    stringResource(R.string.onboarding_location_allowed)
-                } else {
-                    stringResource(R.string.onboarding_location_allow)
-                }
-            )
-        }
-        TextButton(onClick = { showCityPicker = true }) {
-            Text(stringResource(R.string.onboarding_location_manual))
-        }
-        if (savedLocation != null) {
-            Text(
-                text = stringResource(R.string.onboarding_location_saved, savedLocation),
-                style = MaterialTheme.typography.bodySmall,
-                color = onAccentSoft
-            )
-        }
-    }
-
-    SakinahCard {
-        Text(
-            text = stringResource(R.string.onboarding_prayer_settings),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
+        if (editions.isEmpty()) {
+            SakinahCard(containerColor = accentSoft) {
                 Text(
-                    text = stringResource(R.string.settings_calculation_method),
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = methodDisplayName(method),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
+                    text = "No editions found for $languageName. English will be used as a fallback where needed.",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
-            TextButton(onClick = { showMethodPicker = true }) {
-                Text(stringResource(R.string.profile_change))
-            }
-        }
-        Text(
-            text = stringResource(R.string.onboarding_madhhab),
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        SegmentedPillBar(
-            options = listOf(
-                stringResource(R.string.onboarding_madhhab_hanafi),
-                stringResource(R.string.onboarding_madhhab_other)
-            ),
-            selectedIndex = if (school == Madhhab.HANAFI) 0 else 1,
-            onSelect = { index ->
-                appPrefs?.madhhab = if (index == 0) Madhhab.HANAFI else Madhhab.SHAFI_HANBALI_MALIKI
-                onPrefsChanged()
-            }
-        )
-    }
-
-    if (showCityPicker) {
-        HomeLocationCityPickerDialog(
-            title = stringResource(R.string.onboarding_location_title),
-            subtitle = stringResource(R.string.onboarding_location_privacy),
-            onDismiss = { showCityPicker = false },
-            onCitySelected = { city ->
-                onCitySelected(city)
-                showCityPicker = false
-            }
-        )
-    }
-    if (showMethodPicker) {
-        AlertDialog(
-            onDismissRequest = { showMethodPicker = false },
-            title = { Text(stringResource(R.string.settings_calculation_method)) },
-            text = {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    val autoLabel = stringResource(R.string.settings_calculation_automatic_option)
-                    Text(
-                        text = autoLabel,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                appPrefs?.calculationMethodOverride = null
-                                onPrefsChanged()
-                                showMethodPicker = false
+        } else {
+            editions.forEach { edition ->
+                val key = edition.quranTranslation?.editionKey ?: edition.label
+                val selected = key == selectedEditionKey || (selectedEditionKey.isBlank() && edition == editions.firstOrNull())
+                SakinahCard(
+                    onClick = { onSelect(edition) },
+                    containerColor = if (selected) accentSoft else MaterialTheme.colorScheme.surface,
+                    contentPadding = 14.dp
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = edition.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                color = if (selected) accent else MaterialTheme.colorScheme.onSurface
+                            )
+                            val author = edition.quranTranslation?.authorName.orEmpty()
+                            if (author.isNotBlank() && !author.equals(edition.label, true)) {
+                                Text(
+                                    text = author,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
-                            .padding(vertical = 10.dp),
-                        fontSize = 13.sp,
-                        color = accent
-                    )
-                    CalculationMethod.entries.forEach { option ->
-                        Text(
-                            text = methodDisplayName(option),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    appPrefs?.calculationMethod = option
-                                    appPrefs?.calculationMethodOverride = option
-                                    onPrefsChanged()
-                                    showMethodPicker = false
-                                }
-                                .padding(vertical = 10.dp),
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        }
+                        if (selected) {
+                            Icon(Icons.Default.Check, contentDescription = null, tint = accent)
+                        }
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { showMethodPicker = false }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
             }
+        }
+    }
+}
+
+@Composable
+private fun PermissionsStep(
+    permissions: PermissionState,
+    accent: Color,
+    onAccent: Color,
+    accentSoft: Color,
+    onAllowLocation: () -> Unit,
+    onEnterCityManually: () -> Unit,
+    onAllowNotifications: () -> Unit,
+    onAllowExactAlarms: () -> Unit,
+    onAllowBattery: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        PermissionCard(
+            icon = Icons.Default.LocationOn,
+            title = "Location",
+            benefit = "Accurate Salah times and Qibla",
+            granted = permissions.location,
+            accent = accent,
+            onAccent = onAccent,
+            accentSoft = accentSoft,
+            onAllow = onAllowLocation
+        )
+        TextButton(onClick = onEnterCityManually, modifier = Modifier.padding(start = 4.dp)) {
+            Text("Enter city manually", color = accent)
+        }
+        PermissionCard(
+            icon = Icons.Default.Notifications,
+            title = "Notifications",
+            benefit = "Daily prayer alerts",
+            granted = permissions.notifications,
+            accent = accent,
+            onAccent = onAccent,
+            accentSoft = accentSoft,
+            onAllow = onAllowNotifications
+        )
+        PermissionCard(
+            icon = Icons.Default.Alarm,
+            title = "Exact Alarms",
+            benefit = "On-time Azaan scheduling",
+            granted = permissions.exactAlarms,
+            accent = accent,
+            onAccent = onAccent,
+            accentSoft = accentSoft,
+            onAllow = onAllowExactAlarms
+        )
+        PermissionCard(
+            icon = Icons.Default.BatterySaver,
+            title = "Battery Optimization",
+            benefit = "Keep Azaan reliable in background",
+            granted = permissions.batteryOptimizationIgnored,
+            accent = accent,
+            onAccent = onAccent,
+            accentSoft = accentSoft,
+            onAllow = onAllowBattery
         )
     }
 }
 
 @Composable
-private fun FirstWinAndRemindersStep(
-    appPrefs: SakinahPreferences?,
-    prefsTick: Int,
-    remindersEnabled: Boolean,
-    onRemindersChange: (Boolean) -> Unit
+private fun PermissionCard(
+    icon: ImageVector,
+    title: String,
+    benefit: String,
+    granted: Boolean,
+    accent: Color,
+    onAccent: Color,
+    accentSoft: Color,
+    onAllow: () -> Unit
 ) {
-    val emerald = SakinahPalette.EMERALD_SANCTUARY.lightPreviewPrimary
-    val nextPrayer = remember(prefsTick) { appPrefs?.let(::nextPrayerPreview) }
-
-    SakinahCard(containerColor = emerald) {
-        Text(
-            text = stringResource(R.string.onboarding_next_prayer),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.8.sp,
-            color = Color.White.copy(alpha = 0.82f)
-        )
-        if (nextPrayer != null) {
-            Text(
-                text = "${nextPrayer.first} · ${nextPrayer.second}",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-        } else {
-            Text(
-                text = stringResource(R.string.onboarding_next_prayer_hint),
-                fontSize = 13.sp,
-                color = Color.White.copy(alpha = 0.9f)
-            )
-        }
-    }
-
-    SakinahCard {
+    SakinahCard(
+        containerColor = if (granted) accentSoft.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surface,
+        contentPadding = 14.dp
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(if (granted) accent else accentSoft),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (granted) Icons.Default.Check else icon,
+                    contentDescription = null,
+                    tint = if (granted) onAccent else accent,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = stringResource(R.string.onboarding_reminders),
+                    text = title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = stringResource(R.string.onboarding_reminders_detail),
+                    text = benefit,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Switch(checked = remindersEnabled, onCheckedChange = onRemindersChange)
+            Surface(
+                onClick = { if (!granted) onAllow() },
+                shape = RoundedCornerShape(50),
+                color = if (granted) accentSoft else accent,
+                border = if (granted) BorderStroke(1.dp, accent.copy(alpha = 0.35f)) else null
+            ) {
+                Text(
+                    text = if (granted) "Granted" else "Allow",
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (granted) accent else onAccent
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FirstWinStep(
+    userName: String,
+    selectedLanguageName: String,
+    selectedEditionLabel: String,
+    appPrefs: SakinahPreferences?,
+    prefsTick: Int,
+    accent: Color,
+    accentSoft: Color
+) {
+    val name = userName.trim()
+    var countdown by remember { mutableStateOf<String?>(null) }
+    var nextPrayerName by remember { mutableStateOf<String?>(null) }
+    var nextPrayerTime by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(prefsTick, appPrefs?.locationLatitude, appPrefs?.locationLongitude) {
+        while (true) {
+            val preview = appPrefs?.let(::nextPrayerCountdown)
+            nextPrayerName = preview?.prayerName
+            nextPrayerTime = preview?.timeLabel
+            countdown = preview?.countdownLabel
+            delay(1000L)
         }
     }
 
-    Text(
-        text = stringResource(R.string.onboarding_no_ads),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SakinahCard(containerColor = accent, contentPadding = 18.dp) {
+            Text(
+                text = "Next prayer",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp,
+                color = Color.White.copy(alpha = 0.82f)
+            )
+            Spacer(Modifier.height(4.dp))
+            if (nextPrayerName != null && countdown != null) {
+                Text(
+                    text = "$nextPrayerName · $nextPrayerTime",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    text = "in $countdown",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White.copy(alpha = 0.9f)
+                )
+            } else {
+                Text(
+                    text = "Set your location to see the next prayer",
+                    fontSize = 14.sp,
+                    color = Color.White.copy(alpha = 0.92f)
+                )
+            }
+        }
+
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = accentSoft
+        ) {
+            Text(
+                text = "$selectedLanguageName (${selectedEditionLabel}) · Quran, WBW, Hadith & Tafseer",
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = accent,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        Text(
+            text = if (name.isNotBlank()) "Welcome aboard, $name. Your preferences are ready." else "Your preferences are ready.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
 }
 
-private fun methodDisplayName(method: CalculationMethod): String =
-    method.name.lowercase(Locale.US).split('_')
-        .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase(Locale.US) } }
-
-@Composable
-private fun experienceLabel(level: String): String = when (level) {
-    EXPERIENCE_NEW -> stringResource(R.string.onboarding_experience_new)
-    EXPERIENCE_STUDENT -> stringResource(R.string.onboarding_experience_student)
-    else -> stringResource(R.string.onboarding_experience_practicing)
-}
-
-@Composable
-private fun objectiveLabel(objective: UserObjective): String = when (objective) {
-    UserObjective.PRAYER_COMPASS -> stringResource(R.string.onboarding_focus_prayer)
-    UserObjective.QURAN_STUDY -> stringResource(R.string.onboarding_focus_quran)
-    UserObjective.HADITH_SCHOLAR -> stringResource(R.string.onboarding_focus_learning)
-    UserObjective.ALL_IN_ONE -> stringResource(R.string.onboarding_focus_everything)
-}
-
-private fun objectiveIcon(objective: UserObjective): ImageVector = when (objective) {
-    UserObjective.PRAYER_COMPASS -> Icons.Default.Mosque
-    UserObjective.QURAN_STUDY -> Icons.AutoMirrored.Filled.MenuBook
-    UserObjective.HADITH_SCHOLAR -> Icons.AutoMirrored.Filled.LibraryBooks
-    UserObjective.ALL_IN_ONE -> Icons.Default.Explore
-}
-
-private fun readPermissionState(context: Context): PermissionState = PermissionState(
-    location = hasPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ||
-        hasPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION),
-    notifications = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-        hasPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+private data class NextPrayerPreview(
+    val prayerName: String,
+    val timeLabel: String,
+    val countdownLabel: String
 )
 
-private fun hasPermission(context: Context, permission: String): Boolean =
-    ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
-
-/**
- * Live preview of the next Salah for the saved location. Uses the same offline engine and
- * method mapping as the timetable, and returns null until a location has been chosen.
- */
-private fun nextPrayerPreview(prefs: SakinahPreferences): Pair<String, String>? {
+private fun nextPrayerCountdown(prefs: SakinahPreferences): NextPrayerPreview? {
     val coordinates = prefs.locationCoordinates ?: return null
     val zone = prefs.locationTimeZoneId
         ?.let { id -> runCatching { TimeZone.of(id) }.getOrNull() }
         ?: TimeZone.currentSystemDefault()
-    val now = Clock.System.now().toLocalDateTime(zone)
+    val nowInstant = Clock.System.now()
+    val now = nowInstant.toLocalDateTime(zone)
     val method = SunniMethodMapper.localCalculationMethod(
         SunniMethodMapper.resolve(prefs.locationCountryCode, prefs.calculationMethodOverride)
     )
     val engine = PrayerCalculationEngineImpl()
-    val prayers = listOf(
-        PrayerType.FAJR,
-        PrayerType.DHUHR,
-        PrayerType.ASR,
-        PrayerType.MAGHRIB,
-        PrayerType.ISHA
-    )
+    val prayers = listOf(PrayerType.FAJR, PrayerType.DHUHR, PrayerType.ASR, PrayerType.MAGHRIB, PrayerType.ISHA)
 
     fun timesFor(date: LocalDate) = engine.getPrayerTimes(
         coordinates = coordinates,
@@ -1286,14 +1460,183 @@ private fun nextPrayerPreview(prefs: SakinahPreferences): Pair<String, String>? 
         highLatitudeRule = prefs.highLatitudeRule
     )
 
+    val todayTimes = timesFor(now.date)
     val nextToday = prayers.mapNotNull { type ->
-        timesFor(now.date)[type]?.takeIf { it >= now.time }?.let { type to it }
+        todayTimes[type]?.takeIf { it >= now.time }?.let { type to it }
     }.minByOrNull { it.second }
-    val (type, time) = nextToday ?: run {
+
+    val (type, time, date) = if (nextToday != null) {
+        Triple(nextToday.first, nextToday.second, now.date)
+    } else {
         val tomorrow = LocalDate.fromEpochDays(now.date.toEpochDays() + 1)
         val tomorrowFajr = timesFor(tomorrow)[PrayerType.FAJR] ?: return null
-        PrayerType.FAJR to tomorrowFajr
+        Triple(PrayerType.FAJR, tomorrowFajr, tomorrow)
     }
+
+    val targetInstant = kotlinx.datetime.LocalDateTime(date.year, date.monthNumber, date.dayOfMonth, time.hour, time.minute)
+        .toInstant(zone)
+    val diffSeconds = (targetInstant - nowInstant).inWholeSeconds.coerceAtLeast(0)
+    val h = diffSeconds / 3600
+    val m = (diffSeconds % 3600) / 60
+    val s = diffSeconds % 60
+    val countdown = if (h > 0) String.format(Locale.getDefault(), "%dh %02dm %02ds", h, m, s)
+    else String.format(Locale.getDefault(), "%dm %02ds", m, s)
     val formatted = String.format(Locale.getDefault(), "%02d:%02d", time.hour, time.minute)
-    return type.englishName to formatted
+    return NextPrayerPreview(type.englishName, formatted, countdown)
+}
+
+private fun readPermissionState(context: Context): PermissionState {
+    val location = hasPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ||
+        hasPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+    val notifications = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        hasPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+    val exactAlarms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val am = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+        am.canScheduleExactAlarms()
+    } else true
+    val batteryOptimizationIgnored = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        pm.isIgnoringBatteryOptimizations(context.packageName)
+    } else true
+    return PermissionState(location, notifications, exactAlarms, batteryOptimizationIgnored)
+}
+
+private fun hasPermission(context: Context, permission: String): Boolean =
+    ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+
+private fun objectiveForGoals(selected: Set<Int>): UserObjective {
+    if (selected.isEmpty()) return UserObjective.ALL_IN_ONE
+    if (selected.size == GOALS.size) return UserObjective.ALL_IN_ONE
+    if (selected.size > 1) return UserObjective.ALL_IN_ONE
+    val idx = selected.first()
+    return when (idx) {
+        0 -> UserObjective.ALL_IN_ONE
+        1 -> UserObjective.PRAYER_COMPASS
+        2 -> UserObjective.HADITH_SCHOLAR
+        3 -> UserObjective.QURAN_STUDY
+        4 -> UserObjective.PRAYER_COMPASS
+        else -> UserObjective.ALL_IN_ONE
+    }
+}
+
+private fun buildLanguageOptions(resources: List<QuranTranslationResource>): List<LanguageOption> {
+    val byIso = linkedMapOf<String, String>()
+    resources.forEach { r ->
+        val iso = r.isoCode.trim().lowercase(Locale.getDefault())
+        val name = r.languageName.trim().ifBlank { iso.uppercase(Locale.getDefault()) }
+        if (iso.isNotBlank()) {
+            val existing = byIso[iso]
+            if (existing == null || (existing == iso.uppercase(Locale.getDefault()) && name.isNotBlank())) {
+                byIso[iso] = name
+            }
+        }
+    }
+    // Ensure common languages exist even if catalog is sparse
+    listOf(
+        "en" to "English", "ar" to "Arabic", "ur" to "Urdu", "id" to "Indonesian",
+        "fr" to "French", "tr" to "Turkish", "bn" to "Bengali", "ru" to "Russian",
+        "es" to "Spanish", "de" to "German", "hi" to "Hindi", "fa" to "Persian",
+        "ms" to "Malay", "sw" to "Swahili", "ta" to "Tamil", "te" to "Telugu",
+        "th" to "Thai", "zh" to "Chinese", "ja" to "Japanese", "ko" to "Korean",
+        "pt" to "Portuguese", "it" to "Italian", "nl" to "Dutch", "so" to "Somali",
+        "uz" to "Uzbek", "ku" to "Kurdish", "az" to "Azerbaijani", "sq" to "Albanian",
+        "bs" to "Bosnian", "ha" to "Hausa", "yo" to "Yoruba", "ml" to "Malayalam",
+        "pa" to "Punjabi", "ps" to "Pashto", "sd" to "Sindhi"
+    ).forEach { (iso, name) -> byIso.putIfAbsent(iso, name) }
+
+    return byIso.entries
+        .map { LanguageOption(displayName = it.value.replaceFirstChar { c -> c.titlecase(Locale.getDefault()) }, isoCode = it.key) }
+        .sortedBy { it.displayName.lowercase(Locale.getDefault()) }
+}
+
+private fun defaultTranslationResources(): List<QuranTranslationResource> = listOf(
+    QuranTranslationResource(20, "Saheeh International", "Saheeh International", "English", "en", "20", QuranTranslationResource.SOURCE_QURAN_COM),
+    QuranTranslationResource(131, "The Clear Quran", "Dr. Mustafa Khattab", "English", "en", "131", QuranTranslationResource.SOURCE_QURAN_COM),
+    QuranTranslationResource(97, "Tafheem-ul-Quran", "Abul Ala Maududi", "Urdu", "ur", "97", QuranTranslationResource.SOURCE_QURAN_COM),
+    QuranTranslationResource(234, "Fatah Muhammad Jalandhari", "Fatah Muhammad Jalandhari", "Urdu", "ur", "234", QuranTranslationResource.SOURCE_QURAN_COM),
+    QuranTranslationResource(158, "Bayan-ul-Quran", "Dr. Israr Ahmad", "Urdu", "ur", "158", QuranTranslationResource.SOURCE_QURAN_COM),
+    QuranTranslationResource(54, "Maududi", "Abul Ala Maududi", "English", "en", "54", QuranTranslationResource.SOURCE_QURAN_COM)
+)
+
+private fun editionsForLanguage(
+    resources: List<QuranTranslationResource>,
+    iso: String,
+    languageName: String
+): List<EditionOption> {
+    val isoNorm = iso.trim().lowercase(Locale.getDefault())
+    val nameNorm = languageName.trim().lowercase(Locale.getDefault())
+    val matches = resources.filter { r ->
+        val rIso = r.isoCode.trim().lowercase(Locale.getDefault())
+        val rName = r.languageName.trim().lowercase(Locale.getDefault())
+        (isoNorm.isNotBlank() && rIso == isoNorm) || (nameNorm.isNotBlank() && rName == nameNorm)
+    }.distinctBy { it.editionKey.ifBlank { "${it.source}:${it.id}" } }
+        .sortedBy { it.name.lowercase(Locale.getDefault()) }
+    return matches.map { r ->
+        EditionOption(
+            label = r.name.ifBlank { r.authorName.ifBlank { "Edition ${r.id}" } },
+            languageName = r.languageName.ifBlank { languageName },
+            isoCode = r.isoCode.ifBlank { iso },
+            quranTranslation = r
+        )
+    }
+}
+
+private fun normalizeWbwLanguage(iso: String): String {
+    val code = iso.trim().lowercase(Locale.getDefault())
+    return when (code) {
+        "en", "eng", "english" -> "en"
+        "ur", "urd", "urdu" -> "ur"
+        "bn", "ben", "bengali" -> "bn"
+        "id", "ind", "indonesian" -> "id"
+        "tr", "tur", "turkish" -> "tr"
+        "fr", "fra", "french" -> "fr"
+        "ru", "rus", "russian" -> "ru"
+        "fa", "per", "fas", "persian" -> "fa"
+        "hi", "hin", "hindi" -> "hi"
+        "ta", "tam", "tamil" -> "ta"
+        else -> code.ifBlank { "en" }
+    }
+}
+
+private fun normalizeHadithLanguage(iso: String): String {
+    val code = iso.trim().lowercase(Locale.getDefault())
+    return when (code) {
+        "en", "eng", "english" -> "eng"
+        "ar", "ara", "arabic" -> "ara"
+        "ur", "urd", "urdu" -> "urd"
+        "bn", "ben", "bengali" -> "ben"
+        "tr", "tur", "turkish" -> "tur"
+        "id", "ind", "indonesian" -> "ind"
+        "fr", "fra", "french" -> "fra"
+        "ru", "rus", "russian" -> "rus"
+        "es", "spa", "spanish" -> "spa"
+        "fa", "per", "fas", "persian" -> "fas"
+        else -> "eng"
+    }
+}
+
+private fun normalizeTafsirLanguage(iso: String): String {
+    val code = iso.trim().lowercase(Locale.getDefault())
+    return when (code) {
+        "en", "eng", "english" -> "en"
+        "ar", "ara", "arabic" -> "ar"
+        "ur", "urd", "urdu" -> "ur"
+        "bn", "ben", "bengali" -> "bn"
+        "ru", "rus", "russian" -> "ru"
+        "ku", "kur", "kurdish" -> "ku"
+        "fa", "per", "fas", "persian" -> "fa"
+        "tr", "tur", "turkish" -> "tr"
+        "id", "ind", "indonesian" -> "id"
+        else -> "en"
+    }
+}
+
+private fun defaultTafsirIdForLanguage(lang: String): Int? = when (lang) {
+    "ar" -> 16
+    "ur" -> 160
+    "bn" -> 165
+    "ru" -> 170
+    "ku" -> 804
+    "en" -> 169
+    else -> null
 }
