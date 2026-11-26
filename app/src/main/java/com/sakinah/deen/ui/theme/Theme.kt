@@ -33,7 +33,7 @@ fun SakinahTheme(
     val currentDensity = LocalDensity.current
     val scaledDensity = Density(
         density = currentDensity.density,
-        fontScale = currentDensity.fontScale * fontScaleMultiplier.coerceIn(0.8f, 1.4f)
+        fontScale = currentDensity.fontScale * fontScaleMultiplier.coerceIn(0.8f, 2.0f)
     )
 
     CompositionLocalProvider(LocalDensity provides scaledDensity) {

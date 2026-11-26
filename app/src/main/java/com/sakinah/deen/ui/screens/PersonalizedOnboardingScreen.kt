@@ -1136,6 +1136,7 @@ private fun fontScaleLabel(preset: FontScalePreset): String = when (preset) {
     FontScalePreset.STANDARD -> stringResource(R.string.onboarding_font_standard)
     FontScalePreset.COMFORTABLE -> stringResource(R.string.onboarding_font_comfort)
     FontScalePreset.LARGE -> stringResource(R.string.onboarding_font_large)
+    else -> preset.label
 }
 
 @Composable

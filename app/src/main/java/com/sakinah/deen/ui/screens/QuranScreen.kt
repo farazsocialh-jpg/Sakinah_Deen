@@ -57,6 +57,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -102,6 +103,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -130,6 +133,7 @@ import com.sakinah.deen.util.ArabicNormalizer
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
+import kotlin.math.roundToInt
 import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -174,6 +178,7 @@ fun QuranScreen(
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var showQuranOptions by remember { mutableStateOf(false) }
     var showWbwLanguageSheet by remember { mutableStateOf(false) }
+    var showFontSlider by remember { mutableStateOf(false) }
     var showBookmarks by remember { mutableStateOf(false) }
     // 0 means no ayah action bar; any other value is the ayah it acts on.
     var actionBarAyah by remember { mutableIntStateOf(0) }
@@ -181,6 +186,8 @@ fun QuranScreen(
     val appearancePrefs = rememberInject<AppearancePreferences>()
     val appearanceConfig by appearancePrefs.effectiveConfig.collectAsStateWithLifecycle()
     val readingLayout = appearanceConfig.quranReadingLayout
+    val fontScalePresets = FontScalePreset.entries
+    val fontScaleIndex = fontScalePresets.indexOf(appearanceConfig.fontScale).coerceAtLeast(0)
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
 
@@ -575,47 +582,70 @@ fun QuranScreen(
                 onTitleClick = { studioSheetTab = 0 },
                 onMenuClick = { showQuranOptions = true },
                 menuContentDescription = stringResource(R.string.quran_options_title),
-                modifier = Modifier.align(Alignment.BottomCenter),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 8.dp),
                 actions = {
-                    ReaderPillLayoutToggle(
-                        selected = readingLayout,
-                        onClick = {
-                            val next = if (readingLayout == QuranReadingLayout.SPLIT_COLUMN) {
-                                QuranReadingLayout.THUMB_BOTTOM_DOCK
-                            } else {
-                                QuranReadingLayout.SPLIT_COLUMN
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        ReaderPillLayoutToggle(
+                            selected = readingLayout,
+                            onClick = {
+                                val next = if (readingLayout == QuranReadingLayout.SPLIT_COLUMN) {
+                                    QuranReadingLayout.THUMB_BOTTOM_DOCK
+                                } else {
+                                    QuranReadingLayout.SPLIT_COLUMN
+                                }
+                                appearancePrefs.updateQuranReadingLayout(next)
                             }
-                            appearancePrefs.updateQuranReadingLayout(next)
-                        }
-                    )
-                    ReaderPillModeButton(
-                        studyMode = state.isStudyMode,
-                        onClick = { vm.onIntent(QuranUiIntent.ToggleReadingMode) }
-                    )
-                    ReaderPillToggleIcon(
-                        icon = hifzBrainIcon,
-                        description = "Toggle Hifz mistake highlighting",
-                        active = hifzOverlayActive,
-                        onClick = { hifzOverlayActive = !hifzOverlayActive }
-                    )
-                    ReaderPillCanvasToggle(
-                        description = "Toggle word-by-word",
-                        active = state.wbwEnabled,
-                        onClick = {
-                            vm.onIntent(QuranUiIntent.SetWbwEnabled(!state.wbwEnabled))
-                        }
-                    ) { color -> WbwStackedGlyph(color) }
-                    ReaderPillCanvasToggle(
-                        description = "Adjust reading font size",
-                        active = false,
-                        onClick = {
-                            val presets = FontScalePreset.entries
-                            val next = presets[(appearanceConfig.fontScale.ordinal + 1) % presets.size]
-                            appearancePrefs.update { it.copy(fontScale = next) }
-                        }
-                    ) { color -> FontScaleGlyph(color) }
+                        )
+                        ReaderPillModeButton(
+                            studyMode = state.isStudyMode,
+                            onClick = { vm.onIntent(QuranUiIntent.ToggleReadingMode) }
+                        )
+                        ReaderPillToggleIcon(
+                            icon = hifzBrainIcon,
+                            description = "Toggle Hifz mistake highlighting",
+                            active = hifzOverlayActive,
+                            onClick = { hifzOverlayActive = !hifzOverlayActive }
+                        )
+                        ReaderPillCanvasToggle(
+                            description = "Toggle word-by-word",
+                            active = state.wbwEnabled,
+                            onClick = {
+                                vm.onIntent(QuranUiIntent.SetWbwEnabled(!state.wbwEnabled))
+                            }
+                        ) { color -> WbwStackedGlyph(color) }
+                        ReaderPillCanvasToggle(
+                            description = "Adjust reading font size",
+                            active = showFontSlider,
+                            onClick = { showFontSlider = !showFontSlider }
+                        ) { color -> FontScaleGlyph(color) }
+                    }
                 }
             )
+
+            if (showFontSlider) {
+                Popup(
+                    alignment = Alignment.BottomCenter,
+                    onDismissRequest = { showFontSlider = false },
+                    properties = PopupProperties(dismissOnClickOutside = true)
+                ) {
+                    Box(modifier = Modifier.padding(bottom = 84.dp)) {
+                        FontScaleSliderCard(
+                            index = fontScaleIndex,
+                            presets = fontScalePresets,
+                            onIndexChange = { index ->
+                                appearancePrefs.update {
+                                    it.copy(fontScale = fontScalePresets[index])
+                                }
+                            }
+                        )
+                    }
+                }
+            }
         }
 
     // 5. Consolidated Tabbed Reader Studio Sheet (Surah | Translation | Tafsir)
@@ -1322,13 +1352,13 @@ private fun ReaderPillLayoutToggle(
     } else {
         QuranReadingLayout.SPLIT_COLUMN
     }
-    IconButton(onClick = onClick) {
+    CompactPillIconButton(description = target.localizedLabel(), onClick = onClick) {
         Icon(
             imageVector = when (target) {
                 QuranReadingLayout.SPLIT_COLUMN -> Icons.Default.ViewColumn
                 QuranReadingLayout.THUMB_BOTTOM_DOCK -> Icons.Default.ViewAgenda
             },
-            contentDescription = target.localizedLabel(),
+            contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(19.dp)
         )
@@ -1343,14 +1373,79 @@ private fun ReaderPillToggleIcon(
     active: Boolean,
     onClick: () -> Unit
 ) {
-    IconButton(onClick = onClick) {
+    CompactPillIconButton(description = description, onClick = onClick) {
         Icon(
             imageVector = icon,
-            contentDescription = description,
+            contentDescription = null,
             tint = if (active) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(19.dp)
         )
+    }
+}
+
+/** Compact circular icon wrapper so six dock actions leave room for the surah title. */
+@Composable
+private fun CompactPillIconButton(
+    description: String,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center
+    ) {
+        content()
+    }
+}
+
+/** Floating slider popover anchored above the bottom dock. */
+@Composable
+private fun FontScaleSliderCard(
+    index: Int,
+    presets: List<FontScalePreset>,
+    onIndexChange: (Int) -> Unit
+) {
+    val preset = presets[index]
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
+        shadowElevation = 8.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "aA",
+                modifier = Modifier.width(24.dp),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Slider(
+                value = index.toFloat(),
+                onValueChange = { value ->
+                    onIndexChange(value.roundToInt().coerceIn(0, presets.lastIndex))
+                },
+                valueRange = 0f..presets.lastIndex.toFloat(),
+                steps = (presets.lastIndex - 1).coerceAtLeast(0),
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "${(preset.multiplier * 100).roundToInt()}%",
+                modifier = Modifier.width(42.dp),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.End
+            )
+        }
     }
 }
 
@@ -1413,10 +1508,7 @@ private fun ReaderPillCanvasToggle(
 ) {
     val color = if (active) MaterialTheme.colorScheme.primary
     else MaterialTheme.colorScheme.onSurfaceVariant
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier.semantics { contentDescription = description }
-    ) {
+    CompactPillIconButton(description = description, onClick = onClick) {
         Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
             glyph(color)
         }
@@ -1530,11 +1622,14 @@ private fun ReaderPillModeButton(
     studyMode: Boolean,
     onClick: () -> Unit
 ) {
-    IconButton(onClick = onClick) {
+    CompactPillIconButton(
+        description = stringResource(R.string.quran_pill_reading_mode),
+        onClick = onClick
+    ) {
         Icon(
             imageVector = if (studyMode) Icons.Default.ViewAgenda
             else Icons.AutoMirrored.Filled.MenuBook,
-            contentDescription = stringResource(R.string.quran_pill_reading_mode),
+            contentDescription = null,
             tint = if (studyMode) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.secondary,
             modifier = Modifier.size(19.dp)

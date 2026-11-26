@@ -206,7 +206,11 @@ enum class FontScalePreset(val label: String, val multiplier: Float) {
     COMPACT("Compact", 0.90f),
     STANDARD("Standard", 1.00f),
     COMFORTABLE("Comfort", 1.12f),
-    LARGE("Large", 1.24f)
+    LARGE("Large", 1.24f),
+    VERY_LARGE("Very Large", 1.45f),
+    EXTRA_LARGE("Extra Large", 1.65f),
+    HUGE("Huge", 1.85f),
+    MAXIMUM("Maximum", 2.00f)
 }
 
 data class UserAppearanceConfig(

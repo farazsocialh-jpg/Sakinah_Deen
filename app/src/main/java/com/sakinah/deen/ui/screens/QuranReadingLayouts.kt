@@ -176,7 +176,7 @@ private fun HifzTagRow(
     val activeTag = hifzTagFor(surah, ayah, state)
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         listOf("Tajweed", "Mutashabihat", "Memory Slip").forEach { tag ->
             val active = activeTag == tag
@@ -190,7 +190,7 @@ private fun HifzTagRow(
             ) {
                 Text(
                     text = if (active) "✓ $tag" else "+ $tag",
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                     fontSize = 9.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = if (active) MaterialTheme.colorScheme.onPrimary
@@ -242,13 +242,13 @@ private fun SplitColumnLayout(
                     .fillMaxWidth()
                     .height(IntrinsicSize.Min)
                     .clickable { onAyahClick(ayah) },
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .weight(0.48f)
-                        .padding(vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                        .padding(vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -274,7 +274,7 @@ private fun SplitColumnLayout(
                 Column(
                     modifier = Modifier
                         .weight(0.52f)
-                        .padding(vertical = 10.dp)
+                        .padding(vertical = 6.dp)
                 ) {
                     AyahArabic(ayah, state.arabicFontSizeSp)
                     WbwWordsBlock(
@@ -314,8 +314,8 @@ private fun ThumbBottomDockLayout(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 112.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 112.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         itemsIndexed(
             items = ayahs,
@@ -326,8 +326,8 @@ private fun ThumbBottomDockLayout(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onAyahClick(ayah) }
-                    .padding(vertical = 5.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                    .padding(vertical = 3.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -336,7 +336,7 @@ private fun ThumbBottomDockLayout(
                 ) {
                     AyahNumberBadge(ayah.numberInSurah)
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         TafseerLink(onClick = { onTafseer(ayah) })
@@ -408,8 +408,8 @@ private fun WbwInterlinear(
 ) {
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.Start),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.Start),
+        verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         words.forEach { word ->
             key(word.wordKey) {
@@ -417,7 +417,7 @@ private fun WbwInterlinear(
                     modifier = Modifier
                         .wbwHighlight(state.selectedWbwWordKey == word.wordKey)
                         .clickable { onWordClick(word) }
-                        .padding(horizontal = 3.dp, vertical = 2.dp),
+                        .padding(horizontal = 2.dp, vertical = 1.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(1.dp)
                 ) {
