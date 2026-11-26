@@ -2,6 +2,7 @@ package com.sakinah.deen.ui.screens
 
 import android.content.Intent
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -74,16 +75,27 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -109,6 +121,7 @@ import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.components.StatusBadge
 import com.sakinah.deen.ui.rememberInject
 
+import com.sakinah.deen.ui.theme.FontScalePreset
 import com.sakinah.deen.ui.theme.UthmanicFontFamily
 import com.sakinah.deen.ui.viewmodel.AyahSearchResult
 import com.sakinah.deen.ui.viewmodel.QuranUiIntent
@@ -580,20 +593,27 @@ fun QuranScreen(
                         onClick = { vm.onIntent(QuranUiIntent.ToggleReadingMode) }
                     )
                     ReaderPillToggleIcon(
-                        icon = if (hifzOverlayActive) Icons.Default.VisibilityOff
-                        else Icons.Default.Visibility,
+                        icon = hifzBrainIcon,
                         description = "Toggle Hifz mistake highlighting",
                         active = hifzOverlayActive,
                         onClick = { hifzOverlayActive = !hifzOverlayActive }
                     )
-                    ReaderPillToggleIcon(
-                        icon = Icons.Default.Translate,
+                    ReaderPillCanvasToggle(
                         description = "Toggle word-by-word",
                         active = state.wbwEnabled,
                         onClick = {
                             vm.onIntent(QuranUiIntent.SetWbwEnabled(!state.wbwEnabled))
                         }
-                    )
+                    ) { color -> WbwStackedGlyph(color) }
+                    ReaderPillCanvasToggle(
+                        description = "Adjust reading font size",
+                        active = false,
+                        onClick = {
+                            val presets = FontScalePreset.entries
+                            val next = presets[(appearanceConfig.fontScale.ordinal + 1) % presets.size]
+                            appearancePrefs.update { it.copy(fontScale = next) }
+                        }
+                    ) { color -> FontScaleGlyph(color) }
                 }
             )
         }
@@ -1330,6 +1350,141 @@ private fun ReaderPillToggleIcon(
             tint = if (active) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(19.dp)
+        )
+    }
+}
+
+/** Minimalist brain outline with an alert badge for Hifz mistake tracking. */
+private val hifzBrainIcon: ImageVector = ImageVector.Builder(
+    name = "hifz_brain_alert",
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f
+).apply {
+    val stroke = SolidColor(Color.White)
+    addPath(
+        pathData = PathParser().parsePathString("M12 5.4c-1.2-1.2-3.1-1.4-4.4-.6-1.4-.1-2.6.9-2.8 2.3-1.4.6-2.2 2-2 3.4.1 1 .8 1.9 1.8 2.3-.2 1.4.7 2.7 2.1 3.1.9.3 2 .1 2.7-.5.7.5 1.7.7 2.6.4V5.4Z").toNodes(),
+        stroke = stroke,
+        strokeLineWidth = 1.5f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    )
+    addPath(
+        pathData = PathParser().parsePathString("M12 5.4c1.2-1.2 3.1-1.4 4.4-.6 1.4-.1 2.6.9 2.8 2.3 1.4.6 2.2 2 2 3.4-.1 1-.8 1.9-1.8 2.3.2 1.4-.7 2.7-2.1 3.1-.9.3-2 .1-2.7-.5-.7.5-1.7.7-2.6.4V5.4Z").toNodes(),
+        stroke = stroke,
+        strokeLineWidth = 1.5f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    )
+    addPath(
+        pathData = PathParser().parsePathString("M12 5.4v13.1").toNodes(),
+        stroke = stroke,
+        strokeLineWidth = 1.3f,
+        strokeLineCap = StrokeCap.Round
+    )
+    addPath(
+        pathData = PathParser().parsePathString("M15.4 5.6a3 3 0 1 0 6 0a3 3 0 1 0 -6 0").toNodes(),
+        stroke = stroke,
+        strokeLineWidth = 1.4f,
+        strokeLineJoin = StrokeJoin.Round
+    )
+    addPath(
+        pathData = PathParser().parsePathString("M18.4 4.1v2.5").toNodes(),
+        stroke = stroke,
+        strokeLineWidth = 1.6f,
+        strokeLineCap = StrokeCap.Round
+    )
+    addPath(
+        pathData = PathParser().parsePathString("M18.4 8.5l0 .1").toNodes(),
+        stroke = stroke,
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round
+    )
+}.build()
+
+/** Canvas-backed toggle that tints a custom glyph with the active theme color. */
+@Composable
+private fun ReaderPillCanvasToggle(
+    description: String,
+    active: Boolean,
+    onClick: () -> Unit,
+    glyph: @Composable (Color) -> Unit
+) {
+    val color = if (active) MaterialTheme.colorScheme.primary
+    else MaterialTheme.colorScheme.onSurfaceVariant
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.semantics { contentDescription = description }
+    ) {
+        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+            glyph(color)
+        }
+    }
+}
+
+/** Arabic ع over a divider over Latin A: interlinear word-by-word meaning. */
+@Composable
+private fun WbwStackedGlyph(color: Color) {
+    val measurer = rememberTextMeasurer()
+    val style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = color)
+    Canvas(modifier = Modifier.size(24.dp)) {
+        val arabic = "ع"
+        val latin = "A"
+        val arabicLayout = measurer.measure(arabic, style = style)
+        val latinLayout = measurer.measure(latin, style = style)
+        drawText(
+            measurer,
+            arabic,
+            topLeft = Offset((size.width - arabicLayout.size.width) / 2f, 0f),
+            style = style
+        )
+        drawLine(
+            color = color,
+            start = Offset(2f, 12f),
+            end = Offset(size.width - 2f, 12f),
+            strokeWidth = 1.2f
+        )
+        drawText(
+            measurer,
+            latin,
+            topLeft = Offset((size.width - latinLayout.size.width) / 2f, 12.5f),
+            style = style
+        )
+    }
+}
+
+/** `aA` with stacked up/down carets for the global reading font scale. */
+@Composable
+private fun FontScaleGlyph(color: Color) {
+    val measurer = rememberTextMeasurer()
+    val style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = color)
+    Canvas(modifier = Modifier.size(24.dp)) {
+        val label = "aA"
+        val layout = measurer.measure(label, style = style)
+        drawText(
+            measurer,
+            label,
+            topLeft = Offset(0f, (size.height - layout.size.height) / 2f),
+            style = style
+        )
+        drawPath(
+            Path().apply {
+                moveTo(18.5f, 5f)
+                lineTo(21f, 8.5f)
+                lineTo(16f, 8.5f)
+                close()
+            },
+            color = color
+        )
+        drawPath(
+            Path().apply {
+                moveTo(18.5f, 19f)
+                lineTo(16f, 15.5f)
+                lineTo(21f, 15.5f)
+                close()
+            },
+            color = color
         )
     }
 }
