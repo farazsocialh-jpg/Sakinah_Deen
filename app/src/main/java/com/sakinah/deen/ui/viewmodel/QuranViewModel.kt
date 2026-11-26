@@ -14,6 +14,7 @@ import com.sakinah.deen.data.model.SurahModel
 import com.sakinah.deen.data.model.TafsirText
 import com.sakinah.deen.data.prefs.AyahBookmark
 import com.sakinah.deen.data.prefs.QuranReaderPreferences
+import com.sakinah.deen.data.prefs.QuranTranslationSelection
 import com.sakinah.deen.data.prefs.QuranReadingMode
 import com.sakinah.deen.data.prefs.WbwLayoutMode
 import com.sakinah.deen.data.prefs.SakinahPreferences
@@ -223,7 +224,8 @@ class QuranViewModel(
             ?: IslamicDataRepository.IBN_KATHIR_TAFSIR_ID
     )
     private val selectedTranslationIdFlow = MutableStateFlow(
-        sakinahPreferences?.quranTranslationId
+        quranReaderPreferences?.translationSelection?.translationId?.takeIf { it > 0 }
+            ?: sakinahPreferences?.quranTranslationId
             ?: settingsRepository?.settings?.value?.appearance?.translationId
             ?: IslamicDataRepository.DEFAULT_TRANSLATION_ID
     )
@@ -264,15 +266,21 @@ class QuranViewModel(
 
     init {
         val selectedId = selectedTranslationIdFlow.value
+        val preferredTranslation = quranReaderPreferences?.translationSelection
         _uiState.update {
             it.copy(
                 selectedTranslationId = selectedId,
-                selectedTranslationLanguage = sakinahPreferences?.quranTranslationLanguage
+                selectedTranslationLanguage = preferredTranslation?.languageName
+                    ?: sakinahPreferences?.quranTranslationLanguage
                     ?: settingsRepository?.settings?.value?.appearance?.translationName
                     ?: "English",
-                selectedTranslationIsoCode = settingsRepository?.settings?.value?.appearance?.translationLanguage ?: "en",
-                selectedTranslationEditionKey = sakinahPreferences?.quranTranslationEditionKey.orEmpty(),
-                selectedTranslationSource = sakinahPreferences?.quranTranslationSource
+                selectedTranslationIsoCode = preferredTranslation?.isoCode
+                    ?: settingsRepository?.settings?.value?.appearance?.translationLanguage
+                    ?: "en",
+                selectedTranslationEditionKey = preferredTranslation?.editionKey
+                    ?: sakinahPreferences?.quranTranslationEditionKey.orEmpty(),
+                selectedTranslationSource = preferredTranslation?.source
+                    ?: sakinahPreferences?.quranTranslationSource
                     ?: QuranTranslationResource.SOURCE_QURAN_COM,
                 arabicScript = sakinahPreferences?.quranArabicScript ?: QuranArabicScript.UTHMANI,
                 arabicFontSize = (settingsRepository?.settings?.value?.appearance?.arabicFontSize ?: 24).coerceIn(16, 39)
@@ -282,6 +290,7 @@ class QuranViewModel(
         restoreLastReadPosition()
         observeOfflineStatus()
         observeSharedSettings()
+        observeTranslationPreference()
         observeTafseerPackages()
         viewModelScope.launch {
             tafseerRepository?.refreshCatalog()
@@ -388,6 +397,13 @@ class QuranViewModel(
                     sakinahPreferences?.quranTranslationEditionKey = ""
                     sakinahPreferences?.quranTranslationSource =
                         QuranTranslationResource.SOURCE_QURAN_COM
+                    quranReaderPreferences?.setSelectedTranslation(
+                        translationId = translationId,
+                        languageName = language,
+                        isoCode = iso,
+                        editionKey = "",
+                        source = QuranTranslationResource.SOURCE_QURAN_COM
+                    )
                     _uiState.update {
                         it.copy(
                             selectedTranslationId = translationId,
@@ -398,13 +414,105 @@ class QuranViewModel(
                             isLoadingTranslation = true
                         )
                     }
-                    syncSurah(
-                        _uiState.value.currentSurah.number,
-                        translationId,
-                        "",
-                        QuranTranslationResource.SOURCE_QURAN_COM
+                    ensureTranslationDownloaded(
+                        QuranTranslationSelection(
+                            translationId = translationId,
+                            languageName = language,
+                            isoCode = iso,
+                            editionKey = "",
+                            source = QuranTranslationResource.SOURCE_QURAN_COM
+                        )
                     )
                 }
+            }
+        }
+    }
+
+    /** Onboarding (and any other writer) changes the shared preference while the reader is up. */
+    private fun observeTranslationPreference() {
+        val prefs = quranReaderPreferences ?: return
+        viewModelScope.launch {
+            prefs.selectedTranslation.drop(1).collect { selection ->
+                if (selection.translationId <= 0) return@collect
+                val current = _uiState.value
+                if (selection.translationId == current.selectedTranslationId &&
+                    selection.editionKey == current.selectedTranslationEditionKey &&
+                    selection.source == current.selectedTranslationSource &&
+                    selection.isoCode == current.selectedTranslationIsoCode
+                ) {
+                    return@collect
+                }
+                applyTranslationSelection(selection)
+            }
+        }
+    }
+
+    private fun applyTranslationSelection(
+        selection: QuranTranslationSelection,
+        persist: Boolean = false
+    ) {
+        selectedTranslationIdFlow.value = selection.translationId
+        _uiState.update {
+            it.copy(
+                selectedTranslationId = selection.translationId,
+                selectedTranslationLanguage = selection.languageName,
+                selectedTranslationIsoCode = selection.isoCode,
+                selectedTranslationEditionKey = selection.editionKey,
+                selectedTranslationSource = selection.source,
+                isLoadingTranslation = true
+            )
+        }
+        if (persist) {
+            quranReaderPreferences?.setSelectedTranslation(
+                selection.translationId,
+                selection.languageName,
+                selection.isoCode,
+                selection.editionKey,
+                selection.source
+            )
+            sakinahPreferences?.quranTranslationId = selection.translationId
+            sakinahPreferences?.quranTranslationLanguage = selection.languageName
+            sakinahPreferences?.quranTranslationEditionKey = selection.editionKey
+            sakinahPreferences?.quranTranslationSource = selection.source
+            settingsRepository?.let { repo ->
+                viewModelScope.launch {
+                    repo.updateAppearance(
+                        repo.settings.value.appearance.copy(
+                            translationId = selection.translationId,
+                            translationName = selection.languageName,
+                            translationLanguage = selection.isoCode
+                        )
+                    )
+                }
+            }
+        }
+        ensureTranslationDownloaded(selection)
+    }
+
+    /**
+     * Re-querying Room happens automatically through [selectedTranslationIdFlow]. When this
+     * edition is not cached for the open surah yet, fetch it instead of leaving the reader on
+     * the previous translation's text.
+     */
+    private fun ensureTranslationDownloaded(selection: QuranTranslationSelection) {
+        val repo = islamicRepository ?: run {
+            _uiState.update { it.copy(isLoadingTranslation = false) }
+            return
+        }
+        val surahNumber = _uiState.value.currentSurah.number
+        viewModelScope.launch {
+            val cached = runCatching {
+                repo.hasTranslationForSurah(surahNumber, selection.translationId)
+            }.getOrDefault(false)
+            if (cached) {
+                _uiState.update { it.copy(isLoadingTranslation = false) }
+            } else {
+                syncSurah(
+                    surahNumber,
+                    selection.translationId,
+                    selection.editionKey,
+                    selection.source
+                )
             }
         }
     }
@@ -641,39 +749,17 @@ class QuranViewModel(
         val resolvedSource = source.ifBlank {
             catalogEntry?.source ?: QuranTranslationResource.SOURCE_QURAN_COM
         }
-        selectedTranslationIdFlow.value = translationId
         val language = languageName.ifBlank { _uiState.value.selectedTranslationLanguage }
         val iso = isoCode.ifBlank { _uiState.value.selectedTranslationIsoCode }
-        _uiState.update {
-            it.copy(
-                selectedTranslationId = translationId,
-                selectedTranslationLanguage = language,
-                selectedTranslationIsoCode = iso,
-                selectedTranslationEditionKey = resolvedEditionKey,
-                selectedTranslationSource = resolvedSource,
-                isLoadingTranslation = true
-            )
-        }
-        sakinahPreferences?.quranTranslationId = translationId
-        sakinahPreferences?.quranTranslationLanguage = language
-        sakinahPreferences?.quranTranslationEditionKey = resolvedEditionKey
-        sakinahPreferences?.quranTranslationSource = resolvedSource
-        settingsRepository?.let { repo ->
-            viewModelScope.launch {
-                repo.updateAppearance(
-                    repo.settings.value.appearance.copy(
-                        translationId = translationId,
-                        translationName = language,
-                        translationLanguage = iso.ifBlank { repo.settings.value.appearance.translationLanguage }
-                    )
-                )
-            }
-        }
-        syncSurah(
-            _uiState.value.currentSurah.number,
-            translationId,
-            resolvedEditionKey,
-            resolvedSource
+        applyTranslationSelection(
+            QuranTranslationSelection(
+                translationId = translationId,
+                languageName = language,
+                isoCode = iso,
+                editionKey = resolvedEditionKey,
+                source = resolvedSource
+            ),
+            persist = true
         )
     }
 

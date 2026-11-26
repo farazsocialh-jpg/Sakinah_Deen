@@ -150,6 +150,7 @@ import com.sakinah.deen.data.model.SurahModel
 import com.sakinah.deen.data.model.TafsirText
 import com.sakinah.deen.network.IslamicDataRepository
 import com.sakinah.deen.data.prefs.AppearancePreferences
+import com.sakinah.deen.data.prefs.QuranReaderPreferences
 import com.sakinah.deen.data.prefs.QuranReadingLayout
 import com.sakinah.deen.data.prefs.QuranReadingMode
 import com.sakinah.deen.data.quran.QulWord
@@ -207,9 +208,11 @@ fun QuranScreen(
         }
     }
 
-    var studioSheetTab by remember { mutableIntStateOf(-1) } // -1 closed; 0=Surah, 1=Translation, 2=Tafsir
+    var studioSheetTab by remember { mutableIntStateOf(-1) } // -1 closed; 0=Surah, 1=Translation
     var translationQuery by remember { mutableStateOf("") }
     var tafseerLanguageFilter by remember { mutableStateOf("all") }
+    var selectedTafsirAyah by remember { mutableStateOf<Int?>(null) }
+    var showTafsirBooksSheet by remember { mutableStateOf(false) }
     var selectedAyahNumber by remember { mutableIntStateOf(initialAyahNumber) }
     var highlightedAyahNumber by remember { mutableIntStateOf(0) }
     var hifzOverlayActive by remember { mutableStateOf(false) }
@@ -235,6 +238,8 @@ fun QuranScreen(
     val fontScaleIndex = fontScalePresets.indexOf(appearanceConfig.fontScale).coerceAtLeast(0)
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    val readerPrefs = remember(context) { QuranReaderPreferences(context) }
+    val sharedTranslationSelection by readerPrefs.selectedTranslation.collectAsStateWithLifecycle()
 
     val listState = rememberLazyListState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -296,7 +301,15 @@ fun QuranScreen(
 
     LaunchedEffect(studioSheetTab) {
         if (studioSheetTab >= 0) actionBarAyah = 0
-        if (studioSheetTab == 2) vm.onIntent(QuranUiIntent.RefreshTafseerCatalog)
+    }
+    LaunchedEffect(showTafsirBooksSheet) {
+        if (showTafsirBooksSheet) {
+            actionBarAyah = 0
+            vm.onIntent(QuranUiIntent.RefreshTafseerCatalog)
+        }
+    }
+    LaunchedEffect(selectedTafsirAyah) {
+        if (selectedTafsirAyah != null) actionBarAyah = 0
     }
 
     LaunchedEffect(listState) {
@@ -398,7 +411,7 @@ fun QuranScreen(
             }
     }
     val openTafsirBooks: () -> Unit = {
-        studioSheetTab = 2
+        showTafsirBooksSheet = true
         showQuranOptions = false
     }
     val ayahUiState = QuranAyahUiState(
@@ -431,8 +444,15 @@ fun QuranScreen(
     }
     val onTafseerClick: (AyahModel) -> Unit = { ayah ->
         selectedAyahNumber = ayah.numberInSurah
+        selectedTafsirAyah = ayah.numberInSurah
         vm.onIntent(QuranUiIntent.SelectAyahForTafseer(ayah.numberInSurah))
-        studioSheetTab = 2
+    }
+    val moveSelectedTafsirAyah: (Int) -> Unit = { target ->
+        if (surah.ayahs.any { it.numberInSurah == target }) {
+            selectedTafsirAyah = target
+            selectedAyahNumber = target
+            vm.onIntent(QuranUiIntent.SelectAyahForTafseer(target))
+        }
     }
     val onTagMistakeClick: (AyahModel, String) -> Unit = { ayah, tag ->
         vm.onIntent(
@@ -493,6 +513,16 @@ fun QuranScreen(
         ?: "Surah $nextSurah"
 
     Box(modifier = modifier.fillMaxSize()) {
+            if (state.isLoadingTranslation) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .height(2.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                )
+            }
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -992,7 +1022,6 @@ fun QuranScreen(
 
     // 5. Consolidated Tabbed Reader Studio Sheet (Surah | Translation | Tafsir)
     if (studioSheetTab >= 0) {
-        val ayah = surah.ayahs.find { it.numberInSurah == selectedAyahNumber }
         val filteredTranslations = remember(state.availableTranslations, translationQuery) {
             state.availableTranslations.filter { item ->
                 translationQuery.isBlank() ||
@@ -1018,10 +1047,10 @@ fun QuranScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = when (studioSheetTab) {
-                            0 -> "Surah & Ayah Quick Jump"
-                            1 -> "Translation"
-                            else -> "Tafsir"
+                        text = if (studioSheetTab == 0) {
+                            "Surah & Ayah Quick Jump"
+                        } else {
+                            "Translation"
                         },
                         fontFamily = FontFamily.Serif,
                         fontWeight = FontWeight.Bold,
@@ -1154,7 +1183,9 @@ fun QuranScreen(
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
-                                        if (state.selectedTranslationId == item.id) {
+                                        if (state.selectedTranslationId == item.id ||
+                                            sharedTranslationSelection.translationId == item.id
+                                        ) {
                                             Icon(Icons.Default.Translate, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                         }
                                     }
@@ -1163,285 +1194,228 @@ fun QuranScreen(
                         }
                     }
 
-                    else -> {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 440.dp)
-                                .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                }
+            }
+        }
+    }
+
+    // 6. Single-ayah Tafsir sheet: opened only from an ayah header's Tafsir button.
+    if (selectedTafsirAyah != null) {
+        val ayahNumber = selectedTafsirAyah ?: 0
+        ModalBottomSheet(
+            onDismissRequest = { selectedTafsirAyah = null },
+            sheetState = sheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Tafsir · ${surah.nameEnglish} ${surah.number}:$ayahNumber",
+                    fontFamily = FontFamily.Serif,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Text(
+                        text = "Tafsir · ${state.selectedTafseerTitle}",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        maxLines = 1
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    TextButton(
+                        onClick = { moveSelectedTafsirAyah(ayahNumber - 1) },
+                        enabled = ayahNumber > 1
+                    ) {
+                        Text("‹ Previous Ayah", fontSize = 11.sp)
+                    }
+                    TextButton(
+                        onClick = { moveSelectedTafsirAyah(ayahNumber + 1) },
+                        enabled = ayahNumber < surah.ayahs.size
+                    ) {
+                        Text("Next Ayah ›", fontSize = 11.sp)
+                    }
+                }
+                CompositionLocalProvider(
+                    LocalLayoutDirection provides if (TafsirText.isRtl(state.selectedTafseerLanguage)) {
+                        LayoutDirection.Rtl
+                    } else {
+                        LayoutDirection.Ltr
+                    }
+                ) {
+                    Text(
+                        text = TafsirText.clean(state.selectedTafseerContent).ifBlank {
+                            "No commentary cached for this ayah in ${state.selectedTafseerTitle}."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
+    }
+
+    // 7. Tafsir Books sheet: opened only from Reader menu → Tafsir (or an inline fallback).
+    if (showTafsirBooksSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showTafsirBooksSheet = false },
+            sheetState = sheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Tafsir Books",
+                    fontFamily = FontFamily.Serif,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                if (state.isDownloadingTafseer) {
+                    LinearProgressIndicator(
+                        progress = { state.tafseerDownloadProgress },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Text(
+                    text = "Tafseer Language",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                val languageCodes = listOf("all") +
+                    state.allTafseers.map { it.languageCode }.distinct().sorted()
+                val effectiveLanguageFilter = if (languageCodes.contains(tafseerLanguageFilter)) {
+                    tafseerLanguageFilter
+                } else {
+                    "all"
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    languageCodes.forEach { code ->
+                        val selected = effectiveLanguageFilter == code
+                        val label = if (code == "all") {
+                            "All"
+                        } else {
+                            state.allTafseers.firstOrNull { it.languageCode == code }
+                                ?.languageName
+                                ?.takeIf { it.isNotBlank() && it != "Unknown" }
+                                ?: IslamicDataRepository.languageDisplayName(code, code)
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (selected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            },
+                            modifier = Modifier.clickable { tafseerLanguageFilter = code }
                         ) {
                             Text(
-                                text = "${surah.nameEnglish} · Ayah $selectedAyahNumber",
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp,
-                                color = MaterialTheme.colorScheme.onSurface
+                                text = label,
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.onPrimary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                             )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                TextButton(
-                                    onClick = {
-                                        surah.ayahs
-                                            .firstOrNull { it.numberInSurah == selectedAyahNumber - 1 }
-                                            ?.let { target -> onTafseerClick(target) }
-                                    },
-                                    enabled = selectedAyahNumber > 1
-                                ) {
-                                    Text("‹ Previous Ayah", fontSize = 11.sp)
-                                }
-                                TextButton(
-                                    onClick = {
-                                        surah.ayahs
-                                            .firstOrNull { it.numberInSurah == selectedAyahNumber + 1 }
-                                            ?.let { target -> onTafseerClick(target) }
-                                    },
-                                    enabled = selectedAyahNumber < surah.ayahs.size
-                                ) {
-                                    Text("Next Ayah ›", fontSize = 11.sp)
-                                }
-                            }
-                            val languageCodes = listOf("all") +
-                                state.allTafseers.map { it.languageCode }.distinct().sorted()
-                            val effectiveLanguageFilter = if (languageCodes.contains(tafseerLanguageFilter)) {
-                                tafseerLanguageFilter
-                            } else {
-                                "all"
-                            }
-                            Text(
-                                text = "Tafseer Language",
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        }
+                    }
+                }
+                Text(
+                    text = "Tafseer Editions",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    state.allTafseers
+                        .filter { pack ->
+                            effectiveLanguageFilter == "all" ||
+                                pack.languageCode == effectiveLanguageFilter
+                        }
+                        .forEach { pack ->
+                            val selected = state.selectedTafsirId == pack.tafsirId
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                languageCodes.forEach { code ->
-                                    val selected = effectiveLanguageFilter == code
-                                    val label = if (code == "all") {
-                                        "All"
-                                    } else {
-                                        state.allTafseers.firstOrNull { it.languageCode == code }
-                                            ?.languageName
-                                            ?.takeIf { it.isNotBlank() && it != "Unknown" }
-                                            ?: IslamicDataRepository.languageDisplayName(code, code)
+                                    .clickable {
+                                        vm.onIntent(
+                                            QuranUiIntent.SelectTafsir(
+                                                tafsirId = pack.tafsirId,
+                                                languageCode = pack.languageCode,
+                                                title = pack.title
+                                            )
+                                        )
                                     }
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = pack.title,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                                         color = if (selected) {
                                             MaterialTheme.colorScheme.primary
                                         } else {
-                                            MaterialTheme.colorScheme.surfaceVariant
-                                        },
-                                        modifier = Modifier.clickable {
-                                            tafseerLanguageFilter = code
+                                            MaterialTheme.colorScheme.onSurface
                                         }
-                                    ) {
-                                        Text(
-                                            text = label,
-                                            color = if (selected) {
-                                                MaterialTheme.colorScheme.onPrimary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            Text(
-                                text = "Tafseer Editions",
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            state.allTafseers
-                                .filter { pack ->
-                                    effectiveLanguageFilter == "all" ||
-                                        pack.languageCode == effectiveLanguageFilter
-                                }
-                                .forEach { pack ->
-                                    val selected = state.selectedTafsirId == pack.tafsirId
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                vm.onIntent(
-                                                    QuranUiIntent.SelectTafsir(
-                                                        tafsirId = pack.tafsirId,
-                                                        languageCode = pack.languageCode,
-                                                        title = pack.title
-                                                    )
-                                                )
-                                            }
-                                            .padding(vertical = 2.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = pack.title,
-                                                fontSize = 12.sp,
-                                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                                color = if (selected) {
-                                                    MaterialTheme.colorScheme.primary
-                                                } else {
-                                                    MaterialTheme.colorScheme.onSurface
-                                                }
-                                            )
-                                            Text(
-                                                text = "${pack.author} · ${pack.statusLabel}",
-                                                fontSize = 10.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                }
-
-                            CompositionLocalProvider(
-                                LocalLayoutDirection provides if (TafsirText.isRtl(state.selectedTafseerLanguage)) {
-                                    LayoutDirection.Rtl
-                                } else {
-                                    LayoutDirection.Ltr
-                                }
-                            ) {
-                                Text(
-                                    text = TafsirText.clean(state.selectedTafseerContent).ifBlank {
-                                        "No cached commentary for this ayah in ${state.selectedTafseerTitle}. " +
-                                            "Download the pack or read this ayah online."
-                                    },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-
-                            if (state.ayahTopics.isNotEmpty()) {
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    )
                                     Text(
-                                        text = "Topics in this ayah",
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontSize = 12.sp,
+                                        text = listOfNotNull(
+                                            pack.author.takeIf { it.isNotBlank() },
+                                            pack.statusLabel,
+                                            "Active".takeIf { selected }
+                                        ).joinToString(" · "),
+                                        fontSize = 10.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .horizontalScroll(rememberScrollState()),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        state.ayahTopics.forEach { (topic, _) ->
-                                            Surface(
-                                                shape = RoundedCornerShape(10.dp),
-                                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                                            ) {
-                                                Text(
-                                                    text = topic,
-                                                    fontSize = 10.sp,
-                                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
-                                                )
-                                            }
-                                        }
-                                    }
                                 }
-                            }
-
-                            if (state.selectedTafseerContent.isBlank()) {
-                                if (state.isDownloadingTafseer) {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                if (!pack.isDownloaded && pack.tafsirId > 0) {
+                                    IconButton(
+                                        onClick = {
+                                            vm.onIntent(QuranUiIntent.DownloadTafseerPack(pack.tafsirId))
+                                        }
                                     ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(18.dp),
-                                                strokeWidth = 2.dp
-                                            )
-                                            Text(
-                                                text = "Downloading ${state.selectedTafseerTitle} from Quran.com · " +
-                                                    "${(state.tafseerDownloadProgress * 100).toInt()}%",
-                                                fontSize = 12.sp
-                                            )
-                                        }
-                                        LinearProgressIndicator(
-                                            progress = { state.tafseerDownloadProgress },
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    }
-                                } else {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        if (state.selectedTafsirId > 0) {
-                                            Button(
-                                                onClick = {
-                                                    vm.onIntent(
-                                                        QuranUiIntent.DownloadTafseerPack(state.selectedTafsirId)
-                                                    )
-                                                },
-                                                shape = RoundedCornerShape(12.dp)
-                                            ) {
-                                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("Download ${state.selectedTafseerTitle}", fontSize = 12.sp)
-                                            }
-                                        }
-                                        OutlinedButton(
-                                            onClick = { vm.onIntent(QuranUiIntent.FetchTafseerAyah) },
-                                            shape = RoundedCornerShape(12.dp),
-                                            enabled = state.selectedTafsirId > 0
-                                        ) {
-                                            Text("Read online", fontSize = 12.sp)
-                                        }
-                                    }
-                                }
-                            }
-
-                            state.tafseerErrorMessage?.let { error ->
-                                Text(
-                                    text = error,
-                                    color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-
-                            state.errorMessage?.let { error ->
-                                Text(
-                                    text = error,
-                                    color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-
-                            ayah?.hadithProofQuote?.let { quote ->
-                                SakinahCard(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
-                                    contentPadding = 12.dp
-                                ) {
-                                    Row {
-                                        Icon(Icons.Default.FormatQuote, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = quote,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface
+                                        Icon(
+                                            Icons.Default.Download,
+                                            contentDescription = "Download ${pack.title}",
+                                            tint = MaterialTheme.colorScheme.primary
                                         )
                                     }
                                 }
                             }
                         }
-                    }
                 }
             }
         }
@@ -1477,7 +1451,7 @@ fun QuranScreen(
                     icon = Icons.Default.Book,
                     label = "Tafsir",
                     onClick = {
-                        studioSheetTab = 2
+                        showTafsirBooksSheet = true
                         showQuranOptions = false
                     }
                 )

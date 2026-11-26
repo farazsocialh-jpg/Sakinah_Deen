@@ -3,6 +3,10 @@ package com.sakinah.deen.data.prefs
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import com.sakinah.deen.data.model.QuranTranslationResource
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Which presentation the Quran reader renders: verse-by-verse study pages or the flowing
@@ -72,6 +76,15 @@ data class QuranReadingPosition(
     val scrollIndex: Int
 )
 
+/** The active ayah translation, shared by onboarding, the Reader menu and the reader itself. */
+data class QuranTranslationSelection(
+    val translationId: Int = 0,
+    val languageName: String = "English",
+    val isoCode: String = "en",
+    val editionKey: String = "",
+    val source: String = QuranTranslationResource.SOURCE_QURAN_COM
+)
+
 /**
  * Persists the Quran reader's own state: reading mode, the last-read position and
  * per-ayah bookmarks. Kept in SharedPreferences (not Room) so a bookmark works in guest
@@ -81,6 +94,18 @@ data class QuranReadingPosition(
 class QuranReaderPreferences internal constructor(
     private val prefs: SharedPreferences
 ) {
+    private val _selectedTranslation = MutableStateFlow(readTranslationSelection())
+    private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key in TRANSLATION_KEYS) _selectedTranslation.value = readTranslationSelection()
+    }
+
+    /** Single source of truth observed by the reader through `collectAsState()`. */
+    val selectedTranslation: StateFlow<QuranTranslationSelection> = _selectedTranslation.asStateFlow()
+
+    init {
+        prefs.registerOnSharedPreferenceChangeListener(preferenceListener)
+    }
+
     constructor(context: Context) : this(
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     )
@@ -99,6 +124,18 @@ class QuranReaderPreferences internal constructor(
         private const val KEY_WBW_LAYOUT_MODE = "quran_wbw_layout_mode"
         private const val KEY_WBW_ENABLED = "quran_wbw_enabled"
         private const val KEY_INLINE_TAFSIR_ENABLED = "quran_inline_tafsir_enabled"
+        private const val KEY_TRANSLATION_ID = "quran_translation_id"
+        private const val KEY_TRANSLATION_LANGUAGE = "quran_translation_language"
+        private const val KEY_TRANSLATION_ISO = "quran_translation_iso"
+        private const val KEY_TRANSLATION_EDITION_KEY = "quran_translation_edition_key"
+        private const val KEY_TRANSLATION_SOURCE = "quran_translation_source"
+        private val TRANSLATION_KEYS = setOf(
+            KEY_TRANSLATION_ID,
+            KEY_TRANSLATION_LANGUAGE,
+            KEY_TRANSLATION_ISO,
+            KEY_TRANSLATION_EDITION_KEY,
+            KEY_TRANSLATION_SOURCE
+        )
 
         const val DEFAULT_WBW_LANGUAGE = "en"
         const val DEFAULT_WBW_SCRIPT = "uthmani"
@@ -184,6 +221,49 @@ class QuranReaderPreferences internal constructor(
     var inlineTafsirEnabled: Boolean
         get() = prefs.getBoolean(KEY_INLINE_TAFSIR_ENABLED, false)
         set(value) = prefs.edit { putBoolean(KEY_INLINE_TAFSIR_ENABLED, value) }
+
+    /** Active ayah translation; onboarding and the Reader menu both write this. */
+    var translationSelection: QuranTranslationSelection
+        get() = readTranslationSelection()
+        set(value) = writeTranslationSelection(value)
+
+    fun setSelectedTranslation(
+        translationId: Int,
+        languageName: String,
+        isoCode: String,
+        editionKey: String,
+        source: String = QuranTranslationResource.SOURCE_QURAN_COM
+    ) {
+        writeTranslationSelection(
+            QuranTranslationSelection(
+                translationId = translationId,
+                languageName = languageName,
+                isoCode = isoCode,
+                editionKey = editionKey,
+                source = source
+            )
+        )
+    }
+
+    private fun readTranslationSelection(): QuranTranslationSelection = QuranTranslationSelection(
+        translationId = prefs.getInt(KEY_TRANSLATION_ID, 0),
+        languageName = prefs.getString(KEY_TRANSLATION_LANGUAGE, null).orEmpty().ifBlank { "English" },
+        isoCode = prefs.getString(KEY_TRANSLATION_ISO, null).orEmpty().ifBlank { "en" },
+        editionKey = prefs.getString(KEY_TRANSLATION_EDITION_KEY, null).orEmpty(),
+        source = prefs.getString(KEY_TRANSLATION_SOURCE, null).orEmpty()
+            .ifBlank { QuranTranslationResource.SOURCE_QURAN_COM }
+    )
+
+    private fun writeTranslationSelection(selection: QuranTranslationSelection) {
+        prefs.edit {
+            putInt(KEY_TRANSLATION_ID, selection.translationId)
+            putString(KEY_TRANSLATION_LANGUAGE, selection.languageName)
+            putString(KEY_TRANSLATION_ISO, selection.isoCode)
+            putString(KEY_TRANSLATION_EDITION_KEY, selection.editionKey)
+            putString(KEY_TRANSLATION_SOURCE, selection.source)
+        }
+        _selectedTranslation.value = selection
+    }
 
     /** Mushaf page layout key bundled in the QUL database. */
     var mushafLayout: String

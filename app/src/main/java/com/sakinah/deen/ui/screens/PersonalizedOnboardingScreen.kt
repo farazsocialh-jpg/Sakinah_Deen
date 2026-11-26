@@ -440,6 +440,14 @@ fun PersonalizedOnboardingScreen(
             appPrefs?.quranTranslationId = quranRes.id
             appPrefs?.quranTranslationEditionKey = quranRes.editionKey
             appPrefs?.quranTranslationSource = quranRes.source
+            // The reader observes this exact preference flow; appPrefs alone is not enough.
+            quranReaderPrefs.setSelectedTranslation(
+                translationId = quranRes.id,
+                languageName = langName,
+                isoCode = iso,
+                editionKey = quranRes.editionKey,
+                source = quranRes.source
+            )
         }
         // WBW - map to iso code; fallback to en
         quranReaderPrefs.wbwLanguage = normalizeWbwLanguage(iso)

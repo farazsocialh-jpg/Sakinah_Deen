@@ -557,6 +557,12 @@ class IslamicDataRepository(
         }.toMap()
     }
 
+    /** True when every cached ayah of a surah already has this edition's translation. */
+    suspend fun hasTranslationForSurah(surahNumber: Int, translationId: Int): Boolean {
+        val expected = quranDao.countAyahs(surahNumber)
+        return expected > 0 && quranDao.countTranslations(surahNumber, translationId) >= expected
+    }
+
     suspend fun syncChapters(): Result<Int> = runCatching {
         val chapters = fetchChapters()
         quranDao.upsertSurahs(chapters.map { it.toEntity() })

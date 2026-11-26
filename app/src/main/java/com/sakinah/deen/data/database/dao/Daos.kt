@@ -207,6 +207,9 @@ interface QuranDao {
     @Query("SELECT * FROM quran_translations WHERE surahNumber = :surahNumber AND translationId = :translationId ORDER BY ayahNumber ASC")
     fun observeTranslations(surahNumber: Int, translationId: Int): kotlinx.coroutines.flow.Flow<List<QuranTranslationEntity>>
 
+    @Query("SELECT COUNT(*) FROM quran_translations WHERE surahNumber = :surahNumber AND translationId = :translationId")
+    suspend fun countTranslations(surahNumber: Int, translationId: Int): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertTranslations(translations: List<QuranTranslationEntity>)
 
