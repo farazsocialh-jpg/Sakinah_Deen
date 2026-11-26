@@ -225,6 +225,164 @@ private fun AyahArabic(
     )
 }
 
+/** Header shared by the inline ayah card: number, single-ayah Tafsir link and bookmark. */
+@Composable
+private fun AyahHeaderRow(
+    ayah: AyahModel,
+    bookmarked: Boolean,
+    onTafseer: () -> Unit,
+    onToggleBookmark: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AyahNumberBadge(ayah.numberInSurah)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TafseerLink(onClick = onTafseer)
+            BookmarkToggle(bookmarked = bookmarked, onClick = onToggleBookmark)
+        }
+    }
+}
+
+/**
+ * One ayah in strict reading order when inline Tafsir is on: header, Arabic, translation,
+ * then the commentary block. Word-by-word and Hifz tags follow it so they never interrupt
+ * that sequence.
+ */
+@Composable
+private fun InlineAyahBody(
+    surah: SurahModel,
+    ayah: AyahModel,
+    state: QuranAyahUiState,
+    wbwWords: Map<Int, List<QulWord>>,
+    qulScript: String,
+    onAyahClick: (AyahModel) -> Unit,
+    onTafseer: (AyahModel) -> Unit,
+    onTagMistake: (AyahModel, String) -> Unit,
+    onToggleBookmark: (AyahModel) -> Unit,
+    onWordClick: (QulWord) -> Unit,
+    inlineTafsirEnabled: Boolean,
+    activeTafsirBookName: String,
+    inlineTafsirByAyah: Map<Int, String>,
+    tafsirOfflineReady: Boolean,
+    tafsirIsRtl: Boolean,
+    onOpenTafsirBooks: () -> Unit,
+    translationFontSp: Int
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onAyahClick(ayah) }
+            .padding(vertical = 3.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        AyahHeaderRow(
+            ayah = ayah,
+            bookmarked = ayah.numberInSurah in state.bookmarkedAyahNumbers,
+            onTafseer = { onTafseer(ayah) },
+            onToggleBookmark = { onToggleBookmark(ayah) }
+        )
+        AyahArabic(ayah, state.arabicFontSizeSp)
+        TranslationText(ayah, state, fontSize = translationFontSp)
+        InlineTafsirBlock(
+            ayah = ayah,
+            enabled = inlineTafsirEnabled,
+            bookName = activeTafsirBookName,
+            commentary = inlineTafsirByAyah[ayah.numberInSurah].orEmpty(),
+            offlineReady = tafsirOfflineReady,
+            isRtl = tafsirIsRtl,
+            fontSizeSp = translationFontSp,
+            onOpenBooks = onOpenTafsirBooks
+        )
+        WbwWordsBlock(
+            words = wbwWords[ayah.numberInSurah].orEmpty(),
+            state = state,
+            script = qulScript,
+            onWordClick = onWordClick
+        )
+        HifzTagRow(surah, ayah, state, onTagMistake)
+    }
+}
+
+/** Compact commentary surface pinned directly under the ayah's translation. */
+@Composable
+private fun InlineTafsirBlock(
+    ayah: AyahModel,
+    enabled: Boolean,
+    bookName: String,
+    commentary: String,
+    offlineReady: Boolean,
+    isRtl: Boolean,
+    fontSizeSp: Int,
+    onOpenBooks: () -> Unit
+) {
+    AnimatedVisibility(visible = enabled) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+            border = BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.primary
+                ) {
+                    Text(
+                        text = "Tafsir · ${bookName.ifBlank { "Tafsir" }}",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                when {
+                    !offlineReady -> Text(
+                        text = "Download Tafsir in Reader menu → Tafsir for offline reading",
+                        modifier = Modifier.clickable(onClick = onOpenBooks),
+                        fontSize = fontSizeSp.sp,
+                        lineHeight = (fontSizeSp * 1.3f).sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    commentary.isNotBlank() -> CompositionLocalProvider(
+                        LocalLayoutDirection provides if (isRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
+                    ) {
+                        Text(
+                            text = commentary,
+                            modifier = Modifier.fillMaxWidth(),
+                            fontFamily = FontFamily.Serif,
+                            fontSize = fontSizeSp.sp,
+                            lineHeight = (fontSizeSp * 1.35f).sp,
+                            textAlign = if (isRtl) TextAlign.End else TextAlign.Start,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    else -> Text(
+                        text = "No inline commentary cached for ayah ${ayah.numberInSurah}.",
+                        fontSize = fontSizeSp.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
 /** Preset 1: translation on the left, Arabic on the right, per verse. */
 @Composable
 private fun SplitColumnLayout(
@@ -237,7 +395,14 @@ private fun SplitColumnLayout(
     listState: LazyListState,
     wbwWords: Map<Int, List<QulWord>> = emptyMap(),
     qulScript: String = QulWord.QUL_SCRIPT_UTHMANI,
-    onWordClick: (QulWord) -> Unit = {}
+    onWordClick: (QulWord) -> Unit = {},
+    inlineTafsirEnabled: Boolean = false,
+    activeTafsirBookName: String = "",
+    inlineTafsirByAyah: Map<Int, String> = emptyMap(),
+    tafsirOfflineReady: Boolean = false,
+    tafsirIsRtl: Boolean = false,
+    onOpenTafsirBooks: () -> Unit = {},
+    translationFontSp: Int = 13
 ) {
     val ayahs = surah.ayahs
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
@@ -250,56 +415,78 @@ private fun SplitColumnLayout(
                 if (index == 0 && surah.number != 1 && surah.number != 9) {
                     BismillahHeader(modifier = Modifier.padding(bottom = 8.dp))
                 }
-                val dividerColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onAyahClick(ayah) }
-                        .drawBehind {
-                            val dividerX = size.width * 0.48f
-                            drawLine(
-                                color = dividerColor,
-                                start = Offset(dividerX, 0f),
-                                end = Offset(dividerX, size.height),
-                                strokeWidth = 1.dp.toPx()
-                            )
-                        },
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Column(
+                if (inlineTafsirEnabled) {
+                    InlineAyahBody(
+                        surah = surah,
+                        ayah = ayah,
+                        state = state,
+                        wbwWords = wbwWords,
+                        qulScript = qulScript,
+                        onAyahClick = onAyahClick,
+                        onTafseer = onTafseer,
+                        onTagMistake = onTagMistake,
+                        onToggleBookmark = onToggleBookmark,
+                        onWordClick = onWordClick,
+                        inlineTafsirEnabled = inlineTafsirEnabled,
+                        activeTafsirBookName = activeTafsirBookName,
+                        inlineTafsirByAyah = inlineTafsirByAyah,
+                        tafsirOfflineReady = tafsirOfflineReady,
+                        tafsirIsRtl = tafsirIsRtl,
+                        onOpenTafsirBooks = onOpenTafsirBooks,
+                        translationFontSp = translationFontSp
+                    )
+                } else {
+                    val dividerColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+                    Row(
                         modifier = Modifier
-                            .weight(0.48f)
-                            .padding(vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                            .fillMaxWidth()
+                            .clickable { onAyahClick(ayah) }
+                            .drawBehind {
+                                val dividerX = size.width * 0.48f
+                                drawLine(
+                                    color = dividerColor,
+                                    start = Offset(dividerX, 0f),
+                                    end = Offset(dividerX, size.height),
+                                    strokeWidth = 1.dp.toPx()
+                                )
+                            },
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        Column(
+                            modifier = Modifier
+                                .weight(0.48f)
+                                .padding(vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            AyahNumberBadge(ayah.numberInSurah)
-                            BookmarkToggle(
-                                bookmarked = ayah.numberInSurah in state.bookmarkedAyahNumbers,
-                                onClick = { onToggleBookmark(ayah) }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AyahNumberBadge(ayah.numberInSurah)
+                                BookmarkToggle(
+                                    bookmarked = ayah.numberInSurah in state.bookmarkedAyahNumbers,
+                                    onClick = { onToggleBookmark(ayah) }
+                                )
+                            }
+                            TranslationText(ayah, state, fontSize = 12)
+                            HifzTagRow(surah, ayah, state, onTagMistake)
+                            TafseerLink(onClick = { onTafseer(ayah) })
+                        }
+                        Column(
+                            modifier = Modifier
+                                .weight(0.52f)
+                                .padding(vertical = 4.dp)
+                        ) {
+                            AyahArabic(ayah, state.arabicFontSizeSp)
+                            WbwWordsBlock(
+                                words = wbwWords[ayah.numberInSurah].orEmpty(),
+                                state = state,
+                                script = qulScript,
+                                onWordClick = onWordClick,
+                                fontSizeSp = 16
                             )
                         }
-                        TranslationText(ayah, state, fontSize = 12)
-                        HifzTagRow(surah, ayah, state, onTagMistake)
-                        TafseerLink(onClick = { onTafseer(ayah) })
-                    }
-                    Column(
-                        modifier = Modifier
-                            .weight(0.52f)
-                            .padding(vertical = 4.dp)
-                    ) {
-                        AyahArabic(ayah, state.arabicFontSizeSp)
-                        WbwWordsBlock(
-                            words = wbwWords[ayah.numberInSurah].orEmpty(),
-                            state = state,
-                            script = qulScript,
-                            onWordClick = onWordClick,
-                            fontSizeSp = 16
-                        )
                     }
                 }
                 if (index < ayahs.lastIndex) {
@@ -325,7 +512,14 @@ private fun ThumbBottomDockLayout(
     listState: LazyListState,
     wbwWords: Map<Int, List<QulWord>> = emptyMap(),
     qulScript: String = QulWord.QUL_SCRIPT_UTHMANI,
-    onWordClick: (QulWord) -> Unit = {}
+    onWordClick: (QulWord) -> Unit = {},
+    inlineTafsirEnabled: Boolean = false,
+    activeTafsirBookName: String = "",
+    inlineTafsirByAyah: Map<Int, String> = emptyMap(),
+    tafsirOfflineReady: Boolean = false,
+    tafsirIsRtl: Boolean = false,
+    onOpenTafsirBooks: () -> Unit = {},
+    translationFontSp: Int = 13
 ) {
     val ayahs = surah.ayahs
     LazyColumn(
@@ -343,39 +537,61 @@ private fun ThumbBottomDockLayout(
                 if (index == 0 && surah.number != 1 && surah.number != 9) {
                     BismillahHeader(modifier = Modifier.padding(bottom = 6.dp))
                 }
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onAyahClick(ayah) }
-                        .padding(vertical = 2.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                if (inlineTafsirEnabled) {
+                    InlineAyahBody(
+                        surah = surah,
+                        ayah = ayah,
+                        state = state,
+                        wbwWords = wbwWords,
+                        qulScript = qulScript,
+                        onAyahClick = onAyahClick,
+                        onTafseer = onTafseer,
+                        onTagMistake = onTagMistake,
+                        onToggleBookmark = onToggleBookmark,
+                        onWordClick = onWordClick,
+                        inlineTafsirEnabled = inlineTafsirEnabled,
+                        activeTafsirBookName = activeTafsirBookName,
+                        inlineTafsirByAyah = inlineTafsirByAyah,
+                        tafsirOfflineReady = tafsirOfflineReady,
+                        tafsirIsRtl = tafsirIsRtl,
+                        onOpenTafsirBooks = onOpenTafsirBooks,
+                        translationFontSp = translationFontSp
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onAyahClick(ayah) }
+                            .padding(vertical = 2.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        AyahNumberBadge(ayah.numberInSurah)
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            TafseerLink(onClick = { onTafseer(ayah) })
-                            BookmarkToggle(
-                                bookmarked = ayah.numberInSurah in state.bookmarkedAyahNumbers,
-                                onClick = { onToggleBookmark(ayah) }
-                            )
+                            AyahNumberBadge(ayah.numberInSurah)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TafseerLink(onClick = { onTafseer(ayah) })
+                                BookmarkToggle(
+                                    bookmarked = ayah.numberInSurah in state.bookmarkedAyahNumbers,
+                                    onClick = { onToggleBookmark(ayah) }
+                                )
+                            }
                         }
+                        AyahArabic(ayah, state.arabicFontSizeSp)
+                        WbwWordsBlock(
+                            words = wbwWords[ayah.numberInSurah].orEmpty(),
+                            state = state,
+                            script = qulScript,
+                            onWordClick = onWordClick
+                        )
+                        TranslationText(ayah, state, fontSize = translationFontSp)
+                        HifzTagRow(surah, ayah, state, onTagMistake)
                     }
-                    AyahArabic(ayah, state.arabicFontSizeSp)
-                    WbwWordsBlock(
-                        words = wbwWords[ayah.numberInSurah].orEmpty(),
-                        state = state,
-                        script = qulScript,
-                        onWordClick = onWordClick
-                    )
-                    TranslationText(ayah, state)
-                    HifzTagRow(surah, ayah, state, onTagMistake)
                 }
             }
         }
@@ -492,16 +708,27 @@ internal fun QuranReadingLayoutContent(
     listState: LazyListState,
     wbwWords: Map<Int, List<QulWord>> = emptyMap(),
     qulScript: String = QulWord.QUL_SCRIPT_UTHMANI,
-    onWordClick: (QulWord) -> Unit = {}
+    onWordClick: (QulWord) -> Unit = {},
+    inlineTafsirEnabled: Boolean = false,
+    activeTafsirBookName: String = "",
+    inlineTafsirByAyah: Map<Int, String> = emptyMap(),
+    tafsirOfflineReady: Boolean = false,
+    tafsirIsRtl: Boolean = false,
+    onOpenTafsirBooks: () -> Unit = {},
+    translationFontSp: Int = 13
 ) {
     when (layout) {
         QuranReadingLayout.SPLIT_COLUMN -> SplitColumnLayout(
             surah, state, onAyahClick, onTafseer, onTagMistake, onToggleBookmark, listState,
-            wbwWords, qulScript, onWordClick
+            wbwWords, qulScript, onWordClick,
+            inlineTafsirEnabled, activeTafsirBookName, inlineTafsirByAyah,
+            tafsirOfflineReady, tafsirIsRtl, onOpenTafsirBooks, translationFontSp
         )
         QuranReadingLayout.THUMB_BOTTOM_DOCK -> ThumbBottomDockLayout(
             surah, state, onAyahClick, onTafseer, onTagMistake, onToggleBookmark, listState,
-            wbwWords, qulScript, onWordClick
+            wbwWords, qulScript, onWordClick,
+            inlineTafsirEnabled, activeTafsirBookName, inlineTafsirByAyah,
+            tafsirOfflineReady, tafsirIsRtl, onOpenTafsirBooks, translationFontSp
         )
     }
 }

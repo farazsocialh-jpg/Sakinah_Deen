@@ -98,6 +98,7 @@ class QuranReaderPreferences internal constructor(
         private const val KEY_MUSHAF_LAYOUT = "quran_mushaf_layout"
         private const val KEY_WBW_LAYOUT_MODE = "quran_wbw_layout_mode"
         private const val KEY_WBW_ENABLED = "quran_wbw_enabled"
+        private const val KEY_INLINE_TAFSIR_ENABLED = "quran_inline_tafsir_enabled"
 
         const val DEFAULT_WBW_LANGUAGE = "en"
         const val DEFAULT_WBW_SCRIPT = "uthmani"
@@ -178,6 +179,11 @@ class QuranReaderPreferences internal constructor(
     var wbwEnabled: Boolean
         get() = prefs.getBoolean(KEY_WBW_ENABLED, false)
         set(value) = prefs.edit { putBoolean(KEY_WBW_ENABLED, value) }
+
+    /** Whether each study ayah shows its selected Tafsir commentary inline. */
+    var inlineTafsirEnabled: Boolean
+        get() = prefs.getBoolean(KEY_INLINE_TAFSIR_ENABLED, false)
+        set(value) = prefs.edit { putBoolean(KEY_INLINE_TAFSIR_ENABLED, value) }
 
     /** Mushaf page layout key bundled in the QUL database. */
     var mushafLayout: String

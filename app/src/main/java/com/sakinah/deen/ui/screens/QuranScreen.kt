@@ -64,6 +64,7 @@ import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material.icons.filled.ViewColumn
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.FormatSize
 import androidx.compose.material.icons.outlined.Psychology
@@ -380,6 +381,26 @@ fun QuranScreen(
     }
 
     val translationIsRtl = isRtlLanguage(state.selectedTranslationIsoCode)
+    val inlineTafsirEnabled = state.inlineTafsirEnabled
+    val activeTafsirBookName = state.selectedTafseerTitle
+    val tafsirIsRtl = TafsirText.isRtl(state.selectedTafseerLanguage)
+    // Bundled QUL editions are offline by definition; downloaded Quran.com packs are too.
+    val tafsirOfflineReady = remember(
+        state.selectedTafsirId,
+        state.selectedTafseerTitle,
+        state.downloadedTafseers
+    ) {
+        state.selectedTafsirId == IslamicDataRepository.IBN_KATHIR_TAFSIR_ID ||
+            state.selectedTafsirId == QuranViewModel.QUL_JALALAYN_TAFSIR_ID ||
+            state.selectedTafseerTitle.contains("Jalalayn", true) ||
+            state.downloadedTafseers.any {
+                it.tafsirId == state.selectedTafsirId && it.isDownloaded
+            }
+    }
+    val openTafsirBooks: () -> Unit = {
+        studioSheetTab = 2
+        showQuranOptions = false
+    }
     val ayahUiState = QuranAyahUiState(
         selectedAyahNumber = selectedAyahNumber,
         highlightedAyahNumber = highlightedAyahNumber,
@@ -616,7 +637,14 @@ fun QuranScreen(
                             qulScript = state.qulScript,
                             onWordClick = { word ->
                                 vm.onIntent(QuranUiIntent.SelectQulWord(word.wordKey))
-                            }
+                            },
+                            inlineTafsirEnabled = inlineTafsirEnabled,
+                            activeTafsirBookName = activeTafsirBookName,
+                            inlineTafsirByAyah = state.inlineTafsirByAyah,
+                            tafsirOfflineReady = tafsirOfflineReady,
+                            tafsirIsRtl = tafsirIsRtl,
+                            onOpenTafsirBooks = openTafsirBooks,
+                            translationFontSp = appearanceConfig.translationFontSize
                         )
                         FastAyahScrubber(
                             ayahCount = displaySurah.ayahs.size,
@@ -830,7 +858,7 @@ fun QuranScreen(
                                 shadowElevation = 8.dp
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceEvenly
                                 ) {
@@ -864,6 +892,22 @@ fun QuranScreen(
                                     ) { color ->
                                         Icon(
                                             imageVector = Icons.AutoMirrored.Outlined.MenuBook,
+                                            contentDescription = null,
+                                            tint = color,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                    StudyDockIcon(
+                                        description = "Tafsir",
+                                        active = inlineTafsirEnabled,
+                                        onClick = {
+                                            vm.onIntent(
+                                                QuranUiIntent.SetInlineTafsirEnabled(!inlineTafsirEnabled)
+                                            )
+                                        }
+                                    ) { color ->
+                                        Icon(
+                                            imageVector = Icons.Outlined.AutoStories,
                                             contentDescription = null,
                                             tint = color,
                                             modifier = Modifier.size(24.dp)
@@ -1133,6 +1177,31 @@ fun QuranScreen(
                                 fontSize = 14.sp,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                TextButton(
+                                    onClick = {
+                                        surah.ayahs
+                                            .firstOrNull { it.numberInSurah == selectedAyahNumber - 1 }
+                                            ?.let { target -> onTafseerClick(target) }
+                                    },
+                                    enabled = selectedAyahNumber > 1
+                                ) {
+                                    Text("‹ Previous Ayah", fontSize = 11.sp)
+                                }
+                                TextButton(
+                                    onClick = {
+                                        surah.ayahs
+                                            .firstOrNull { it.numberInSurah == selectedAyahNumber + 1 }
+                                            ?.let { target -> onTafseerClick(target) }
+                                    },
+                                    enabled = selectedAyahNumber < surah.ayahs.size
+                                ) {
+                                    Text("Next Ayah ›", fontSize = 11.sp)
+                                }
+                            }
                             val languageCodes = listOf("all") +
                                 state.allTafseers.map { it.languageCode }.distinct().sorted()
                             val effectiveLanguageFilter = if (languageCodes.contains(tafseerLanguageFilter)) {
@@ -1784,7 +1853,7 @@ internal fun BismillahHeader(modifier: Modifier = Modifier) {
     )
 }
 
-/** Equal touch target for each of the six bottom study actions. */
+/** Equal touch target for each bottom study action. */
 @Composable
 private fun StudyDockIcon(
     description: String,
@@ -1798,7 +1867,7 @@ private fun StudyDockIcon(
     else MaterialTheme.colorScheme.onSurfaceVariant
     Box(
         modifier = Modifier
-            .size(44.dp)
+            .size(40.dp)
             .background(container, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .semantics { contentDescription = description },
