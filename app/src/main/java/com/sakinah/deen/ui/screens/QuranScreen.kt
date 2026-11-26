@@ -1,6 +1,9 @@
 package com.sakinah.deen.ui.screens
 
 import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -45,7 +48,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Translate
@@ -54,6 +59,11 @@ import androidx.compose.material.icons.filled.ViewColumn
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.FormatSize
+import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.ViewAgenda
+import androidx.compose.material.icons.outlined.ViewColumn
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -122,8 +132,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -255,6 +263,25 @@ fun QuranScreen(
 
     LaunchedEffect(surah.number) {
         quickJumpSurah = surah.number
+        actionBarAyah = 0
+    }
+
+    LaunchedEffect(showFontSlider) {
+        if (showFontSlider) actionBarAyah = 0
+    }
+
+    LaunchedEffect(showQuranOptions) {
+        if (showQuranOptions) actionBarAyah = 0
+    }
+
+    LaunchedEffect(studioSheetTab) {
+        if (studioSheetTab >= 0) actionBarAyah = 0
+    }
+
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }
+            .filter { it }
+            .collect { showFontSlider = false }
     }
 
     LaunchedEffect(
@@ -326,7 +353,12 @@ fun QuranScreen(
     )
     val onAyahClick: (AyahModel) -> Unit = { ayah ->
         selectedAyahNumber = ayah.numberInSurah
-        actionBarAyah = ayah.numberInSurah
+        if (actionBarAyah == ayah.numberInSurah) {
+            actionBarAyah = 0
+        } else {
+            actionBarAyah = ayah.numberInSurah
+            showFontSlider = false
+        }
         vm.onIntent(
             QuranUiIntent.SaveReadingPosition(
                 surah.number,
@@ -698,6 +730,15 @@ fun QuranScreen(
                 )
             }
 
+            if (showFontSlider && !focusMode) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.08f))
+                        .clickable { showFontSlider = false }
+                )
+            }
+
             if (!focusMode) {
                 Surface(
                     modifier = Modifier
@@ -724,19 +765,37 @@ fun QuranScreen(
                                 }
                                 appearancePrefs.updateQuranReadingLayout(next)
                             }
-                        ) { color -> LayoutToggleGlyph(color, readingLayout) }
+                        ) { color ->
+                            Icon(
+                                imageVector = if (readingLayout == QuranReadingLayout.SPLIT_COLUMN) {
+                                    Icons.Outlined.ViewAgenda
+                                } else {
+                                    Icons.Outlined.ViewColumn
+                                },
+                                contentDescription = null,
+                                tint = color,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                         StudyDockIcon(
                             description = stringResource(R.string.quran_pill_reading_mode),
                             active = state.isStudyMode,
                             onClick = toggleStudyMode
-                        ) { color -> ReadingViewGlyph(color) }
+                        ) { color ->
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Outlined.MenuBook,
+                                contentDescription = null,
+                                tint = color,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                         StudyDockIcon(
                             description = "Toggle Hifz mistake highlighting",
                             active = hifzOverlayActive,
                             onClick = { hifzOverlayActive = !hifzOverlayActive }
                         ) { color ->
                             Icon(
-                                imageVector = hifzBrainIcon,
+                                imageVector = Icons.Outlined.Psychology,
                                 contentDescription = null,
                                 tint = color,
                                 modifier = Modifier.size(24.dp)
@@ -748,46 +807,59 @@ fun QuranScreen(
                             onClick = {
                                 vm.onIntent(QuranUiIntent.SetWbwEnabled(!state.wbwEnabled))
                             }
-                        ) { color -> WbwInterlinearGlyph(color) }
+                        ) { color ->
+                            Icon(
+                                imageVector = Icons.Outlined.Translate,
+                                contentDescription = null,
+                                tint = color,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                         StudyDockIcon(
                             description = "Adjust reading font size",
                             active = showFontSlider,
                             onClick = { showFontSlider = !showFontSlider }
-                        ) { color -> FontScaleTtGlyph(color) }
+                        ) { color ->
+                            Icon(
+                                imageVector = Icons.Outlined.FormatSize,
+                                contentDescription = null,
+                                tint = color,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                         StudyDockIcon(
                             description = stringResource(R.string.quran_options_title),
                             active = showQuranOptions,
                             onClick = { showQuranOptions = true }
                         ) { color ->
-                            Text(
-                                text = "•••",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = color
+                            Icon(
+                                imageVector = Icons.Default.MoreHoriz,
+                                contentDescription = null,
+                                tint = color,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
                 }
             }
 
-            if (showFontSlider) {
-                Popup(
-                    alignment = Alignment.BottomCenter,
-                    onDismissRequest = { showFontSlider = false },
-                    properties = PopupProperties(dismissOnClickOutside = true)
-                ) {
-                    Box(modifier = Modifier.padding(bottom = 84.dp)) {
-                        FontScaleSliderCard(
-                            index = fontScaleIndex,
-                            presets = fontScalePresets,
-                            onIndexChange = { index ->
-                                appearancePrefs.update {
-                                    it.copy(fontScale = fontScalePresets[index])
-                                }
-                            }
-                        )
+            AnimatedVisibility(
+                visible = showFontSlider && !focusMode,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 84.dp),
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                FontScaleSliderCard(
+                    index = fontScaleIndex,
+                    presets = fontScalePresets,
+                    onIndexChange = { index ->
+                        appearancePrefs.update {
+                            it.copy(fontScale = fontScalePresets[index])
+                        }
                     }
-                }
+                )
             }
         }
 
@@ -1544,104 +1616,6 @@ private fun StudyDockIcon(
     }
 }
 
-/** Split-column rectangle when split is active, stacked lines for the thumb dock. */
-@Composable
-private fun LayoutToggleGlyph(color: Color, layout: QuranReadingLayout) {
-    Canvas(modifier = Modifier.size(24.dp)) {
-        if (layout == QuranReadingLayout.SPLIT_COLUMN) {
-            drawRect(
-                color = color,
-                topLeft = Offset(1f, 2f),
-                size = Size(9f, 20f),
-                style = Stroke(1.6f)
-            )
-            drawRect(
-                color = color,
-                topLeft = Offset(14f, 2f),
-                size = Size(9f, 20f),
-                style = Stroke(1.6f)
-            )
-        } else {
-            drawRoundRect(
-                color = color,
-                topLeft = Offset(2f, 3f),
-                size = Size(20f, 18f),
-                cornerRadius = CornerRadius(4f),
-                style = Stroke(1.6f)
-            )
-            listOf(8f, 12f, 16f).forEach { y ->
-                drawLine(color, Offset(5f, y), Offset(19f, y), 1.4f)
-            }
-        }
-    }
-}
-
-/** Rounded page outline with stacked reading lines. */
-@Composable
-private fun ReadingViewGlyph(color: Color) {
-    Canvas(modifier = Modifier.size(24.dp)) {
-        drawRoundRect(
-            color = color,
-            topLeft = Offset(2f, 3f),
-            size = Size(20f, 18f),
-            cornerRadius = CornerRadius(4f),
-            style = Stroke(1.6f)
-        )
-        listOf(8f, 12f, 16f).forEach { y ->
-            drawLine(color, Offset(5f, y), Offset(19f, y), 1.4f)
-        }
-    }
-}
-
-/** Interlinear word strip: top bar branching into three words above `WbW`. */
-@Composable
-private fun WbwInterlinearGlyph(color: Color) {
-    val measurer = rememberTextMeasurer()
-    Canvas(modifier = Modifier.size(24.dp)) {
-        drawLine(color, Offset(2f, 4f), Offset(22f, 4f), 1.5f)
-        listOf(5f, 12f, 19f).forEach { x ->
-            drawLine(color, Offset(x, 4f), Offset(x, 9f), 1.5f)
-        }
-        val style = TextStyle(
-            fontSize = 8.sp,
-            fontWeight = FontWeight.Bold,
-            color = color
-        )
-        val label = measurer.measure("WbW", style = style)
-        drawText(
-            measurer,
-            "WbW",
-            topLeft = Offset((size.width - label.size.width) / 2f, 10f),
-            style = style
-        )
-    }
-}
-
-/** Crisp `tT` typography glyph with a slider baseline. */
-@Composable
-private fun FontScaleTtGlyph(color: Color) {
-    val measurer = rememberTextMeasurer()
-    Canvas(modifier = Modifier.size(24.dp)) {
-        val style = TextStyle(
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            color = color
-        )
-        val label = measurer.measure("tT", style = style)
-        drawText(
-            measurer,
-            "tT",
-            topLeft = Offset(
-                (size.width - label.size.width) / 2f,
-                (size.height - label.size.height) / 2f - 2f
-            ),
-            style = style
-        )
-        drawLine(color, Offset(3f, 20f), Offset(21f, 20f), 1.4f)
-        drawCircle(color, radius = 2f, center = Offset(12f, 20f))
-    }
-}
-
 /** Search, prev/next, and a split Surah + Ayah picker for quick navigation. */
 @Composable
 private fun QuickJumpSheet(
@@ -1738,6 +1712,11 @@ private fun QuickJumpSheet(
             LazyColumn(modifier = Modifier.weight(0.42f)) {
                 items(filtered, key = { it.number }) { item ->
                     val selected = item.number == selectedSurah
+                    val subtitle = listOfNotNull(
+                        item.englishMeaning.takeIf { it.isNotBlank() },
+                        item.revelationType.takeIf { it.isNotBlank() },
+                        if (item.ayahCount > 0) "${item.ayahCount} Ayahs" else null
+                    ).joinToString(" · ")
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1757,14 +1736,25 @@ private fun QuickJumpSheet(
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        Text(
-                            text = item.nameEnglish,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = item.nameEnglish,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (subtitle.isNotBlank()) {
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                     }
                 }
             }
