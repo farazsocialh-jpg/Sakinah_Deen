@@ -237,60 +237,65 @@ private fun SplitColumnLayout(
             key = { _, ayah -> ayahKey(surah, ayah) },
             contentType = { _, _ -> "ayah" }
         ) { index, ayah ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min)
-                    .clickable { onAyahClick(ayah) },
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Column(
+            Column(modifier = Modifier.fillMaxWidth()) {
+                if (index == 0 && surah.number != 1 && surah.number != 9) {
+                    BismillahHeader(modifier = Modifier.padding(bottom = 8.dp))
+                }
+                Row(
                     modifier = Modifier
-                        .weight(0.48f)
-                        .padding(vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min)
+                        .clickable { onAyahClick(ayah) },
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier
+                            .weight(0.48f)
+                            .padding(vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        AyahNumberBadge(ayah.numberInSurah)
-                        BookmarkToggle(
-                            bookmarked = ayah.numberInSurah in state.bookmarkedAyahNumbers,
-                            onClick = { onToggleBookmark(ayah) }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AyahNumberBadge(ayah.numberInSurah)
+                            BookmarkToggle(
+                                bookmarked = ayah.numberInSurah in state.bookmarkedAyahNumbers,
+                                onClick = { onToggleBookmark(ayah) }
+                            )
+                        }
+                        TranslationText(ayah, state, fontSize = 12)
+                        HifzTagRow(surah, ayah, state, onTagMistake)
+                        TafseerLink(onClick = { onTafseer(ayah) })
+                    }
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+                    )
+                    Column(
+                        modifier = Modifier
+                            .weight(0.52f)
+                            .padding(vertical = 4.dp)
+                    ) {
+                        AyahArabic(ayah, state.arabicFontSizeSp)
+                        WbwWordsBlock(
+                            words = wbwWords[ayah.numberInSurah].orEmpty(),
+                            state = state,
+                            script = qulScript,
+                            onWordClick = onWordClick,
+                            fontSizeSp = 16
                         )
                     }
-                    TranslationText(ayah, state, fontSize = 12)
-                    HifzTagRow(surah, ayah, state, onTagMistake)
-                    TafseerLink(onClick = { onTafseer(ayah) })
                 }
-                Box(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .fillMaxHeight()
-                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
-                )
-                Column(
-                    modifier = Modifier
-                        .weight(0.52f)
-                        .padding(vertical = 4.dp)
-                ) {
-                    AyahArabic(ayah, state.arabicFontSizeSp)
-                    WbwWordsBlock(
-                        words = wbwWords[ayah.numberInSurah].orEmpty(),
-                        state = state,
-                        script = qulScript,
-                        onWordClick = onWordClick,
-                        fontSizeSp = 16
+                if (index < ayahs.lastIndex) {
+                    HorizontalDivider(
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
                     )
                 }
-            }
-            if (index < ayahs.lastIndex) {
-                HorizontalDivider(
-                    thickness = 1.dp,
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
-                )
             }
         }
     }
@@ -321,40 +326,45 @@ private fun ThumbBottomDockLayout(
             items = ayahs,
             key = { _, ayah -> ayahKey(surah, ayah) },
             contentType = { _, _ -> "ayah" }
-        ) { _, ayah ->
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onAyahClick(ayah) }
-                    .padding(vertical = 2.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+        ) { index, ayah ->
+            Column(modifier = Modifier.fillMaxWidth()) {
+                if (index == 0 && surah.number != 1 && surah.number != 9) {
+                    BismillahHeader(modifier = Modifier.padding(bottom = 6.dp))
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onAyahClick(ayah) }
+                        .padding(vertical = 2.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    AyahNumberBadge(ayah.numberInSurah)
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TafseerLink(onClick = { onTafseer(ayah) })
-                        BookmarkToggle(
-                            bookmarked = ayah.numberInSurah in state.bookmarkedAyahNumbers,
-                            onClick = { onToggleBookmark(ayah) }
-                        )
+                        AyahNumberBadge(ayah.numberInSurah)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TafseerLink(onClick = { onTafseer(ayah) })
+                            BookmarkToggle(
+                                bookmarked = ayah.numberInSurah in state.bookmarkedAyahNumbers,
+                                onClick = { onToggleBookmark(ayah) }
+                            )
+                        }
                     }
+                    AyahArabic(ayah, state.arabicFontSizeSp)
+                    WbwWordsBlock(
+                        words = wbwWords[ayah.numberInSurah].orEmpty(),
+                        state = state,
+                        script = qulScript,
+                        onWordClick = onWordClick
+                    )
+                    TranslationText(ayah, state)
+                    HifzTagRow(surah, ayah, state, onTagMistake)
                 }
-                AyahArabic(ayah, state.arabicFontSizeSp)
-                WbwWordsBlock(
-                    words = wbwWords[ayah.numberInSurah].orEmpty(),
-                    state = state,
-                    script = qulScript,
-                    onWordClick = onWordClick
-                )
-                TranslationText(ayah, state)
-                HifzTagRow(surah, ayah, state, onTagMistake)
             }
         }
     }
