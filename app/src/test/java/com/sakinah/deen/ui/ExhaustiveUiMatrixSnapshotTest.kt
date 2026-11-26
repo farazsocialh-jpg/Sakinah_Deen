@@ -274,8 +274,12 @@ class ExhaustiveUiMatrixSnapshotTest {
                 )
             }
         }
+        // The welcome CTA and Skip appear only after the logo finishes assembling (~900ms)
+        // plus the greeting's fade/slide, and this suite drives the clock manually.
+        composeRule.mainClock.advanceTimeBy(1_200)
+        composeRule.waitForIdle()
         shots?.invoke("onboarding/$prefix-step0-welcome")
-        val stepNames = listOf("step1-journey", "step2-theme-fonts", "step3-permissions")
+        val stepNames = listOf("step1-journey", "step2-location-method", "step3-first-win")
         stepNames.forEach { stepName ->
             val found = composeRule.onAllNodesWithText("Continue").fetchSemanticsNodes()
             check(found.isNotEmpty()) {
@@ -316,8 +320,8 @@ class ExhaustiveUiMatrixSnapshotTest {
         FontScalePreset.entries.forEach { preset ->
             val scale = preset.multiplier
             onboarding(SakinahPalette.EMERALD_SANCTUARY, false, scale) { path ->
-                // Every step is captured at every preset; steps 2 and 3 are where the LIVE
-                // PREVIEW card, the steppers and the permission tiles wrap first.
+                // Every step is captured at every preset; steps 2 and 3 are where the
+                // location, method and reminder cards wrap first.
                 shot("fonts/${preset.name.lowercase()}-${path.substringAfterLast('/')}")
             }
             showAndShot("fonts/${preset.name.lowercase()}-salah", SakinahPalette.EMERALD_SANCTUARY, false, scale, salahScene)

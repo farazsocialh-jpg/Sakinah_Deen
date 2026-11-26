@@ -201,6 +201,8 @@ fun RootNavHost(
             } else {
                 null
             },
+            appPrefs = appPrefs,
+            locationProvider = locationProvider,
             onComplete = { completedDraft ->
                 val savedConfig = completedDraft.copy(onboardingCompleted = true)
                 appearancePrefs.saveConfig(savedConfig)
@@ -215,16 +217,12 @@ fun RootNavHost(
                     }
                 }
                 appearancePrefs.setPreview(null)
-                val wasRerun = rerunOnboarding
                 rerunOnboarding = false
                 backStack.clear()
                 currentScreen = startScreenForObjective(savedConfig.objective)
 
-                // Preserve the user's existing alarm preference on a re-run; only enable
-                // by default for a first-time onboarding completion.
-                if (!wasRerun) {
-                    appPrefs?.alarmsEnabled = true
-                }
+                // Reminders are opt-in in Step 3; the onboarding screen writes the preference
+                // only when the user actually enabled them.
                 scope.launch {
                     AzaanScheduling.scheduleWithBestLocation(
                         context = context,

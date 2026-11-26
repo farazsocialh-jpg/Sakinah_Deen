@@ -1,23 +1,26 @@
 package com.sakinah.deen.ui.screens
 
 import android.Manifest
-import android.app.AlarmManager
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import android.os.PowerManager
-import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,13 +54,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.Alarm
-import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Mosque
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
@@ -68,41 +69,57 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.sakinah.deen.R
+import com.sakinah.deen.data.model.CalculationMethod
+import com.sakinah.deen.data.model.Madhhab
+import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.data.prefs.HadithReadingLayout
 import com.sakinah.deen.data.prefs.QuranReadingLayout
+import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.prefs.SalahHomeLayout
+import com.sakinah.deen.data.prayer.SunniMethodMapper
+import com.sakinah.deen.data.prayer.englishName
+import com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl
+import com.sakinah.deen.domain.astronomy.UserLocationProvider
+import com.sakinah.deen.ui.components.HomeCity
+import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
+import com.sakinah.deen.ui.components.SakinahCard
 import com.sakinah.deen.ui.components.SegmentedPillBar
-import com.sakinah.deen.ui.components.ThemePalettePicker
 import com.sakinah.deen.ui.theme.FontScalePreset
 import com.sakinah.deen.ui.theme.PrayerGuideGender
 import com.sakinah.deen.ui.theme.SakinahPalette
@@ -110,7 +127,14 @@ import com.sakinah.deen.ui.theme.SakinahTheme
 import com.sakinah.deen.ui.theme.ThemeMode
 import com.sakinah.deen.ui.theme.UserAppearanceConfig
 import com.sakinah.deen.ui.theme.UserObjective
-import com.sakinah.deen.ui.theme.UthmanicFontFamily
+import com.sakinah.deen.util.TimeZoneResolver
+import kotlinx.datetime.Clock
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.util.Locale
 
 /** Emerald & Alabaster default look, used until the live theme preview takes over. */
 private val AlabasterHero = Color(0xFFFBF8F3)
@@ -127,6 +151,98 @@ private const val TRANSLATION_FONT_MAX = 24
 private const val EXPERIENCE_NEW = "New to Islam"
 private const val EXPERIENCE_PRACTICING = "Practicing Muslim"
 private const val EXPERIENCE_STUDENT = "Student of Knowledge"
+
+private val LogoGreen = Color(0xFF0F6B5E)
+private val LogoIvory = Color(0xFFF7F8F5)
+private val LogoGold = Color(0xFFC5A059)
+
+/**
+ * The adaptive-icon mark assembling itself: crescent from the left, dome and Qibla diamond
+ * from the centre, then the gold Quran sweep from the bottom. Every path is the exact path
+ * used by the launcher icon, scaled from the shared 108f viewport.
+ */
+@Composable
+fun SakinahAnimatedLogo(
+    modifier: Modifier = Modifier,
+    size: Dp = 104.dp,
+    onAssembled: () -> Unit = {}
+) {
+    val crescentAnim = remember { Animatable(0f) }
+    val domeAnim = remember { Animatable(0f) }
+    val quranAnim = remember { Animatable(0f) }
+
+    LaunchedEffect(Unit) {
+        launch { crescentAnim.animateTo(1f, tween(520, easing = FastOutSlowInEasing)) }
+        launch {
+            delay(160)
+            domeAnim.animateTo(1f, tween(520, easing = FastOutSlowInEasing))
+        }
+        launch {
+            delay(300)
+            quranAnim.animateTo(1f, tween(520, easing = FastOutSlowInEasing))
+        }
+        delay(900)
+        onAssembled()
+    }
+
+    val crescentPath = remember {
+        PathParser().parsePathString(
+            "M55,27 C37,29 27,44 31,60 C34,71 45,76 58,74 C67,72 73,66 76,58 C70,66 59,69 49,65 C39,60 36,48 41,38 C44,32 49,28 55,27 Z"
+        ).toPath()
+    }
+    val domePath = remember {
+        PathParser().parsePathString(
+            "M57,33 C54,37 47,41 47,49 L47,52 L45,52 L45,59 C49,62 65,62 69,59 L69,52 L67,52 L67,49 C67,41 60,37 57,33 Z"
+        ).toPath()
+    }
+    val qiblaOuterPath = remember {
+        PathParser().parsePathString("M57,41 L61,49 L57,57 L53,49 Z").toPath()
+    }
+    val qiblaInnerPath = remember {
+        PathParser().parsePathString("M57,46.5 L59,49 L57,51.5 L55,49 Z").toPath()
+    }
+    val quranTopPath = remember {
+        PathParser().parsePathString(
+            "M31,68 C40,67 48,70 54,75 C60,70 68,67 77,68 C69,70 61,74 54,79 C47,74 39,70 31,68 Z"
+        ).toPath()
+    }
+    val quranBottomPath = remember {
+        PathParser().parsePathString(
+            "M35,72 C42,72 49,75 54,80 C59,75 66,72 73,72 C66,74 60,78 54,82 C48,78 42,74 35,72 Z"
+        ).toPath()
+    }
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(RoundedCornerShape(26.dp))
+            .background(LogoGreen)
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val scaleFactor = this.size.minDimension / 108f
+            scale(scaleFactor, scaleFactor, pivot = Offset.Zero) {
+                // 1. Crescent slides in from left.
+                val crescentProgress = crescentAnim.value
+                translate(left = (1f - crescentProgress) * -22f) {
+                    drawPath(crescentPath, color = LogoIvory.copy(alpha = crescentProgress))
+                }
+                // 2. Mosque dome and its negative-space Qibla diamond rise into the centre.
+                val domeProgress = domeAnim.value
+                translate(top = (1f - domeProgress) * 18f) {
+                    drawPath(domePath, color = LogoIvory.copy(alpha = domeProgress))
+                    drawPath(qiblaOuterPath, color = LogoGreen.copy(alpha = domeProgress))
+                    drawPath(qiblaInnerPath, color = LogoIvory.copy(alpha = domeProgress))
+                }
+                // 3. Gold Quran sweep unfolds upward.
+                val quranProgress = quranAnim.value
+                translate(top = (1f - quranProgress) * 20f) {
+                    drawPath(quranTopPath, color = LogoGold.copy(alpha = quranProgress))
+                    drawPath(quranBottomPath, color = LogoGold.copy(alpha = quranProgress))
+                }
+            }
+        }
+    }
+}
 
 private val UserAppearanceConfigSaver = listSaver<UserAppearanceConfig, String>(
     save = { config ->
@@ -183,9 +299,7 @@ private val UserAppearanceConfigSaver = listSaver<UserAppearanceConfig, String>(
 
 private data class PermissionState(
     val location: Boolean,
-    val notifications: Boolean,
-    val exactAlarms: Boolean,
-    val battery: Boolean
+    val notifications: Boolean
 )
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -195,12 +309,20 @@ fun PersonalizedOnboardingScreen(
     initialConfig: UserAppearanceConfig = UserAppearanceConfig(),
     onConfigPreviewChange: (UserAppearanceConfig) -> Unit = {},
     onComplete: (UserAppearanceConfig) -> Unit,
-    onDismiss: (() -> Unit)? = null
+    onDismiss: (() -> Unit)? = null,
+    /** Set by RootNavHost so Step 2 can confirm the calculation method and madhhab. */
+    appPrefs: SakinahPreferences? = null,
+    locationProvider: UserLocationProvider? = null
 ) {
     var step by rememberSaveable { mutableIntStateOf(0) }
     var config by rememberSaveable(initialConfig, stateSaver = UserAppearanceConfigSaver) {
         mutableStateOf(initialConfig)
     }
+    var showGreeting by rememberSaveable { mutableStateOf(false) }
+    var remindersEnabled by rememberSaveable(appPrefs) {
+        mutableStateOf(appPrefs?.alarmsEnabled == true)
+    }
+    var remindersTouched by rememberSaveable { mutableStateOf(false) }
 
     BackHandler(enabled = step > 0) { step-- }
 
@@ -210,10 +332,12 @@ fun PersonalizedOnboardingScreen(
     }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var permissionTick by remember { mutableIntStateOf(0) }
+    var prefsTick by remember { mutableIntStateOf(0) }
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Returning from a system settings screen must flip the tiles without a manual refresh.
+    // Returning from a system settings screen must refresh the location state.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) permissionTick++
@@ -226,17 +350,47 @@ fun PersonalizedOnboardingScreen(
 
     val locationLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissionTick++ }
+    ) { results ->
+        permissionTick++
+        val granted = results[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            results[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (!granted) return@rememberLauncherForActivityResult
+        scope.launch {
+            val resolved = (locationProvider ?: UserLocationProvider(context))
+                .getFreshOrCachedLocation()
+            val label = if (resolved.countryName.isNotBlank()) {
+                "${resolved.cityName}, ${resolved.countryName}"
+            } else {
+                resolved.cityName
+            }
+            val zone = TimeZoneResolver.resolveZoneIdString(
+                cityLabel = label,
+                countryCode = resolved.countryCode,
+                longitude = resolved.longitude
+            )
+            appPrefs?.saveGpsLocation(
+                latitude = resolved.latitude,
+                longitude = resolved.longitude,
+                label = label,
+                countryCode = resolved.countryCode,
+                timeZoneId = zone
+            )
+            prefsTick++
+        }
+    }
     val notificationLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { permissionTick++ }
+    ) { granted ->
+        permissionTick++
+        // A denied prompt must not leave the toggle claiming reminders are on.
+        if (!granted) remindersEnabled = false
+    }
 
     val darkTheme = when (config.themeMode) {
         ThemeMode.DARK -> true
         ThemeMode.LIGHT -> false
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
     }
-    // Once the user picks another palette or Dark mode, the live theme owns every colour.
     val themePreviewActive = config.themeMode != initialConfig.themeMode ||
         config.palette != initialConfig.palette
     val defaultLook = !darkTheme && !themePreviewActive
@@ -248,7 +402,11 @@ fun PersonalizedOnboardingScreen(
     val accentSoft = if (defaultLook) SoftSage else MaterialTheme.colorScheme.primaryContainer
     val onAccentSoft = if (defaultLook) ForestEmerald else MaterialTheme.colorScheme.onPrimaryContainer
 
-    val finish = { onComplete(config.copy(onboardingCompleted = true)) }
+    val finish = {
+        // Only an explicit Step 3 opt-in (or opt-out) touches the background alarm flag.
+        if (remindersTouched) appPrefs?.alarmsEnabled = remindersEnabled
+        onComplete(config.copy(onboardingCompleted = true))
+    }
 
     // The live draft drives the theme so Dark mode and palette changes render immediately.
     SakinahTheme(
@@ -278,12 +436,11 @@ fun PersonalizedOnboardingScreen(
                         .fillMaxWidth(),
                     step = step,
                     userName = config.userName,
+                    showGreeting = showGreeting,
                     accent = accent,
                     accentSoft = accentSoft,
                     onAccentSoft = onAccentSoft,
-                    arabicFontSize = (config.arabicFontSize * config.fontScale.multiplier).sp,
-                    translationFontSize = (config.translationFontSize * config.fontScale.multiplier).sp,
-                    sheetColor = sheetColor,
+                    onAssembled = { showGreeting = true },
                     onBack = { if (step > 0) step-- },
                     onSkip = { if (onDismiss != null) onDismiss() else finish() }
                 )
@@ -298,6 +455,7 @@ fun PersonalizedOnboardingScreen(
                     when (currentStep) {
                         0 -> WelcomeStep(
                             config = config,
+                            showGreeting = showGreeting,
                             accent = accent,
                             accentSoft = accentSoft,
                             onConfigChange = ::updateConfig
@@ -309,14 +467,10 @@ fun PersonalizedOnboardingScreen(
                             onAccent = onAccent,
                             onConfigChange = ::updateConfig
                         )
-                        2 -> ThemeStep(
-                            config = config,
-                            accent = accent,
-                            accentSoft = accentSoft,
-                            onConfigChange = ::updateConfig
-                        )
-                        else -> SetupStep(
-                            permissions = permissions,
+                        2 -> LocationAndMethodStep(
+                            appPrefs = appPrefs,
+                            prefsTick = prefsTick,
+                            locationGranted = permissions.location,
                             accent = accent,
                             onAccent = onAccent,
                             accentSoft = accentSoft,
@@ -329,29 +483,53 @@ fun PersonalizedOnboardingScreen(
                                     )
                                 )
                             },
-                            onAllowNotifications = {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            onCitySelected = { city ->
+                                appPrefs?.saveManualLocation(
+                                    latitude = city.latitude,
+                                    longitude = city.longitude,
+                                    label = city.name,
+                                    countryCode = city.countryCode,
+                                    timeZoneId = city.timeZoneId
+                                )
+                                prefsTick++
+                            },
+                            onPrefsChanged = { prefsTick++ }
+                        )
+                        else -> FirstWinAndRemindersStep(
+                            appPrefs = appPrefs,
+                            prefsTick = prefsTick,
+                            remindersEnabled = remindersEnabled,
+                            onRemindersChange = { enabled ->
+                                remindersTouched = true
+                                remindersEnabled = enabled
+                                if (enabled && !permissions.notifications &&
+                                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                                ) {
                                     notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 }
-                            },
-                            onAllowExactAlarms = { openExactAlarmSettings(context) },
-                            onAllowBattery = { openBatteryOptimizationSettings(context) }
+                            }
                         )
                     }
                 }
 
-                OnboardingCta(
-                    label = if (step < TOTAL_STEPS - 1) {
-                        stringResource(R.string.onboarding_continue)
-                    } else {
-                        stringResource(R.string.onboarding_open_app)
-                    },
-                    accent = accent,
-                    onAccent = onAccent,
-                    onClick = {
-                        if (step < TOTAL_STEPS - 1) step++ else finish()
-                    }
-                )
+                AnimatedVisibility(
+                    visible = step > 0 || showGreeting,
+                    enter = fadeIn(tween(300)) + slideInVertically(initialOffsetY = { it / 4 }),
+                    exit = fadeOut(tween(220)) + slideOutVertically(targetOffsetY = { it / 4 })
+                ) {
+                    OnboardingCta(
+                        label = when {
+                            step < TOTAL_STEPS - 1 -> stringResource(R.string.onboarding_continue)
+                            remindersEnabled -> stringResource(R.string.onboarding_enable_reminders)
+                            else -> stringResource(R.string.onboarding_enter_app)
+                        },
+                        accent = accent,
+                        onAccent = onAccent,
+                        onClick = {
+                            if (step < TOTAL_STEPS - 1) step++ else finish()
+                        }
+                    )
+                }
             }
         }
     }
@@ -362,12 +540,11 @@ private fun HeroZone(
     modifier: Modifier,
     step: Int,
     userName: String,
+    showGreeting: Boolean,
     accent: Color,
     accentSoft: Color,
     onAccentSoft: Color,
-    arabicFontSize: androidx.compose.ui.unit.TextUnit,
-    translationFontSize: androidx.compose.ui.unit.TextUnit,
-    sheetColor: Color,
+    onAssembled: () -> Unit,
     onBack: () -> Unit,
     onSkip: () -> Unit
 ) {
@@ -395,18 +572,24 @@ private fun HeroZone(
             }
 
             if (step == 0) {
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = accentSoft,
-                    modifier = Modifier.clickable(onClick = onSkip)
+                AnimatedVisibility(
+                    visible = showGreeting,
+                    enter = fadeIn(tween(300)) + slideInVertically(initialOffsetY = { -it / 4 }),
+                    exit = fadeOut(tween(220)) + slideOutVertically(targetOffsetY = { -it / 4 })
                 ) {
-                    Text(
-                        text = stringResource(R.string.onboarding_skip),
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = onAccentSoft
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = accentSoft,
+                        modifier = Modifier.clickable(onClick = onSkip)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.onboarding_skip),
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = onAccentSoft
+                        )
+                    }
                 }
             } else {
                 Spacer(Modifier.size(48.dp))
@@ -423,20 +606,7 @@ private fun HeroZone(
         ) {
             when (step) {
                 0 -> {
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(CircleShape)
-                            .background(accentSoft),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Mosque,
-                            contentDescription = null,
-                            tint = accent,
-                            modifier = Modifier.size(30.dp)
-                        )
-                    }
+                    SakinahAnimatedLogo(onAssembled = onAssembled)
                     Text(
                         text = stringResource(R.string.onboarding_brand),
                         fontFamily = FontFamily.Serif,
@@ -444,14 +614,20 @@ private fun HeroZone(
                         fontWeight = FontWeight.Bold,
                         color = accent
                     )
-                    Text(
-                        text = stringResource(R.string.onboarding_welcome_greeting),
-                        fontFamily = FontFamily.Serif,
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
+                    AnimatedVisibility(
+                        visible = showGreeting,
+                        enter = fadeIn(tween(300)) + slideInVertically(initialOffsetY = { it / 4 }),
+                        exit = fadeOut(tween(220)) + slideOutVertically(targetOffsetY = { it / 4 })
+                    ) {
+                        Text(
+                            text = stringResource(R.string.onboarding_welcome_salam),
+                            fontFamily = FontFamily.Serif,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
                 }
 
                 1 -> {
@@ -476,41 +652,28 @@ private fun HeroZone(
                 }
 
                 2 -> {
-                    Surface(
-                        shape = RoundedCornerShape(24.dp),
-                        color = sheetColor,
-                        shadowElevation = 3.dp,
-                        modifier = Modifier.fillMaxWidth()
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(accentSoft),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.onboarding_live_preview),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.8.sp,
-                                color = accent
-                            )
-                            Text(
-                                text = "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
-                                fontFamily = UthmanicFontFamily,
-                                fontSize = arabicFontSize,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Text(
-                                text = stringResource(R.string.onboarding_bismillah_translation),
-                                fontSize = translationFontSize,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = accent,
+                            modifier = Modifier.size(30.dp)
+                        )
                     }
+                    Text(
+                        text = stringResource(R.string.onboarding_location_title),
+                        fontFamily = FontFamily.Serif,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
                 }
 
                 else -> {
@@ -522,18 +685,14 @@ private fun HeroZone(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.VerifiedUser,
+                            imageVector = Icons.Default.Notifications,
                             contentDescription = null,
                             tint = accent,
                             modifier = Modifier.size(30.dp)
                         )
                     }
                     Text(
-                        text = if (name.isNotBlank()) {
-                            stringResource(R.string.onboarding_setup_heading_named, name)
-                        } else {
-                            stringResource(R.string.onboarding_setup_heading)
-                        },
+                        text = stringResource(R.string.onboarding_next_prayer),
                         fontFamily = FontFamily.Serif,
                         fontSize = 26.sp,
                         fontWeight = FontWeight.Bold,
@@ -541,7 +700,7 @@ private fun HeroZone(
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = stringResource(R.string.onboarding_setup_subtitle),
+                        text = stringResource(R.string.onboarding_reminders_detail),
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -555,7 +714,7 @@ private fun HeroZone(
 @Composable
 private fun OnboardingSheet(
     step: Int,
-    bodyMaxHeight: androidx.compose.ui.unit.Dp,
+    bodyMaxHeight: Dp,
     sheetColor: Color,
     accent: Color,
     accentSoft: Color,
@@ -608,8 +767,12 @@ private fun OnboardingSheet(
                 targetState = step,
                 transitionSpec = {
                     val forward = targetState > initialState
-                    val enter = slideInHorizontally { width -> if (forward) width / 3 else -width / 3 } + fadeIn()
-                    val exit = slideOutHorizontally { width -> if (forward) -width / 3 else width / 3 } + fadeOut()
+                    val enter = slideInHorizontally(animationSpec = tween(300)) { width ->
+                        if (forward) width / 3 else -width / 3
+                    } + fadeIn(tween(300))
+                    val exit = slideOutHorizontally(animationSpec = tween(220)) { width ->
+                        if (forward) -width / 3 else width / 3
+                    } + fadeOut(tween(220))
                     enter togetherWith exit
                 },
                 label = "onboarding_sheet_step"
@@ -652,54 +815,62 @@ private fun OnboardingCta(
 @Composable
 private fun WelcomeStep(
     config: UserAppearanceConfig,
+    showGreeting: Boolean,
     accent: Color,
     accentSoft: Color,
     onConfigChange: (UserAppearanceConfig) -> Unit
 ) {
-    Text(
-        text = stringResource(R.string.onboarding_mission),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+    AnimatedVisibility(
+        visible = showGreeting,
+        enter = fadeIn(tween(300)) + slideInVertically(initialOffsetY = { it / 4 }),
+        exit = fadeOut(tween(220)) + slideOutVertically(targetOffsetY = { it / 4 })
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                text = stringResource(R.string.onboarding_mission),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-    Text(
-        text = stringResource(R.string.onboarding_name_prompt),
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface
-    )
+            Text(
+                text = stringResource(R.string.onboarding_welcome_headline),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
 
-    OutlinedTextField(
-        value = config.userName,
-        onValueChange = { onConfigChange(config.copy(userName = it)) },
-        label = { Text(stringResource(R.string.onboarding_name_label)) },
-        placeholder = { Text(stringResource(R.string.onboarding_name_placeholder)) },
-        singleLine = true,
-        shape = RoundedCornerShape(16.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = accent,
-            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-            cursorColor = accent,
-            focusedLabelColor = accent
-        ),
-        modifier = Modifier.fillMaxWidth()
-    )
+            OutlinedTextField(
+                value = config.userName,
+                onValueChange = { onConfigChange(config.copy(userName = it)) },
+                label = { Text(stringResource(R.string.onboarding_name_label)) },
+                placeholder = { Text(stringResource(R.string.onboarding_name_placeholder)) },
+                singleLine = true,
+                shape = RoundedCornerShape(16.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = accent,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                    cursorColor = accent,
+                    focusedLabelColor = accent
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
 
-    Text(
-        text = stringResource(R.string.onboarding_privacy_microcopy),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+            Text(
+                text = stringResource(R.string.onboarding_privacy_microcopy),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-    Spacer(Modifier.height(2.dp))
-    // Soft sage rule keeps the sheet's emerald identity visible even in monochrome palettes.
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(3.dp)
-            .clip(RoundedCornerShape(2.dp))
-            .background(accentSoft)
-    )
+            // Soft sage rule keeps the sheet's emerald identity visible in every palette.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(accentSoft)
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -821,211 +992,222 @@ private fun FocusTile(
 }
 
 @Composable
-private fun ThemeStep(
-    config: UserAppearanceConfig,
-    accent: Color,
-    accentSoft: Color,
-    onConfigChange: (UserAppearanceConfig) -> Unit
-) {
-    Text(
-        text = stringResource(R.string.onboarding_color_theme),
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface
-    )
-    // Labels are resolved here: a label provider lambda is not a composable scope.
-    SegmentedPillBar(
-        options = ThemeMode.entries.map { themeModeLabel(it) },
-        selectedIndex = config.themeMode.ordinal,
-        onSelect = { index ->
-            ThemeMode.entries.getOrNull(index)?.let { onConfigChange(config.copy(themeMode = it)) }
-        }
-    )
-    // The palette grid is capped and scrolls on its own so the font-size controls below it are
-    // one short scroll away instead of sitting under nine rows of swatches.
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = 172.dp)
-            .verticalScroll(rememberScrollState())
-    ) {
-        ThemePalettePicker(
-            selected = config.palette,
-            onSelect = { onConfigChange(config.copy(palette = it)) }
-        )
-    }
-
-    Text(
-        text = stringResource(R.string.onboarding_font_size),
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface
-    )
-    SegmentedPillBar(
-        options = FontScalePreset.entries.map { fontScaleLabel(it) },
-        selectedIndex = config.fontScale.ordinal,
-        onSelect = { index ->
-            FontScalePreset.entries.getOrNull(index)?.let { onConfigChange(config.copy(fontScale = it)) }
-        }
-    )
-
-    SizeStepperRow(
-        label = stringResource(R.string.onboarding_arabic_size),
-        value = config.arabicFontSize,
-        min = ARABIC_FONT_MIN,
-        max = ARABIC_FONT_MAX,
-        accent = accent,
-        accentSoft = accentSoft,
-        onValueChange = { onConfigChange(config.copy(arabicFontSize = it)) }
-    )
-    SizeStepperRow(
-        label = stringResource(R.string.onboarding_translation_size),
-        value = config.translationFontSize,
-        min = TRANSLATION_FONT_MIN,
-        max = TRANSLATION_FONT_MAX,
-        accent = accent,
-        accentSoft = accentSoft,
-        onValueChange = { onConfigChange(config.copy(translationFontSize = it)) }
-    )
-}
-
-@Composable
-private fun SizeStepperRow(
-    label: String,
-    value: Int,
-    min: Int,
-    max: Int,
-    accent: Color,
-    accentSoft: Color,
-    onValueChange: (Int) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        StepperButton(
-            symbol = "−",
-            description = stringResource(R.string.onboarding_decrease),
-            enabled = value > min,
-            accent = accent,
-            accentSoft = accentSoft,
-            onClick = { onValueChange((value - 1).coerceAtLeast(min)) }
-        )
-        Text(
-            text = value.toString(),
-            modifier = Modifier.width(40.dp),
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        StepperButton(
-            symbol = "+",
-            description = stringResource(R.string.onboarding_increase),
-            enabled = value < max,
-            accent = accent,
-            accentSoft = accentSoft,
-            onClick = { onValueChange((value + 1).coerceAtMost(max)) }
-        )
-    }
-}
-
-@Composable
-private fun StepperButton(
-    symbol: String,
-    description: String,
-    enabled: Boolean,
-    accent: Color,
-    accentSoft: Color,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .size(34.dp)
-            .clip(CircleShape)
-            .background(accentSoft)
-            .semantics { contentDescription = description }
-            .clickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = symbol,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (enabled) accent else accent.copy(alpha = 0.35f)
-        )
-    }
-}
-
-@Composable
-private fun SetupStep(
-    permissions: PermissionState,
+private fun LocationAndMethodStep(
+    appPrefs: SakinahPreferences?,
+    prefsTick: Int,
+    locationGranted: Boolean,
     accent: Color,
     onAccent: Color,
     accentSoft: Color,
     onAccentSoft: Color,
     onAllowLocation: () -> Unit,
-    onAllowNotifications: () -> Unit,
-    onAllowExactAlarms: () -> Unit,
-    onAllowBattery: () -> Unit
+    onCitySelected: (HomeCity) -> Unit,
+    onPrefsChanged: () -> Unit
 ) {
-    val tiles = listOf(
-        PermissionTileModel(
-            icon = Icons.Default.LocationOn,
-            title = stringResource(R.string.onboarding_perm_location_title),
-            reason = stringResource(R.string.onboarding_perm_location_reason),
-            granted = permissions.location,
-            onAllow = onAllowLocation
-        ),
-        PermissionTileModel(
-            icon = Icons.Default.Notifications,
-            title = stringResource(R.string.onboarding_perm_notifications_title),
-            reason = stringResource(R.string.onboarding_perm_notifications_reason),
-            granted = permissions.notifications,
-            onAllow = onAllowNotifications
-        ),
-        PermissionTileModel(
-            icon = Icons.Default.Alarm,
-            title = stringResource(R.string.onboarding_perm_alarms_title),
-            reason = stringResource(R.string.onboarding_perm_alarms_reason),
-            granted = permissions.exactAlarms,
-            onAllow = onAllowExactAlarms
-        ),
-        PermissionTileModel(
-            icon = Icons.Default.BatteryChargingFull,
-            title = stringResource(R.string.onboarding_perm_battery_title),
-            reason = stringResource(R.string.onboarding_perm_battery_reason),
-            granted = permissions.battery,
-            onAllow = onAllowBattery
-        )
-    )
+    var showCityPicker by rememberSaveable { mutableStateOf(false) }
+    var showMethodPicker by rememberSaveable { mutableStateOf(false) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        tiles.chunked(2).forEach { rowItems ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                rowItems.forEach { tile ->
-                    PermissionTile(
-                        model = tile,
-                        accent = accent,
-                        onAccent = onAccent,
-                        accentSoft = accentSoft,
-                        onAccentSoft = onAccentSoft,
-                        modifier = Modifier.weight(1f)
-                    )
+    val method = remember(prefsTick) {
+        appPrefs?.calculationMethodOverride ?: appPrefs?.calculationMethod
+        ?: CalculationMethod.MUSLIM_WORLD_LEAGUE
+    }
+    val school = remember(prefsTick) { appPrefs?.madhhab ?: Madhhab.HANAFI }
+    val savedLocation = remember(prefsTick) { appPrefs?.locationLabel?.takeIf(String::isNotBlank) }
+
+    SakinahCard(containerColor = accentSoft) {
+        Text(
+            text = stringResource(R.string.onboarding_location_title),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = onAccentSoft
+        )
+        Text(
+            text = stringResource(R.string.onboarding_location_privacy),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Button(
+            onClick = onAllowLocation,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = onAccent)
+        ) {
+            Text(
+                text = if (savedLocation != null && locationGranted) {
+                    stringResource(R.string.onboarding_location_allowed)
+                } else {
+                    stringResource(R.string.onboarding_location_allow)
                 }
-                if (rowItems.size == 1) Spacer(Modifier.weight(1f))
+            )
+        }
+        TextButton(onClick = { showCityPicker = true }) {
+            Text(stringResource(R.string.onboarding_location_manual))
+        }
+        if (savedLocation != null) {
+            Text(
+                text = stringResource(R.string.onboarding_location_saved, savedLocation),
+                style = MaterialTheme.typography.bodySmall,
+                color = onAccentSoft
+            )
+        }
+    }
+
+    SakinahCard {
+        Text(
+            text = stringResource(R.string.onboarding_prayer_settings),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.settings_calculation_method),
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = methodDisplayName(method),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
             }
+            TextButton(onClick = { showMethodPicker = true }) {
+                Text(stringResource(R.string.profile_change))
+            }
+        }
+        Text(
+            text = stringResource(R.string.onboarding_madhhab),
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        SegmentedPillBar(
+            options = listOf(
+                stringResource(R.string.onboarding_madhhab_hanafi),
+                stringResource(R.string.onboarding_madhhab_other)
+            ),
+            selectedIndex = if (school == Madhhab.HANAFI) 0 else 1,
+            onSelect = { index ->
+                appPrefs?.madhhab = if (index == 0) Madhhab.HANAFI else Madhhab.SHAFI_HANBALI_MALIKI
+                onPrefsChanged()
+            }
+        )
+    }
+
+    if (showCityPicker) {
+        HomeLocationCityPickerDialog(
+            title = stringResource(R.string.onboarding_location_title),
+            subtitle = stringResource(R.string.onboarding_location_privacy),
+            onDismiss = { showCityPicker = false },
+            onCitySelected = { city ->
+                onCitySelected(city)
+                showCityPicker = false
+            }
+        )
+    }
+    if (showMethodPicker) {
+        AlertDialog(
+            onDismissRequest = { showMethodPicker = false },
+            title = { Text(stringResource(R.string.settings_calculation_method)) },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    val autoLabel = stringResource(R.string.settings_calculation_automatic_option)
+                    Text(
+                        text = autoLabel,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                appPrefs?.calculationMethodOverride = null
+                                onPrefsChanged()
+                                showMethodPicker = false
+                            }
+                            .padding(vertical = 10.dp),
+                        fontSize = 13.sp,
+                        color = accent
+                    )
+                    CalculationMethod.entries.forEach { option ->
+                        Text(
+                            text = methodDisplayName(option),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    appPrefs?.calculationMethod = option
+                                    appPrefs?.calculationMethodOverride = option
+                                    onPrefsChanged()
+                                    showMethodPicker = false
+                                }
+                                .padding(vertical = 10.dp),
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showMethodPicker = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun FirstWinAndRemindersStep(
+    appPrefs: SakinahPreferences?,
+    prefsTick: Int,
+    remindersEnabled: Boolean,
+    onRemindersChange: (Boolean) -> Unit
+) {
+    val emerald = SakinahPalette.EMERALD_SANCTUARY.lightPreviewPrimary
+    val nextPrayer = remember(prefsTick) { appPrefs?.let(::nextPrayerPreview) }
+
+    SakinahCard(containerColor = emerald) {
+        Text(
+            text = stringResource(R.string.onboarding_next_prayer),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.8.sp,
+            color = Color.White.copy(alpha = 0.82f)
+        )
+        if (nextPrayer != null) {
+            Text(
+                text = "${nextPrayer.first} · ${nextPrayer.second}",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        } else {
+            Text(
+                text = stringResource(R.string.onboarding_next_prayer_hint),
+                fontSize = 13.sp,
+                color = Color.White.copy(alpha = 0.9f)
+            )
+        }
+    }
+
+    SakinahCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.onboarding_reminders),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = stringResource(R.string.onboarding_reminders_detail),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(checked = remindersEnabled, onCheckedChange = onRemindersChange)
         }
     }
 
@@ -1036,107 +1218,15 @@ private fun SetupStep(
     )
 }
 
-private data class PermissionTileModel(
-    val icon: ImageVector,
-    val title: String,
-    val reason: String,
-    val granted: Boolean,
-    val onAllow: () -> Unit
-)
-
-@Composable
-private fun PermissionTile(
-    model: PermissionTileModel,
-    accent: Color,
-    onAccent: Color,
-    accentSoft: Color,
-    onAccentSoft: Color,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier.fillMaxHeight(),
-        shape = RoundedCornerShape(20.dp),
-        color = if (model.granted) accentSoft else MaterialTheme.colorScheme.surface,
-        border = BorderStroke(
-            1.dp,
-            if (model.granted) accent else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Icon(
-                imageVector = model.icon,
-                contentDescription = null,
-                tint = accent,
-                modifier = Modifier.size(20.dp)
-            )
-            Text(
-                text = model.title,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = model.reason,
-                fontSize = 11.sp,
-                minLines = 1,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(2.dp))
-            val shape = RoundedCornerShape(50)
-            Box(
-                modifier = Modifier
-                    .clip(shape)
-                    .then(
-                        if (model.granted) {
-                            Modifier.background(accent)
-                        } else {
-                            Modifier.border(1.dp, accent, shape)
-                        }
-                    )
-                    .clickable(enabled = !model.granted, onClick = model.onAllow)
-                    .padding(horizontal = 12.dp, vertical = 5.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = if (model.granted) {
-                        stringResource(R.string.onboarding_perm_allowed)
-                    } else {
-                        stringResource(R.string.onboarding_perm_allow)
-                    },
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (model.granted) onAccent else accent
-                )
-            }
-        }
-    }
-}
+private fun methodDisplayName(method: CalculationMethod): String =
+    method.name.lowercase(Locale.US).split('_')
+        .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase(Locale.US) } }
 
 @Composable
 private fun experienceLabel(level: String): String = when (level) {
     EXPERIENCE_NEW -> stringResource(R.string.onboarding_experience_new)
     EXPERIENCE_STUDENT -> stringResource(R.string.onboarding_experience_student)
     else -> stringResource(R.string.onboarding_experience_practicing)
-}
-
-@Composable
-private fun themeModeLabel(mode: ThemeMode): String = when (mode) {
-    ThemeMode.SYSTEM -> stringResource(R.string.onboarding_theme_system)
-    ThemeMode.LIGHT -> stringResource(R.string.onboarding_theme_light)
-    ThemeMode.DARK -> stringResource(R.string.onboarding_theme_dark)
-}
-
-@Composable
-private fun fontScaleLabel(preset: FontScalePreset): String = when (preset) {
-    FontScalePreset.COMPACT -> stringResource(R.string.onboarding_font_compact)
-    FontScalePreset.STANDARD -> stringResource(R.string.onboarding_font_standard)
-    FontScalePreset.COMFORTABLE -> stringResource(R.string.onboarding_font_comfort)
-    FontScalePreset.LARGE -> stringResource(R.string.onboarding_font_large)
-    else -> preset.label
 }
 
 @Composable
@@ -1158,39 +1248,52 @@ private fun readPermissionState(context: Context): PermissionState = PermissionS
     location = hasPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ||
         hasPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION),
     notifications = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-        hasPermission(context, Manifest.permission.POST_NOTIFICATIONS),
-    exactAlarms = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-        (context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager)
-            ?.canScheduleExactAlarms() == true,
-    battery = (context.getSystemService(Context.POWER_SERVICE) as? PowerManager)
-        ?.isIgnoringBatteryOptimizations(context.packageName) == true
+        hasPermission(context, Manifest.permission.POST_NOTIFICATIONS)
 )
 
 private fun hasPermission(context: Context, permission: String): Boolean =
     ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
-private fun openExactAlarmSettings(context: Context) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
-    val direct = Intent(
-        Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-        "package:${context.packageName}".toUri()
+/**
+ * Live preview of the next Salah for the saved location. Uses the same offline engine and
+ * method mapping as the timetable, and returns null until a location has been chosen.
+ */
+private fun nextPrayerPreview(prefs: SakinahPreferences): Pair<String, String>? {
+    val coordinates = prefs.locationCoordinates ?: return null
+    val zone = prefs.locationTimeZoneId
+        ?.let { id -> runCatching { TimeZone.of(id) }.getOrNull() }
+        ?: TimeZone.currentSystemDefault()
+    val now = Clock.System.now().toLocalDateTime(zone)
+    val method = SunniMethodMapper.localCalculationMethod(
+        SunniMethodMapper.resolve(prefs.locationCountryCode, prefs.calculationMethodOverride)
     )
-    launchOrFallback(context, direct, Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
-}
-
-private fun openBatteryOptimizationSettings(context: Context) {
-    val direct = Intent(
-        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-        "package:${context.packageName}".toUri()
+    val engine = PrayerCalculationEngineImpl()
+    val prayers = listOf(
+        PrayerType.FAJR,
+        PrayerType.DHUHR,
+        PrayerType.ASR,
+        PrayerType.MAGHRIB,
+        PrayerType.ISHA
     )
-    launchOrFallback(context, direct, Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-}
 
-private fun launchOrFallback(context: Context, primary: Intent, fallback: Intent) {
-    val launched = runCatching {
-        context.startActivity(primary.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }.isSuccess
-    if (!launched) {
-        runCatching { context.startActivity(fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    fun timesFor(date: LocalDate) = engine.getPrayerTimes(
+        coordinates = coordinates,
+        date = date,
+        method = method,
+        madhhab = prefs.madhhab,
+        timeZone = zone,
+        adjustments = prefs.prayerAdjustments,
+        highLatitudeRule = prefs.highLatitudeRule
+    )
+
+    val nextToday = prayers.mapNotNull { type ->
+        timesFor(now.date)[type]?.takeIf { it >= now.time }?.let { type to it }
+    }.minByOrNull { it.second }
+    val (type, time) = nextToday ?: run {
+        val tomorrow = LocalDate.fromEpochDays(now.date.toEpochDays() + 1)
+        val tomorrowFajr = timesFor(tomorrow)[PrayerType.FAJR] ?: return null
+        PrayerType.FAJR to tomorrowFajr
     }
+    val formatted = String.format(Locale.getDefault(), "%02d:%02d", time.hour, time.minute)
+    return type.englishName to formatted
 }
