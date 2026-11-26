@@ -267,7 +267,7 @@ dependencies {
 // strings so the task action captures only serializable values and the build stays
 // compatible with org.gradle.configuration-cache=true.
 val bundledFonts = listOf(
-    listOf("uthmanic_hafs1_ver18.ttf", "https://cdn.jsdelivr.net/gh/thetruetruth/quran-data-kfgqpc@main/hafs/font/hafs.18.ttf", "50000", "a0636e68e375af9552470d67773936f54d536e6586ce2608311b2fe7f9cbec3a"),
+    listOf("amiri_quran_regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/amiriquran/AmiriQuran-Regular.ttf", "50000", "e2a47644762d16bdfb6d33e0d8db8c6ff30beae84150ef5a705316bbd829455c"),
     listOf("amiri_regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Regular.ttf", "50000", "ab391c4147d054c48976e98322ad0eefe1427aa0e0502a12a4c75d80a70cfcd7"),
     listOf("amiri_bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Bold.ttf", "50000", "cfccb794268e7d573d857e6d6a67f89cf8a053e8ffd85dfa0c8ec1bb36fc4827")
 )

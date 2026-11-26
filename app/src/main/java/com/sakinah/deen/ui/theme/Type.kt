@@ -9,13 +9,14 @@ import androidx.compose.ui.unit.sp
 import com.sakinah.deen.R
 
 /**
- * Official KFGQPC Uthmanic Hafs v18 (UthmanicHafs1Ver18.ttf), shipped verbatim from
- * the quran.com/QUL font assets. Its Unicode cmap carries the full Uthmani annotation
- * range U+06D6–U+06ED natively, including U+06DF (۟), so no text substitution is needed.
+ * Quran-facing Arabic face. Amiri Quran is HarfBuzz-compatible and renders the Uthmani
+ * annotation range U+06D6–U+06ED natively: U+06DF (۟) is a compact doubled-circle mark,
+ * not the dotted-circle placeholder produced by KFGQPC Uthmanic Hafs v18 on Android.
+ * The Quranic text is never rewritten to work around font shaping.
  * Amiri is a classical Naskh face used for Hadith matn, tafsir, and Arabic quotations.
  */
 val UthmanicFontFamily = FontFamily(
-    Font(R.font.uthmanic_hafs1_ver18, FontWeight.Normal)
+    Font(R.font.amiri_quran_regular, FontWeight.Normal)
 )
 
 val AmiriFontFamily = FontFamily(

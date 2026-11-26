@@ -8,8 +8,8 @@ import java.security.MessageDigest
 
 /**
  * Guards the authenticity boundary of the reader's Uthmani text: the Quran assets stay
- * byte-for-byte untouched, and the bundled official KFGQPC font keeps native cmap
- * entries for every Quranic annotation mark (U+06D6–U+06ED, including U+06DF).
+ * byte-for-byte untouched, and the bundled font keeps native glyphs for every Quranic
+ * annotation mark (U+06D6–U+06ED, including U+06DF) without dotted-circle geometry.
  */
 class QuranUthmaniFontIntegrityTest {
 
@@ -19,8 +19,8 @@ class QuranUthmaniFontIntegrityTest {
         "seed_quran_surahs.json" to "caaab98e85dd28b1fc87e08026a8afc5ad3b33597ceaeb3a6ce2c04615944c13"
     )
 
-    private val officialUthmanicFontSha256 =
-        "a0636e68e375af9552470d67773936f54d536e6586ce2608311b2fe7f9cbec3a"
+    private val verifiedFontSha256 =
+        "e2a47644762d16bdfb6d33e0d8db8c6ff30beae84150ef5a705316bbd829455c"
 
     @Test
     fun quranTextAssetsRemainByteIdentical() {
@@ -31,36 +31,44 @@ class QuranUthmaniFontIntegrityTest {
     }
 
     @Test
-    fun bundledFontIsTheOfficialKfgqpcUthmanicHafsV18() {
-        assertEquals(
-            officialUthmanicFontSha256,
-            sha256(locateUthmanicFont())
-        )
+    fun bundledFontIsTheVerifiedAmiriQuranFont() {
+        assertEquals(verifiedFontSha256, sha256(locateUthmanicFont()))
     }
 
     @Test
     fun uthmanicFontMapsEveryQuranicAnnotationMarkNatively() {
-        val cmap = TrueTypeCmap(locateUthmanicFont().readBytes())
+        val font = TrueTypeFont(locateUthmanicFont().readBytes())
 
         (0x06D6..0x06ED).forEach { codePoint ->
-            val glyph = cmap.glyphFor(codePoint)
             assertTrue(
-                "U+${codePoint.toString(16).uppercase().padStart(4, '0')} has no native glyph",
-                glyph > 0
+                "U+${hex(codePoint)} has no native glyph",
+                font.glyphFor(codePoint) > 0
             )
         }
-
-        // U+06DF (۟) is the historically problematic doubled-circle mark.
-        assertTrue("U+06DF must map to a real glyph", cmap.glyphFor(0x06DF) > 0)
+        assertTrue("U+06DF must map to a real glyph", font.glyphFor(0x06DF) > 0)
     }
+
+    @Test
+    fun u06dfGlyphIsACompactMarkNotADottedCircle() {
+        val bounds = TrueTypeFont(locateUthmanicFont().readBytes()).boundsFor(0x06DF)
+        val width = bounds.right - bounds.left
+        val height = bounds.bottom - bounds.top
+
+        // KFGQPC v18 uses a 1255x1255 dotted-circle composite here; a real
+        // doubled-circle mark is a fraction of the em square.
+        assertTrue("U+06DF glyph width $width is dotted-circle sized", width in 1..500)
+        assertTrue("U+06DF glyph height $height is dotted-circle sized", height in 1..500)
+    }
+
+    private fun hex(codePoint: Int) = codePoint.toString(16).uppercase().padStart(4, '0')
 
     private fun locate(vararg candidates: String): File =
         candidates.asSequence().map(::File).firstOrNull(File::isFile)
             ?: error("Missing asset; tried ${candidates.joinToString()}")
 
     private fun locateUthmanicFont(): File = locate(
-        "src/main/res/font/uthmanic_hafs1_ver18.ttf",
-        "app/src/main/res/font/uthmanic_hafs1_ver18.ttf"
+        "src/main/res/font/amiri_quran_regular.ttf",
+        "app/src/main/res/font/amiri_quran_regular.ttf"
     )
 
     private fun sha256(file: File): String {
@@ -79,39 +87,42 @@ class QuranUthmaniFontIntegrityTest {
     }
 }
 
-/**
- * Minimal sfnt cmap reader: resolves Unicode code points to non-zero glyph IDs from
- * format 4 and format 12 subtables without depending on a native text-shaping engine.
- */
-private class TrueTypeCmap(private val bytes: ByteArray) {
+/** sfnt glyph bounds: (left, top, right, bottom) in font units. */
+private data class GlyphBounds(
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int
+)
 
-    private val cmapOffset: Int
+/**
+ * Minimal sfnt reader: resolves Unicode code points to glyph IDs and reads TrueType
+ * outlines directly, without relying on a native text-shaping engine.
+ */
+private class TrueTypeFont(private val bytes: ByteArray) {
+
+    private val tables: Map<String, Int>
 
     init {
         require(u16(0) == 0x0001 && u16(2) == 0x0000) { "Not a TrueType sfnt font" }
-        val numTables = u16(4)
-        var offset = -1
-        for (index in 0 until numTables) {
+        tables = (0 until u16(4)).associate { index ->
             val record = 12 + index * 16
-            if (ascii(record, 4) == "cmap") {
-                offset = u32(record + 8).toInt()
-                break
-            }
+            ascii(record, 4) to u32(record + 8).toInt()
         }
-        require(offset >= 0) { "Font has no cmap table" }
-        cmapOffset = offset
+        require("cmap" in tables) { "Font has no cmap table" }
     }
 
     fun glyphFor(codePoint: Int): Int {
-        val subtableCount = u16(cmapOffset + 2)
+        val cmap = tables.getValue("cmap")
+        val subtableCount = u16(cmap + 2)
         for (index in 0 until subtableCount) {
-            val record = cmapOffset + 4 + index * 8
+            val record = cmap + 4 + index * 8
             val platform = u16(record)
             val encoding = u16(record + 2)
             val isUnicode = platform == 0 || (platform == 3 && (encoding == 1 || encoding == 10))
             if (!isUnicode) continue
 
-            val subtable = cmapOffset + u32(record + 4).toInt()
+            val subtable = cmap + u32(record + 4).toInt()
             val glyph = when (u16(subtable)) {
                 4 -> glyphFromFormat4(subtable, codePoint)
                 12 -> glyphFromFormat12(subtable, codePoint)
@@ -120,6 +131,28 @@ private class TrueTypeCmap(private val bytes: ByteArray) {
             if (glyph > 0) return glyph
         }
         return 0
+    }
+
+    fun boundsFor(codePoint: Int): GlyphBounds {
+        val glyphId = glyphFor(codePoint)
+        require(glyphId > 0) { "No glyph for U+${codePoint.toString(16)}" }
+
+        val longLoca = i16(tables.getValue("head") + 50) != 0
+        val loca = tables.getValue("loca")
+        val glyf = tables.getValue("glyf")
+        fun glyphOffset(index: Int) =
+            if (longLoca) u32(loca + index * 4).toInt() else u16(loca + index * 2) * 2
+
+        val start = glyphOffset(glyphId)
+        val end = glyphOffset(glyphId + 1)
+        require(end > start + 8) { "Glyph U+${codePoint.toString(16)} has no outline" }
+
+        return GlyphBounds(
+            left = i16(glyf + start + 2),
+            top = i16(glyf + start + 4),
+            right = i16(glyf + start + 6),
+            bottom = i16(glyf + start + 8)
+        )
     }
 
     private fun glyphFromFormat4(subtable: Int, codePoint: Int): Int {
