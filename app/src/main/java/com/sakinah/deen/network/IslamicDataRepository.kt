@@ -1233,6 +1233,19 @@ class IslamicDataRepository(
         tafsirId: Int = IBN_KATHIR_TAFSIR_ID
     ): TafsirEntryEntity? = tafsirDao.getTafsir("tafsir_$tafsirId", surahNumber, ayahNumber)
 
+    /** Fetches one ayah live and caches it in Room so the next reader opens it offline. */
+    suspend fun fetchAndStoreTafsirForAyah(
+        surahNumber: Int,
+        ayahNumber: Int,
+        tafsirId: Int,
+        languageCode: String = "en"
+    ): TafsirEntryEntity? {
+        val entry = fetchTafsirForAyah(surahNumber, ayahNumber, tafsirId, languageCode)
+            ?: return null
+        tafsirDao.upsertAll(listOf(entry))
+        return entry
+    }
+
     /**
      * Reads one ayah's commentary live with `by_ayah` without claiming the pack is offline.
      * HTML is stripped here so callers never have to render raw `<p>`/`<span>` markup.

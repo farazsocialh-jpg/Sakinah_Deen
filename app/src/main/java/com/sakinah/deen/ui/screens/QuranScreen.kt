@@ -1245,6 +1245,21 @@ fun QuranScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                val missingAyahs = group.filter { state.tafsirByAyah[it].isNullOrBlank() }
+                LaunchedEffect(
+                    state.selectedTafsirId,
+                    surah.number,
+                    group.first,
+                    group.last,
+                    state.isFetchingTafsirRange,
+                    missingAyahs.joinToString(",")
+                ) {
+                    if (missingAyahs.isNotEmpty() && !state.isFetchingTafsirRange) {
+                        vm.onIntent(
+                            QuranUiIntent.FetchTafsirRange(surah.number, missingAyahs)
+                        )
+                    }
+                }
                 Text(
                     text = "Tafsir ${group.first}:${group.last}",
                     fontFamily = FontFamily.Serif,
@@ -1264,6 +1279,19 @@ fun QuranScreen(
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         maxLines = 1
                     )
+                }
+                if (state.isFetchingTafsirRange) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Text(
+                            text = "Fetching missing ayahs…",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),

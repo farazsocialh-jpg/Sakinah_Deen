@@ -5,6 +5,7 @@ import com.sakinah.deen.data.database.dao.TafsirDao
 import com.sakinah.deen.data.database.entity.TafsirEntryEntity
 import com.sakinah.deen.data.model.TafsirResource
 import com.sakinah.deen.network.IslamicDataRepository
+import com.sakinah.deen.util.CitationParser
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -174,15 +175,25 @@ class TafseerDownloadRepository(
         }
     }
 
-    /** Reconciles the pack list with the chapters actually present in Room. */
+    /** Reconciles the pack list with fully cached ayah rows, never just chapter presence. */
     suspend fun refreshDownloadStatus() = withContext(ioDispatcher) {
         val dao = tafsirDao ?: return@withContext
         _packages.update { packages ->
             packages.map { pkg ->
-                val chapters = runCatching {
-                    dao.countSurahsForSource(TafseerPackage.sourceKey(pkg.tafsirId))
-                }.getOrDefault(pkg.downloadedChapters)
-                pkg.copy(downloadedChapters = chapters)
+                val counts = runCatching {
+                    dao.getAyahCountsBySurah(TafseerPackage.sourceKey(pkg.tafsirId))
+                }.getOrDefault(emptyList()).associate { it.surahNumber to it.ayahCount }
+                var complete = 0
+                for (surahNumber in 1..TafseerPackage.TOTAL_CHAPTERS) {
+                    val expectedFromDb = islamicRepository?.let { repo ->
+                        runCatching { repo.ayahCountForSurah(surahNumber) }.getOrDefault(0)
+                    } ?: 0
+                    val expected = expectedFromDb.takeIf { it > 0 }
+                        ?: CitationParser.AYAH_COUNTS.getOrNull(surahNumber - 1)
+                        ?: 0
+                    if (expected > 0 && (counts[surahNumber] ?: 0) >= expected) complete++
+                }
+                pkg.copy(downloadedChapters = complete)
             }
         }
     }
@@ -276,12 +287,13 @@ class TafseerDownloadRepository(
                     // resumes instead of silently serving a half chapter.
                     val expectedAyahs = runCatching {
                         repo.ayahCountForSurah(surahNumber)
-                    }.getOrDefault(0)
+                    }.getOrDefault(0).takeIf { it > 0 }
+                        ?: CitationParser.AYAH_COUNTS.getOrNull(surahNumber - 1)
+                        ?: 0
                     val cachedRows = runCatching {
                         tafsirDao?.countForSurah(sourceKey, surahNumber) ?: 0
                     }.getOrDefault(0)
-                    val alreadyComplete = cachedRows > 0 &&
-                        (expectedAyahs <= 0 || cachedRows >= expectedAyahs)
+                    val alreadyComplete = expectedAyahs > 0 && cachedRows >= expectedAyahs
                     if (alreadyComplete) {
                         savedChapters++
                         onProgress(surahNumber.toFloat() / TafseerPackage.TOTAL_CHAPTERS)

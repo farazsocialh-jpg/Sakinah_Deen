@@ -427,6 +427,12 @@ interface PrayerTimetableDao {
     }
 }
 
+/** Per-surah cached ayah counts used to verify an offline Tafsir pack. */
+data class SurahAyahCount(
+    val surahNumber: Int,
+    val ayahCount: Int
+)
+
 @Dao
 interface TafsirDao {
     @Query(
@@ -441,9 +447,9 @@ interface TafsirDao {
     @Query("SELECT COUNT(*) FROM tafsir_entries WHERE sourceKey = :sourceKey")
     suspend fun countForSource(sourceKey: String): Int
 
-    /** Number of chapters with at least one cached commentary row for an edition. */
-    @Query("SELECT COUNT(DISTINCT surahNumber) FROM tafsir_entries WHERE sourceKey = :sourceKey")
-    suspend fun countSurahsForSource(sourceKey: String): Int
+    /** Grouped row counts, so a surah with only a few ayahs is never mistaken for complete. */
+    @Query("SELECT surahNumber, COUNT(*) AS ayahCount FROM tafsir_entries WHERE sourceKey = :sourceKey GROUP BY surahNumber")
+    suspend fun getAyahCountsBySurah(sourceKey: String): List<SurahAyahCount>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(entries: List<TafsirEntryEntity>)

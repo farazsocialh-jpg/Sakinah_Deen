@@ -5,6 +5,7 @@ import com.sakinah.deen.data.database.dao.HadithCatalogSummary
 import com.sakinah.deen.data.database.dao.HadithDao
 import com.sakinah.deen.data.database.dao.HadithSectionSummary
 import com.sakinah.deen.data.database.dao.QuranDao
+import com.sakinah.deen.data.database.dao.SurahAyahCount
 import com.sakinah.deen.data.database.dao.TafsirDao
 import com.sakinah.deen.data.database.entity.AdhkarEntity
 import com.sakinah.deen.data.database.entity.HadithEntryEntity
@@ -253,9 +254,10 @@ class FakeTafsirDao : TafsirDao {
         it.sourceKey == sourceKey
     }
 
-    override suspend fun countSurahsForSource(sourceKey: String): Int = entries.filter {
-        it.sourceKey == sourceKey
-    }.map { it.surahNumber }.distinct().size
+    override suspend fun getAyahCountsBySurah(sourceKey: String): List<SurahAyahCount> =
+        entries.filter { it.sourceKey == sourceKey }
+            .groupBy { it.surahNumber }
+            .map { (surahNumber, rows) -> SurahAyahCount(surahNumber, rows.size) }
 
     override suspend fun upsertAll(entries: List<TafsirEntryEntity>) {
         this.entries += entries

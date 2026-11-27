@@ -29,6 +29,7 @@ import com.sakinah.deen.data.repository.TafseerPackage
 import com.sakinah.deen.network.IslamicDataRepository
 import com.sakinah.deen.settings.SettingsRepository
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -110,6 +111,8 @@ data class QuranUiState(
     val wbwEnabled: Boolean = false,
     /** Ayah -> cleaned commentary for the open surah, used by group labels and the sheet. */
     val tafsirByAyah: Map<Int, String> = emptyMap(),
+    /** True while missing ayahs in the open Tafsir range are fetched live. */
+    val isFetchingTafsirRange: Boolean = false,
     val mushafLayout: String = QuranReaderPreferences.DEFAULT_MUSHAF_LAYOUT,
     /** Word whose morphology sheet is open, plus its root occurrences. */
     val selectedQulWord: QulWord? = null,
@@ -156,6 +159,10 @@ sealed class QuranUiIntent {
         val title: String = ""
     ) : QuranUiIntent()
     data object FetchTafseerAyah : QuranUiIntent()
+    data class FetchTafsirRange(
+        val surahNumber: Int,
+        val ayahNumbers: List<Int>
+    ) : QuranUiIntent()
     data object RefreshTafseerCatalog : QuranUiIntent()
     data class SetHifzMistakeTag(val surah: Int, val ayah: Int, val wordPos: Int, val tag: String) : QuranUiIntent()
     data class DownloadTafseerPack(val tafsirId: Int) : QuranUiIntent()
@@ -233,6 +240,7 @@ class QuranViewModel(
     )
     private var searchJob: Job? = null
     private var tafsirByAyahJob: Job? = null
+    private var tafsirRangeJob: Job? = null
     private var pendingTargetAyah: Int? = null
 
     /** True once Room has supplied chapter metadata, i.e. the offline library is usable. */
@@ -351,6 +359,10 @@ class QuranViewModel(
                 intent.title
             )
             is QuranUiIntent.FetchTafseerAyah -> fetchTafseerAyahLive()
+            is QuranUiIntent.FetchTafsirRange -> fetchTafsirRange(
+                intent.surahNumber,
+                intent.ayahNumbers
+            )
             is QuranUiIntent.RefreshTafseerCatalog -> viewModelScope.launch {
                 tafseerRepository?.refreshCatalog()
             }
@@ -1190,6 +1202,78 @@ class QuranViewModel(
                         tafseerErrorMessage = friendlyTafseerError(title, e)
                     )
                 }
+            }
+        }
+    }
+
+    /**
+     * Fills gaps in an open Tafsir range. Bundled English editions resolve from QUL offline;
+     * every other edition is fetched live and cached in Room so it becomes offline-ready too.
+     */
+    private fun fetchTafsirRange(surahNumber: Int, ayahNumbers: List<Int>) {
+        val state = _uiState.value
+        val tafsirId = state.selectedTafsirId
+        if (tafsirId <= 0 || surahNumber != state.currentSurah.number) return
+        val missing = ayahNumbers.distinct().filter {
+            state.tafsirByAyah[it].isNullOrBlank()
+        }
+        if (missing.isEmpty()) return
+        tafsirRangeJob?.cancel()
+        _uiState.update { it.copy(isFetchingTafsirRange = true) }
+        val slug = qulTafsirSlug(tafsirId, state.selectedTafseerTitle)
+        val languageCode = state.selectedTafseerLanguage
+        tafsirRangeJob = viewModelScope.launch {
+            val fetched = mutableMapOf<Int, String>()
+            try {
+                if (slug != null && qulDatabase != null) {
+                    missing.forEach { ayah ->
+                        val text = qulDatabase.getTafsir(slug, "$surahNumber:$ayah")
+                        if (!text.isNullOrBlank()) fetched[ayah] = TafsirText.clean(text)
+                    }
+                } else {
+                    islamicRepository?.let { repo ->
+                        missing.forEach { ayah ->
+                            ensureActive()
+                            val entry = repo.fetchAndStoreTafsirForAyah(
+                                surahNumber = surahNumber,
+                                ayahNumber = ayah,
+                                tafsirId = tafsirId,
+                                languageCode = languageCode
+                            )
+                            if (entry != null && entry.text.isNotBlank()) {
+                                fetched[ayah] = TafsirText.clean(entry.text)
+                            }
+                        }
+                    }
+                }
+                if (fetched.isNotEmpty()) {
+                    _uiState.update { current ->
+                        if (current.selectedTafsirId != tafsirId ||
+                            current.currentSurah.number != surahNumber
+                        ) {
+                            current
+                        } else {
+                            current.copy(tafsirByAyah = current.tafsirByAyah + fetched)
+                        }
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { current ->
+                    if (current.selectedTafsirId == tafsirId &&
+                        current.currentSurah.number == surahNumber
+                    ) {
+                        current.copy(
+                            tafseerErrorMessage = friendlyTafseerError(
+                                current.selectedTafseerTitle,
+                                e
+                            )
+                        )
+                    } else current
+                }
+            } finally {
+                _uiState.update { it.copy(isFetchingTafsirRange = false) }
             }
         }
     }
