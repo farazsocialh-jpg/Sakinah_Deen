@@ -27,3 +27,13 @@ val PrayerType.arabicName: String
         PrayerType.MAGHRIB -> "المغرب"
         PrayerType.ISHA -> "العشاء"
     }
+
+/**
+ * Jumu'ah replaces Dhuhr on Fridays. Apps that show a calculated Dhuhr time on Friday relabel
+ * that same window as Jummah; the exact congregation/khutbah time remains mosque-specific.
+ */
+fun PrayerType.displayEnglishName(isFriday: Boolean = false): String =
+    if (isFriday && this == PrayerType.DHUHR) "Jummah" else englishName
+
+fun PrayerType.displayArabicName(isFriday: Boolean = false): String =
+    if (isFriday && this == PrayerType.DHUHR) "الجمعة" else arabicName
