@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -68,6 +70,7 @@ import com.sakinah.deen.ui.screens.DataSourcesScreen
 import com.sakinah.deen.ui.screens.HadithScreen
 import com.sakinah.deen.ui.screens.HelpScreen
 import com.sakinah.deen.ui.screens.NotificationSettingsScreen
+import com.sakinah.deen.ui.components.QiblaModesCard
 import com.sakinah.deen.ui.screens.PersonalizedOnboardingScreen
 import com.sakinah.deen.ui.screens.PrivacyScreen
 import com.sakinah.deen.ui.screens.ProfileScreen
@@ -97,6 +100,7 @@ enum class SakinahScreen(
     Onboarding(R.string.app_name, showTopBar = false, showBottomBar = false),
     DailySalah(R.string.nav_salah, showTopBar = false, showBottomBar = true),
     VisualGuide(R.string.nav_guide, showTopBar = false, showBottomBar = true),
+    Qibla(R.string.nav_travel, showTopBar = true, showBottomBar = true),
     Quran(R.string.nav_quran, showTopBar = false, showBottomBar = true),
     Hadith(R.string.nav_hadith, showTopBar = false, showBottomBar = true),
     Travel(R.string.nav_travel, showTopBar = true, showBottomBar = true),
@@ -344,6 +348,7 @@ fun RootNavHost(
         SakinahScreen.AiScholar -> "Islamic AI Scholar"
         SakinahScreen.ToolsHub -> toolsLabel
         SakinahScreen.VisualGuide -> "Visual Salah Guide"
+        SakinahScreen.Qibla -> "Qibla Compass"
         SakinahScreen.Travel -> "Safar & Qibla"
         SakinahScreen.Wealth -> "Zakat & Sadaqah"
         SakinahScreen.Auth -> "Account"
@@ -482,6 +487,19 @@ fun RootNavHost(
                         totalRakats = guideTotalRakats,
                         prayerTitle = guidePrayerTitle
                     )
+                }
+                SakinahScreen.Qibla -> {
+                    val qiblaState = salahVm?.uiState?.collectAsStateWithLifecycle()?.value
+                    Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                        if (qiblaState != null) {
+                            QiblaModesCard(
+                                latitude = qiblaState.userCoordinates.first,
+                                longitude = qiblaState.userCoordinates.second,
+                                cityName = qiblaState.locationName,
+                                locationAvailable = !qiblaState.isLocationPending
+                            )
+                        }
+                    }
                 }
                 SakinahScreen.Quran -> {
                     QuranScreen(

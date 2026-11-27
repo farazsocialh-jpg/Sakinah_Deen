@@ -185,6 +185,13 @@ fun ToolsHubScreen(
                 )
                 HubDivider()
                 HubRow(
+                    icon = Icons.Outlined.Place,
+                    title = "Qibla Compass",
+                    subtitle = "Find the direction of the Kaaba",
+                    onClick = { onNavigate(SakinahScreen.Qibla) }
+                )
+                HubDivider()
+                HubRow(
                     icon = Icons.Outlined.MonetizationOn,
                     title = stringResource(R.string.tools_zakat_title),
                     subtitle = stringResource(R.string.tools_zakat_subtitle),

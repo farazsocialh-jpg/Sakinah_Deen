@@ -110,7 +110,6 @@ import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.data.prefs.AppearancePreferences
 import com.sakinah.deen.data.prefs.SalahHomeLayout
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
-import com.sakinah.deen.ui.components.QiblaModesCard
 import com.sakinah.deen.ui.components.SakinahCard
 import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.components.StatusBadge
@@ -136,7 +135,6 @@ fun SalahScreen(
         SalahUiState(
             prayersList = listOf(
                 PrayerModel("fajr", "Fajr", "الفجر", "05:14 AM", 2, 2, 0, true, true, true),
-                PrayerModel("sunrise", "Sunrise", "الشروق", "06:38 AM", 0, 0, 0, false, false, false),
                 PrayerModel("dhuhr", "Dhuhr", "الظهر", "12:45 PM", 4, 4, 2, true, true, true, true, "2 Rakat Nafl"),
                 PrayerModel("asr", "Asr", "العصر", "03:52 PM", 4, 4, 0, false, false, false),
                 PrayerModel("maghrib", "Maghrib", "المغرب", "06:18 PM", 3, 0, 2, false, false, false, false, "Awwabin (6 Rakat)"),
@@ -184,12 +182,6 @@ fun SalahScreen(
         }
     }
 
-    var selectedSegment by rememberSaveable { mutableIntStateOf(0) }
-    LaunchedEffect(focusMode) {
-        if (focusMode) {
-            selectedSegment = 0
-        }
-    }
     var showQadhaDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showManualCityDialog by remember { mutableStateOf(false) }
@@ -333,16 +325,10 @@ fun SalahScreen(
                         }
                     }
 
-                    SalahTabBar(
-                        selectedSegment = selectedSegment,
-                        onSelect = { selectedSegment = it },
-                        underline = salahHomeLayout == SalahHomeLayout.CIRCULAR_RING
-                    )
+                    LiveSkySunArcCard(state = state)
                 }
             }
 
-            when (selectedSegment) {
-                0 -> {
                     // Layout F: 5-Segment Daily Progress Strip
                     val fardPrayers = state.prayersList.filter { it.id != "sunrise" }
                     val prayedCount = fardPrayers.count { it.isFardCompleted }
@@ -415,34 +401,10 @@ fun SalahScreen(
                         )
                     }
 
-                    // Slim secondary rows below Isha: Sunrise and Tahajjud
-                    if (!focusMode) {
-                        val sunrise = state.prayersList.firstOrNull { it.id == "sunrise" }
-                        if (sunrise != null) {
-                            item(key = "sunrise") {
-                                SunriseRow(sunrise)
-                            }
-                        }
-                    }
-
                     item(key = "tahajjud") {
                         TahajjudCard(state)
                     }
-                }
 
-                else -> {
-                    // One shared Qibla card (Compass · Map · Sun). Interference, calibration
-                    // and permission guidance are owned by the card itself.
-                    item(key = "qibla-card") {
-                        QiblaModesCard(
-                            latitude = state.userCoordinates.first,
-                            longitude = state.userCoordinates.second,
-                            cityName = state.locationName,
-                            locationAvailable = !state.isLocationPending
-                        )
-                    }
-                }
-            }
         }
 
         // 5. Prayer Calculation & Regional Settings Dialog (Draft-buffered until Apply)

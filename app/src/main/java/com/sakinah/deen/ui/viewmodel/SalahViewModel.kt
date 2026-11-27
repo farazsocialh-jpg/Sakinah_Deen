@@ -1,6 +1,16 @@
 package com.sakinah.deen.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
+import io.ktor.client.HttpClient
+import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.isSuccess
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.jsonObject
 import androidx.lifecycle.viewModelScope
 import com.sakinah.deen.data.database.dao.QadhaDao
 import com.sakinah.deen.data.database.dao.SalahDao
@@ -56,6 +66,16 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoField
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+
+/** Live sky summary from Open-Meteo, with an offline-neutral fallback. */
+enum class SkyCondition(val label: String) {
+    CLEAR("Sunny"),
+    SCATTERED_CLOUDS("Scattered clouds"),
+    CLOUDY("Cloudy"),
+    RAINY("Rainy"),
+    FOG("Fog"),
+    NIGHT("Clear night")
+}
 
 data class SalahUiState(
     val hijriDate: String = "14 Jumada al-Ula 1448 AH",
@@ -118,6 +138,9 @@ data class SalahUiState(
     val isTahajjudWindow: Boolean = false,
     /** Optional override for the hero title (e.g. "Next: Dhuhr · 11:19 am"). */
     val heroTitleOverride: String? = null,
+    val skyCondition: SkyCondition? = null,
+    val temperatureCelsius: Double? = null,
+    val isDaylight: Boolean = true,
     /** Start of Tahajjud window in seconds-of-day (-1 when unknown). */
     val tahajjudStartSecondOfDay: Int = -1,
     /** How old the saved/current fix is, in minutes, when a timestamp exists. */
@@ -171,7 +194,8 @@ class SalahViewModel(
     private val prayerTimes: PrayerTimeRepository? = null,
     private val preferences: SakinahPreferences? = null,
     private val settingsRepository: SettingsRepository? = null,
-    private val alarmScheduler: PrayerAlarmScheduler? = null
+    private val alarmScheduler: PrayerAlarmScheduler? = null,
+    private val httpClient: HttpClient? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SalahUiState())
@@ -673,6 +697,7 @@ class SalahViewModel(
             ),
             sourceLabel = "Offline Calculation"
         )
+        refreshWeather(state.userCoordinates.first, state.userCoordinates.second)
 
         // City, GPS, madhhab, calculation-method or offset changes all pass through here.
         // Re-arm immediately so background alarms never use stale times.
@@ -712,6 +737,7 @@ class SalahViewModel(
                 sourceLabel = resolved.label,
                 authorityName = resolved.authority.displayName
             )
+            refreshWeather(state.userCoordinates.first, state.userCoordinates.second)
         }
     }
 
@@ -721,6 +747,43 @@ class SalahViewModel(
         val denied = alarmsActive && hasUsableCoordinates && !scheduler.canScheduleExactAlarms()
         if (_uiState.value.showExactAlarmWarningBanner != denied) {
             _uiState.update { it.copy(showExactAlarmWarningBanner = denied) }
+        }
+    }
+
+    /** Free, keyless Open-Meteo current conditions; failures keep the last cached values. */
+    private fun refreshWeather(latitude: Double, longitude: Double) {
+        val client = httpClient ?: return
+        viewModelScope.launch {
+            runCatching {
+                val response = client.get(
+                    "https://api.open-meteo.com/v1/forecast" +
+                        "?latitude=$latitude&longitude=$longitude" +
+                        "&current=weather_code,is_day,temperature_2m"
+                )
+                if (!response.status.isSuccess()) return@launch
+                val root = Json { ignoreUnknownKeys = true }
+                    .parseToJsonElement(response.bodyAsText()) as? JsonObject ?: return@launch
+                val current = root["current"] as? JsonObject ?: return@launch
+                val code = (current["weather_code"] as? JsonPrimitive)?.intOrNull ?: 0
+                val isDay = (current["is_day"] as? JsonPrimitive)?.intOrNull != 0
+                val temp = (current["temperature_2m"] as? JsonPrimitive)?.doubleOrNull
+                val condition = when {
+                    !isDay -> SkyCondition.NIGHT
+                    code == 0 || code == 1 -> SkyCondition.CLEAR
+                    code == 2 -> SkyCondition.SCATTERED_CLOUDS
+                    code == 3 -> SkyCondition.CLOUDY
+                    code in 45..48 -> SkyCondition.FOG
+                    code in 51..99 -> SkyCondition.RAINY
+                    else -> SkyCondition.CLEAR
+                }
+                _uiState.update {
+                    it.copy(
+                        skyCondition = condition,
+                        temperatureCelsius = temp,
+                        isDaylight = isDay
+                    )
+                }
+            }
         }
     }
 
@@ -888,7 +951,6 @@ class SalahViewModel(
 
         return listOf(
             model("fajr", PrayerType.FAJR, "Fajr", "الفجر", 2, 2, 0),
-            model("sunrise", PrayerType.SUNRISE, "Sunrise", "الشروق", 0, 0, 0),
             model(
                 "dhuhr",
                 PrayerType.DHUHR,

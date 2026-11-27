@@ -39,6 +39,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,7 +57,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sakinah.deen.data.model.PrayerModel
 import com.sakinah.deen.data.prefs.SalahHomeLayout
-import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.viewmodel.SalahUiState
 import kotlin.math.roundToInt
 
@@ -239,54 +239,144 @@ internal fun SalahTopHeader(
 }
 
 @Composable
-internal fun SalahTabBar(
-    selectedSegment: Int,
-    onSelect: (Int) -> Unit,
-    underline: Boolean = false
+internal fun LiveSkySunArcCard(
+    state: SalahUiState,
+    modifier: Modifier = Modifier
 ) {
-    val tabs = listOf(
-        stringResource(R.string.salah_tab_times),
-        stringResource(R.string.salah_tab_qibla)
-    )
-    if (!underline) {
-        SegmentedPillBar(
-            options = tabs,
-            selectedIndex = selectedSegment,
-            onSelect = onSelect
-        )
-        return
+    var nowMillis by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(System.currentTimeMillis()) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        while (true) {
+            nowMillis = System.currentTimeMillis()
+            kotlinx.coroutines.delay(60_000L)
+        }
     }
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+
+    val sunrise = state.prayerTimes[com.sakinah.deen.data.model.PrayerType.SUNRISE]
+    val sunset = state.prayerTimes[com.sakinah.deen.data.model.PrayerType.MAGHRIB]
+    val zone = java.time.ZoneId.systemDefault()
+    fun millisFor(time: kotlinx.datetime.LocalTime?): Long? = time?.let {
+        java.time.LocalTime.of(it.hour, it.minute, it.second)
+            .atDate(java.time.LocalDate.now(zone)).atZone(zone).toInstant().toEpochMilli()
+    }
+    val start = millisFor(sunrise)
+    val end = millisFor(sunset)
+    val progress = if (start != null && end != null && end > start) {
+        ((nowMillis - start).toFloat() / (end - start).toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    val formatter = java.time.format.DateTimeFormatter.ofPattern("hh:mm a")
+    fun label(time: kotlinx.datetime.LocalTime?): String = time?.let {
+        java.time.LocalTime.of(it.hour, it.minute, it.second).format(formatter)
+    } ?: "--:--"
+
+    val sky = state.skyCondition
+    val backdrop = when (sky) {
+        com.sakinah.deen.ui.viewmodel.SkyCondition.RAINY -> listOf(Color(0xFF1A2A3A), Color(0xFF24394D))
+        com.sakinah.deen.ui.viewmodel.SkyCondition.CLOUDY,
+        com.sakinah.deen.ui.viewmodel.SkyCondition.SCATTERED_CLOUDS -> listOf(Color(0xFF24313D), Color(0xFF334656))
+        com.sakinah.deen.ui.viewmodel.SkyCondition.NIGHT -> listOf(Color(0xFF0B1324), Color(0xFF16223B))
+        com.sakinah.deen.ui.viewmodel.SkyCondition.FOG -> listOf(Color(0xFF2A3339), Color(0xFF3B474E))
+        else -> listOf(Color(0xFF17324A), Color(0xFF2E5876))
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(84.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Brush.verticalGradient(backdrop))
     ) {
-        tabs.forEachIndexed { index, label ->
-            val selected = index == selectedSegment
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onSelect(index) },
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = label,
-                    fontSize = 12.sp,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                    color = if (selected) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(Modifier.height(6.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.dp)
-                        .background(
-                            if (selected) MaterialTheme.colorScheme.primary
-                            else Color.Transparent
-                        )
+        Canvas(modifier = Modifier.matchParentSize()) {
+            val insetX = 64.dp.toPx()
+            val top = 20.dp.toPx()
+            val bottom = 18.dp.toPx()
+            val left = insetX
+            val right = size.width - insetX
+            val arcTop = top
+            val arcBottom = size.height - bottom
+            val midX = (left + right) / 2f
+            val radiusX = (right - left) / 2f
+            val radiusY = (arcBottom - arcTop).coerceAtLeast(1f)
+
+            fun point(t: Float): androidx.compose.ui.geometry.Offset {
+                val angle = Math.PI.toFloat() * t
+                return androidx.compose.ui.geometry.Offset(
+                    x = midX - radiusX * kotlin.math.cos(angle),
+                    y = arcBottom - radiusY * kotlin.math.sin(angle)
                 )
             }
+
+            drawLine(
+                color = Color.White.copy(alpha = 0.35f),
+                start = point(progress),
+                end = point(1f),
+                strokeWidth = 1.5.dp.toPx(),
+                cap = StrokeCap.Round,
+                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+                    floatArrayOf(6.dp.toPx(), 6.dp.toPx())
+                )
+            )
+            val steps = 32
+            for (i in 0 until steps) {
+                val t0 = progress * i / steps
+                val t1 = progress * (i + 1) / steps
+                drawLine(
+                    color = SalahAmber,
+                    start = point(t0),
+                    end = point(t1),
+                    strokeWidth = 2.5.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
+            }
+            if (state.isDaylight) {
+                val sun = point(progress)
+                drawCircle(color = SalahAmber.copy(alpha = 0.25f), radius = 11.dp.toPx(), center = sun)
+                drawCircle(color = Color(0xFFFFD54F), radius = 5.dp.toPx(), center = sun)
+            } else {
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.75f),
+                    radius = 2.dp.toPx(),
+                    center = androidx.compose.ui.geometry.Offset(size.width * 0.68f, 16.dp.toPx())
+                )
+            }
+        }
+
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = Color.Black.copy(alpha = 0.28f),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 4.dp)
+        ) {
+            Text(
+                text = sky?.label ?: "Sky unavailable",
+                color = Color.White,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
+            )
+        }
+        Column(
+            modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Text("Sunrise", color = Color.White.copy(alpha = 0.75f), fontSize = 9.sp)
+            Text(label(sunrise), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+        Column(
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp),
+            horizontalAlignment = Alignment.End
+        ) {
+            Text("Sunset", color = Color.White.copy(alpha = 0.75f), fontSize = 9.sp)
+            Text(label(sunset), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+        state.temperatureCelsius?.let { temp ->
+            Text(
+                text = "${temp.roundToInt()}°C",
+                color = Color.White,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 2.dp)
+            )
         }
     }
 }

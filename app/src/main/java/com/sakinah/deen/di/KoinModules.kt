@@ -363,7 +363,7 @@ val accountModule = module {
 }
 
 val viewModelModule = module {
-    viewModel { SalahViewModel(get(), get(), get(), get(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull()) }
+    viewModel { SalahViewModel(get(), get(), get(), get(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull()) }
     viewModel {
         QuranViewModel(
             getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull(), getOrNull(),
