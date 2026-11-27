@@ -1095,7 +1095,7 @@ private fun SunriseRow(prayer: PrayerModel) {
  */
 internal fun prayerTypeOf(prayer: PrayerModel): PrayerType? = when (prayer.id.lowercase()) {
     "fajr" -> PrayerType.FAJR
-    "dhuhr" -> PrayerType.DHUHR
+    "dhuhr", "jummah" -> PrayerType.DHUHR
     "asr" -> PrayerType.ASR
     "maghrib" -> PrayerType.MAGHRIB
     "isha" -> PrayerType.ISHA

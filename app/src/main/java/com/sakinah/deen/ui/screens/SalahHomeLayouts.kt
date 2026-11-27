@@ -572,7 +572,7 @@ private fun heroTitle(state: SalahUiState): String {
     return listOfNotNull(
         state.currentPrayerName.takeIf { it.isNotBlank() },
         state.currentPrayerArabic.takeIf { it.isNotBlank() }
-    ).joinToString(" · ").uppercase()
+    ).joinToString(" · ")
 }
 
 @Composable
@@ -587,14 +587,18 @@ internal fun ClassicHeroCard(
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
+        color = if (completed) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
         border = BorderStroke(
             1.dp,
-            if (completed) SalahEmerald.copy(alpha = 0.55f) else MaterialTheme.colorScheme.outline
+            if (completed) SalahEmerald.copy(alpha = 0.75f) else MaterialTheme.colorScheme.outline
         )
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
@@ -605,13 +609,13 @@ internal fun ClassicHeroCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = state.hijriDate,
-                        fontSize = 12.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = "${state.locationName} · ${state.authorityName}",
-                        fontSize = 10.sp,
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -619,7 +623,7 @@ internal fun ClassicHeroCard(
                 }
                 Text(
                     text = state.gregorianDate,
-                    fontSize = 10.sp,
+                    fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -642,7 +646,11 @@ internal fun ClassicHeroCard(
                 )
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    color = if (completed) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                    },
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Row(
