@@ -24,10 +24,12 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -45,8 +47,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -77,8 +82,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -97,10 +104,13 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -127,6 +137,7 @@ import com.sakinah.deen.network.IslamicDataRepository
 import com.sakinah.deen.ui.components.HomeCity
 import com.sakinah.deen.ui.components.HomeLocationCityPickerDialog
 import com.sakinah.deen.ui.components.SakinahCard
+import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.theme.FontScalePreset
 import com.sakinah.deen.ui.theme.PrayerGuideGender
 import com.sakinah.deen.ui.theme.SakinahPalette
@@ -148,7 +159,7 @@ import kotlinx.datetime.toLocalDateTime
 import org.koin.core.context.GlobalContext
 import java.util.Locale
 
-private const val TOTAL_STEPS = 7
+private const val TOTAL_STEPS = 8
 private const val ARABIC_FONT_MIN = 18
 private const val ARABIC_FONT_MAX = 36
 private const val TRANSLATION_FONT_MIN = 12
@@ -616,7 +627,13 @@ fun PersonalizedOnboardingScreen(
                             accent = accent,
                             onConfigChange = ::updateConfig
                         )
-                        1 -> GoalsStep(
+                        1 -> AppearanceStep(
+                            draft = config,
+                            accent = accent,
+                            accentSoft = accentSoft,
+                            onDraftChange = ::updateConfig
+                        )
+                        2 -> GoalsStep(
                             userName = config.userName,
                             selectedGoalIndices = selectedGoalIndices,
                             accent = accent,
@@ -635,7 +652,7 @@ fun PersonalizedOnboardingScreen(
                                 updateConfig(config.copy(objective = UserObjective.ALL_IN_ONE))
                             }
                         )
-                        2 -> LanguageStep(
+                        3 -> LanguageStep(
                             search = languageSearch,
                             onSearchChange = { languageSearch = it },
                             languages = availableLanguages,
@@ -649,7 +666,7 @@ fun PersonalizedOnboardingScreen(
                                 selectedEditionLabel = ""
                             }
                         )
-                        3 -> EditionStep(
+                        4 -> EditionStep(
                             languageName = selectedLanguageName.ifBlank { "English" },
                             editions = editionsForSelectedLanguage,
                             selectedEditionKey = selectedEditionKey,
@@ -660,7 +677,7 @@ fun PersonalizedOnboardingScreen(
                                 applyLanguageAndEdition(lang, edition)
                             }
                         )
-                        4 -> TafsirStep(
+                        5 -> TafsirStep(
                             languageName = selectedLanguageName.ifBlank { "English" },
                             packages = availableTafsirPackages,
                             selectedTafsirId = selectedTafsirId,
@@ -671,9 +688,9 @@ fun PersonalizedOnboardingScreen(
                             accentSoft = accentSoft,
                             onSelect = ::selectTafsirBook,
                             onRetry = ::selectTafsirBook,
-                            onDownloadLater = { step = 5 }
+                            onDownloadLater = { step = 6 }
                         )
-                        5 -> PermissionsStep(
+                        6 -> PermissionsStep(
                             permissions = permissions,
                             accent = accent,
                             onAccent = onAccent,
@@ -725,7 +742,7 @@ fun PersonalizedOnboardingScreen(
 
                 val ctaLabel = when (step) {
                     0 -> "Continue"
-                    1, 2, 3, 4, 5 -> "Continue"
+                    1, 2, 4, 5, 6 -> "Continue"
                     else -> "Start Using Sakinah"
                 }
                 val showCta = step > 0 || showGreeting
@@ -753,22 +770,22 @@ fun PersonalizedOnboardingScreen(
                                     }
                                     val editions = editionsForLanguage(translationResources, lang.isoCode, lang.displayName)
                                     if (editions.size > 1) {
-                                        step = 3
+                                        step = 4
                                     } else {
                                         applyLanguageAndEdition(lang, editions.firstOrNull())
-                                        step = if (availableTafsirPackages.isEmpty()) 5 else 4
+                                        step = if (availableTafsirPackages.isEmpty()) 6 else 5
                                     }
                                 }
-                                3 -> {
+                                4 -> {
                                     if (selectedEditionKey.isBlank()) {
                                         val lang = LanguageOption(selectedLanguageName.ifBlank { "English" }, selectedLanguageIso.ifBlank { "en" })
                                         val editions = editionsForLanguage(translationResources, lang.isoCode, lang.displayName)
                                         applyLanguageAndEdition(lang, editions.firstOrNull())
                                     }
-                                    step = if (availableTafsirPackages.isEmpty()) 5 else 4
+                                    step = if (availableTafsirPackages.isEmpty()) 6 else 5
                                 }
-                                4 -> step = 5
                                 5 -> step = 6
+                                6 -> step = 7
                                 else -> finish()
                             }
                         }
@@ -1079,6 +1096,192 @@ private fun OnboardingCta(
         colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = onAccent)
     ) {
         Text(text = label, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun AppearanceStep(
+    draft: UserAppearanceConfig,
+    accent: Color,
+    accentSoft: Color,
+    onDraftChange: (UserAppearanceConfig) -> Unit
+) {
+    val name = draft.userName.trim()
+    val palettes = remember { SakinahPalette.entries }
+    val initialIndex = remember { palettes.indexOf(draft.palette).coerceAtLeast(0) }
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
+    val flingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
+    val scope = rememberCoroutineScope()
+
+    val centeredIndex by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val viewportCenter = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
+            layoutInfo.visibleItemsInfo.minByOrNull { item ->
+                kotlin.math.abs((item.offset + item.size / 2) - viewportCenter)
+            }?.index ?: initialIndex
+        }
+    }
+    LaunchedEffect(centeredIndex) {
+        val selected = palettes.getOrNull(centeredIndex) ?: return@LaunchedEffect
+        if (selected != draft.palette) {
+            onDraftChange(draft.copy(palette = selected))
+        }
+    }
+
+    val darkPreview = when (draft.themeMode) {
+        ThemeMode.DARK -> true
+        ThemeMode.LIGHT -> false
+        ThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = if (name.isBlank()) "Make it yours" else "Make it yours, $name",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = accent
+        )
+        Text(
+            text = "Choose your color theme and reading comfort.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Text(
+            text = "Theme",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        SegmentedPillBar(
+            options = ThemeMode.entries.map { it.label },
+            selectedIndex = draft.themeMode.ordinal,
+            onSelect = { index -> onDraftChange(draft.copy(themeMode = ThemeMode.entries[index])) }
+        )
+
+        Text(
+            text = "Palette",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Box(modifier = Modifier.fillMaxWidth().height(176.dp)) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(vertical = 58.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                flingBehavior = flingBehavior
+            ) {
+                itemsIndexed(palettes) { index, palette ->
+                    val centered = index == centeredIndex
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(
+                                if (centered) accentSoft else Color.Transparent
+                            )
+                            .clickable {
+                                if (!centered) {
+                                    scope.launch { listState.animateScrollToItem(index) }
+                                }
+                            }
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        val primary = if (darkPreview) palette.darkPreviewPrimary else palette.lightPreviewPrimary
+                        val secondary = if (darkPreview) palette.darkPreviewPrimary else palette.lightPreviewAccent
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(14.dp)
+                                    .clip(CircleShape)
+                                    .background(secondary)
+                            )
+                        }
+                        Text(
+                            text = stringResource(palette.titleRes),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (centered) FontWeight.Bold else FontWeight.Medium,
+                            color = if (centered) accent else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (centered) {
+                            Icon(Icons.Default.Check, contentDescription = null, tint = accent)
+                        }
+                    }
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .border(
+                        width = 1.dp,
+                        color = accent.copy(alpha = 0.65f),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+            )
+        }
+
+        Text(
+            text = "Text size",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        val scalePresets = FontScalePreset.entries.take(4)
+        scalePresets.chunked(2).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                row.forEach { preset ->
+                    val selected = preset == draft.fontScale
+                    Surface(
+                        onClick = { onDraftChange(draft.copy(fontScale = preset)) },
+                        shape = RoundedCornerShape(50),
+                        color = if (selected) accent else accentSoft,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = preset.label,
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+        val baseDensity = LocalDensity.current
+        CompositionLocalProvider(
+            LocalDensity provides Density(
+                density = baseDensity.density,
+                fontScale = (baseDensity.fontScale * draft.fontScale.multiplier).coerceIn(0.8f, 2.0f)
+            )
+        ) {
+            SakinahCard(containerColor = accentSoft.copy(alpha = 0.55f), contentPadding = 12.dp) {
+                Text(
+                    text = "Sample reading text — Calm, clear, and easy on the eyes.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
     }
 }
 
