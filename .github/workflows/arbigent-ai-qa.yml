@@ -92,7 +92,18 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
+      - name: Verify AI_PROXY_URL for APK build
+        env:
+          AI_PROXY_URL: ${{ vars.AI_PROXY_URL || secrets.AI_PROXY_URL }}
+        run: |
+          test -n "$(printf '%s' "$AI_PROXY_URL" | tr -d '[:space:]')" || {
+            echo "::error::AI_PROXY_URL is empty. Set it on the Playstore environment as a variable or secret."
+            exit 1
+          }
+
       - name: Build Debug APK
+        env:
+          AI_PROXY_URL: ${{ vars.AI_PROXY_URL || secrets.AI_PROXY_URL }}
         run: ./gradlew :app:assembleDebug
 
       - name: Download Arbigent Wrapper

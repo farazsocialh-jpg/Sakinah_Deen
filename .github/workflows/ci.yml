@@ -31,12 +31,20 @@ jobs:
     # bakes AI_PROXY_URL into this APK, so the debug build must see the same values as release.
     environment: Playstore
     env:
-      AI_PROXY_URL: ${{ vars.AI_PROXY_URL || secrets.AI_PROXY_URL || 'https://ai.insightsltd.com' }}
       GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
       NISAB_RATE_URL: ${{ vars.NISAB_RATE_URL || secrets.NISAB_RATE_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Verify AI_PROXY_URL is configured
+        env:
+          AI_PROXY_URL: ${{ vars.AI_PROXY_URL || secrets.AI_PROXY_URL }}
+        run: |
+          test -n "$(printf '%s' "$AI_PROXY_URL" | tr -d '[:space:]')" || {
+            echo "::error::AI_PROXY_URL is empty. Set it on the Playstore environment as a variable or secret."
+            exit 1
+          }
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -53,6 +61,8 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build debug APK
+        env:
+          AI_PROXY_URL: ${{ vars.AI_PROXY_URL || secrets.AI_PROXY_URL }}
         run: ./gradlew :app:assembleDebug --build-cache --parallel
 
       - name: Upload debug APK
@@ -68,7 +78,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: Playstore
     env:
-      AI_PROXY_URL: ${{ vars.AI_PROXY_URL || secrets.AI_PROXY_URL || 'https://ai.insightsltd.com' }}
       GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
       NISAB_RATE_URL: ${{ vars.NISAB_RATE_URL || secrets.NISAB_RATE_URL }}
     # ~300 PNGs (17 palettes x 2 modes x every screen, 4 font presets, 19 layouts,
@@ -92,9 +101,20 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
+      - name: Verify AI_PROXY_URL is configured
+        env:
+          AI_PROXY_URL: ${{ vars.AI_PROXY_URL || secrets.AI_PROXY_URL }}
+        run: |
+          test -n "$(printf '%s' "$AI_PROXY_URL" | tr -d '[:space:]')" || {
+            echo "::error::AI_PROXY_URL is empty. Set it on the Playstore environment as a variable or secret."
+            exit 1
+          }
+
       - name: Record every screen in every theme/font/layout
         # --no-configuration-cache: Roborazzi injects per-task system properties, which
         # configuration-cache snapshots would otherwise keep from the first invocation.
+        env:
+          AI_PROXY_URL: ${{ vars.AI_PROXY_URL || secrets.AI_PROXY_URL }}
         run: ./gradlew :app:recordRoborazziDebug --no-configuration-cache --stacktrace
 
       - name: Upload snapshot matrix PNGs
