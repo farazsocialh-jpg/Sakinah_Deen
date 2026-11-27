@@ -65,7 +65,6 @@ import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material.icons.filled.ViewColumn
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.FormatSize
 import androidx.compose.material.icons.outlined.Psychology
@@ -424,7 +423,14 @@ fun QuranScreen(
     }
 
     val translationIsRtl = isRtlLanguage(state.selectedTranslationIsoCode)
-    val inlineTafsirEnabled = state.inlineTafsirEnabled
+    // Inline tafsir is always on now; the dock toggle is gone.
+    val inlineTafsirEnabled = true
+    val tafsirGroups = remember(displaySurah.ayahs.size, state.inlineTafsirByAyah) {
+        tafsirAyahGroups(
+            ayahCount = displaySurah.ayahs.size,
+            availableAyahs = state.inlineTafsirByAyah.filterValues { it.isNotBlank() }.keys
+        )
+    }
     val activeTafsirBookName = state.selectedTafseerTitle
     val tafsirIsRtl = TafsirText.isRtl(state.selectedTafseerLanguage)
     // Bundled QUL editions are offline by definition; downloaded Quran.com packs are too.
@@ -477,7 +483,7 @@ fun QuranScreen(
         selectedTafsirAyah = ayah.numberInSurah
         vm.onIntent(QuranUiIntent.SelectAyahForTafseer(ayah.numberInSurah))
     }
-    val moveSelectedTafsirAyah: (Int) -> Unit = { target ->
+    val moveSelectedTafsirGroup: (Int) -> Unit = { target ->
         if (surah.ayahs.any { it.numberInSurah == target }) {
             selectedTafsirAyah = target
             selectedAyahNumber = target
@@ -723,6 +729,7 @@ fun QuranScreen(
                                 onWordClick = { word ->
                                     vm.onIntent(QuranUiIntent.SelectQulWord(word.wordKey))
                                 },
+                                tafsirGroups = tafsirGroups,
                                 inlineTafsirEnabled = inlineTafsirEnabled,
                                 activeTafsirBookName = activeTafsirBookName,
                                 inlineTafsirByAyah = state.inlineTafsirByAyah,
@@ -993,22 +1000,6 @@ fun QuranScreen(
                                         )
                                     }
                                     StudyDockIcon(
-                                        description = "Tafsir",
-                                        active = inlineTafsirEnabled,
-                                        onClick = {
-                                            vm.onIntent(
-                                                QuranUiIntent.SetInlineTafsirEnabled(!inlineTafsirEnabled)
-                                            )
-                                        }
-                                    ) { color ->
-                                        Icon(
-                                            imageVector = Icons.Outlined.AutoStories,
-                                            contentDescription = null,
-                                            tint = color,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    }
-                                    StudyDockIcon(
                                         description = "Toggle Hifz mistake highlighting",
                                         active = hifzOverlayActive,
                                         onClick = { hifzOverlayActive = !hifzOverlayActive }
@@ -1264,9 +1255,13 @@ fun QuranScreen(
         }
     }
 
-    // 6. Single-ayah Tafsir sheet: opened only from an ayah header's Tafsir button.
+    // 6. Ayah-group Tafsir sheet: opened only from an ayah header's Tafsir button.
     if (selectedTafsirAyah != null) {
         val ayahNumber = selectedTafsirAyah ?: 0
+        val group = tafsirGroups.firstOrNull { ayahNumber in it }
+            ?: (ayahNumber..minOf(ayahNumber + 3, surah.ayahs.size.coerceAtLeast(1)))
+        val previousGroup = tafsirGroups.lastOrNull { it.last < group.first }
+        val nextGroup = tafsirGroups.firstOrNull { it.first > group.last }
         ModalBottomSheet(
             onDismissRequest = { selectedTafsirAyah = null },
             sheetState = sheetState
@@ -1278,7 +1273,7 @@ fun QuranScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Tafsir · ${surah.nameEnglish} ${surah.number}:$ayahNumber",
+                    text = "Tafsir ${group.first}:${group.last}",
                     fontFamily = FontFamily.Serif,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
@@ -1302,32 +1297,51 @@ fun QuranScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     TextButton(
-                        onClick = { moveSelectedTafsirAyah(ayahNumber - 1) },
-                        enabled = ayahNumber > 1
+                        onClick = { previousGroup?.let { moveSelectedTafsirGroup(it.first) } },
+                        enabled = previousGroup != null
                     ) {
-                        Text("‹ Previous Ayah", fontSize = 11.sp)
+                        Text("‹ Previous", fontSize = 11.sp)
                     }
                     TextButton(
-                        onClick = { moveSelectedTafsirAyah(ayahNumber + 1) },
-                        enabled = ayahNumber < surah.ayahs.size
+                        onClick = { nextGroup?.let { moveSelectedTafsirGroup(it.first) } },
+                        enabled = nextGroup != null
                     ) {
-                        Text("Next Ayah ›", fontSize = 11.sp)
+                        Text("Next ›", fontSize = 11.sp)
                     }
                 }
-                CompositionLocalProvider(
-                    LocalLayoutDirection provides if (TafsirText.isRtl(state.selectedTafseerLanguage)) {
-                        LayoutDirection.Rtl
-                    } else {
-                        LayoutDirection.Ltr
-                    }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(
-                        text = TafsirText.clean(state.selectedTafseerContent).ifBlank {
-                            "No commentary cached for this ayah in ${state.selectedTafseerTitle}."
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    group.forEach { number ->
+                        val commentary = state.inlineTafsirByAyah[number]
+                            ?.takeIf { it.isNotBlank() }
+                            ?: if (number == ayahNumber) state.selectedTafseerContent else ""
+                        Text(
+                            text = "Ayah $number",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        CompositionLocalProvider(
+                            LocalLayoutDirection provides if (TafsirText.isRtl(state.selectedTafseerLanguage)) {
+                                LayoutDirection.Rtl
+                            } else {
+                                LayoutDirection.Ltr
+                            }
+                        ) {
+                            Text(
+                                text = TafsirText.clean(commentary).ifBlank {
+                                    "No commentary cached for ayah $number in ${state.selectedTafseerTitle}."
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
                 }
             }
         }

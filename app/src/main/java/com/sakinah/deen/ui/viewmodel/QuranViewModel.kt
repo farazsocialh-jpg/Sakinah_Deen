@@ -253,7 +253,8 @@ class QuranViewModel(
                 ?: QuranReaderPreferences.DEFAULT_MUSHAF_LAYOUT,
             wbwLayoutMode = quranReaderPreferences?.wbwLayoutMode ?: WbwLayoutMode.DEFAULT,
             wbwEnabled = quranReaderPreferences?.wbwEnabled ?: false,
-            inlineTafsirEnabled = quranReaderPreferences?.inlineTafsirEnabled ?: false
+            // Inline tafsir is part of the reading experience, not an optional dock toggle.
+            inlineTafsirEnabled = true
         )
     )
     val uiState: StateFlow<QuranUiState> = _uiState.asStateFlow()

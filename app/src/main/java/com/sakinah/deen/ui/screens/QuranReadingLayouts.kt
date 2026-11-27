@@ -90,6 +90,42 @@ internal data class QuranAyahUiState(
 internal fun cleanQuranArabic(raw: String): String =
     raw.replace("{", "").replace("}", "").trim()
 
+/**
+ * Builds ayah groups from the commentary actually available for the open surah. Consecutive
+ * ayahs with cached tafsir become a group (capped at four), and ayahs without cached tafsir are
+ * still grouped so every header has a meaningful label.
+ */
+internal fun tafsirAyahGroups(ayahCount: Int, availableAyahs: Set<Int>): List<IntRange> {
+    if (ayahCount <= 0) return emptyList()
+    val groups = mutableListOf<IntRange>()
+    fun appendRun(numbers: List<Int>) {
+        if (numbers.isEmpty()) return
+        var start = numbers.first()
+        var previous = start
+        for (number in numbers.drop(1)) {
+            if (number == previous + 1 && number - start < 4) {
+                previous = number
+            } else {
+                groups += start..previous
+                start = number
+                previous = number
+            }
+        }
+        groups += start..previous
+    }
+
+    appendRun(availableAyahs.filter { it in 1..ayahCount }.sorted())
+    val covered = groups.flatMap { it.toList() }.toSet()
+    appendRun((1..ayahCount).filterNot { it in covered })
+    return groups.distinct().sortedBy { it.first }
+}
+
+internal fun tafsirLabelFor(groups: List<IntRange>, ayahNumber: Int): String {
+    val group = groups.firstOrNull { ayahNumber in it }
+        ?: return "Tafsir $ayahNumber"
+    return "Tafsir ${group.first}:${group.last}"
+}
+
 private fun verseWithMarker(ayah: AyahModel): String {
     val marker = ArabicNormalizer.toArabicIndicNumerals(ayah.numberInSurah)
     return "${cleanQuranArabic(ayah.arabicText)} ﴿$marker﴾"
@@ -230,6 +266,7 @@ private fun AyahArabic(
 private fun AyahHeaderRow(
     ayah: AyahModel,
     bookmarked: Boolean,
+    tafsirLabel: String,
     onTafseer: () -> Unit,
     onToggleBookmark: () -> Unit
 ) {
@@ -243,7 +280,7 @@ private fun AyahHeaderRow(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TafseerLink(onClick = onTafseer)
+            TafseerLink(text = tafsirLabel, onClick = onTafseer)
             BookmarkToggle(bookmarked = bookmarked, onClick = onToggleBookmark)
         }
     }
@@ -266,6 +303,7 @@ private fun InlineAyahBody(
     onTagMistake: (AyahModel, String) -> Unit,
     onToggleBookmark: (AyahModel) -> Unit,
     onWordClick: (QulWord) -> Unit,
+    tafsirGroups: List<IntRange>,
     inlineTafsirEnabled: Boolean,
     activeTafsirBookName: String,
     inlineTafsirByAyah: Map<Int, String>,
@@ -284,6 +322,7 @@ private fun InlineAyahBody(
         AyahHeaderRow(
             ayah = ayah,
             bookmarked = ayah.numberInSurah in state.bookmarkedAyahNumbers,
+            tafsirLabel = tafsirLabelFor(tafsirGroups, ayah.numberInSurah),
             onTafseer = { onTafseer(ayah) },
             onToggleBookmark = { onToggleBookmark(ayah) }
         )
@@ -396,6 +435,7 @@ private fun SplitColumnLayout(
     wbwWords: Map<Int, List<QulWord>> = emptyMap(),
     qulScript: String = QulWord.QUL_SCRIPT_UTHMANI,
     onWordClick: (QulWord) -> Unit = {},
+    tafsirGroups: List<IntRange> = emptyList(),
     inlineTafsirEnabled: Boolean = false,
     activeTafsirBookName: String = "",
     inlineTafsirByAyah: Map<Int, String> = emptyMap(),
@@ -427,6 +467,7 @@ private fun SplitColumnLayout(
                         onTagMistake = onTagMistake,
                         onToggleBookmark = onToggleBookmark,
                         onWordClick = onWordClick,
+                        tafsirGroups = tafsirGroups,
                         inlineTafsirEnabled = inlineTafsirEnabled,
                         activeTafsirBookName = activeTafsirBookName,
                         inlineTafsirByAyah = inlineTafsirByAyah,
@@ -471,7 +512,10 @@ private fun SplitColumnLayout(
                             }
                             TranslationText(ayah, state, fontSize = 12)
                             HifzTagRow(surah, ayah, state, onTagMistake)
-                            TafseerLink(onClick = { onTafseer(ayah) })
+                            TafseerLink(
+                                text = tafsirLabelFor(tafsirGroups, ayah.numberInSurah),
+                                onClick = { onTafseer(ayah) }
+                            )
                         }
                         Column(
                             modifier = Modifier
@@ -513,6 +557,7 @@ private fun ThumbBottomDockLayout(
     wbwWords: Map<Int, List<QulWord>> = emptyMap(),
     qulScript: String = QulWord.QUL_SCRIPT_UTHMANI,
     onWordClick: (QulWord) -> Unit = {},
+    tafsirGroups: List<IntRange> = emptyList(),
     inlineTafsirEnabled: Boolean = false,
     activeTafsirBookName: String = "",
     inlineTafsirByAyah: Map<Int, String> = emptyMap(),
@@ -549,6 +594,7 @@ private fun ThumbBottomDockLayout(
                         onTagMistake = onTagMistake,
                         onToggleBookmark = onToggleBookmark,
                         onWordClick = onWordClick,
+                        tafsirGroups = tafsirGroups,
                         inlineTafsirEnabled = inlineTafsirEnabled,
                         activeTafsirBookName = activeTafsirBookName,
                         inlineTafsirByAyah = inlineTafsirByAyah,
@@ -575,7 +621,10 @@ private fun ThumbBottomDockLayout(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                TafseerLink(onClick = { onTafseer(ayah) })
+                                TafseerLink(
+                                text = tafsirLabelFor(tafsirGroups, ayah.numberInSurah),
+                                onClick = { onTafseer(ayah) }
+                            )
                                 BookmarkToggle(
                                     bookmarked = ayah.numberInSurah in state.bookmarkedAyahNumbers,
                                     onClick = { onToggleBookmark(ayah) }
@@ -709,6 +758,7 @@ internal fun QuranReadingLayoutContent(
     wbwWords: Map<Int, List<QulWord>> = emptyMap(),
     qulScript: String = QulWord.QUL_SCRIPT_UTHMANI,
     onWordClick: (QulWord) -> Unit = {},
+    tafsirGroups: List<IntRange> = emptyList(),
     inlineTafsirEnabled: Boolean = false,
     activeTafsirBookName: String = "",
     inlineTafsirByAyah: Map<Int, String> = emptyMap(),
@@ -720,13 +770,13 @@ internal fun QuranReadingLayoutContent(
     when (layout) {
         QuranReadingLayout.SPLIT_COLUMN -> SplitColumnLayout(
             surah, state, onAyahClick, onTafseer, onTagMistake, onToggleBookmark, listState,
-            wbwWords, qulScript, onWordClick,
+            wbwWords, qulScript, onWordClick, tafsirGroups,
             inlineTafsirEnabled, activeTafsirBookName, inlineTafsirByAyah,
             tafsirOfflineReady, tafsirIsRtl, onOpenTafsirBooks, translationFontSp
         )
         QuranReadingLayout.THUMB_BOTTOM_DOCK -> ThumbBottomDockLayout(
             surah, state, onAyahClick, onTafseer, onTagMistake, onToggleBookmark, listState,
-            wbwWords, qulScript, onWordClick,
+            wbwWords, qulScript, onWordClick, tafsirGroups,
             inlineTafsirEnabled, activeTafsirBookName, inlineTafsirByAyah,
             tafsirOfflineReady, tafsirIsRtl, onOpenTafsirBooks, translationFontSp
         )
