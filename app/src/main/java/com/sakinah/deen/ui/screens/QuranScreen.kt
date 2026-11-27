@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -106,6 +107,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -224,6 +226,11 @@ fun QuranScreen(
     var quickJumpQuery by remember { mutableStateOf("") }
     var quickJumpSurah by remember { mutableIntStateOf(surah.number) }
     var scrubberActive by remember { mutableStateOf(false) }
+    var scrubberVisible by remember { mutableStateOf(false) }
+    val scrubberAlpha by animateFloatAsState(
+        targetValue = if (scrubberVisible && !focusMode) 1f else 0f,
+        label = "scrubber_alpha"
+    )
     var scrubberAyah by remember { mutableIntStateOf(1) }
     var overscrollHandled by remember { mutableStateOf(false) }
     // 0 means no ayah action bar; any other value is the ayah it acts on.
@@ -316,6 +323,22 @@ fun QuranScreen(
         snapshotFlow { listState.isScrollInProgress }
             .filter { it }
             .collect { showFontSlider = false }
+    }
+
+    // The vertical scrubber appears only while reading is moving (or being dragged) and
+    // fades away shortly after, instead of sitting on the page permanently.
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress || scrubberActive }
+            .collect { moving ->
+                if (moving) {
+                    scrubberVisible = true
+                } else {
+                    delay(900)
+                    if (!listState.isScrollInProgress && !scrubberActive) {
+                        scrubberVisible = false
+                    }
+                }
+            }
     }
 
     // Track direction from the lazy list itself so the dock can recede while the reader
@@ -676,14 +699,21 @@ fun QuranScreen(
                             onOpenTafsirBooks = openTafsirBooks,
                             translationFontSp = appearanceConfig.translationFontSize
                         )
-                        FastAyahScrubber(
-                            ayahCount = displaySurah.ayahs.size,
-                            listState = listState,
-                            active = scrubberActive,
-                            activeAyah = scrubberAyah,
-                            onActiveChange = { scrubberActive = it },
-                            onAyahChange = { scrubberAyah = it }
-                        )
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .alpha(scrubberAlpha)
+                        ) {
+                            FastAyahScrubber(
+                                ayahCount = displaySurah.ayahs.size,
+                                listState = listState,
+                                active = scrubberActive,
+                                activeAyah = scrubberAyah,
+                                enabled = scrubberVisible && !focusMode,
+                                onActiveChange = { scrubberActive = it },
+                                onAyahChange = { scrubberAyah = it }
+                            )
+                        }
                         if (atEndOfSurah && surah.number < 114 && !focusMode) {
                             Surface(
                                 modifier = Modifier
@@ -1749,6 +1779,7 @@ private fun FastAyahScrubber(
     listState: LazyListState,
     active: Boolean,
     activeAyah: Int,
+    enabled: Boolean = true,
     onActiveChange: (Boolean) -> Unit,
     onAyahChange: (Int) -> Unit
 ) {
@@ -1765,7 +1796,8 @@ private fun FastAyahScrubber(
                 .fillMaxHeight()
                 .width(18.dp)
                 .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-                .pointerInput(ayahCount) {
+                .pointerInput(ayahCount, enabled) {
+                    if (!enabled) return@pointerInput
                     detectDragGestures(
                         onDragStart = { onActiveChange(true) },
                         onDragEnd = { onActiveChange(false) },
