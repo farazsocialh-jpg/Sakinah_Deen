@@ -199,30 +199,6 @@ fun ToolsHubScreen(
                 )
             }
 
-            HubSectionTitle(stringResource(R.string.tools_section_discover))
-            SakinahCard(contentPadding = 0.dp) {
-                HubRow(
-                    icon = Icons.Outlined.Palette,
-                    title = stringResource(R.string.tools_replay_tour_title),
-                    subtitle = stringResource(R.string.tools_replay_tour_subtitle),
-                    onClick = { onReplayTour?.invoke() }
-                )
-                HubDivider()
-                HubRow(
-                    icon = Icons.Outlined.Info,
-                    title = stringResource(R.string.tools_whats_new_title),
-                    subtitle = stringResource(R.string.tools_whats_new_subtitle),
-                    onClick = { showWhatsNew = true }
-                )
-                HubDivider()
-                HubRow(
-                    icon = Icons.Outlined.DownloadForOffline,
-                    title = stringResource(R.string.tools_offline_title),
-                    subtitle = stringResource(R.string.tools_offline_subtitle),
-                    onClick = { onNavigate(SakinahScreen.SettingsQuran) }
-                )
-            }
-
             HubSectionTitle(stringResource(R.string.tools_section_settings))
             SakinahCard(contentPadding = 0.dp) {
                 HubRow(
@@ -250,6 +226,30 @@ fun ToolsHubScreen(
                     icon = Icons.Outlined.DownloadForOffline,
                     title = stringResource(R.string.tools_quran_offline_title),
                     subtitle = stringResource(R.string.tools_quran_offline_subtitle),
+                    onClick = { onNavigate(SakinahScreen.SettingsQuran) }
+                )
+            }
+
+            HubSectionTitle(stringResource(R.string.tools_section_discover))
+            SakinahCard(contentPadding = 0.dp) {
+                HubRow(
+                    icon = Icons.Outlined.Palette,
+                    title = stringResource(R.string.tools_replay_tour_title),
+                    subtitle = stringResource(R.string.tools_replay_tour_subtitle),
+                    onClick = { onReplayTour?.invoke() }
+                )
+                HubDivider()
+                HubRow(
+                    icon = Icons.Outlined.Info,
+                    title = stringResource(R.string.tools_whats_new_title),
+                    subtitle = stringResource(R.string.tools_whats_new_subtitle),
+                    onClick = { showWhatsNew = true }
+                )
+                HubDivider()
+                HubRow(
+                    icon = Icons.Outlined.DownloadForOffline,
+                    title = stringResource(R.string.tools_offline_title),
+                    subtitle = stringResource(R.string.tools_offline_subtitle),
                     onClick = { onNavigate(SakinahScreen.SettingsQuran) }
                 )
             }

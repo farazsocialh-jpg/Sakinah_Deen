@@ -61,9 +61,6 @@ import com.sakinah.deen.data.prefs.SalahHomeLayout
 import com.sakinah.deen.ui.viewmodel.SalahUiState
 import kotlin.math.roundToInt
 
-internal val SalahEmerald = Color(0xFF22C55E)
-internal val SalahAmber = Color(0xFFF59E0B)
-internal val SalahCoral = Color(0xFFEF4444)
 
 internal data class SalahHeroMetrics(
     val remainingFraction: Float,
@@ -92,8 +89,8 @@ internal fun rememberSalahHeroMetrics(state: SalahUiState): SalahHeroMetrics {
 
 @Composable
 private fun progressBrush(completed: Boolean, remainingPercent: Int): Brush = when {
-    completed -> Brush.horizontalGradient(listOf(SalahEmerald, Color(0xFF4ADE80)))
-    remainingPercent <= 20 -> Brush.horizontalGradient(listOf(SalahAmber, SalahCoral))
+    completed -> Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.primary, Color(0xFF4ADE80)))
+    remainingPercent <= 20 -> Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.error))
     else -> Brush.horizontalGradient(
         listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)
     )
@@ -101,8 +98,8 @@ private fun progressBrush(completed: Boolean, remainingPercent: Int): Brush = wh
 
 @Composable
 private fun accentColor(completed: Boolean, remainingPercent: Int): Color = when {
-    completed -> SalahEmerald
-    remainingPercent <= 20 -> SalahAmber
+    completed -> MaterialTheme.colorScheme.primary
+    remainingPercent <= 20 -> MaterialTheme.colorScheme.tertiary
     else -> MaterialTheme.colorScheme.primary
 }
 
@@ -288,6 +285,7 @@ internal fun LiveSkySunArcCard(
             .clip(RoundedCornerShape(16.dp))
             .background(Brush.verticalGradient(backdrop))
     ) {
+        val arcAccent = MaterialTheme.colorScheme.tertiary
         Canvas(modifier = Modifier.matchParentSize()) {
             val insetX = 64.dp.toPx()
             val top = 20.dp.toPx()
@@ -323,7 +321,7 @@ internal fun LiveSkySunArcCard(
                 val t0 = progress * i / steps
                 val t1 = progress * (i + 1) / steps
                 drawLine(
-                    color = SalahAmber,
+                    color = arcAccent,
                     start = point(t0),
                     end = point(t1),
                     strokeWidth = 2.5.dp.toPx(),
@@ -332,7 +330,7 @@ internal fun LiveSkySunArcCard(
             }
             if (state.isDaylight) {
                 val sun = point(progress)
-                drawCircle(color = SalahAmber.copy(alpha = 0.25f), radius = 11.dp.toPx(), center = sun)
+                drawCircle(color = arcAccent.copy(alpha = 0.25f), radius = 11.dp.toPx(), center = sun)
                 drawCircle(color = Color(0xFFFFD54F), radius = 5.dp.toPx(), center = sun)
             } else {
                 drawCircle(
@@ -394,7 +392,7 @@ internal fun PrayerCheckCircle(
 ) {
     Surface(
         shape = CircleShape,
-        color = if (completed) SalahEmerald else MaterialTheme.colorScheme.surfaceVariant,
+        color = if (completed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
         border = if (completed) null else BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier
             .size(size)
@@ -507,7 +505,7 @@ private fun NextMetaRow(
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 0.6.sp,
-            color = if (completed) SalahEmerald else MaterialTheme.colorScheme.primary
+            color = if (completed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary
         )
         trailing()
     }
@@ -561,7 +559,7 @@ private fun CountdownRow(
             text = "${metrics.remainingPercent}%",
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
-            color = if (completed) SalahEmerald else MaterialTheme.colorScheme.primary
+            color = if (completed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary
         )
     }
 }
@@ -594,7 +592,7 @@ internal fun ClassicHeroCard(
         },
         border = BorderStroke(
             1.dp,
-            if (completed) SalahEmerald.copy(alpha = 0.75f) else MaterialTheme.colorScheme.outline
+            if (completed) MaterialTheme.colorScheme.primary.copy(alpha = 0.75f) else MaterialTheme.colorScheme.outline
         )
     ) {
         Column(
@@ -725,7 +723,7 @@ internal fun BentoHero(
                             text = "NOW",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (completed) SalahEmerald else MaterialTheme.colorScheme.primary
+                            color = if (completed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary
                         )
                         PrayerCheckCircle(completed, onToggleCurrent, size = 40.dp)
                     }
@@ -807,8 +805,8 @@ internal fun CircularHero(
 ) {
     val metrics = rememberSalahHeroMetrics(state)
     val completed = state.isCurrentPrayerCompleted
-    val arcColor = if (completed) SalahEmerald
-    else if (metrics.remainingPercent <= 20) SalahCoral
+    val arcColor = if (completed) MaterialTheme.colorScheme.primary
+    else if (metrics.remainingPercent <= 20) MaterialTheme.colorScheme.error
     else MaterialTheme.colorScheme.primary
     val trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
 
@@ -832,7 +830,7 @@ internal fun CircularHero(
                         text = "NEXT: ${state.nextPrayerName.uppercase()} · ${state.nextPrayerStartTimeFormatted.ifBlank { "--:--" }}",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (completed) SalahEmerald else MaterialTheme.colorScheme.primary
+                        color = if (completed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary
                     )
                 }
                 PrayerCheckCircle(completed, onToggleCurrent, size = 40.dp)
@@ -906,7 +904,7 @@ internal fun SeamlessHero(
                     text = "NEXT: ${state.nextPrayerName.uppercase()} · ${state.nextPrayerStartTimeFormatted.ifBlank { "--:--" }}",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (completed) SalahEmerald else MaterialTheme.colorScheme.primary
+                    color = if (completed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary
                 )
             }
             Text(
@@ -975,7 +973,7 @@ internal fun DailyDotsHero(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = if (completed) SalahEmerald else MaterialTheme.colorScheme.primary
+                            color = if (completed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary
                         )
                     }
                 }
@@ -985,7 +983,7 @@ internal fun DailyDotsHero(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Surface(
                                 shape = CircleShape,
-                                color = if (done) SalahEmerald else Color.Transparent,
+                                color = if (done) MaterialTheme.colorScheme.primary else Color.Transparent,
                                 border = if (done) null else BorderStroke(
                                     1.dp,
                                     MaterialTheme.colorScheme.outline
@@ -1132,7 +1130,7 @@ internal fun PrayerGrid(
                                             } else {
                                                 "Mark ${prayer.nameEnglish} complete"
                                             },
-                                            tint = if (prayer.isFardCompleted) SalahEmerald
+                                            tint = if (prayer.isFardCompleted) MaterialTheme.colorScheme.primary
                                             else MaterialTheme.colorScheme.outline,
                                             modifier = Modifier.size(18.dp)
                                         )

@@ -238,8 +238,8 @@ fun SalahScreen(
                         ) {
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
-                                color = SalahAmber.copy(alpha = 0.12f),
-                                border = BorderStroke(1.dp, SalahAmber.copy(alpha = 0.45f)),
+                                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.45f)),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column(
@@ -354,7 +354,7 @@ fun SalahScreen(
                                 fardPrayers.forEach { p ->
                                     val isDone = p.isFardCompleted
                                     val segmentColor = if (isDone) {
-                                        Color(0xFF3D5A36)
+                                        MaterialTheme.colorScheme.primary
                                     } else {
                                         MaterialTheme.colorScheme.surfaceVariant
                                     }
@@ -782,7 +782,7 @@ private fun SalahWarningLine(text: String, onClick: () -> Unit) {
         Icon(
             imageVector = Icons.Default.Warning,
             contentDescription = null,
-            tint = SalahAmber,
+            tint = MaterialTheme.colorScheme.tertiary,
             modifier = Modifier.size(14.dp)
         )
         Spacer(Modifier.width(6.dp))
@@ -810,8 +810,8 @@ private fun StatusAccentPrayerRow(
     val isActive = isCurrent
 
     val accentColor = when {
-        isPrayed -> Color(0xFF3D5A36)
-        isActive -> Color(0xFFE68A1E)
+        isPrayed -> MaterialTheme.colorScheme.primary
+        isActive -> MaterialTheme.colorScheme.tertiary
         else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
     }
 
@@ -854,7 +854,7 @@ private fun StatusAccentPrayerRow(
                         text = prayer.nameArabic,
                         fontFamily = AmiriFontFamily,
                         fontSize = 15.sp,
-                        color = if (isActive) Color(0xFFE68A1E) else MaterialTheme.colorScheme.primary,
+                        color = if (isActive) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
                         maxLines = 1,
                         softWrap = false
                     )
@@ -867,7 +867,7 @@ private fun StatusAccentPrayerRow(
                     text = prayer.time,
                     fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
                     fontSize = 14.sp,
-                    color = if (isActive) Color(0xFFE68A1E) else MaterialTheme.colorScheme.onSurface,
+                    color = if (isActive) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     softWrap = false
                 )
@@ -887,7 +887,7 @@ private fun StatusAccentPrayerRow(
                         isPrayed -> {
                             Surface(
                                 shape = CircleShape,
-                                color = Color(0xFF3D5A36),
+                                color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(30.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
@@ -905,8 +905,8 @@ private fun StatusAccentPrayerRow(
                             // outstanding gets a clock instead of a confusing tick.
                             Surface(
                                 shape = CircleShape,
-                                color = Color(0xFFE68A1E).copy(alpha = 0.12f),
-                                border = BorderStroke(1.5.dp, Color(0xFFE68A1E)),
+                                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f),
+                                border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.tertiary),
                                 modifier = Modifier.size(30.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
@@ -916,7 +916,7 @@ private fun StatusAccentPrayerRow(
                                             R.string.salah_toggle_prayer_cd,
                                             prayer.nameEnglish
                                         ),
-                                        tint = Color(0xFFE68A1E),
+                                        tint = MaterialTheme.colorScheme.tertiary,
                                         modifier = Modifier.size(16.dp)
                                     )
                                 }

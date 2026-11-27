@@ -967,6 +967,12 @@ class SalahViewModel(
         )
     }
 
+    /** Friday's Dhuhr is displayed as Jummah, so resolve completion by stable id first. */
+    private fun prayerTypeForPrayer(prayer: PrayerModel): PrayerType? =
+        runCatching { PrayerType.valueOf(prayer.id.uppercase()) }.getOrNull()
+            ?: runCatching { PrayerType.valueOf(prayer.nameEnglish.uppercase()) }.getOrNull()
+            ?: PrayerType.DHUHR.takeIf { prayer.nameEnglish.equals("Jummah", ignoreCase = true) }
+
     private fun observeTodaySalahRecords(epochDay: Long) {
         if (observedEpochDay == epochDay && salahObserverJob?.isActive == true) return
         observedEpochDay = epochDay
@@ -981,7 +987,7 @@ class SalahViewModel(
                     if (state.prayersList.isEmpty()) state
                     else {
                         val updatedList = state.prayersList.map { prayer ->
-                            val type = runCatching { PrayerType.valueOf(prayer.nameEnglish.uppercase()) }.getOrNull()
+                            val type = prayerTypeForPrayer(prayer)
                             val record = type?.let { completedRecordsByPrayer[it] }
                             prayer.copy(
                                 isFardCompleted = record?.isCompleted == true,
