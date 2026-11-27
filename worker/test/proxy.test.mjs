@@ -64,6 +64,24 @@ test("clampGenerationConfig caps the output budget instead of trusting the clien
   assert.equal(clampGenerationConfig({ contents: [] }).generationConfig.maxOutputTokens, 2048);
 });
 
+test("clampGenerationConfig strips sampling params rejected by Gemini 3.x", () => {
+  const { generationConfig } = clampGenerationConfig({
+    contents: [],
+    generationConfig: {
+      temperature: 0.35,
+      topP: 0.95,
+      topK: 40,
+      candidateCount: 2,
+      maxOutputTokens: 2048,
+    },
+  });
+  for (const key of ["temperature", "topP", "topK", "candidateCount"]) {
+    assert.equal(key in generationConfig, false);
+  }
+  assert.deepEqual(generationConfig.thinkingConfig, { thinkingLevel: "low" });
+  assert.equal(generationConfig.maxOutputTokens, 2048);
+});
+
 test("tokensMatch is constant-time over digests and rejects wrong, empty and partial tokens", async () => {
   assert.equal(await tokensMatch("abc123", "abc123"), true);
   assert.equal(await tokensMatch("abc124", "abc123"), false);

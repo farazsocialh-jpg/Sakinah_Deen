@@ -35,7 +35,9 @@ const MAX_NOTIFY_BODY_BYTES = 16 * 1024;
 const MAX_PROMPT_CHARS = 16_000;
 const MAX_CONTENTS = 40;
 const MAX_OUTPUT_TOKENS = 2048;
-const DEFAULT_MODEL = "gemini-2.0-flash";
+// Gemini 2.0 Flash was shut down on 2026-06-01. 3.6 Flash is the supported
+// generateContent/streamGenerateContent replacement; keep wrangler.toml in sync.
+const DEFAULT_MODEL = "gemini-3.6-flash";
 const RATE_LIMIT_WINDOW_SECONDS = 60;
 
 const ERROR_STATUS = {
@@ -241,7 +243,11 @@ function validatePayload(payload) {
   return null;
 }
 
-/** Cost control: clamp the generation budget instead of trusting the client. */
+/**
+ * Cost control plus Gemini 3.x compatibility: clamp the generation budget and
+ * strip sampling parameters that 3.x ignores today and rejects in future
+ * model generations. A low thinking level keeps scholar answers quick.
+ */
 function clampGenerationConfig(payload) {
   const config =
     payload.generationConfig && typeof payload.generationConfig === "object"
@@ -251,10 +257,23 @@ function clampGenerationConfig(payload) {
   const capped = Number.isFinite(requested) && requested > 0
     ? Math.min(requested, MAX_OUTPUT_TOKENS)
     : MAX_OUTPUT_TOKENS;
-  return {
-    ...payload,
-    generationConfig: { ...config, maxOutputTokens: capped },
+
+  const safeConfig = { ...config };
+  for (const key of [
+    "temperature", "topP", "top_p", "topK", "top_k",
+    "candidateCount", "candidate_count", "thinkingBudget", "thinking_budget",
+  ]) {
+    delete safeConfig[key];
+  }
+  safeConfig.thinkingConfig = {
+    ...(safeConfig.thinkingConfig && typeof safeConfig.thinkingConfig === "object"
+      ? safeConfig.thinkingConfig
+      : {}),
+    thinkingLevel: "low",
   };
+  safeConfig.maxOutputTokens = capped;
+
+  return { ...payload, generationConfig: safeConfig };
 }
 
 /* ------------------------------------------------------------------ */

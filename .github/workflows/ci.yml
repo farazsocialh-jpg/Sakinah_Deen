@@ -65,6 +65,15 @@ jobs:
           AI_PROXY_URL: ${{ vars.AI_PROXY_URL || secrets.AI_PROXY_URL }}
         run: ./gradlew :app:assembleDebug --build-cache --parallel
 
+      - name: Report debug signing SHA-1
+        # The Google OAuth Android client is matched by package + signing SHA-1. CI signs
+        # with its own debug key, which is not the same as a developer's ~/.android key.
+        run: |
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          echo '### Debug APK signing fingerprint' >> "$GITHUB_STEP_SUMMARY"
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/debug/app-debug.apk \
+            | grep 'SHA-1 digest' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:

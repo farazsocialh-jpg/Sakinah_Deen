@@ -252,8 +252,8 @@ class SunniAiClient(
         put(
             "generationConfig",
             buildJsonObject {
-                put("temperature", 0.35)
-                put("topP", 0.95)
+                // Gemini 3.x ignores/rejects temperature and topP. The proxy also strips
+                // them from older APKs, so keep the wire format compatible with both.
                 put("maxOutputTokens", 2048)
             }
         )
