@@ -145,6 +145,16 @@ class SunniAiScholarRepositoryImpl(
                         "When a Muslim travels the Shar'i distance (approx 80-88 km), the Sunnah grants the concession (Rukhsah) of Qasr (shortening 4-Rakat prayers to 2) and Jam‘ (combining Dhuhr with Asr, and Maghrib with Isha).\n\n" +
                         "> \"And when you travel throughout the land, there is no blame upon you for shortening an aspect of prayer...\" (Surah An-Nisa 4:101)"
             }
+            qLower.contains("tahajjud") || qLower.contains("qiyam al-layl") ||
+                qLower.contains("night prayer") || qLower.contains("witr") -> {
+                "Tahajjud (قيام الليل) is a voluntary prayer offered after Isha until Fajr. " +
+                        "Its virtue is greatest in the last third of the night, and it is normally " +
+                        "prayed in sets of two rak‘at, concluded with Witr.\n\n" +
+                        "> \"And from the night, arise and pray in it as an additional prayer for you; " +
+                        "perhaps your Lord will raise you to a praised station.\" (Surah Al-Isra 17:79)\n\n" +
+                        "This is an educational summary, not a personal fatwa; asks about specific " +
+                        "circumstances should go to a qualified scholar."
+            }
             qLower.contains("zakat") || qLower.contains("stock") -> {
                 "Regarding Zakat on liquid stocks and equities:\n\n" +
                         "According to contemporary Islamic Fiqh Academies and classical principles of Trade Goods (Urud al-Tijarah):\n" +
@@ -152,12 +162,10 @@ class SunniAiScholarRepositoryImpl(
                         "2. Long-term dividend investment: Zakat is calculated strictly on the company's underlying liquid and net trade assets (~25-30% proxy) at 2.5%."
             }
             else -> {
-                "In classical Islamic jurisprudence, answers are derived strictly from the four established Usul:\n" +
-                        "1. The Holy Quran\n" +
-                        "2. The authentic Prophetic Sunnah (Kutub al-Tis‘ah)\n" +
-                        "3. Ijma‘ (Scholarly consensus of the Sahabah and Salaf)\n" +
-                        "4. Qiyas (Sound analogical deduction)\n\n" +
-                        "> \"O you who have believed, obey Allah and obey the Messenger and those in authority among you.\" (Surah An-Nisa 4:59)"
+                "I don't have a verified offline answer for that specific question. The live " +
+                        "Scholar service is not configured in this build, so no sourced texts could " +
+                        "be retrieved. Please configure the Scholar backend, rephrase the question, " +
+                        "or consult a qualified scholar."
             }
         }
 
@@ -202,22 +210,17 @@ class SunniAiScholarRepositoryImpl(
                     navigationDeepLink = "hadith/abudawud/1205"
                 )
             )
-            else -> listOf(
+            qLower.contains("tahajjud") || qLower.contains("qiyam al-layl") ||
+                qLower.contains("night prayer") || qLower.contains("witr") -> listOf(
                 ProofSourceDto(
-                    title = "Surah An-Nisa 4:59",
+                    title = "Surah Al-Isra 17:79",
                     referenceType = "QURAN",
-                    primaryTextArabic = "يَا أَيُّهَا الَّذِينَ آمَنُوا أَطِيعُوا اللَّهَ وَأَطِيعُوا الرَّسُولَ",
-                    translation = "O you who have believed, obey Allah and obey the Messenger.",
-                    navigationDeepLink = "quran/4/59"
-                ),
-                ProofSourceDto(
-                    title = "Sahih al-Bukhari #1",
-                    referenceType = "HADITH",
-                    primaryTextArabic = "إِنَّمَا الأَعْمَالُ بِالنِّيَّاتِ",
-                    translation = "Actions are judged by intentions.",
-                    navigationDeepLink = "hadith/bukhari/1"
+                    primaryTextArabic = "وَمِنَ اللَّيْلِ فَتَهَجَّدْ بِهِ نَافِلَةً لَّكَ",
+                    translation = "And from the night, arise and pray as an additional prayer for you.",
+                    navigationDeepLink = "quran/17/79"
                 )
             )
+            else -> emptyList()
         }
     }
 
@@ -230,13 +233,15 @@ class SunniAiScholarRepositoryImpl(
                 "Shafi'i" to "Always performed immediately prior to the first Salam (Qabli) after final Tashahhud.",
                 "Hanbali" to "Before Salam for omissions and doubt; after Salam when based on prevailing probability or completed after early Salam."
             )
-        } else {
+        } else if (qLower.contains("travel") || qLower.contains("qasr") || qLower.contains("jam")) {
             mapOf(
                 "Hanafi" to "Structured upon Zahir al-Riwayah and foundational Kufan jurisprudence.",
                 "Maliki" to "Grounded in the Muwatta and the continuous collective practice of Madinah (Amal Ahl al-Madinah).",
                 "Shafi'i" to "Rooted in rigorous linguistic Usul formulated by Imam al-Shafi'i in Al-Risalah.",
                 "Hanbali" to "Prioritizes Marfu‘ Hadith and Athar of the Sahabah over speculative Qiyas."
             )
+        } else {
+            emptyMap()
         }
     }
 }
