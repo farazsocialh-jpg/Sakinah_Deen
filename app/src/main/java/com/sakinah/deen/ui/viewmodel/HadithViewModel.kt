@@ -62,6 +62,10 @@ data class HadithUiState(
 sealed class HadithUiIntent {
     data class SelectTab(val tab: HadithTab) : HadithUiIntent()
     data class SelectBook(val bookKey: String) : HadithUiIntent()
+    /** Books → Chapters: selects a book without leaving the Books tab. */
+    data class OpenBook(val bookKey: String) : HadithUiIntent()
+    /** Chapters → Books: clears the book selection and restores the library feed. */
+    data object BackToBooks : HadithUiIntent()
     data class SelectLanguage(val languageCode: String) : HadithUiIntent()
     data class SelectSection(val sectionNumber: Int) : HadithUiIntent()
     data class SearchQueryChanged(val query: String) : HadithUiIntent()
@@ -206,6 +210,39 @@ class HadithViewModel(
                 } else {
                     syncAllBooks(_uiState.value.selectedLanguageCode)
                 }
+                observeDatabaseHadiths()
+            }
+            is HadithUiIntent.OpenBook -> {
+                _uiState.update {
+                    it.copy(
+                        selectedTab = HadithTab.BOOKS,
+                        selectedBookKey = intent.bookKey,
+                        resolvedLanguageCode = null,
+                        selectedSectionNumber = 0,
+                        isLoading = true,
+                        errorMessage = null,
+                        downloadProgress = null
+                    )
+                }
+                updateDerivedFromCatalog(intent.bookKey)
+                applyFilterAndSearch()
+                syncBook(intent.bookKey, _uiState.value.selectedLanguageCode)
+                observeDatabaseHadiths()
+            }
+            is HadithUiIntent.BackToBooks -> {
+                _uiState.update {
+                    it.copy(
+                        selectedTab = HadithTab.BOOKS,
+                        selectedBookKey = "all",
+                        selectedSectionNumber = 0,
+                        isLoading = false,
+                        errorMessage = null,
+                        downloadProgress = null
+                    )
+                }
+                updateDerivedFromCatalog("all")
+                applyFilterAndSearch()
+                syncAllBooks(_uiState.value.selectedLanguageCode)
                 observeDatabaseHadiths()
             }
             is HadithUiIntent.SelectLanguage -> {

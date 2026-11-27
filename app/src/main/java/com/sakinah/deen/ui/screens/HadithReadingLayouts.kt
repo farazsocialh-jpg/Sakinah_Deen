@@ -35,8 +35,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -48,9 +50,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sakinah.deen.data.model.HadithModel
@@ -880,6 +885,117 @@ private fun MinimalistZenLayout(
     }
 }
 
+/** Side-by-side reader: translation/narrator left, RTL Arabic right. */
+@Composable
+private fun HadithSplitReader(
+    hadiths: List<HadithModel>,
+    listState: LazyListState,
+    highlightedHadithId: String?,
+    arabicFontSp: Float,
+    translationFontSp: Float,
+    onToggleBookmark: (HadithModel) -> Unit,
+    onShare: (HadithModel) -> Unit
+) {
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(bottom = 96.dp)
+    ) {
+        items(hadiths, key = { it.id }) { hadith ->
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = if (highlightedHadithId == hadith.id) {
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                } else {
+                    MaterialTheme.colorScheme.surface
+                },
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Hadith ${hadith.hadithNumber}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (hadith.grade.isNotBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = MaterialTheme.colorScheme.secondaryContainer
+                            ) {
+                                Text(
+                                    text = hadith.grade,
+                                    fontSize = 9.sp,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+                        HadithBookmarkButton(hadith, onToggleBookmark)
+                        IconButton(onClick = { onShare(hadith) }) {
+                            Icon(Icons.Default.Share, contentDescription = "Share hadith")
+                        }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 10.dp)
+                        ) {
+                            if (hadith.sanad.isNotBlank()) {
+                                Text(
+                                    text = hadith.sanad,
+                                    fontSize = translationFontSp.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(
+                                text = hadith.matnTranslation,
+                                fontSize = translationFontSp.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        VerticalDivider(
+                            thickness = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant
+                        )
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 10.dp)
+                        ) {
+                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                                Text(
+                                    text = hadith.arabicText,
+                                    fontFamily = FontFamily.Serif,
+                                    fontSize = arabicFontSp.sp,
+                                    lineHeight = (arabicFontSp * 1.5f).sp,
+                                    textAlign = TextAlign.End,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 internal fun HadithReadingLayoutContent(
     layout: HadithReadingLayout,
@@ -891,8 +1007,23 @@ internal fun HadithReadingLayoutContent(
     highlightedHadithId: String?,
     onSelectBook: (String) -> Unit,
     onToggleBookmark: (HadithModel) -> Unit,
-    onShare: (HadithModel) -> Unit
+    onShare: (HadithModel) -> Unit,
+    splitViewEnabled: Boolean = false,
+    arabicFontSp: Float = 19f,
+    translationFontSp: Float = 14f
 ) {
+    if (splitViewEnabled) {
+        HadithSplitReader(
+            hadiths = hadiths,
+            listState = listState,
+            highlightedHadithId = highlightedHadithId,
+            arabicFontSp = arabicFontSp,
+            translationFontSp = translationFontSp,
+            onToggleBookmark = onToggleBookmark,
+            onShare = onShare
+        )
+        return
+    }
     when (layout) {
         HadithReadingLayout.COMPACT_DROPDOWN -> CompactDropdownLayout(
             hadiths, listState, highlightedHadithId, onToggleBookmark, onShare
