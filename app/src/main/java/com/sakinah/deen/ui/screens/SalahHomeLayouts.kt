@@ -402,7 +402,9 @@ internal fun PrayerCheckCircle(
             androidx.compose.material3.Icon(
                 imageVector = Icons.Rounded.Check,
                 contentDescription = if (completed) "Prayer completed" else "Mark prayer complete",
-                tint = if (completed) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                // A light primary in dark monochrome needs a dark tick, not a fixed white one.
+                tint = if (completed) MaterialTheme.colorScheme.onPrimary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(size * 0.48f)
             )
         }

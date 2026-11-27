@@ -208,12 +208,12 @@ fun SalahScreen(
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             // 1. Deduplicated Salah header + layout-specific hero
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Column(
                         modifier = if (salahHomeLayout == SalahHomeLayout.SEAMLESS_EDITORIAL) {
                             Modifier
@@ -318,81 +318,32 @@ fun SalahScreen(
                 }
             }
 
-                    // Layout F: 5-Segment Daily Progress Strip
-                    val fardPrayers = state.prayersList.filter { it.id != "sunrise" }
-                    val prayedCount = fardPrayers.count { it.isFardCompleted }
+            val fardPrayers = state.prayersList.filter { it.id != "sunrise" }
 
-                    item(key = "daily-progress-strip") {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 4.dp, vertical = 2.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.salah_today_prayed, prayedCount, 5),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "${prayedCount * 20}%",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                fardPrayers.forEach { p ->
-                                    val isDone = p.isFardCompleted
-                                    val segmentColor = if (isDone) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(6.dp)
-                                            .clip(RoundedCornerShape(3.dp))
-                                            .background(segmentColor)
-                                    )
-                                }
-                            }
+            // Tahajjud takes the place of the old "Today: x/5" progress strip.
+            item(key = "tahajjud") {
+                TahajjudCard(state)
+            }
+
+            // Slim Single-Line Status-Accent Prayer Rows
+            items(fardPrayers, key = { it.id }) { prayer ->
+                val isExpanded = !focusMode && expandedId == prayer.id
+                StatusAccentPrayerRow(
+                    prayer = prayer,
+                    isCurrent = prayer.nameEnglish.equals(state.currentPrayerName, ignoreCase = true),
+                    isExpanded = isExpanded,
+                    onToggleExpand = { expandedId = if (isExpanded) null else prayer.id },
+                    onToggleCompletion = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        prayerTypeOf(prayer)?.let { prayerType ->
+                            viewModel?.onIntent(
+                                SalahUiIntent.ToggleSalahCompletion(prayerType, prayer.isJamaah)
+                            )
                         }
-                    }
-
-                    // Slim Single-Line Status-Accent Prayer Rows
-                    items(fardPrayers, key = { it.id }) { prayer ->
-                        val isExpanded = !focusMode && expandedId == prayer.id
-                        StatusAccentPrayerRow(
-                            prayer = prayer,
-                            isCurrent = prayer.nameEnglish.equals(state.currentPrayerName, ignoreCase = true),
-                            isExpanded = isExpanded,
-                            onToggleExpand = { expandedId = if (isExpanded) null else prayer.id },
-                            onToggleCompletion = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                prayerTypeOf(prayer)?.let { prayerType ->
-                                    viewModel?.onIntent(
-                                        SalahUiIntent.ToggleSalahCompletion(prayerType, prayer.isJamaah)
-                                    )
-                                }
-                            },
-                            onOpenGuide = { launchPrayerGuide(prayer.nameEnglish, prayer.fardRakats) }
-                        )
-                    }
-
-                    item(key = "tahajjud") {
-                        TahajjudCard(state)
-                    }
+                    },
+                    onOpenGuide = { launchPrayerGuide(prayer.nameEnglish, prayer.fardRakats) }
+                )
+            }
 
         }
 
@@ -817,7 +768,7 @@ private fun StatusAccentPrayerRow(
 
     SakinahCard(
         modifier = Modifier.fillMaxWidth(),
-        contentPadding = 12.dp,
+        contentPadding = 8.dp,
         onClick = onToggleExpand
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -825,15 +776,15 @@ private fun StatusAccentPrayerRow(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left edge: 4.dp wide, 28.dp tall rounded vertical accent bar
+                // Left edge: 4.dp wide, 24.dp tall rounded vertical accent bar
                 Box(
                     modifier = Modifier
                         .width(4.dp)
-                        .height(28.dp)
+                        .height(24.dp)
                         .clip(RoundedCornerShape(2.dp))
                         .background(accentColor)
                 )
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
                 // Left text: Prayer name (maxLines = 1, softWrap = false)
                 Row(
@@ -874,11 +825,11 @@ private fun StatusAccentPrayerRow(
 
                 Spacer(modifier = Modifier.width(6.dp))
 
-                // Circular check toggle (28.dp–32.dp visual circle with 44.dp touch target)
+                // Circular check toggle (28.dp visual circle with a 40.dp touch target)
                 Box(
                     modifier = Modifier
-                        .width(44.dp)
-                        .height(44.dp)
+                        .width(40.dp)
+                        .height(40.dp)
                         .clip(CircleShape)
                         .clickable(onClick = onToggleCompletion),
                     contentAlignment = Alignment.Center
@@ -888,14 +839,16 @@ private fun StatusAccentPrayerRow(
                             Surface(
                                 shape = CircleShape,
                                 color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(30.dp)
+                                modifier = Modifier.size(28.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
                                         imageVector = Icons.Rounded.Check,
                                         contentDescription = stringResource(R.string.salah_completed_cd),
-                                        tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
+                                        // Some palettes use a light primary (e.g. monochrome
+                                        // dark), so a hard-coded white tick disappears.
+                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
                             }
@@ -907,7 +860,7 @@ private fun StatusAccentPrayerRow(
                                 shape = CircleShape,
                                 color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f),
                                 border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.tertiary),
-                                modifier = Modifier.size(30.dp)
+                                modifier = Modifier.size(28.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
@@ -927,7 +880,7 @@ private fun StatusAccentPrayerRow(
                                 shape = CircleShape,
                                 color = Color.Transparent,
                                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
-                                modifier = Modifier.size(30.dp)
+                                modifier = Modifier.size(28.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Box(
@@ -1111,11 +1064,11 @@ private fun TahajjudCard(state: SalahUiState) {
     if (state.tahajjudStartTimeFormatted.isBlank() || state.tahajjudEndTimeFormatted.isBlank()) {
         return
     }
-    SakinahCard(contentPadding = 14.dp) {
+    SakinahCard(contentPadding = 8.dp) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Icon(
                 imageVector = Icons.Outlined.Schedule,
