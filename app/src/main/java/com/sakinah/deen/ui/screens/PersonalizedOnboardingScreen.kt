@@ -68,7 +68,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -114,6 +116,8 @@ import com.sakinah.deen.data.prefs.HadithReadingLayout
 import com.sakinah.deen.data.prefs.QuranReaderPreferences
 import com.sakinah.deen.data.prefs.QuranReadingLayout
 import com.sakinah.deen.data.prefs.SakinahPreferences
+import com.sakinah.deen.data.repository.TafseerDownloadRepository
+import com.sakinah.deen.data.repository.TafseerPackage
 import com.sakinah.deen.data.prefs.SalahHomeLayout
 import com.sakinah.deen.data.prayer.SunniMethodMapper
 import com.sakinah.deen.data.prayer.englishName
@@ -131,6 +135,9 @@ import com.sakinah.deen.ui.theme.ThemeMode
 import com.sakinah.deen.ui.theme.UserAppearanceConfig
 import com.sakinah.deen.ui.theme.UserObjective
 import com.sakinah.deen.util.TimeZoneResolver
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -141,7 +148,7 @@ import kotlinx.datetime.toLocalDateTime
 import org.koin.core.context.GlobalContext
 import java.util.Locale
 
-private const val TOTAL_STEPS = 6
+private const val TOTAL_STEPS = 7
 private const val ARABIC_FONT_MIN = 18
 private const val ARABIC_FONT_MAX = 36
 private const val TRANSLATION_FONT_MIN = 12
@@ -343,6 +350,13 @@ fun PersonalizedOnboardingScreen(
     var quranRepository by remember { mutableStateOf<IslamicDataRepository?>(null) }
     var translationDownloadLabel by remember { mutableStateOf<String?>(null) }
     var translationDownloadJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var tafseerRepository by remember { mutableStateOf<TafseerDownloadRepository?>(null) }
+    var tafseerPackages by remember { mutableStateOf<List<TafseerPackage>>(emptyList()) }
+    var selectedTafsirId by rememberSaveable { mutableIntStateOf(0) }
+    var selectedTafsirTitle by rememberSaveable { mutableStateOf("") }
+    var tafsirDownloadProgress by remember { mutableStateOf(0f) }
+    var tafsirDownloading by remember { mutableStateOf(false) }
+    var tafsirDownloadError by remember { mutableStateOf<String?>(null) }
     var availableLanguages by remember { mutableStateOf<List<LanguageOption>>(emptyList()) }
     var permissionTick by remember { mutableIntStateOf(0) }
     var prefsTick by remember { mutableIntStateOf(0) }
@@ -350,6 +364,9 @@ fun PersonalizedOnboardingScreen(
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // Deliberately not tied to the composable: a Tafsir pack keeps downloading after the
+    // user leaves onboarding.
+    val tafsirDownloadScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
     val lifecycleOwner = LocalLifecycleOwner.current
     val quranReaderPrefs = remember(context) { QuranReaderPreferences(context) }
 
@@ -378,6 +395,12 @@ fun PersonalizedOnboardingScreen(
                 selectedLanguageName = match.displayName
             }
         }
+    }
+
+    LaunchedEffect(Unit) {
+        val repo = runCatching { GlobalContext.get().get<TafseerDownloadRepository>() }.getOrNull()
+        tafseerRepository = repo
+        repo?.packages?.collect { packages -> tafseerPackages = packages }
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -481,12 +504,53 @@ fun PersonalizedOnboardingScreen(
         // Tafseer - map to language code; fallback to en
         appPrefs?.selectedTafseerLanguage = normalizeTafsirLanguage(iso)
         val tafsirId = defaultTafsirIdForLanguage(normalizeTafsirLanguage(iso))
-        if (tafsirId != null) appPrefs?.selectedTafsirId = tafsirId
+        if (tafsirId != null && selectedTafsirId <= 0) appPrefs?.selectedTafsirId = tafsirId
+    }
+
+    fun selectTafsirBook(pkg: TafseerPackage) {
+        selectedTafsirId = pkg.tafsirId
+        selectedTafsirTitle = pkg.title
+        tafsirDownloadError = null
+        tafsirDownloadProgress = 0f
+        quranReaderPrefs.setSelectedTafsir(pkg.tafsirId, pkg.languageCode, pkg.title)
+        appPrefs?.selectedTafsirId = pkg.tafsirId
+        appPrefs?.selectedTafseerLanguage = pkg.languageCode
+
+        val repo = tafseerRepository ?: run {
+            tafsirDownloadError = "Tafsir service is unavailable. You can retry or continue."
+            return
+        }
+        if (pkg.isDownloaded) {
+            tafsirDownloading = false
+            tafsirDownloadProgress = 1f
+            return
+        }
+        tafsirDownloading = true
+        tafsirDownloadScope.launch {
+            val result = repo.downloadTafseerPackage(pkg.tafsirId) { progress ->
+                tafsirDownloadProgress = progress
+            }
+            tafsirDownloading = false
+            tafsirDownloadProgress = if (result.isSuccess) 1f else 0f
+            tafsirDownloadError = if (result.isSuccess) {
+                null
+            } else {
+                "Couldn't download ${pkg.title}. Retry or continue."
+            }
+        }
     }
 
     val editionsForSelectedLanguage = remember(translationResources, selectedLanguageIso, selectedLanguageName) {
         editionsForLanguage(translationResources, selectedLanguageIso, selectedLanguageName)
     }
+    val selectedTafsirLanguageCode = normalizeTafsirLanguage(selectedLanguageIso)
+    val availableTafsirPackages = remember(tafseerPackages, selectedTafsirLanguageCode, selectedLanguageName) {
+        tafseerPackages.filter { pkg ->
+            pkg.languageCode.equals(selectedTafsirLanguageCode, true) ||
+                pkg.languageName.equals(selectedLanguageName, true)
+        }
+    }
+    val selectedTafsirPackage = availableTafsirPackages.firstOrNull { it.tafsirId == selectedTafsirId }
 
     val darkTheme = when (config.themeMode) {
         ThemeMode.DARK -> true
@@ -596,7 +660,20 @@ fun PersonalizedOnboardingScreen(
                                 applyLanguageAndEdition(lang, edition)
                             }
                         )
-                        4 -> PermissionsStep(
+                        4 -> TafsirStep(
+                            languageName = selectedLanguageName.ifBlank { "English" },
+                            packages = availableTafsirPackages,
+                            selectedTafsirId = selectedTafsirId,
+                            downloading = tafsirDownloading,
+                            progress = tafsirDownloadProgress,
+                            error = tafsirDownloadError,
+                            accent = accent,
+                            accentSoft = accentSoft,
+                            onSelect = ::selectTafsirBook,
+                            onRetry = ::selectTafsirBook,
+                            onDownloadLater = { step = 5 }
+                        )
+                        5 -> PermissionsStep(
                             permissions = permissions,
                             accent = accent,
                             onAccent = onAccent,
@@ -648,8 +725,7 @@ fun PersonalizedOnboardingScreen(
 
                 val ctaLabel = when (step) {
                     0 -> "Continue"
-                    1, 2, 3 -> "Continue"
-                    4 -> "Continue"
+                    1, 2, 3, 4, 5 -> "Continue"
                     else -> "Start Using Sakinah"
                 }
                 val showCta = step > 0 || showGreeting
@@ -680,7 +756,7 @@ fun PersonalizedOnboardingScreen(
                                         step = 3
                                     } else {
                                         applyLanguageAndEdition(lang, editions.firstOrNull())
-                                        step = 4
+                                        step = if (availableTafsirPackages.isEmpty()) 5 else 4
                                     }
                                 }
                                 3 -> {
@@ -689,9 +765,10 @@ fun PersonalizedOnboardingScreen(
                                         val editions = editionsForLanguage(translationResources, lang.isoCode, lang.displayName)
                                         applyLanguageAndEdition(lang, editions.firstOrNull())
                                     }
-                                    step = 4
+                                    step = if (availableTafsirPackages.isEmpty()) 5 else 4
                                 }
                                 4 -> step = 5
+                                5 -> step = 6
                                 else -> finish()
                             }
                         }
@@ -1256,6 +1333,122 @@ private fun EditionStep(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun TafsirStep(
+    languageName: String,
+    packages: List<TafseerPackage>,
+    selectedTafsirId: Int,
+    downloading: Boolean,
+    progress: Float,
+    error: String?,
+    accent: Color,
+    accentSoft: Color,
+    onSelect: (TafseerPackage) -> Unit,
+    onRetry: (TafseerPackage) -> Unit,
+    onDownloadLater: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = "Choose your $languageName Tafsir",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = accent
+        )
+        Text(
+            text = "Downloads immediately for offline reading across the Quran.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (packages.isEmpty()) {
+            SakinahCard(containerColor = accentSoft, contentPadding = 14.dp) {
+                Text(
+                    text = "No Tafsir editions are available for $languageName yet. " +
+                        "You can choose one later from the Reader menu.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        } else {
+            packages.forEach { pkg ->
+                val selected = pkg.tafsirId == selectedTafsirId
+                SakinahCard(
+                    onClick = { onSelect(pkg) },
+                    containerColor = if (selected) accentSoft else MaterialTheme.colorScheme.surface,
+                    contentPadding = 14.dp
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = pkg.title,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                color = if (selected) accent else MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "${pkg.author} · ${pkg.statusLabel}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        if (selected && pkg.isDownloaded && !downloading) {
+                            Text(
+                                text = "Offline Ready ✓",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = accent
+                            )
+                        } else if (selected) {
+                            Icon(Icons.Default.Check, contentDescription = null, tint = accent)
+                        }
+                    }
+                    if (selected && downloading) {
+                        Spacer(Modifier.height(8.dp))
+                        LinearProgressIndicator(
+                            progress = { progress.coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Downloading offline pack… ${(progress * 100).toInt()}%",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = accent
+                        )
+                    }
+                    if (selected && error != null && !downloading) {
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = error,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedButton(onClick = { onRetry(pkg) }) {
+                                Text("Retry", fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        TextButton(
+            onClick = onDownloadLater,
+            modifier = Modifier.align(Alignment.End)
+        ) {
+            Text("Download later", color = accent)
         }
     }
 }

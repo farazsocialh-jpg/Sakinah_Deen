@@ -14,6 +14,7 @@ import com.sakinah.deen.data.model.SurahModel
 import com.sakinah.deen.data.model.TafsirText
 import com.sakinah.deen.data.prefs.AyahBookmark
 import com.sakinah.deen.data.prefs.QuranReaderPreferences
+import com.sakinah.deen.data.prefs.QuranTafsirSelection
 import com.sakinah.deen.data.prefs.QuranTranslationSelection
 import com.sakinah.deen.data.prefs.QuranReadingMode
 import com.sakinah.deen.data.prefs.WbwLayoutMode
@@ -217,8 +218,11 @@ class QuranViewModel(
     }
 
     private val selectedSurahNumber = MutableStateFlow(1)
+    private val preferredTafsir = quranReaderPreferences?.selectedTafsirSelection
+        ?.takeIf { it.tafsirId > 0 }
     private val selectedTafsirIdFlow = MutableStateFlow(
-        sakinahPreferences?.selectedTafsirId
+        preferredTafsir?.tafsirId
+            ?: sakinahPreferences?.selectedTafsirId
             ?: IslamicDataRepository.IBN_KATHIR_TAFSIR_ID
     )
     private val selectedTranslationIdFlow = MutableStateFlow(
@@ -240,7 +244,11 @@ class QuranViewModel(
             surahs = listOf(sampleSurah.copy(ayahs = emptyList())),
             selectedTafseerContent = sampleSurah.ayahs[0].tafseerIbnKathir,
             selectedTafsirId = selectedTafsirIdFlow.value,
-            selectedTafseerLanguage = sakinahPreferences?.selectedTafseerLanguage ?: "en",
+            selectedTafseerLanguage = preferredTafsir?.languageCode
+                ?: sakinahPreferences?.selectedTafseerLanguage ?: "en",
+            selectedTafseerTitle = preferredTafsir?.title
+                .takeIf { !it.isNullOrBlank() }
+                ?: "Ibn Kathir (Abridged)",
             readingMode = quranReaderPreferences?.readingMode ?: QuranReadingMode.STUDY,
             bookmarks = quranReaderPreferences?.bookmarks.orEmpty(),
             wbwLanguage = quranReaderPreferences?.wbwLanguage
@@ -288,6 +296,7 @@ class QuranViewModel(
         observeOfflineStatus()
         observeSharedSettings()
         observeTranslationPreference()
+        observeTafsirPreference()
         observeTafseerPackages()
         viewModelScope.launch {
             tafseerRepository?.refreshCatalog()
@@ -450,6 +459,22 @@ class QuranViewModel(
                     return@collect
                 }
                 applyTranslationSelection(selection)
+            }
+        }
+    }
+
+    /** Onboarding can change the active Tafsir while the reader ViewModel is still alive. */
+    private fun observeTafsirPreference() {
+        val prefs = quranReaderPreferences ?: return
+        viewModelScope.launch {
+            prefs.selectedTafsir.drop(1).collect { selection ->
+                if (selection.tafsirId <= 0 ||
+                    (selection.tafsirId == _uiState.value.selectedTafsirId &&
+                        selection.title == _uiState.value.selectedTafseerTitle)
+                ) {
+                    return@collect
+                }
+                selectTafsir(selection.tafsirId, selection.languageCode, selection.title)
             }
         }
     }
@@ -988,6 +1013,7 @@ class QuranViewModel(
         selectedTafsirIdFlow.value = tafsirId
         sakinahPreferences?.selectedTafsirId = tafsirId
         sakinahPreferences?.selectedTafseerLanguage = resolvedLanguage
+        quranReaderPreferences?.setSelectedTafsir(tafsirId, resolvedLanguage, resolvedTitle)
         _uiState.update {
             it.copy(
                 selectedTafsirId = tafsirId,

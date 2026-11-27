@@ -85,6 +85,13 @@ data class QuranTranslationSelection(
     val source: String = QuranTranslationResource.SOURCE_QURAN_COM
 )
 
+/** Active Tafsir edition chosen in onboarding or the Reader menu. */
+data class QuranTafsirSelection(
+    val tafsirId: Int = 0,
+    val languageCode: String = "en",
+    val title: String = ""
+)
+
 /**
  * Persists the Quran reader's own state: reading mode, the last-read position and
  * per-ayah bookmarks. Kept in SharedPreferences (not Room) so a bookmark works in guest
@@ -95,12 +102,17 @@ class QuranReaderPreferences internal constructor(
     private val prefs: SharedPreferences
 ) {
     private val _selectedTranslation = MutableStateFlow(readTranslationSelection())
+    private val _selectedTafsir = MutableStateFlow(readTafsirSelection())
     private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key in TRANSLATION_KEYS) _selectedTranslation.value = readTranslationSelection()
+        if (key in TAFSIR_KEYS) _selectedTafsir.value = readTafsirSelection()
     }
 
     /** Single source of truth observed by the reader through `collectAsState()`. */
     val selectedTranslation: StateFlow<QuranTranslationSelection> = _selectedTranslation.asStateFlow()
+
+    /** Active Tafsir edition; onboarding writes this before the reader starts. */
+    val selectedTafsir: StateFlow<QuranTafsirSelection> = _selectedTafsir.asStateFlow()
 
     init {
         prefs.registerOnSharedPreferenceChangeListener(preferenceListener)
@@ -134,6 +146,14 @@ class QuranReaderPreferences internal constructor(
             KEY_TRANSLATION_ISO,
             KEY_TRANSLATION_EDITION_KEY,
             KEY_TRANSLATION_SOURCE
+        )
+        private const val KEY_TAFSIR_ID = "quran_selected_tafsir_id"
+        private const val KEY_TAFSEER_LANGUAGE = "quran_selected_tafseer_language"
+        private const val KEY_TAFSEER_TITLE = "quran_selected_tafseer_title"
+        private val TAFSIR_KEYS = setOf(
+            KEY_TAFSIR_ID,
+            KEY_TAFSEER_LANGUAGE,
+            KEY_TAFSEER_TITLE
         )
 
         const val DEFAULT_WBW_LANGUAGE = "en"
@@ -257,6 +277,35 @@ class QuranReaderPreferences internal constructor(
             putString(KEY_TRANSLATION_SOURCE, selection.source)
         }
         _selectedTranslation.value = selection
+    }
+
+    var selectedTafsirSelection: QuranTafsirSelection
+        get() = readTafsirSelection()
+        set(value) = writeTafsirSelection(value)
+
+    fun setSelectedTafsir(tafsirId: Int, languageCode: String, title: String) {
+        writeTafsirSelection(
+            QuranTafsirSelection(
+                tafsirId = tafsirId,
+                languageCode = languageCode,
+                title = title
+            )
+        )
+    }
+
+    private fun readTafsirSelection(): QuranTafsirSelection = QuranTafsirSelection(
+        tafsirId = prefs.getInt(KEY_TAFSIR_ID, 0),
+        languageCode = prefs.getString(KEY_TAFSEER_LANGUAGE, null).orEmpty().ifBlank { "en" },
+        title = prefs.getString(KEY_TAFSEER_TITLE, null).orEmpty()
+    )
+
+    private fun writeTafsirSelection(selection: QuranTafsirSelection) {
+        prefs.edit {
+            putInt(KEY_TAFSIR_ID, selection.tafsirId)
+            putString(KEY_TAFSEER_LANGUAGE, selection.languageCode)
+            putString(KEY_TAFSEER_TITLE, selection.title)
+        }
+        _selectedTafsir.value = selection
     }
 
     /** Mushaf page layout key bundled in the QUL database. */
