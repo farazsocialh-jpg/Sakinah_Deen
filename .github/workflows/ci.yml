@@ -27,6 +27,13 @@ jobs:
     name: Fast debug APK
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Playstore environment holds the Scholar proxy URL and Google client id. buildConfigField
+    # bakes AI_PROXY_URL into this APK, so the debug build must see the same values as release.
+    environment: Playstore
+    env:
+      AI_PROXY_URL: ${{ vars.AI_PROXY_URL || secrets.AI_PROXY_URL || 'https://ai.insightsltd.com' }}
+      GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+      NISAB_RATE_URL: ${{ vars.NISAB_RATE_URL || secrets.NISAB_RATE_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -59,6 +66,11 @@ jobs:
   ui-snapshot-matrix:
     name: Exhaustive UI snapshot matrix
     runs-on: ubuntu-latest
+    environment: Playstore
+    env:
+      AI_PROXY_URL: ${{ vars.AI_PROXY_URL || secrets.AI_PROXY_URL || 'https://ai.insightsltd.com' }}
+      GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+      NISAB_RATE_URL: ${{ vars.NISAB_RATE_URL || secrets.NISAB_RATE_URL }}
     # ~300 PNGs (17 palettes x 2 modes x every screen, 4 font presets, 19 layouts,
     # 15 secondary screens) render in a few minutes; the margin covers a cold Gradle cache.
     timeout-minutes: 45
