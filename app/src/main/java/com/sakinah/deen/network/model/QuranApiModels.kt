@@ -84,7 +84,10 @@ data class TafsirChapterDto(
     @SerialName("resource_id") val resourceId: Int = 0,
     @SerialName("verse_key") val verseKey: String = "",
     @SerialName("resource_name") val resourceName: String = "",
-    val text: String = ""
+    val text: String = "",
+    /** Some editions return one commentary for a whole passage listed here. */
+    val verses: List<String> = emptyList(),
+    val ayahs: List<String> = emptyList()
 )
 
 @Serializable

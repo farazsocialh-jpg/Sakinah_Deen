@@ -55,7 +55,8 @@ class TafseerDownloadRepositoryTest {
 
     private fun fixture(
         chapterCalls: AtomicInteger = AtomicInteger(),
-        catalogCalls: AtomicInteger = AtomicInteger()
+        catalogCalls: AtomicInteger = AtomicInteger(),
+        chapterJsonOverride: String? = null
     ): Triple<TafseerDownloadRepository, FakeTafsirDao, FakeQuranDao> {
         val quranDao = FakeQuranDao()
         repeat(3) { index ->
@@ -79,7 +80,7 @@ class TafseerDownloadRepositoryTest {
                     val surah = url.substringAfter("/by_chapter/").substringBefore('/').toIntOrNull() ?: 0
                     chapterCalls.incrementAndGet()
                     if (surah == 1) {
-                        respond(chapterJson(surah), HttpStatusCode.OK)
+                        respond(chapterJsonOverride ?: chapterJson(surah), HttpStatusCode.OK)
                     } else {
                         respond("""{"tafsirs":[]}""", HttpStatusCode.OK)
                     }
@@ -141,6 +142,40 @@ class TafseerDownloadRepositoryTest {
         repo.removeTafseerPackage(160)
         assertTrue(dao.entries.isEmpty())
         assertEquals(0, repo.packages.first().first { it.tafsirId == 160 }.downloadedChapters)
+    }
+
+    @Test
+    fun groupedVersesExpandToOneRowPerAyah() = runTest(dispatcher) {
+        val grouped = """
+            {"tafsirs":[
+              {"resource_id":160,"verse_key":"1:1","resource_name":"Tafsir Ibn Kathir",
+               "text":"<p>passage</p>","verses":["1:1","1:2","1:3"]}
+            ]}
+        """.trimIndent()
+        val (repo, dao, _) = fixture(chapterJsonOverride = grouped)
+
+        val result = repo.downloadTafseerPackage(160)
+
+        assertTrue(result.isSuccess)
+        assertEquals(listOf(1, 2, 3), dao.entries.map { it.ayahNumber }.sorted())
+        assertTrue(dao.entries.all { it.text == "passage" })
+    }
+
+    @Test
+    fun groupStartsFillGapAyahsUpToExpectedCount() = runTest(dispatcher) {
+        val sparse = """
+            {"tafsirs":[
+              {"resource_id":160,"verse_key":"1:1","resource_name":"Tafsir Ibn Kathir","text":"<p>first</p>"},
+              {"resource_id":160,"verse_key":"1:5","resource_name":"Tafsir Ibn Kathir","text":"<p>fifth</p>"}
+            ]}
+        """.trimIndent()
+        val (repo, dao, _) = fixture(chapterJsonOverride = sparse)
+
+        val result = repo.downloadTafseerPackage(160)
+
+        assertTrue(result.isSuccess)
+        assertEquals(listOf(1, 2, 3), dao.entries.map { it.ayahNumber }.sorted())
+        assertTrue(dao.entries.all { it.text == "first" })
     }
 
     @Test

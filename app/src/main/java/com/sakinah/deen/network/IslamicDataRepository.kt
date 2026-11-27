@@ -14,6 +14,7 @@ import com.sakinah.deen.data.model.QuranTranslationResource
 import com.sakinah.deen.data.model.TafsirResource
 import com.sakinah.deen.data.model.TafsirText
 import com.sakinah.deen.data.quran.QuranOfflineStatus
+import com.sakinah.deen.util.CitationParser
 import com.sakinah.deen.data.database.entity.SurahMetadataEntity
 import com.sakinah.deen.data.database.entity.TafsirEntryEntity
 import com.sakinah.deen.network.model.ChapterAudioResponse
@@ -1182,6 +1183,73 @@ class IslamicDataRepository(
         collected.size
     }
 
+    /** Parses a `2:3` style key, or a bare ayah number, into an ayah index. */
+    private fun ayahNumberFromKey(key: String): Int? {
+        val trimmed = key.trim()
+        val ayah = trimmed.substringAfter(':', "").toIntOrNull()
+            ?: trimmed.toIntOrNull()
+            ?: return null
+        return ayah.takeIf { it in 1..114 }
+    }
+
+    /**
+     * Expands passage-level commentary into one row per ayah. When the API names a group in
+     * `verses`/`ayahs`, every named ayah gets the same text. When it only gives group starts
+     * (1, 5, 10, …), each start's text fills the gap up to the next start so no ayah is missing.
+     */
+    private fun expandChapterTafsir(
+        dtos: List<com.sakinah.deen.network.model.TafsirChapterDto>,
+        surahNumber: Int,
+        expectedAyahs: Int,
+        sourceKey: String,
+        sourceName: String,
+        languageCode: String
+    ): List<TafsirEntryEntity> {
+        if (expectedAyahs <= 0) return emptyList()
+        val textByAyah = linkedMapOf<Int, String>()
+        dtos.forEach { dto ->
+            val text = cleanText(dto.text)
+            if (text.isBlank()) return@forEach
+            val keys = dto.verses + dto.ayahs
+            val ayahNumbers = if (keys.isNotEmpty()) {
+                keys.mapNotNull { ayahNumberFromKey(it) }
+            } else {
+                listOfNotNull(ayahNumberFromKey(dto.verseKey))
+            }
+            ayahNumbers.filter { it in 1..expectedAyahs }.forEach { ayah ->
+                textByAyah.putIfAbsent(ayah, text)
+            }
+        }
+        if (textByAyah.isEmpty()) return emptyList()
+
+        val starts = textByAyah.keys.sorted()
+        val first = starts.first()
+        if (first > 1) {
+            val text = textByAyah.getValue(first)
+            for (ayah in 1 until first) textByAyah.putIfAbsent(ayah, text)
+        }
+        starts.forEachIndexed { index, ayah ->
+            val nextStart = starts.getOrNull(index + 1) ?: (expectedAyahs + 1)
+            val text = textByAyah.getValue(ayah)
+            for (gap in ayah + 1 until nextStart.coerceAtMost(expectedAyahs + 1)) {
+                textByAyah.putIfAbsent(gap, text)
+            }
+        }
+
+        return (1..expectedAyahs).mapNotNull { ayah ->
+            textByAyah[ayah]?.let { text ->
+                TafsirEntryEntity(
+                    sourceKey = sourceKey,
+                    sourceName = sourceName,
+                    surahNumber = surahNumber,
+                    ayahNumber = ayah,
+                    languageCode = languageCode,
+                    text = text
+                )
+            }
+        }
+    }
+
     /**
      * Downloads one whole chapter of commentary in a single Quran.com v4 request. Large
      * chapters are inserted in chunks so the parsed list and the Room rows are never all
@@ -1200,27 +1268,22 @@ class IslamicDataRepository(
             ?.resourceName
             ?: "Tafsir $tafsirId"
         val sourceKey = "tafsir_$tafsirId"
+        val expectedAyahs = runCatching { ayahCountForSurah(surahNumber) }.getOrDefault(0)
+            .takeIf { it > 0 }
+            ?: CitationParser.AYAH_COUNTS.getOrNull(surahNumber - 1)
+            ?: response.tafsirs.size
         var saved = 0
 
-        response.tafsirs.chunked(TAFSIR_UPSERT_CHUNK).forEach { chunk ->
-            val entities = chunk.mapNotNull { dto ->
-                val ayahNumber = dto.verseKey.substringAfter(':', "").toIntOrNull()
-                    ?: return@mapNotNull null
-                val text = cleanText(dto.text)
-                if (text.isBlank()) return@mapNotNull null
-                TafsirEntryEntity(
-                    sourceKey = sourceKey,
-                    sourceName = sourceName,
-                    surahNumber = surahNumber,
-                    ayahNumber = ayahNumber,
-                    languageCode = languageCode,
-                    text = text
-                )
-            }
-            if (entities.isNotEmpty()) {
-                tafsirDao.upsertAll(entities)
-                saved += entities.size
-            }
+        expandChapterTafsir(
+            dtos = response.tafsirs,
+            surahNumber = surahNumber,
+            expectedAyahs = expectedAyahs,
+            sourceKey = sourceKey,
+            sourceName = sourceName,
+            languageCode = languageCode
+        ).chunked(TAFSIR_UPSERT_CHUNK).forEach { chunk ->
+            tafsirDao.upsertAll(chunk)
+            saved += chunk.size
         }
 
         if (saved == 0) error("Quran.com returned no tafsir for Surah $surahNumber")
