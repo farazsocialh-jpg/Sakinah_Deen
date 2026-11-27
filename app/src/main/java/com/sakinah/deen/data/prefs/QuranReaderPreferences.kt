@@ -123,7 +123,6 @@ class QuranReaderPreferences internal constructor(
         private const val KEY_MUSHAF_LAYOUT = "quran_mushaf_layout"
         private const val KEY_WBW_LAYOUT_MODE = "quran_wbw_layout_mode"
         private const val KEY_WBW_ENABLED = "quran_wbw_enabled"
-        private const val KEY_INLINE_TAFSIR_ENABLED = "quran_inline_tafsir_enabled"
         private const val KEY_TRANSLATION_ID = "quran_translation_id"
         private const val KEY_TRANSLATION_LANGUAGE = "quran_translation_language"
         private const val KEY_TRANSLATION_ISO = "quran_translation_iso"
@@ -216,11 +215,6 @@ class QuranReaderPreferences internal constructor(
     var wbwEnabled: Boolean
         get() = prefs.getBoolean(KEY_WBW_ENABLED, false)
         set(value) = prefs.edit { putBoolean(KEY_WBW_ENABLED, value) }
-
-    /** Whether each study ayah shows its selected Tafsir commentary inline. */
-    var inlineTafsirEnabled: Boolean
-        get() = prefs.getBoolean(KEY_INLINE_TAFSIR_ENABLED, false)
-        set(value) = prefs.edit { putBoolean(KEY_INLINE_TAFSIR_ENABLED, value) }
 
     /** Active ayah translation; onboarding and the Reader menu both write this. */
     var translationSelection: QuranTranslationSelection

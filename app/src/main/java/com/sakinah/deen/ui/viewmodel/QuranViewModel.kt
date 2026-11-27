@@ -107,9 +107,8 @@ data class QuranUiState(
     val wbwLayoutMode: WbwLayoutMode = WbwLayoutMode.DEFAULT,
     /** False hides the word-by-word strip entirely; the choice is remembered. */
     val wbwEnabled: Boolean = false,
-    /** Ayah -> cleaned commentary for the open surah, used by the inline Tafsir block. */
-    val inlineTafsirEnabled: Boolean = false,
-    val inlineTafsirByAyah: Map<Int, String> = emptyMap(),
+    /** Ayah -> cleaned commentary for the open surah, used by group labels and the sheet. */
+    val tafsirByAyah: Map<Int, String> = emptyMap(),
     val mushafLayout: String = QuranReaderPreferences.DEFAULT_MUSHAF_LAYOUT,
     /** Word whose morphology sheet is open, plus its root occurrences. */
     val selectedQulWord: QulWord? = null,
@@ -145,7 +144,6 @@ sealed class QuranUiIntent {
     data class SelectWbwLanguage(val lang: String) : QuranUiIntent()
     data class SelectQulScript(val script: String) : QuranUiIntent()
     data class SetWbwEnabled(val enabled: Boolean) : QuranUiIntent()
-    data class SetInlineTafsirEnabled(val enabled: Boolean) : QuranUiIntent()
     data class SelectMushafLayout(val layout: String) : QuranUiIntent()
     data class SelectQulWord(val wordKey: String) : QuranUiIntent()
     data object ClearQulWord : QuranUiIntent()
@@ -230,7 +228,7 @@ class QuranViewModel(
             ?: IslamicDataRepository.DEFAULT_TRANSLATION_ID
     )
     private var searchJob: Job? = null
-    private var inlineTafsirJob: Job? = null
+    private var tafsirByAyahJob: Job? = null
     private var pendingTargetAyah: Int? = null
 
     /** True once Room has supplied chapter metadata, i.e. the offline library is usable. */
@@ -252,9 +250,7 @@ class QuranViewModel(
             mushafLayout = quranReaderPreferences?.mushafLayout
                 ?: QuranReaderPreferences.DEFAULT_MUSHAF_LAYOUT,
             wbwLayoutMode = quranReaderPreferences?.wbwLayoutMode ?: WbwLayoutMode.DEFAULT,
-            wbwEnabled = quranReaderPreferences?.wbwEnabled ?: false,
-            // Inline tafsir is part of the reading experience, not an optional dock toggle.
-            inlineTafsirEnabled = true
+            wbwEnabled = quranReaderPreferences?.wbwEnabled ?: false
         )
     )
     val uiState: StateFlow<QuranUiState> = _uiState.asStateFlow()
@@ -314,7 +310,7 @@ class QuranViewModel(
         if (islamicRepository != null) {
             viewModelScope.launch { loadTranslationCatalog() }
         }
-        if (_uiState.value.inlineTafsirEnabled) loadInlineTafsirForSurah()
+        loadTafsirByAyahForSurah()
     }
 
     fun onIntent(intent: QuranUiIntent) {
@@ -327,7 +323,6 @@ class QuranViewModel(
             is QuranUiIntent.SelectWbwLanguage -> selectWbwLanguage(intent.lang)
             is QuranUiIntent.SelectQulScript -> selectQulScript(intent.script)
             is QuranUiIntent.SetWbwEnabled -> setWbwEnabled(intent.enabled)
-            is QuranUiIntent.SetInlineTafsirEnabled -> setInlineTafsirEnabled(intent.enabled)
             is QuranUiIntent.SelectMushafLayout -> selectMushafLayout(intent.layout)
             is QuranUiIntent.SelectQulWord -> selectQulWord(intent.wordKey)
             is QuranUiIntent.ClearQulWord -> _uiState.update {
@@ -601,7 +596,7 @@ class QuranViewModel(
                 errorMessage = null
             )
         }
-        if (_uiState.value.inlineTafsirEnabled) loadInlineTafsirForSurah()
+        loadTafsirByAyahForSurah()
     }
 
     private fun selectSurah(surahNumber: Int, targetAyah: Int?) {
@@ -865,37 +860,17 @@ class QuranViewModel(
         quranReaderPreferences?.wbwEnabled = enabled
     }
 
-    /** Shows one inline commentary block per study ayah; the choice survives restarts. */
-    private fun setInlineTafsirEnabled(enabled: Boolean) {
-        if (_uiState.value.inlineTafsirEnabled == enabled) return
-        _uiState.update {
-            it.copy(
-                inlineTafsirEnabled = enabled,
-                inlineTafsirByAyah = if (enabled) it.inlineTafsirByAyah else emptyMap()
-            )
-        }
-        quranReaderPreferences?.inlineTafsirEnabled = enabled
-        if (enabled) loadInlineTafsirForSurah() else {
-            inlineTafsirJob?.cancel()
-            inlineTafsirJob = null
-        }
-    }
-
-    /**
-     * Reads the open surah's commentary from the same offline sources the single-ayah sheet
-     * uses: bundled QUL editions first, then Room. Nothing here goes to the network, so the
-     * inline block can show an honest "download" fallback instead of blocking the reader.
-     */
-    private fun loadInlineTafsirForSurah() {
-        inlineTafsirJob?.cancel()
+    /** Reads the open surah's commentary so header buttons can derive tafsir ayah groups. */
+    private fun loadTafsirByAyahForSurah() {
+        tafsirByAyahJob?.cancel()
         val state = _uiState.value
-        if (!state.inlineTafsirEnabled || state.currentSurah.ayahs.isEmpty()) return
+        if (state.currentSurah.ayahs.isEmpty()) return
         val surahNumber = state.currentSurah.number
         val ayahs = state.currentSurah.ayahs
         val tafsirId = state.selectedTafsirId
         val title = state.selectedTafseerTitle
         val slug = qulTafsirSlug(tafsirId, title)
-        inlineTafsirJob = viewModelScope.launch {
+        tafsirByAyahJob = viewModelScope.launch {
             val commentary = ayahs.associate { ayah ->
                 val ayahNumber = ayah.numberInSurah
                 val qulText = if (slug != null) {
@@ -918,13 +893,12 @@ class QuranViewModel(
                 ayahNumber to TafsirText.clean(cachedText)
             }
             _uiState.update { current ->
-                if (!current.inlineTafsirEnabled ||
-                    current.currentSurah.number != surahNumber ||
+                if (current.currentSurah.number != surahNumber ||
                     current.selectedTafsirId != tafsirId
                 ) {
                     current
                 } else {
-                    current.copy(inlineTafsirByAyah = commentary)
+                    current.copy(tafsirByAyah = commentary)
                 }
             }
         }
@@ -1025,7 +999,7 @@ class QuranViewModel(
             )
         }
         selectAyahForTafseer(_uiState.value.activeHighlightedAyah)
-        if (_uiState.value.inlineTafsirEnabled) loadInlineTafsirForSurah()
+        loadTafsirByAyahForSurah()
     }
 
     private fun selectAyahForTafseer(ayahNumber: Int) {
@@ -1412,7 +1386,7 @@ class QuranViewModel(
                         )
                     }
                     selectAyahForTafseer(ayahNumber)
-                    if (_uiState.value.inlineTafsirEnabled) loadInlineTafsirForSurah()
+                    loadTafsirByAyahForSurah()
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e

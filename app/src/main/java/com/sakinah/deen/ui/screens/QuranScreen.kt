@@ -423,32 +423,11 @@ fun QuranScreen(
     }
 
     val translationIsRtl = isRtlLanguage(state.selectedTranslationIsoCode)
-    // Inline tafsir is always on now; the dock toggle is gone.
-    val inlineTafsirEnabled = true
-    val tafsirGroups = remember(displaySurah.ayahs.size, state.inlineTafsirByAyah) {
+    val tafsirGroups = remember(displaySurah.ayahs.size, state.tafsirByAyah) {
         tafsirAyahGroups(
             ayahCount = displaySurah.ayahs.size,
-            availableAyahs = state.inlineTafsirByAyah.filterValues { it.isNotBlank() }.keys
+            availableAyahs = state.tafsirByAyah.filterValues { it.isNotBlank() }.keys
         )
-    }
-    val activeTafsirBookName = state.selectedTafseerTitle
-    val tafsirIsRtl = TafsirText.isRtl(state.selectedTafseerLanguage)
-    // Bundled QUL editions are offline by definition; downloaded Quran.com packs are too.
-    val tafsirOfflineReady = remember(
-        state.selectedTafsirId,
-        state.selectedTafseerTitle,
-        state.downloadedTafseers
-    ) {
-        state.selectedTafsirId == IslamicDataRepository.IBN_KATHIR_TAFSIR_ID ||
-            state.selectedTafsirId == QuranViewModel.QUL_JALALAYN_TAFSIR_ID ||
-            state.selectedTafseerTitle.contains("Jalalayn", true) ||
-            state.downloadedTafseers.any {
-                it.tafsirId == state.selectedTafsirId && it.isDownloaded
-            }
-    }
-    val openTafsirBooks: () -> Unit = {
-        showTafsirBooksSheet = true
-        showQuranOptions = false
     }
     val ayahUiState = QuranAyahUiState(
         selectedAyahNumber = selectedAyahNumber,
@@ -730,12 +709,6 @@ fun QuranScreen(
                                     vm.onIntent(QuranUiIntent.SelectQulWord(word.wordKey))
                                 },
                                 tafsirGroups = tafsirGroups,
-                                inlineTafsirEnabled = inlineTafsirEnabled,
-                                activeTafsirBookName = activeTafsirBookName,
-                                inlineTafsirByAyah = state.inlineTafsirByAyah,
-                                tafsirOfflineReady = tafsirOfflineReady,
-                                tafsirIsRtl = tafsirIsRtl,
-                                onOpenTafsirBooks = openTafsirBooks,
                                 translationFontSp = appearanceConfig.translationFontSize
                             )
                         }
@@ -1317,7 +1290,7 @@ fun QuranScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     group.forEach { number ->
-                        val commentary = state.inlineTafsirByAyah[number]
+                        val commentary = state.tafsirByAyah[number]
                             ?.takeIf { it.isNotBlank() }
                             ?: if (number == ayahNumber) state.selectedTafseerContent else ""
                         Text(
