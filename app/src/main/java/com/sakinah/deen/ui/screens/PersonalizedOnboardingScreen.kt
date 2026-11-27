@@ -738,7 +738,7 @@ fun PersonalizedOnboardingScreen(
 
                 val ctaLabel = when (step) {
                     0 -> "Continue"
-                    1, 2, 4, 5, 6 -> "Continue"
+                    1, 2, 3, 4, 5, 6 -> "Continue"
                     else -> "Start Using Sakinah"
                 }
                 val showCta = step > 0 || showGreeting
@@ -755,7 +755,8 @@ fun PersonalizedOnboardingScreen(
                             when (step) {
                                 0 -> step = 1
                                 1 -> step = 2
-                                2 -> {
+                                2 -> step = 3
+                                3 -> {
                                     val lang = LanguageOption(
                                         selectedLanguageName.ifBlank { "English" },
                                         selectedLanguageIso.ifBlank { "en" }
