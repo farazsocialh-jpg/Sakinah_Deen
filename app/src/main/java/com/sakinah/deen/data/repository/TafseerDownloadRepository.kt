@@ -8,6 +8,7 @@ import com.sakinah.deen.network.IslamicDataRepository
 import com.sakinah.deen.util.CitationParser
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
@@ -118,8 +119,11 @@ class TafseerDownloadRepository(
     refreshCatalogOnStart: Boolean = true
 ) {
     companion object {
-        /** Retry backoff for one chapter before it is reported as failed. */
-        private const val RETRY_BASE_DELAY_MILLIS = 400L
+        /** Retry backoff for one chapter: 1s, 2s, 3s. */
+        private const val RETRY_BASE_DELAY_MILLIS = 1000L
+
+        /** Polite gap between chapter requests so Quran.com does not rate-limit the run. */
+        private const val CHAPTER_THROTTLE_MILLIS = 120L
 
         /** Accepts both catalog package ids and the canonical `tafsir_<id>` form. */
         fun tafsirIdFromPackageId(packageId: String): Int? =
@@ -134,7 +138,18 @@ class TafseerDownloadRepository(
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val packageMutexes = mutableMapOf<Int, Mutex>()
 
-    /** Retries a single chapter fetch with exponential backoff before reporting failure. */
+    private fun isTransientTafsirError(error: Throwable): Boolean {
+        val message = error.message.orEmpty().lowercase()
+        return message.contains("http 429") ||
+            Regex("http 5\\d\\d").containsMatchIn(message) ||
+            message.contains("timeout") ||
+            message.contains("timed out") ||
+            message.contains("connect") ||
+            message.contains("unresolved") ||
+            error is IOException
+    }
+
+    /** Retries a single chapter fetch with backoff, recording failure instead of aborting. */
     private suspend fun downloadChapter(
         repo: IslamicDataRepository,
         pkg: TafseerPackage,
@@ -144,19 +159,21 @@ class TafseerDownloadRepository(
     ): Result<Int> {
         var lastError: Throwable? = null
         repeat(attempts) { attempt ->
-            val result = repo.syncTafsirForChapter(
-                tafsirId = pkg.tafsirId,
-                surahNumber = surahNumber,
-                languageCode = pkg.languageCode
-            )
+            val result = runCatching {
+                repo.syncTafsirForChapter(
+                    tafsirId = pkg.tafsirId,
+                    surahNumber = surahNumber,
+                    languageCode = pkg.languageCode
+                ).getOrThrow()
+            }
             val error = result.exceptionOrNull()
             if (error == null) return result
             if (error is kotlinx.coroutines.CancellationException) return result
             lastError = error
             // Drop whatever half of the chapter landed so the retry writes a clean copy.
             runCatching { tafsirDao?.deleteForSurah(sourceKey, surahNumber) }
-            if (attempt < attempts - 1) {
-                delay(RETRY_BASE_DELAY_MILLIS * (1L shl attempt))
+            if (attempt < attempts - 1 && isTransientTafsirError(error)) {
+                delay(RETRY_BASE_DELAY_MILLIS * (attempt + 1L))
             }
         }
         return Result.failure(
@@ -263,7 +280,35 @@ class TafseerDownloadRepository(
      */
     suspend fun downloadTafseerPackage(
         tafsirId: Int,
+        prioritySurah: Int? = null,
         onProgress: (Float) -> Unit = {}
+    ): Result<Int> = withContext(scope.coroutineContext) {
+        downloadTafseerPackageCore(tafsirId, onProgress, prioritySurah)
+    }
+
+    /**
+     * App-scoped launcher: the download survives UI teardown (sheet close, navigation,
+     * onboarding finish). Progress and the final result are delivered to the caller's callbacks.
+     */
+    fun launchTafseerPackageDownload(
+        tafsirId: Int,
+        prioritySurah: Int? = null,
+        onProgress: (Float) -> Unit = {},
+        onComplete: (Result<Int>) -> Unit = {}
+    ): Job = scope.launch {
+        onComplete(
+            downloadTafseerPackage(
+                tafsirId = tafsirId,
+                prioritySurah = prioritySurah,
+                onProgress = onProgress
+            )
+        )
+    }
+
+    private suspend fun downloadTafseerPackageCore(
+        tafsirId: Int,
+        onProgress: (Float) -> Unit,
+        prioritySurah: Int?
     ): Result<Int> = withContext(ioDispatcher) {
         val pkg = runCatching { ensurePackage(tafsirId) }.getOrElse {
             return@withContext Result.failure(it)
@@ -274,13 +319,19 @@ class TafseerDownloadRepository(
             )
 
         val sourceKey = TafseerPackage.sourceKey(pkg.tafsirId)
+        val orderedSurahs = if (prioritySurah != null && prioritySurah in chaptersToDownload) {
+            listOf(prioritySurah) + chaptersToDownload.filter { it != prioritySurah }
+        } else {
+            chaptersToDownload.toList()
+        }
 
         mutexFor(pkg.tafsirId).withLock {
             var savedChapters = 0
+            var processed = 0
             var firstError: Throwable? = null
 
             try {
-                for (surahNumber in chaptersToDownload) {
+                for (surahNumber in orderedSurahs) {
                     ensureActive()
                     // A chapter only counts as cached when it holds a commentary row for
                     // every ayah the offline Quran text has, so an interrupted download
@@ -296,21 +347,23 @@ class TafseerDownloadRepository(
                     val alreadyComplete = expectedAyahs > 0 && cachedRows >= expectedAyahs
                     if (alreadyComplete) {
                         savedChapters++
-                        onProgress(surahNumber.toFloat() / TafseerPackage.TOTAL_CHAPTERS)
-                        continue
-                    }
-                    if (cachedRows > 0) {
-                        runCatching { tafsirDao?.deleteForSurah(sourceKey, surahNumber) }
-                    }
-                    val result = downloadChapter(repo, pkg, surahNumber, sourceKey)
-                    if (result.isSuccess) {
-                        savedChapters++
                     } else {
-                        val error = result.exceptionOrNull()
-                        if (error is kotlinx.coroutines.CancellationException) throw error
-                        if (firstError == null) firstError = error
+                        if (cachedRows > 0) {
+                            runCatching { tafsirDao?.deleteForSurah(sourceKey, surahNumber) }
+                        }
+                        val result = downloadChapter(repo, pkg, surahNumber, sourceKey)
+                        if (result.isSuccess) {
+                            savedChapters++
+                        } else {
+                            val error = result.exceptionOrNull()
+                            if (error is kotlinx.coroutines.CancellationException) throw error
+                            // Record the failure and keep going; one bad surah must not
+                            // strand the remaining chapters at 4/114.
+                            if (firstError == null) firstError = error
+                        }
                     }
-                    onProgress(surahNumber.toFloat() / TafseerPackage.TOTAL_CHAPTERS)
+                    processed++
+                    onProgress(processed.toFloat() / TafseerPackage.TOTAL_CHAPTERS)
                     _packages.update { packages ->
                         packages.map {
                             if (it.tafsirId == pkg.tafsirId) {
@@ -321,7 +374,7 @@ class TafseerDownloadRepository(
                         }
                     }
                     // Stay a polite consumer of the free API.
-                    delay(60)
+                    delay(CHAPTER_THROTTLE_MILLIS)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 refreshDownloadStatus()
@@ -345,11 +398,12 @@ class TafseerDownloadRepository(
     /** Package-id entry point retained for Settings and the background worker. */
     suspend fun downloadTafseerPackage(
         packageId: String,
+        prioritySurah: Int? = null,
         onProgress: (Float) -> Unit = {}
     ): Result<Int> {
         val pkg = resolvePackageId(packageId)
             ?: return Result.failure(IllegalArgumentException("Tafseer package $packageId not found"))
-        return downloadTafseerPackage(pkg.tafsirId, onProgress)
+        return downloadTafseerPackage(pkg.tafsirId, prioritySurah, onProgress)
     }
 
     /** Reads a cached ayah directly from the same Room source the downloader writes. */

@@ -1124,26 +1124,30 @@ fun SettingsScreen(
                                             onClick = {
                                                 downloadingPackId = pack.id
                                                 packDownloadProgress = 0f
-                                                scope.launch {
-                                                    val result = tafseerRepository
-                                                        .downloadTafseerPackage(pack.id) { progress ->
-                                                            packDownloadProgress = progress
+                                                tafseerRepository.launchTafseerPackageDownload(
+                                                    tafsirId = pack.tafsirId,
+                                                    onProgress = { progress ->
+                                                        packDownloadProgress = progress
+                                                    },
+                                                    onComplete = { result ->
+                                                        scope.launch {
+                                                            tafseerRepository.refreshDownloadStatus()
+                                                            downloadingPackId = null
+                                                            packDownloadProgress = 0f
+                                                            snackbarHostState.showSnackbar(
+                                                                result.fold(
+                                                                    onSuccess = { chapters ->
+                                                                        "${pack.title}: $chapters surahs cached offline."
+                                                                    },
+                                                                    onFailure = { error ->
+                                                                        "Tafseer download failed: " +
+                                                                            (error.message ?: "network error")
+                                                                    }
+                                                                )
+                                                            )
                                                         }
-                                                    tafseerRepository.refreshDownloadStatus()
-                                                    downloadingPackId = null
-                                                    packDownloadProgress = 0f
-                                                    snackbarHostState.showSnackbar(
-                                                        result.fold(
-                                                            onSuccess = { chapters ->
-                                                                "${pack.title}: $chapters surahs cached offline."
-                                                            },
-                                                            onFailure = { error ->
-                                                                "Tafseer download failed: " +
-                                                                    (error.message ?: "network error")
-                                                            }
-                                                        )
-                                                    )
-                                                }
+                                                    }
+                                                )
                                             }
                                         ) {
                                             Text(

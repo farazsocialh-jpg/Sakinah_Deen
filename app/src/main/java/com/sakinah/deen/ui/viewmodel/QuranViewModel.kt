@@ -1454,41 +1454,37 @@ class QuranViewModel(
         val ayahNumber = state.activeHighlightedAyah
         val title = state.selectedTafseerTitle
 
-        viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    isDownloadingTafseer = true,
-                    tafseerDownloadProgress = 0f,
-                    contentNotice = null,
-                    tafseerErrorMessage = null
-                )
-            }
-            try {
-                val result = if (packRepo != null) {
-                    packRepo.downloadTafseerPackage(tafsirId) { progress ->
-                        _uiState.update { it.copy(tafseerDownloadProgress = progress) }
-                    }
-                } else {
-                    repo!!.syncTafsirForSurah(surahNumber = surahNumber, tafsirId = tafsirId)
-                }
-                val error = result.exceptionOrNull()
-                val savedChapters = result.getOrNull() ?: 0
+        _uiState.update {
+            it.copy(
+                isDownloadingTafseer = true,
+                tafseerDownloadProgress = 0f,
+                contentNotice = null,
+                tafseerErrorMessage = null
+            )
+        }
 
-                if (error != null) {
-                    _uiState.update {
-                        it.copy(tafseerErrorMessage = friendlyTafseerError(title, error))
-                    }
-                } else if (savedChapters <= 0) {
+        fun handleResult(result: Result<Int>) {
+            val error = result.exceptionOrNull()
+            val savedChapters = result.getOrNull() ?: 0
+            when {
+                error != null -> _uiState.update {
+                    it.copy(
+                        isDownloadingTafseer = false,
+                        tafseerErrorMessage = friendlyTafseerError(title, error)
+                    )
+                }
+                savedChapters <= 0 -> _uiState.update {
+                    it.copy(
+                        isDownloadingTafseer = false,
+                        tafseerErrorMessage = "No $title commentary was returned. Check your connection and try again."
+                    )
+                }
+                else -> {
+                    viewModelScope.launch { packRepo?.refreshDownloadStatus() }
                     _uiState.update {
                         it.copy(
-                            tafseerErrorMessage = "No $title commentary was returned for Surah $surahNumber. " +
-                                "Check your connection and try again."
-                        )
-                    }
-                } else {
-                    packRepo?.refreshDownloadStatus()
-                    _uiState.update {
-                        it.copy(
+                            isDownloadingTafseer = false,
+                            tafseerDownloadProgress = 1f,
                             activeHighlightedAyah = ayahNumber,
                             selectedTafseerContent = "",
                             contentNotice = null,
@@ -1498,16 +1494,27 @@ class QuranViewModel(
                     selectAyahForTafseer(ayahNumber)
                     loadTafsirByAyahForSurah()
                 }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(tafseerErrorMessage = friendlyTafseerError(title, e))
+            }
+        }
+
+        if (packRepo != null) {
+            // App-scoped: leaving the sheet or screen no longer cancels the 114-surah run.
+            packRepo.launchTafseerPackageDownload(
+                tafsirId = tafsirId,
+                prioritySurah = surahNumber,
+                onProgress = { progress ->
+                    _uiState.update { it.copy(tafseerDownloadProgress = progress) }
+                },
+                onComplete = ::handleResult
+            )
+        } else {
+            viewModelScope.launch {
+                val result = try {
+                    repo!!.syncTafsirForSurah(surahNumber = surahNumber, tafsirId = tafsirId)
+                } catch (e: Exception) {
+                    Result.failure(e)
                 }
-            } finally {
-                _uiState.update {
-                    it.copy(isDownloadingTafseer = false, tafseerDownloadProgress = 0f)
-                }
+                handleResult(result)
             }
         }
     }

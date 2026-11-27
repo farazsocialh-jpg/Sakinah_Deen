@@ -146,9 +146,6 @@ import com.sakinah.deen.ui.theme.ThemeMode
 import com.sakinah.deen.ui.theme.UserAppearanceConfig
 import com.sakinah.deen.ui.theme.UserObjective
 import com.sakinah.deen.util.TimeZoneResolver
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -375,9 +372,6 @@ fun PersonalizedOnboardingScreen(
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    // Deliberately not tied to the composable: a Tafsir pack keeps downloading after the
-    // user leaves onboarding.
-    val tafsirDownloadScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
     val lifecycleOwner = LocalLifecycleOwner.current
     val quranReaderPrefs = remember(context) { QuranReaderPreferences(context) }
 
@@ -537,18 +531,20 @@ fun PersonalizedOnboardingScreen(
             return
         }
         tafsirDownloading = true
-        tafsirDownloadScope.launch {
-            val result = repo.downloadTafseerPackage(pkg.tafsirId) { progress ->
-                tafsirDownloadProgress = progress
+        repo.launchTafseerPackageDownload(
+            tafsirId = pkg.tafsirId,
+            prioritySurah = quranReaderPrefs.lastReadPosition?.surahNumber ?: 1,
+            onProgress = { progress -> tafsirDownloadProgress = progress },
+            onComplete = { result ->
+                tafsirDownloading = false
+                tafsirDownloadProgress = if (result.isSuccess) 1f else 0f
+                tafsirDownloadError = if (result.isSuccess) {
+                    null
+                } else {
+                    "Couldn't download ${pkg.title}. Retry or continue."
+                }
             }
-            tafsirDownloading = false
-            tafsirDownloadProgress = if (result.isSuccess) 1f else 0f
-            tafsirDownloadError = if (result.isSuccess) {
-                null
-            } else {
-                "Couldn't download ${pkg.title}. Retry or continue."
-            }
-        }
+        )
     }
 
     val editionsForSelectedLanguage = remember(translationResources, selectedLanguageIso, selectedLanguageName) {
