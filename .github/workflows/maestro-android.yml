@@ -16,6 +16,11 @@ jobs:
   maestro-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    environment: Playstore
+    env:
+      AI_PROXY_URL: ${{ vars.AI_PROXY_URL || secrets.AI_PROXY_URL || 'https://ai.insightsltd.com' }}
+      GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+      NISAB_RATE_URL: ${{ vars.NISAB_RATE_URL || secrets.NISAB_RATE_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
