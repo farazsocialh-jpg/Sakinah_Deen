@@ -90,7 +90,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
@@ -160,6 +160,8 @@ jobs:
       - name: Build Debug APK
         env:
           AI_PROXY_URL: ${{ vars.AI_PROXY_URL || secrets.AI_PROXY_URL }}
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          NISAB_RATE_URL: ${{ vars.NISAB_RATE_URL || secrets.NISAB_RATE_URL }}
         run: ./gradlew :app:assembleDebug
 
       - name: Boot Emulator & Run AI UX Agent

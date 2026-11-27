@@ -194,6 +194,9 @@ fun RootNavHost(
             // Clearing the preview is essential: a non-null preview stays active forever
             // and silently blocks all later theme/layout updates.
             appearancePrefs.setPreview(null)
+            // Settings resets onboardingCompleted before launching the replay, so restore it
+            // on cancel; otherwise the wizard reopens forever and Settings never returns.
+            appearancePrefs.saveConfig(appearanceConfig.copy(onboardingCompleted = true))
             rerunOnboarding = false
         }
         BackHandler(enabled = rerunOnboarding) { cancelOnboarding() }

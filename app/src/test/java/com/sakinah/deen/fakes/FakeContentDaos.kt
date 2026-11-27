@@ -56,6 +56,9 @@ class FakeQuranDao : QuranDao {
         translations.keys.removeAll { it.first == surahNumber && it.third == translationId }
     }
 
+    override suspend fun countTranslations(surahNumber: Int, translationId: Int): Int =
+        translations.values.count { it.surahNumber == surahNumber && it.translationId == translationId }
+
     override fun searchAyahs(query: String, limit: Int): Flow<List<QuranAyahEntity>> = flow {
         emit(
             ayahs.values

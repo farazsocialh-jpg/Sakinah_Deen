@@ -288,7 +288,8 @@ fun QiblaModesCard(
             QiblaMode.MAP -> QiblaMapView(
                 latitude = latitude,
                 longitude = longitude,
-                qiblaBearing = qiblaBearing
+                qiblaBearing = qiblaBearing,
+                distanceKm = distanceKm
             )
 
             QiblaMode.COMPASS -> QiblaCompassPanel(
@@ -516,7 +517,8 @@ private enum class MapLoadState { LOADING, READY, FAILED }
 private fun QiblaMapView(
     latitude: Double,
     longitude: Double,
-    qiblaBearing: Float
+    qiblaBearing: Float,
+    distanceKm: Int
 ) {
     val context = LocalContext.current
     var loadState by remember(latitude, longitude) { mutableStateOf(MapLoadState.LOADING) }
@@ -588,179 +590,185 @@ private fun QiblaMapView(
                 .height(230.dp)
                 .clip(RoundedCornerShape(12.dp))
         ) {
-            if (loadState == MapLoadState.FAILED) {
-                QiblaMapFallback(
-                    qiblaBearing = qiblaBearing,
-                    reason = failureReason,
-                    onRetry = { reloadToken++ }
-                )
-            } else {
-                AndroidView(
-                    modifier = Modifier.fillMaxSize(),
-                    factory = { webContext ->
-                        WebView(webContext).apply {
-                            settings.javaScriptEnabled = true
-                            settings.domStorageEnabled = true
-                            settings.allowFileAccess = false
-                            settings.allowContentAccess = false
-                            settings.setGeolocationEnabled(false)
-                            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                            settings.loadsImagesAutomatically = true
-                            settings.userAgentString =
-                                System.getProperty("http.agent").orEmpty() +
-                                " ImanCore/${BuildConfig.VERSION_NAME}"
-                            setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                            if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { webContext ->
+                    WebView(webContext).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.allowFileAccess = false
+                        settings.allowContentAccess = false
+                        settings.setGeolocationEnabled(false)
+                        settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                        settings.loadsImagesAutomatically = true
+                        settings.userAgentString =
+                            System.getProperty("http.agent").orEmpty() +
+                            " ImanCore/${BuildConfig.VERSION_NAME}"
+                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                        if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
 
-                            webChromeClient = object : WebChromeClient() {
-                                override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
-                                    android.util.Log.d(
-                                        "QiblaMapJS",
-                                        "${consoleMessage?.message()} @${consoleMessage?.sourceId()}:${consoleMessage?.lineNumber()}"
-                                    )
-                                    return true
+                        webChromeClient = object : WebChromeClient() {
+                            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                                android.util.Log.d(
+                                    "QiblaMapJS",
+                                    "${consoleMessage?.message()} @${consoleMessage?.sourceId()}:${consoleMessage?.lineNumber()}"
+                                )
+                                return true
+                            }
+                        }
+
+                        webViewClient = object : WebViewClient() {
+                            override fun shouldInterceptRequest(
+                                view: WebView?,
+                                request: WebResourceRequest?
+                            ): android.webkit.WebResourceResponse? {
+                                val url = request?.url ?: return null
+                                return assetLoader.shouldInterceptRequest(url)
+                            }
+
+                            override fun shouldOverrideUrlLoading(
+                                view: WebView?,
+                                request: WebResourceRequest?
+                            ): Boolean {
+                                // Keep the map on its own page; nothing may navigate the WebView away.
+                                val url = request?.url?.toString().orEmpty()
+                                return !url.startsWith(QIBLA_MAP_URL, ignoreCase = true)
+                            }
+
+                            override fun onReceivedError(
+                                view: WebView?,
+                                request: WebResourceRequest?,
+                                error: WebResourceError?
+                            ) {
+                                android.util.Log.e(
+                                    "QiblaMap",
+                                    "onReceivedError: ${error?.description} for ${request?.url}"
+                                )
+                                if (request?.isForMainFrame == true) {
+                                    fail(error?.description?.toString() ?: "Map page failed to load.")
                                 }
                             }
 
-                            webViewClient = object : WebViewClient() {
-                                override fun shouldInterceptRequest(
-                                    view: WebView?,
-                                    request: WebResourceRequest?
-                                ): android.webkit.WebResourceResponse? {
-                                    val url = request?.url ?: return null
-                                    return assetLoader.shouldInterceptRequest(url)
-                                }
-
-                                override fun shouldOverrideUrlLoading(
-                                    view: WebView?,
-                                    request: WebResourceRequest?
-                                ): Boolean {
-                                    // Keep the map on its own page; nothing may navigate the WebView away.
-                                    val url = request?.url?.toString().orEmpty()
-                                    return !url.startsWith(QIBLA_MAP_URL, ignoreCase = true)
-                                }
-
-                                override fun onReceivedError(
-                                    view: WebView?,
-                                    request: WebResourceRequest?,
-                                    error: WebResourceError?
-                                ) {
-                                    android.util.Log.e(
-                                        "QiblaMap",
-                                        "onReceivedError: ${error?.description} for ${request?.url}"
-                                    )
-                                    if (request?.isForMainFrame == true) {
-                                        fail(error?.description?.toString() ?: "Map page failed to load.")
-                                    }
-                                }
-
-                                override fun onReceivedHttpError(
-                                    view: WebView?,
-                                    request: WebResourceRequest?,
-                                    errorResponse: android.webkit.WebResourceResponse?
-                                ) {
-                                    android.util.Log.e(
-                                        "QiblaMap",
-                                        "onReceivedHttpError: ${errorResponse?.statusCode} for ${request?.url}"
-                                    )
-                                    if (request?.isForMainFrame == true) {
-                                        fail("Map page returned HTTP ${errorResponse?.statusCode}.")
-                                    }
-                                }
-
-                                override fun onRenderProcessGone(
-                                    view: WebView?,
-                                    detail: android.webkit.RenderProcessGoneDetail?
-                                ): Boolean {
-                                    android.util.Log.e("QiblaMap", "WebView renderer died")
-                                    fail("The map renderer stopped unexpectedly.")
-                                    return true
+                            override fun onReceivedHttpError(
+                                view: WebView?,
+                                request: WebResourceRequest?,
+                                errorResponse: android.webkit.WebResourceResponse?
+                            ) {
+                                android.util.Log.e(
+                                    "QiblaMap",
+                                    "onReceivedHttpError: ${errorResponse?.statusCode} for ${request?.url}"
+                                )
+                                if (request?.isForMainFrame == true) {
+                                    fail("Map page returned HTTP ${errorResponse?.statusCode}.")
                                 }
                             }
 
-                            val mainHandler = Handler(Looper.getMainLooper())
-                            addJavascriptInterface(
-                                QiblaMapBridge(
-                                    onReadyCallback = {
-                                        android.util.Log.d("QiblaMap", "Leaflet page ready")
-                                        mainHandler.post {
-                                            loadState = MapLoadState.READY
-                                            failureReason = null
-                                            webViewHolder.value?.evaluateJavascript(
-                                                "window.invalidateMapSize && window.invalidateMapSize()",
-                                                null
-                                            )
-                                        }
-                                    },
-                                    onTileLoadedCallback = {
-                                        mainHandler.post {
-                                            loadState = MapLoadState.READY
-                                            failureReason = null
-                                        }
-                                    },
-                                    onErrorCallback = { reason ->
-                                        mainHandler.post {
-                                            fail(
-                                                when (reason) {
-                                                    "tiles_unavailable" -> "Street tiles are unreachable on this network."
-                                                    "leaflet_missing" -> "The bundled map library failed to load."
-                                                    "bad_coordinates" -> "Location coordinates are missing."
-                                                    else -> "Map error: $reason"
-                                                }
-                                            )
-                                        }
-                                    },
-                                    onDebugCallback = { message ->
-                                        // Bridge diagnostics are only useful while developing; a
-                                        // release build must not write WebView URLs to logcat.
-                                        if (com.sakinah.deen.BuildConfig.DEBUG) {
-                                            android.util.Log.d("QiblaMapBT", message)
-                                        }
+                            override fun onRenderProcessGone(
+                                view: WebView?,
+                                detail: android.webkit.RenderProcessGoneDetail?
+                            ): Boolean {
+                                android.util.Log.e("QiblaMap", "WebView renderer died")
+                                fail("The map renderer stopped unexpectedly.")
+                                return true
+                            }
+                        }
+
+                        val mainHandler = Handler(Looper.getMainLooper())
+                        addJavascriptInterface(
+                            QiblaMapBridge(
+                                onReadyCallback = {
+                                    android.util.Log.d("QiblaMap", "Leaflet page ready")
+                                    mainHandler.post {
+                                        // Leaflet being ready is not the same as tiles being painted.
+                                        // Keep the native base layer up until the first tile loads.
+                                        webViewHolder.value?.evaluateJavascript(
+                                            "window.invalidateMapSize && window.invalidateMapSize()",
+                                            null
+                                        )
                                     }
-                                ),
-                                "QiblaBridge"
-                            )
-                            webViewHolder.value = this
-                            tag = mapUrl
-                            loadUrl(mapUrl)
-                        }
-                    },
-                    update = { webView ->
-                        // Retry / location change reloads the page instead of stacking new WebViews.
-                        if (webView.tag != mapUrl) {
-                            webView.tag = mapUrl
-                            webView.loadUrl(mapUrl)
-                        }
+                                },
+                                onTileLoadedCallback = {
+                                    mainHandler.post {
+                                        loadState = MapLoadState.READY
+                                        failureReason = null
+                                    }
+                                },
+                                onErrorCallback = { reason ->
+                                    mainHandler.post {
+                                        fail(
+                                            when (reason) {
+                                                "tiles_unavailable" -> "Street tiles are unreachable on this network."
+                                                "leaflet_missing" -> "The bundled map library failed to load."
+                                                "bad_coordinates" -> "Location coordinates are missing."
+                                                else -> "Map error: $reason"
+                                            }
+                                        )
+                                    }
+                                },
+                                onDebugCallback = { message ->
+                                    // Bridge diagnostics are only useful while developing; a
+                                    // release build must not write WebView URLs to logcat.
+                                    if (com.sakinah.deen.BuildConfig.DEBUG) {
+                                        android.util.Log.d("QiblaMapBT", message)
+                                    }
+                                }
+                            ),
+                            "QiblaBridge"
+                        )
+                        webViewHolder.value = this
+                        tag = mapUrl
+                        loadUrl(mapUrl)
                     }
-                )
+                },
+                update = { webView ->
+                    // Retry / location change reloads the page instead of stacking new WebViews.
+                    if (webView.tag != mapUrl) {
+                        webView.tag = mapUrl
+                        webView.loadUrl(mapUrl)
+                    }
+                }
+            )
 
-                // A small pill, not a full-cover overlay: the page's own offline bearing
-                // graphic has to stay visible while tiles are still being fetched, otherwise
-                // Map mode looks like an empty coloured rectangle on a slow or offline device.
-                if (loadState == MapLoadState.LOADING) {
-                    Surface(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(top = 10.dp)
-                            .zIndex(1f),
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+            // Always-on native base layer: remote tiles may be slow, blocked, or fail after
+            // first paint. This guarantees Map mode can never look like an empty green panel.
+            if (loadState != MapLoadState.READY) {
+                QiblaMapBaseLayer(
+                    qiblaBearing = qiblaBearing,
+                    distanceKm = distanceKm,
+                    reason = failureReason,
+                    failed = loadState == MapLoadState.FAILED,
+                    onRetry = { reloadToken++ },
+                    modifier = Modifier
+                        .matchParentSize()
+                        .zIndex(1f)
+                )
+            }
+
+            // A small progress pill above the native base layer: it communicates that real
+            // street tiles are still being fetched without hiding the offline bearing graphic.
+            if (loadState == MapLoadState.LOADING) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 10.dp)
+                        .zIndex(2f),
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(12.dp),
-                                strokeWidth = 1.5.dp
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = "Loading street tiles…",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(12.dp),
+                            strokeWidth = 1.5.dp
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "Loading street tiles…",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -778,59 +786,115 @@ private fun QiblaMapView(
     }
 }
 
-/** Native fallback shown when tiles cannot be fetched: bearing ring + explicit retry. */
+/**
+ * Native map layer that stays visible until real street tiles are ready. It draws a high-contrast
+ * grid, the user's location, the Kaaba marker and the Qibla bearing so Map mode always conveys
+ * useful information even when the WebView is loading or completely offline.
+ */
 @Composable
-private fun QiblaMapFallback(qiblaBearing: Float, reason: String?, onRetry: () -> Unit) {
-    val fallbackRing = MaterialTheme.colorScheme.outline
-    val fallbackPrimary = MaterialTheme.colorScheme.primary
+private fun QiblaMapBaseLayer(
+    qiblaBearing: Float,
+    distanceKm: Int,
+    reason: String?,
+    failed: Boolean,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val gridColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.32f)
+    val bearingColor = MaterialTheme.colorScheme.primary
+    val pinColor = MaterialTheme.colorScheme.onSurface
     Surface(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier,
         color = MaterialTheme.colorScheme.surfaceVariant
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = reason ?: "Map tiles unavailable — native Qibla bearing shown below.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(10.dp))
+        Box(Modifier.fillMaxSize()) {
             Canvas(
                 modifier = Modifier
-                    .size(96.dp)
+                    .matchParentSize()
                     .semantics {
                         contentDescription =
-                            "Qibla bearing ${qiblaBearing.roundToInt()} degrees from true north"
+                            "Stylised map showing Qibla bearing ${qiblaBearing.roundToInt()} degrees from true north"
                     }
             ) {
-                val centre = Offset(size.width / 2f, size.height / 2f)
-                val radius = size.minDimension / 2f - 6f
-                drawCircle(color = fallbackRing, radius = radius, center = centre, style = Stroke(width = 3f))
-                rotate(degrees = qiblaBearing, pivot = centre) {
+                val width = size.width
+                val height = size.height
+                for (index in 1..5) {
+                    val x = width * index / 6f
+                    val y = height * index / 6f
+                    drawLine(gridColor, Offset(x, 0f), Offset(x, height), strokeWidth = 1.5f)
+                    drawLine(gridColor, Offset(0f, y), Offset(width, y), strokeWidth = 1.5f)
+                }
+
+                val centre = Offset(width / 2f, height / 2f)
+                val radius = minOf(width, height) * 0.36f
+                val radians = Math.toRadians(qiblaBearing.toDouble())
+                val kaaba = Offset(
+                    centre.x + sin(radians).toFloat() * radius,
+                    centre.y - cos(radians).toFloat() * radius
+                )
+
+                var travelled = 0f
+                while (travelled < 0.92f) {
+                    val next = minOf(travelled + 0.07f, 1f)
                     drawLine(
-                        color = fallbackPrimary,
-                        start = centre,
-                        end = Offset(centre.x, centre.y - radius + 16f),
-                        strokeWidth = 7f,
+                        color = bearingColor,
+                        start = Offset(
+                            centre.x + (kaaba.x - centre.x) * travelled,
+                            centre.y + (kaaba.y - centre.y) * travelled
+                        ),
+                        end = Offset(
+                            centre.x + (kaaba.x - centre.x) * next,
+                            centre.y + (kaaba.y - centre.y) * next
+                        ),
+                        strokeWidth = 3f,
                         cap = StrokeCap.Round
                     )
+                    travelled += 0.12f
                 }
+
+                drawCircle(color = pinColor, radius = 11f, center = centre)
+                drawCircle(color = bearingColor, radius = 6f, center = centre)
+                drawCircle(
+                    color = bearingColor,
+                    radius = 11f,
+                    center = kaaba,
+                    style = Stroke(width = 3f)
+                )
+                drawCircle(color = bearingColor, radius = 4f, center = kaaba)
+                drawLine(
+                    color = gridColor,
+                    start = Offset(centre.x, centre.y - radius - 22f),
+                    end = Offset(centre.x, centre.y - radius - 8f),
+                    strokeWidth = 2f
+                )
             }
-            Text(
-                text = "Qibla ${qiblaBearing.roundToInt()}° from true north",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            Button(onClick = onRetry) {
-                Text("Retry map", fontSize = 12.sp)
+
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Qibla ${qiblaBearing.roundToInt()}° · $distanceKm km to Makkah",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center
+                )
+                if (failed) {
+                    Text(
+                        text = reason ?: "Street tiles are unavailable. Bearing shown offline.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    Button(onClick = onRetry) {
+                        Text("Retry map", fontSize = 12.sp)
+                    }
+                }
             }
         }
     }

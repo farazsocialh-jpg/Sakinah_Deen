@@ -23,10 +23,13 @@ settings:
   prompt:
     appUiStructure: |-
       ImanCore is an Islamic companion app for Android.
-      First launch shows a 4-step onboarding: Welcome (preferred name), About you
-      (experience level + focus), Appearance (System/Light/Dark, colour palette swatches,
-      font sizes, LIVE PREVIEW card), Permissions (Location, Notifications, Exact Alarms,
-      Battery), then "Open ImanCore". "Skip" is available on the welcome step.
+      First launch shows an 8-step onboarding: Welcome ("As-salamu alaykum", "Enter your
+      name"), Appearance ("Make it yours", "Choose your color theme and reading comfort.",
+      System/Light/Dark, palette swatches, "Sample reading text"), Goals ("Select all of
+      the above"), Language ("Search languages..."), Edition ("Select your preferred
+      translation style"), Tafsir ("Download later"), Permissions (Location, Notifications,
+      Exact Alarms, Battery Optimization with "Allow"/"Granted" buttons), then the final
+      "Start Using Sakinah" button. "Skip" is available on the welcome step.
       Bottom navigation: Salah, Quran, Hadith, Scholar, Tools.
       Salah opens on a "Times" tab: header with Hijri date/location, "Today: X/Y Prayed"
       progress strip, prayer rows (Fajr, Dhuhr, Asr, Maghrib, Isha) with completion
@@ -69,24 +72,28 @@ scenarios:
     goal: |-
       You are a first-time user on ImanCore's welcome step.
       0. If any Android system permission dialog appears, dismiss it ("Don't allow") and
-         return to ImanCore.
-      1. Tap the "Preferred name (optional)" field, type "Faraz", clear it completely,
-         re-type "Faraz", dismiss the on-screen keyboard, then tap "Continue".
-      2. On step 2, verify the greeting contains "Faraz". Tap each journey chip
-         ("New to Islam", "Student of Knowledge", "Practicing Muslim"), then tap two
-         different focus cards (for example "Reading Quran" and "Prayer consistency"),
-         and tap "Continue".
-      3. On the Appearance step, verify the LIVE PREVIEW Arabic and English text is
-         visible. Tap "Dark". Select the "Black & White" (monochrome) palette. Scroll down
-         inside the step to reveal the font controls, tap "Large" overall font size, tap
-         "+" on Arabic Size and on Translation Size, and verify LIVE PREVIEW stays readable.
-         Then tap "Continue".
-      4. On step 4, verify the heading reads "Set up once, Faraz" (the name must not be
-         missing). Inspect all four tiles - Location, Notifications, Exact Alarms, Battery.
-         Do NOT tap "Open ImanCore". Stay on this screen.
-    maxStep: 22
+          return to ImanCore.
+      1. Verify "As-salamu alaykum" and "Welcome to Sakinah. What should we call you?".
+        Tap the "Enter your name" field, type "Faraz", clear it completely, re-type "Faraz",
+        dismiss the keyboard, then tap "Continue".
+      2. On the Appearance step, verify "Make it yours, Faraz" and "Choose your color theme
+          and reading comfort.". Tap "Dark", select the "Black & White" (monochrome) palette,
+          and verify the "Sample reading text — Calm, clear, and easy on the eyes." stays
+          readable. Tap "Continue".
+      3. On the goals step, verify "Select all of the above". Tap at least two goal cards
+          (for example "Learn more about Islam" and "Become more proficient in prayers"),
+          then tap "Continue".
+      4. On the language step, verify "Search languages...", then tap "Continue".
+      5. On the edition step, verify "Select your preferred translation style across Quran,
+          WBW, Hadith, and Tafseer.", then tap "Continue".
+      6. On the Tafsir step, verify "Choose your English Tafsir" and tap "Download later",
+          then tap "Continue".
+      7. On the permissions step, verify the heading reads "You're all set, Faraz" (the name
+          must not be missing). Inspect all four tiles - Location, Notifications, Exact Alarms,
+          Battery Optimization. Do NOT tap "Continue". Stay on this screen.
+    maxStep: 30
     imageAssertions:
-      - assertionPrompt: "Step 4 displays 'Set up once, Faraz' and all 4 permission tiles and buttons (Allow/Allowed) have clear, high-contrast readable text with no blank white pills."
+      - assertionPrompt: "Permissions step displays 'You're all set, Faraz' and all 4 permission tiles and buttons (Allow/Granted) have clear, high-contrast readable text with no blank white pills."
 
   # ------------------------------------------- skip + replay onboarding cancel
   - id: "02-onboarding-skip-and-replay-cancel"
@@ -98,12 +105,13 @@ scenarios:
     goal: |-
       0. Dismiss any Android permission dialog.
       1. Tap "Skip" on the welcome step and confirm the app lands cleanly on the main
-         Salah screen, with the bottom navigation visible and no half-finished overlay.
+          Salah screen, with the bottom navigation visible and no half-finished overlay.
       2. Tap "Tools" in the bottom navigation, then open "Settings" / "Appearance &
-         Reading", then tap "Replay Quick Tour" (Replay Onboarding).
-      3. Verify the onboarding wizard opens. Then dismiss it with the Close (X) or
-         "Cancel" control. Verify you are returned to the Settings screen and can still
-         scroll and tap controls (no frozen overlay, no broken back stack).
+          Reading", then tap "Re-run Personalized Onboarding".
+      3. Verify the onboarding wizard opens. Then dismiss it with the "Skip" control
+          (there is no X/Cancel button) or the system back key. Verify you are returned to
+          the Settings screen and can still scroll and tap controls (no frozen overlay,
+          no broken back stack).
     maxStep: 16
     imageAssertions:
       - assertionPrompt: "Cancelling Replay Onboarding returns cleanly to the Settings screen with no frozen overlay or broken back stack."
