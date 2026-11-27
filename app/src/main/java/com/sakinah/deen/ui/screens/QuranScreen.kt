@@ -121,6 +121,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.pluralStringResource
@@ -141,6 +142,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -243,6 +245,11 @@ fun QuranScreen(
     val readingLayout = appearanceConfig.quranReadingLayout
     val fontScalePresets = FontScalePreset.entries
     val fontScaleIndex = fontScalePresets.indexOf(appearanceConfig.fontScale).coerceAtLeast(0)
+    val baseDensity = LocalDensity.current
+    val readingDensity = Density(
+        density = baseDensity.density,
+        fontScale = (baseDensity.fontScale * appearanceConfig.fontScale.multiplier).coerceIn(0.8f, 2.0f)
+    )
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val readerPrefs = remember(context) { QuranReaderPreferences(context) }
@@ -701,28 +708,30 @@ fun QuranScreen(
                             .weight(1f)
                             .fillMaxWidth()
                     ) {
-                        QuranReadingLayoutContent(
-                            layout = readingLayout,
-                            surah = displaySurah,
-                            state = ayahUiState,
-                            onAyahClick = onAyahClick,
-                            onTafseer = onTafseerClick,
-                            onTagMistake = onTagMistakeClick,
-                            onToggleBookmark = onToggleBookmark,
-                            listState = listState,
-                            wbwWords = state.qulWordsByAyah,
-                            qulScript = state.qulScript,
-                            onWordClick = { word ->
-                                vm.onIntent(QuranUiIntent.SelectQulWord(word.wordKey))
-                            },
-                            inlineTafsirEnabled = inlineTafsirEnabled,
-                            activeTafsirBookName = activeTafsirBookName,
-                            inlineTafsirByAyah = state.inlineTafsirByAyah,
-                            tafsirOfflineReady = tafsirOfflineReady,
-                            tafsirIsRtl = tafsirIsRtl,
-                            onOpenTafsirBooks = openTafsirBooks,
-                            translationFontSp = appearanceConfig.translationFontSize
-                        )
+                        CompositionLocalProvider(LocalDensity provides readingDensity) {
+                            QuranReadingLayoutContent(
+                                layout = readingLayout,
+                                surah = displaySurah,
+                                state = ayahUiState,
+                                onAyahClick = onAyahClick,
+                                onTafseer = onTafseerClick,
+                                onTagMistake = onTagMistakeClick,
+                                onToggleBookmark = onToggleBookmark,
+                                listState = listState,
+                                wbwWords = state.qulWordsByAyah,
+                                qulScript = state.qulScript,
+                                onWordClick = { word ->
+                                    vm.onIntent(QuranUiIntent.SelectQulWord(word.wordKey))
+                                },
+                                inlineTafsirEnabled = inlineTafsirEnabled,
+                                activeTafsirBookName = activeTafsirBookName,
+                                inlineTafsirByAyah = state.inlineTafsirByAyah,
+                                tafsirOfflineReady = tafsirOfflineReady,
+                                tafsirIsRtl = tafsirIsRtl,
+                                onOpenTafsirBooks = openTafsirBooks,
+                                translationFontSp = appearanceConfig.translationFontSize
+                            )
+                        }
                         Box(
                             modifier = Modifier
                                 .matchParentSize()
@@ -775,6 +784,7 @@ fun QuranScreen(
                     // The mus-haf page used to build one AnnotatedString for the whole
                     // surah and compose a chip per ayah, which janked on long surahs.
                     // Paragraph chunks are lazily composed with stable keys instead.
+                    CompositionLocalProvider(LocalDensity provides readingDensity) {
                     LazyColumn(
                         state = listState,
                         modifier = Modifier
@@ -856,6 +866,7 @@ fun QuranScreen(
                                 }
                             }
                         }
+                    }
                     }
                 }
             }

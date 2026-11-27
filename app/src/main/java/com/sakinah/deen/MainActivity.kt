@@ -124,7 +124,8 @@ class MainActivity : ComponentActivity() {
             SakinahTheme(
                 darkTheme = darkTheme,
                 palette = appearanceConfig.palette,
-                fontScaleMultiplier = appearanceConfig.fontScale.multiplier
+                // Font scale is Quran-reading scoped; it must never resize the whole app.
+                fontScaleMultiplier = 1f
             ) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     RootNavHost(

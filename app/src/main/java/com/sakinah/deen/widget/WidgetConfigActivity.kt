@@ -96,7 +96,7 @@ class WidgetConfigActivity : ComponentActivity() {
             SakinahTheme(
                 darkTheme = darkTheme,
                 palette = appearance.palette,
-                fontScaleMultiplier = appearance.fontScale.multiplier
+                fontScaleMultiplier = 1f
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
