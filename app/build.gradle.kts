@@ -166,7 +166,7 @@ android {
     sourceSets {
         // Room's MigrationTestHelper reads the exported schemas from the instrumentation assets;
         // without this the migration tests fail with "Cannot find schema file".
-        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+        getByName("androidTest").assets.directories.add("$projectDir/schemas")
     }
 }
 

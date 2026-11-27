@@ -3,6 +3,7 @@ package com.sakinah.deen.ui.screens
 import com.sakinah.deen.R
 
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -41,9 +42,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -65,7 +66,7 @@ fun DataSourcesScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 @Composable
 fun HelpScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showEmailFallback by remember { mutableStateOf(false) }
@@ -109,7 +110,11 @@ fun HelpScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             },
             confirmButton = {
                 TextButton(onClick = {
-                    clipboard.setText(AnnotatedString("support@imancore.app"))
+                    scope.launch {
+                        clipboard.setClipEntry(
+                            ClipEntry(ClipData.newPlainText("Sakinah Deen", "support@imancore.app"))
+                        )
+                    }
                     showEmailFallback = false
                     scope.launch {
                         snackbarHostState.showSnackbar(context.getString(R.string.info_help_copied))

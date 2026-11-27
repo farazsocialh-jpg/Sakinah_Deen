@@ -1,5 +1,6 @@
 package com.sakinah.deen.ui.screens
 
+import android.content.ClipData
 import android.content.Intent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -118,7 +119,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -127,7 +129,6 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -247,7 +248,8 @@ fun QuranScreen(
         fontScale = (baseDensity.fontScale * appearanceConfig.fontScale.multiplier).coerceIn(0.8f, 2.0f)
     )
     val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
     val readerPrefs = remember(context) { QuranReaderPreferences(context) }
     val sharedTranslationSelection by readerPrefs.selectedTranslation.collectAsStateWithLifecycle()
 
@@ -491,7 +493,11 @@ fun QuranScreen(
         ).joinToString("\n\n")
     }
     val copyActionAyah: () -> Unit = {
-        ayahShareBody?.let { clipboard.setText(AnnotatedString(it)) }
+        ayahShareBody?.let { body ->
+            scope.launch {
+                clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Sakinah Deen", body)))
+            }
+        }
     }
     val shareActionAyah: () -> Unit = {
         ayahShareBody?.let { body ->

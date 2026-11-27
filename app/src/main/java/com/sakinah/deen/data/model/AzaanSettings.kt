@@ -17,7 +17,7 @@ enum class Muezzin(
     val id: String,
     val displayName: String,
     /** Compiled resource id: resolving the recording by name needed reflection and hid it from lint. */
-    @RawRes val rawRes: Int
+    @param:RawRes val rawRes: Int
 ) {
     MAKKAH("makkah", "Makkah (Masjid al-Haram)", R.raw.adhan_makkah),
     MADINAH("madinah", "Madinah (Masjid an-Nabawi)", R.raw.azan_madinah),

@@ -184,7 +184,6 @@ class PrayerCalculationEngineImpl : PrayerCalculationEngine {
                     CalculationMethod.SAMR -> 15.0
                     CalculationMethod.TUNISIA -> 18.0
                     CalculationMethod.TEHRAN -> 14.0
-                    else -> 17.0
                 }
                 val ishaAltRad = -ishaAngle * PI / 180.0
                 val cosHourAngleIsha = (sin(ishaAltRad) - sin(latRad) * sin(declRad)) / (cos(latRad) * cos(declRad))

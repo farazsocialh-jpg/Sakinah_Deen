@@ -21,6 +21,8 @@ import com.sakinah.deen.R
  */
 class SakinahFirebaseMessagingService : FirebaseMessagingService() {
 
+    @Suppress("DEPRECATION")
+    @Deprecated("Topic subscription is managed by SakinahApp, not by token callbacks.")
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         // Topic subscription is (re)established by SakinahApp; a refreshed token keeps it alive.

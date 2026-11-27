@@ -44,7 +44,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import org.koin.android.ext.koin.androidContext
-import org.koin.androidx.viewmodel.dsl.viewModel
+import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
 val preferencesModule = module {
@@ -204,6 +204,7 @@ val workerModule = module {
  * The previous plain store is migrated once and kept only as a fallback when the platform
  * keystore is unavailable, so a rotated key never locks the user out of the app.
  */
+@Suppress("DEPRECATION")
 private fun encryptedAccountSettings(context: android.content.Context): android.content.SharedPreferences? {
     val legacy = context.getSharedPreferences("sakinah_account_settings", android.content.Context.MODE_PRIVATE)
     val encrypted = runCatching {

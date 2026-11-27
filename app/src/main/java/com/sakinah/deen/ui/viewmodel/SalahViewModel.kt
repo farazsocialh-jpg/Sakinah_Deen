@@ -230,10 +230,10 @@ class SalahViewModel(
         val savedManual = preferences?.isManualLocation == true && savedCoords != null
         val savedZone = if (savedManual) {
             TimeZoneResolver.resolveZoneIdString(
-                explicitZoneId = preferences?.locationTimeZoneId,
-                cityLabel = preferences?.locationLabel,
-                countryCode = preferences?.locationCountryCode,
-                longitude = savedCoords?.second
+                explicitZoneId = preferences.locationTimeZoneId,
+                cityLabel = preferences.locationLabel,
+                countryCode = preferences.locationCountryCode,
+                longitude = savedCoords.second
             )
         } else {
             preferences?.locationTimeZoneId ?: ZoneId.systemDefault().id
@@ -250,7 +250,7 @@ class SalahViewModel(
                 locationAgeMinutes = preferences?.locationAgeMillis()?.let { age -> age / 60_000L } ?: 0L,
                 isLocationStale = preferences?.isLocationStale() == true,
                 userCoordinates = savedCoords ?: it.userCoordinates,
-                locationName = if (savedCoords != null) preferences?.locationLabel ?: it.locationName else it.locationName,
+                locationName = if (savedCoords != null) preferences.locationLabel else it.locationName,
                 timeZoneId = savedZone,
                 timeZoneAbbr = TimeZoneResolver.shortAbbreviation(savedZone),
                 isLocationPending = !hasUsableCoordinates
@@ -761,8 +761,8 @@ class SalahViewModel(
                         "&current=weather_code,is_day,temperature_2m"
                 )
                 if (!response.status.isSuccess()) return@launch
-                val root = Json { ignoreUnknownKeys = true }
-                    .parseToJsonElement(response.bodyAsText()) as? JsonObject ?: return@launch
+                val root = weatherJson.parseToJsonElement(response.bodyAsText()) as? JsonObject
+                    ?: return@launch
                 val current = root["current"] as? JsonObject ?: return@launch
                 val code = (current["weather_code"] as? JsonPrimitive)?.intOrNull ?: 0
                 val isDay = (current["is_day"] as? JsonPrimitive)?.intOrNull != 0
@@ -808,7 +808,7 @@ class SalahViewModel(
         val manualTravelMode = preferences?.travelModeActive == true
         val clearManualTravelMode = manualTravelMode &&
             SafarPolicy.shouldClearManualTravelMode(travelManager.getHomeAnchor(), coords)
-        if (clearManualTravelMode) preferences?.travelModeActive = false
+        if (clearManualTravelMode) preferences.travelModeActive = false
         val isSafar = travel.isTraveler || (manualTravelMode && !clearManualTravelMode)
         val rakats = SafarPolicy.rakats(isSafar)
 
@@ -1208,6 +1208,7 @@ class SalahViewModel(
 
     companion object {
         private const val SECONDS_PER_DAY = 86_400L
+        private val weatherJson = Json { ignoreUnknownKeys = true }
 
         /** Shown when a prayer time could not be resolved, instead of a fake clock time. */
         internal const val UNAVAILABLE_TIME = "--:--"
