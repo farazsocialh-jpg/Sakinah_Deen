@@ -432,7 +432,7 @@ fun QuranScreen(
         hifzOverlayActive = hifzOverlayActive,
         hifzMistakes = state.hifzMistakes,
         translationIsRtl = translationIsRtl,
-        arabicFontSizeSp = state.arabicFontSize,
+        arabicFontSizeSp = appearanceConfig.arabicFontSize,
         translationFontSizeSp = appearanceConfig.translationFontSize,
         focusMode = focusMode,
         bookmarkedAyahNumbers = state.bookmarkedAyahNumbers,
@@ -798,7 +798,7 @@ fun QuranScreen(
                             MushafParagraphText(
                                 paragraph = paragraph,
                                 selectedAyahNumber = selectedAyahNumber,
-                                fontSizeSp = state.arabicFontSize
+                                fontSizeSp = appearanceConfig.arabicFontSize
                             )
                         }
 
