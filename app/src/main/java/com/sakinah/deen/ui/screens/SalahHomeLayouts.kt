@@ -36,6 +36,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Surface
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -578,6 +579,7 @@ private fun heroTitle(state: SalahUiState): String {
 internal fun ClassicHeroCard(
     state: SalahUiState,
     onToggleCurrent: () -> Unit,
+    onQadhaClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val metrics = rememberSalahHeroMetrics(state)
@@ -595,6 +597,32 @@ internal fun ClassicHeroCard(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = state.hijriDate,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "${state.locationName} · ${state.authorityName}",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Text(
+                    text = state.gregorianDate,
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             if (!state.isDuhaWindow) {
                 NextMetaRow(state, completed) {
                     ClockPill(state.nextPrayerStartTimeFormatted)
@@ -607,12 +635,48 @@ internal fun ClassicHeroCard(
             ) {
                 Text(
                     text = heroTitle(state),
-                    fontSize = 28.sp,
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
-                PrayerCheckCircle(completed, onToggleCurrent)
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Row(
+                        modifier = Modifier.height(IntrinsicSize.Min),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clickable(onClick = onQadhaClick)
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Qadha", style = MaterialTheme.typography.labelLarge)
+                        }
+                        VerticalDivider(
+                            modifier = Modifier.padding(vertical = 6.dp),
+                            thickness = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clickable(onClick = onToggleCurrent)
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            androidx.compose.material3.Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = "Mark prayed",
+                                tint = if (completed) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
             DrainingBar(metrics.animatedProgress, completed, metrics.remainingPercent)
             CountdownRow(state, metrics, completed)
@@ -1094,10 +1158,11 @@ internal fun PrayerGrid(
 internal fun SalahHomeHero(
     layout: SalahHomeLayout,
     state: SalahUiState,
-    onToggleCurrent: () -> Unit
+    onToggleCurrent: () -> Unit,
+    onQadhaClick: () -> Unit = {}
 ) {
     when (layout) {
-        SalahHomeLayout.CLASSIC_COMPACT -> ClassicHeroCard(state, onToggleCurrent)
+        SalahHomeLayout.CLASSIC_COMPACT -> ClassicHeroCard(state, onToggleCurrent, onQadhaClick)
         SalahHomeLayout.BENTO_SPLIT -> BentoHero(state, onToggleCurrent)
         SalahHomeLayout.CIRCULAR_RING -> CircularHero(state, onToggleCurrent)
         SalahHomeLayout.SEAMLESS_EDITORIAL -> SeamlessHero(state, onToggleCurrent)

@@ -208,7 +208,7 @@ fun SalahScreen(
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // 1. Deduplicated Salah header + layout-specific hero
@@ -231,16 +231,6 @@ fun SalahScreen(
                         },
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        SalahTopHeader(
-                            state = state,
-                            focusMode = focusMode,
-                            onPickLocation = { showManualCityDialog = true },
-                            onOpenNotifications = onOpenNotificationSettings,
-                            onOpenSettings = { onOpenPrayerSettings?.invoke() ?: run { showSettingsDialog = true } },
-                            onOpenQadha = { showQadhaDialog = true },
-                            onRecalculate = { viewModel?.onIntent(SalahUiIntent.RecalculateToday) }
-                        )
-
                         // One compact warning card: two stacked full-width banners pushed the
                         // first prayer rows below the fold on a short screen.
                         if (!focusMode &&
@@ -320,12 +310,11 @@ fun SalahScreen(
                                 onToggleCurrent = {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     viewModel?.onIntent(SalahUiIntent.ToggleCurrentPrayerCompleted)
-                                }
+                                },
+                                onQadhaClick = { showQadhaDialog = true }
                             )
                         }
                     }
-
-                    LiveSkySunArcCard(state = state)
                 }
             }
 

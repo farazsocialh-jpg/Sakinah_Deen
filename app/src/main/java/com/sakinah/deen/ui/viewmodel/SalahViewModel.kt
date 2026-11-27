@@ -1023,10 +1023,16 @@ class SalahViewModel(
         }
     }
 
+    /** Friday relabels Dhuhr as Jummah, so match on the stable id, never the display text. */
+    private fun PrayerModel.matchesType(type: PrayerType): Boolean =
+        id.equals(type.name, ignoreCase = true) ||
+            nameEnglish.equals(type.name, ignoreCase = true) ||
+            (type == PrayerType.DHUHR && nameEnglish.equals("Jummah", ignoreCase = true))
+
     private fun toggleSalahCompletion(prayerType: PrayerType, isJamaah: Boolean) {
         viewModelScope.launch {
             val currentlyCompleted = _uiState.value.prayersList
-                .firstOrNull { it.nameEnglish.equals(prayerType.name, ignoreCase = true) }
+                .firstOrNull { it.matchesType(prayerType) }
                 ?.isFardCompleted == true
             val newCompleted = !currentlyCompleted
             val newJamaah = if (newCompleted) isJamaah else false
@@ -1049,7 +1055,7 @@ class SalahViewModel(
             }
 
             val updated = _uiState.value.prayersList.map { p ->
-                if (p.nameEnglish.equals(prayerType.name, ignoreCase = true)) {
+                if (p.matchesType(prayerType)) {
                     p.copy(isFardCompleted = newCompleted, isJamaah = newJamaah)
                 } else p
             }
