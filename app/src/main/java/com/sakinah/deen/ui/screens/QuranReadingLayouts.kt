@@ -258,7 +258,8 @@ private fun AyahArabic(
         modifier = modifier,
         fontSizeSp = fontSizeSp,
         color = MaterialTheme.colorScheme.onSurface,
-        isQuran = true
+        isQuran = true,
+        lineHeightMultiplier = 1.65f
     )
 }
 
@@ -528,6 +529,7 @@ private fun WbwInterlinear(
                         text = word.arabicFor(script),
                         fontFamily = UthmanicFontFamily,
                         fontSize = arabicFontSp.sp,
+                        lineHeight = (arabicFontSp * 1.65f).sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     if (word.translation.isNotBlank()) {

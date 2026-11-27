@@ -342,41 +342,45 @@ internal fun LiveSkySunArcCard(
             }
         }
 
-        Surface(
-            shape = RoundedCornerShape(50),
-            color = Color.Black.copy(alpha = 0.28f),
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 4.dp)
-        ) {
-            Text(
-                text = sky?.label ?: "Sky unavailable",
-                color = Color.White,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
-            )
-        }
         Column(
-            modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp),
+            modifier = Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = 2.dp),
             horizontalAlignment = Alignment.Start
         ) {
             Text("Sunrise", color = Color.White.copy(alpha = 0.75f), fontSize = 9.sp)
             Text(label(sunrise), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
         Column(
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 2.dp),
             horizontalAlignment = Alignment.End
         ) {
             Text("Sunset", color = Color.White.copy(alpha = 0.75f), fontSize = 9.sp)
             Text(label(sunset), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
-        state.temperatureCelsius?.let { temp ->
-            Text(
-                text = "${temp.roundToInt()}°C",
-                color = Color.White,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 2.dp)
-            )
+        Column(
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 2.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = Color.Black.copy(alpha = 0.28f)
+            ) {
+                Text(
+                    text = sky?.label ?: "Sky unavailable",
+                    color = Color.White,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
+                )
+            }
+            Spacer(Modifier.height(2.dp))
+            state.temperatureCelsius?.let { temp ->
+                Text(
+                    text = "${temp.roundToInt()}°C",
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }

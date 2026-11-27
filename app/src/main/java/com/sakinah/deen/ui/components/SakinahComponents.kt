@@ -206,7 +206,8 @@ fun ArabicVerseBlock(
     modifier: Modifier = Modifier,
     fontSizeSp: Int = 26,
     color: Color = MaterialTheme.colorScheme.onSurface,
-    isQuran: Boolean = true
+    isQuran: Boolean = true,
+    lineHeightMultiplier: Float = 1.9f
 ) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Text(
@@ -219,7 +220,7 @@ fun ArabicVerseBlock(
                 fontSize = fontSizeSp.sp,
                 // 1.9x line height plus explicit font padding keep the harakat above and
                 // below the baseline (fatha, kasra, shadda, sukun) from being clipped.
-                lineHeight = (fontSizeSp * 1.9f).sp,
+                lineHeight = (fontSizeSp * lineHeightMultiplier).sp,
                 platformStyle = PlatformTextStyle(includeFontPadding = true),
                 color = color,
                 textAlign = TextAlign.Start

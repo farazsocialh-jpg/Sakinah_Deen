@@ -1280,23 +1280,6 @@ fun QuranScreen(
                         maxLines = 1
                     )
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(onClick = { vm.onIntent(QuranUiIntent.SetTafsirFontSize(state.tafsirFontSize - 1)) }) {
-                        Text("A-", fontSize = 12.sp)
-                    }
-                    Text(
-                        text = "${state.tafsirFontSize}sp",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    TextButton(onClick = { vm.onIntent(QuranUiIntent.SetTafsirFontSize(state.tafsirFontSize + 1)) }) {
-                        Text("A+", fontSize = 12.sp)
-                    }
-                }
                 if (state.isFetchingTafsirRange) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -1355,8 +1338,8 @@ fun QuranScreen(
                                 text = TafsirText.clean(commentary).ifBlank {
                                     "No commentary cached for ayah $number in ${state.selectedTafseerTitle}."
                                 },
-                                fontSize = state.tafsirFontSize.sp,
-                                lineHeight = (state.tafsirFontSize * 1.4f).sp,
+                                fontSize = appearanceConfig.translationFontSize.sp,
+                                lineHeight = (appearanceConfig.translationFontSize * 1.4f).sp,
                                 textAlign = if (TafsirText.isRtl(state.selectedTafseerLanguage)) {
                                     TextAlign.End
                                 } else {
@@ -2237,7 +2220,7 @@ private fun ReaderFontSlidersCard(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
-                text = "Arabic ${arabicFontSize}sp · WBW",
+                text = "Arabic ${arabicFontSize}sp",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -2249,7 +2232,7 @@ private fun ReaderFontSlidersCard(
                 modifier = Modifier.fillMaxWidth()
             )
             Text(
-                text = "Translation ${translationFontSize}sp · WBW meanings",
+                text = "Translation ${translationFontSize}sp",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
