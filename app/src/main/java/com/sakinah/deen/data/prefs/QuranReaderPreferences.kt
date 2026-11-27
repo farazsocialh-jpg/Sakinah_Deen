@@ -150,10 +150,12 @@ class QuranReaderPreferences internal constructor(
         private const val KEY_TAFSIR_ID = "quran_selected_tafsir_id"
         private const val KEY_TAFSEER_LANGUAGE = "quran_selected_tafseer_language"
         private const val KEY_TAFSEER_TITLE = "quran_selected_tafseer_title"
+        private const val KEY_TAFSIR_FONT_SIZE = "quran_tafsir_font_size"
         private val TAFSIR_KEYS = setOf(
             KEY_TAFSIR_ID,
             KEY_TAFSEER_LANGUAGE,
-            KEY_TAFSEER_TITLE
+            KEY_TAFSEER_TITLE,
+            KEY_TAFSIR_FONT_SIZE
         )
 
         const val DEFAULT_WBW_LANGUAGE = "en"
@@ -278,6 +280,11 @@ class QuranReaderPreferences internal constructor(
         }
         _selectedTranslation.value = selection
     }
+
+    /** Commentary text size, scoped to the Tafsir sheet only. */
+    var tafsirFontSize: Int
+        get() = prefs.getInt(KEY_TAFSIR_FONT_SIZE, 16).coerceIn(13, 24)
+        set(value) = prefs.edit { putInt(KEY_TAFSIR_FONT_SIZE, value.coerceIn(13, 24)) }
 
     var selectedTafsirSelection: QuranTafsirSelection
         get() = readTafsirSelection()

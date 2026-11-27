@@ -80,6 +80,7 @@ internal data class QuranAyahUiState(
     val hifzMistakes: Map<Pair<Int, Int>, String>,
     val translationIsRtl: Boolean,
     val arabicFontSizeSp: Int,
+    val translationFontSizeSp: Int = 13,
     val focusMode: Boolean,
     val bookmarkedAyahNumbers: Set<Int> = emptySet(),
     /** False hides the word-by-word strip without losing the reader's choice. */
@@ -363,8 +364,7 @@ private fun SplitColumnLayout(
                                 words = wbwWords[ayah.numberInSurah].orEmpty(),
                                 state = state,
                                 script = qulScript,
-                                onWordClick = onWordClick,
-                                fontSizeSp = 16
+                                onWordClick = onWordClick
                             )
                         }
                     }
@@ -467,14 +467,20 @@ private fun WbwWordsBlock(
     words: List<QulWord>,
     state: QuranAyahUiState,
     script: String,
-    onWordClick: (QulWord) -> Unit,
-    fontSizeSp: Int = 18
+    onWordClick: (QulWord) -> Unit
 ) {
     if (words.isEmpty() || !state.wbwEnabled) return
     // One presentation: interlinear RTL. Every word stays clickable and opens the
     // word-meaning/root sheet from the reader, so no secondary layout is needed.
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-        WbwInterlinear(words, state, script, fontSizeSp, onWordClick)
+        WbwInterlinear(
+            words = words,
+            state = state,
+            script = script,
+            arabicFontSp = state.arabicFontSizeSp,
+            translationFontSp = state.translationFontSizeSp,
+            onWordClick = onWordClick
+        )
     }
 }
 
@@ -496,7 +502,8 @@ private fun WbwInterlinear(
     words: List<QulWord>,
     state: QuranAyahUiState,
     script: String,
-    fontSizeSp: Int,
+    arabicFontSp: Int,
+    translationFontSp: Int,
     onWordClick: (QulWord) -> Unit
 ) {
     // No height cap and no take(n): every word of the ayah wraps into the FlowRow.
@@ -520,14 +527,14 @@ private fun WbwInterlinear(
                     Text(
                         text = word.arabicFor(script),
                         fontFamily = UthmanicFontFamily,
-                        fontSize = fontSizeSp.sp,
+                        fontSize = arabicFontSp.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     if (word.translation.isNotBlank()) {
                         Text(
                             text = word.translation,
-                            fontSize = 9.sp,
-                            lineHeight = 11.sp,
+                            fontSize = translationFontSp.sp,
+                            lineHeight = (translationFontSp * 1.2f).sp,
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -535,8 +542,8 @@ private fun WbwInterlinear(
                     if (word.transliteration.isNotBlank()) {
                         Text(
                             text = word.transliteration,
-                            fontSize = 8.sp,
-                            lineHeight = 10.sp,
+                            fontSize = (translationFontSp * 0.8f).sp,
+                            lineHeight = (translationFontSp).sp,
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                         )

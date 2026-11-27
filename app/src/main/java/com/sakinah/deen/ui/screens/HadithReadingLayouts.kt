@@ -39,6 +39,7 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -63,6 +64,10 @@ import com.sakinah.deen.data.prefs.HadithReadingLayout
 import com.sakinah.deen.ui.components.ArabicVerseBlock
 import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.viewmodel.HadithBookInfo
+
+/** Reader-scoped font sizes shared by every Hadith layout variant. */
+val LocalHadithArabicFont = compositionLocalOf { 20f }
+val LocalHadithTranslationFont = compositionLocalOf { 12f }
 
 @Composable
 private fun hadithGradeAccent(hadith: HadithModel): Color = when {
@@ -182,13 +187,13 @@ private fun HadithShareButton(
 private fun HadithArabic(
     hadith: HadithModel,
     modifier: Modifier = Modifier,
-    fontSizeSp: Int = 20
+    fontSizeSp: Int? = null
 ) {
     if (hadith.arabicText.isBlank()) return
     ArabicVerseBlock(
         arabicText = hadith.arabicText,
         modifier = modifier,
-        fontSizeSp = fontSizeSp,
+        fontSizeSp = fontSizeSp ?: LocalHadithArabicFont.current.toInt(),
         color = MaterialTheme.colorScheme.onSurface,
         isQuran = false
     )
@@ -198,15 +203,16 @@ private fun HadithArabic(
 private fun HadithEnglish(
     hadith: HadithModel,
     modifier: Modifier = Modifier,
-    fontSizeSp: Int = 12
+    fontSizeSp: Int? = null
 ) {
     if (hadith.matnTranslation.isBlank()) return
+    val size = fontSizeSp ?: LocalHadithTranslationFont.current.toInt()
     Text(
         text = hadith.matnTranslation,
         modifier = modifier.fillMaxWidth(),
         fontFamily = FontFamily.Serif,
-        fontSize = fontSizeSp.sp,
-        lineHeight = (fontSizeSp * 1.38f).sp,
+        fontSize = size.sp,
+        lineHeight = (size * 1.38f).sp,
         color = MaterialTheme.colorScheme.onSurface
     )
 }
@@ -1024,6 +1030,10 @@ internal fun HadithReadingLayoutContent(
         )
         return
     }
+    CompositionLocalProvider(
+        LocalHadithArabicFont provides arabicFontSp,
+        LocalHadithTranslationFont provides translationFontSp
+    ) {
     when (layout) {
         HadithReadingLayout.COMPACT_DROPDOWN -> CompactDropdownLayout(
             hadiths, listState, highlightedHadithId, onToggleBookmark, onShare
@@ -1063,5 +1073,6 @@ internal fun HadithReadingLayoutContent(
         HadithReadingLayout.MINIMALIST_ZEN -> MinimalistZenLayout(
             hadiths, listState, highlightedHadithId, onToggleBookmark
         )
+    }
     }
 }

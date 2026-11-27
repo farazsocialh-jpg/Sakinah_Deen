@@ -164,7 +164,6 @@ import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.components.StatusBadge
 import com.sakinah.deen.ui.rememberInject
 
-import com.sakinah.deen.ui.theme.FontScalePreset
 import com.sakinah.deen.ui.theme.UthmanicFontFamily
 import com.sakinah.deen.ui.viewmodel.AyahSearchResult
 import com.sakinah.deen.ui.viewmodel.QuranUiIntent
@@ -242,8 +241,6 @@ fun QuranScreen(
     val appearancePrefs = rememberInject<AppearancePreferences>()
     val appearanceConfig by appearancePrefs.effectiveConfig.collectAsStateWithLifecycle()
     val readingLayout = appearanceConfig.quranReadingLayout
-    val fontScalePresets = FontScalePreset.entries
-    val fontScaleIndex = fontScalePresets.indexOf(appearanceConfig.fontScale).coerceAtLeast(0)
     val baseDensity = LocalDensity.current
     val readingDensity = Density(
         density = baseDensity.density,
@@ -436,6 +433,7 @@ fun QuranScreen(
         hifzMistakes = state.hifzMistakes,
         translationIsRtl = translationIsRtl,
         arabicFontSizeSp = state.arabicFontSize,
+        translationFontSizeSp = appearanceConfig.translationFontSize,
         focusMode = focusMode,
         bookmarkedAyahNumbers = state.bookmarkedAyahNumbers,
         wbwEnabled = state.wbwEnabled,
@@ -1037,13 +1035,14 @@ fun QuranScreen(
                 enter = fadeIn(),
                 exit = fadeOut()
             ) {
-                FontScaleSliderCard(
-                    index = fontScaleIndex,
-                    presets = fontScalePresets,
-                    onIndexChange = { index ->
-                        appearancePrefs.update {
-                            it.copy(fontScale = fontScalePresets[index])
-                        }
+                ReaderFontSlidersCard(
+                    arabicFontSize = appearanceConfig.arabicFontSize,
+                    translationFontSize = appearanceConfig.translationFontSize,
+                    onArabicChange = { size ->
+                        appearancePrefs.update { it.copy(arabicFontSize = size) }
+                    },
+                    onTranslationChange = { size ->
+                        appearancePrefs.update { it.copy(translationFontSize = size) }
                     }
                 )
             }
@@ -1281,6 +1280,23 @@ fun QuranScreen(
                         maxLines = 1
                     )
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { vm.onIntent(QuranUiIntent.SetTafsirFontSize(state.tafsirFontSize - 1)) }) {
+                        Text("A-", fontSize = 12.sp)
+                    }
+                    Text(
+                        text = "${state.tafsirFontSize}sp",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextButton(onClick = { vm.onIntent(QuranUiIntent.SetTafsirFontSize(state.tafsirFontSize + 1)) }) {
+                        Text("A+", fontSize = 12.sp)
+                    }
+                }
                 if (state.isFetchingTafsirRange) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -1339,8 +1355,8 @@ fun QuranScreen(
                                 text = TafsirText.clean(commentary).ifBlank {
                                     "No commentary cached for ayah $number in ${state.selectedTafseerTitle}."
                                 },
-                                fontSize = appearanceConfig.translationFontSize.sp,
-                                lineHeight = (appearanceConfig.translationFontSize * 1.35f).sp,
+                                fontSize = state.tafsirFontSize.sp,
+                                lineHeight = (state.tafsirFontSize * 1.4f).sp,
                                 textAlign = if (TafsirText.isRtl(state.selectedTafseerLanguage)) {
                                     TextAlign.End
                                 } else {
@@ -2202,48 +2218,47 @@ private fun CompactPillIconButton(
     }
 }
 
-/** Floating slider popover anchored above the bottom dock. */
+/** Floating reader-scoped sliders: Arabic (including WBW) and Translation (including WBW meanings). */
 @Composable
-private fun FontScaleSliderCard(
-    index: Int,
-    presets: List<FontScalePreset>,
-    onIndexChange: (Int) -> Unit
+private fun ReaderFontSlidersCard(
+    arabicFontSize: Int,
+    translationFontSize: Int,
+    onArabicChange: (Int) -> Unit,
+    onTranslationChange: (Int) -> Unit
 ) {
-    val preset = presets[index]
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
         shadowElevation = 8.dp
     ) {
-        Row(
+        Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
-                text = "aA",
-                modifier = Modifier.width(24.dp),
-                fontSize = 13.sp,
+                text = "Arabic ${arabicFontSize}sp · WBW",
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
             Slider(
-                value = index.toFloat(),
-                onValueChange = { value ->
-                    onIndexChange(value.roundToInt().coerceIn(0, presets.lastIndex))
-                },
-                valueRange = 0f..presets.lastIndex.toFloat(),
-                steps = (presets.lastIndex - 1).coerceAtLeast(0),
-                modifier = Modifier.weight(1f)
+                value = arabicFontSize.toFloat(),
+                onValueChange = { onArabicChange(it.roundToInt().coerceIn(16, 40)) },
+                valueRange = 16f..40f,
+                modifier = Modifier.fillMaxWidth()
             )
             Text(
-                text = "${(preset.multiplier * 100).roundToInt()}%",
-                modifier = Modifier.width(42.dp),
+                text = "Translation ${translationFontSize}sp · WBW meanings",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                textAlign = TextAlign.End
+                color = MaterialTheme.colorScheme.primary
+            )
+            Slider(
+                value = translationFontSize.toFloat(),
+                onValueChange = { onTranslationChange(it.roundToInt().coerceIn(12, 30)) },
+                valueRange = 12f..30f,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }

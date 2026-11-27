@@ -111,6 +111,8 @@ data class QuranUiState(
     val wbwEnabled: Boolean = false,
     /** Ayah -> cleaned commentary for the open surah, used by group labels and the sheet. */
     val tafsirByAyah: Map<Int, String> = emptyMap(),
+    /** Tafsir-sheet-only commentary text size. */
+    val tafsirFontSize: Int = 16,
     /** True while missing ayahs in the open Tafsir range are fetched live. */
     val isFetchingTafsirRange: Boolean = false,
     val mushafLayout: String = QuranReaderPreferences.DEFAULT_MUSHAF_LAYOUT,
@@ -159,6 +161,7 @@ sealed class QuranUiIntent {
         val title: String = ""
     ) : QuranUiIntent()
     data object FetchTafseerAyah : QuranUiIntent()
+    data class SetTafsirFontSize(val size: Int) : QuranUiIntent()
     data class FetchTafsirRange(
         val surahNumber: Int,
         val ayahNumbers: List<Int>
@@ -266,7 +269,8 @@ class QuranViewModel(
             mushafLayout = quranReaderPreferences?.mushafLayout
                 ?: QuranReaderPreferences.DEFAULT_MUSHAF_LAYOUT,
             wbwLayoutMode = quranReaderPreferences?.wbwLayoutMode ?: WbwLayoutMode.DEFAULT,
-            wbwEnabled = quranReaderPreferences?.wbwEnabled ?: false
+            wbwEnabled = quranReaderPreferences?.wbwEnabled ?: false,
+            tafsirFontSize = quranReaderPreferences?.tafsirFontSize ?: 16
         )
     )
     val uiState: StateFlow<QuranUiState> = _uiState.asStateFlow()
@@ -359,6 +363,11 @@ class QuranViewModel(
                 intent.title
             )
             is QuranUiIntent.FetchTafseerAyah -> fetchTafseerAyahLive()
+            is QuranUiIntent.SetTafsirFontSize -> {
+                val size = intent.size.coerceIn(13, 24)
+                quranReaderPreferences?.tafsirFontSize = size
+                _uiState.update { it.copy(tafsirFontSize = size) }
+            }
             is QuranUiIntent.FetchTafsirRange -> fetchTafsirRange(
                 intent.surahNumber,
                 intent.ayahNumbers

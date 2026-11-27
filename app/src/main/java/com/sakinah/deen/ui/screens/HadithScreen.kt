@@ -62,7 +62,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
@@ -116,6 +118,7 @@ fun HadithScreen(
     var splitViewEnabled by rememberSaveable { mutableStateOf(false) }
     var showFontSettings by remember { mutableStateOf(false) }
     var chapterQuery by remember { mutableStateOf("") }
+    var pillCollapsed by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val tabLabels = listOf(
         stringResource(R.string.hadith_tab_books),
@@ -206,6 +209,31 @@ fun HadithScreen(
         }
     }
 
+    // Same scroll-direction morph as the Quran reader: the floating pill recedes while
+    // reading down and returns on scroll up, unless auto-hide is disabled.
+    LaunchedEffect(listState, appearanceConfig.autoHideBarsOnScroll) {
+        if (!appearanceConfig.autoHideBarsOnScroll) {
+            pillCollapsed = false
+            return@LaunchedEffect
+        }
+        var lastIndex = listState.firstVisibleItemIndex
+        var lastOffset = listState.firstVisibleItemScrollOffset
+        snapshotFlow {
+            listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+        }.collect { (index, offset) ->
+            val atTop = index == 0 && offset < 8
+            val delta = (index - lastIndex) * 1_000_000 + (offset - lastOffset)
+            pillCollapsed = when {
+                atTop -> false
+                delta < -4 -> false
+                delta > 4 -> true
+                else -> pillCollapsed
+            }
+            lastIndex = index
+            lastOffset = offset
+        }
+    }
+
     BackHandler(enabled = state.selectedTab == HadithTab.BOOKS && selectedBook != null) {
         if (selectedChapterNumber != null) {
             vm.onIntent(HadithUiIntent.SelectSection(0))
@@ -260,7 +288,7 @@ fun HadithScreen(
                         }
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "← ${selectedSectionTitle}",
+                                text = selectedSectionTitle,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp,
                                 color = MaterialTheme.colorScheme.primary,
@@ -438,14 +466,18 @@ fun HadithScreen(
             )
 
             if (state.selectedTab == HadithTab.BOOKS && selectedChapterNumber != null) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 72.dp)
+                        .alpha(if (pillCollapsed) 0f else 1f)
+                ) {
                 Surface(
                     shape = RoundedCornerShape(50),
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     tonalElevation = 3.dp,
                     shadowElevation = 4.dp,
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 72.dp)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -473,6 +505,7 @@ fun HadithScreen(
                             )
                         }
                     }
+                }
                 }
             }
         }
@@ -808,7 +841,7 @@ private fun HadithChaptersContent(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "← ${book?.title ?: "Hadith"}",
+                    text = book?.title ?: "Hadith",
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
                     color = MaterialTheme.colorScheme.primary,
