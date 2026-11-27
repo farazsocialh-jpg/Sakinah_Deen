@@ -1239,6 +1239,7 @@ fun QuranScreen(
             onDismissRequest = { selectedTafsirAyah = null },
             sheetState = sheetState
         ) {
+            CompositionLocalProvider(LocalDensity provides readingDensity) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1338,12 +1339,19 @@ fun QuranScreen(
                                 text = TafsirText.clean(commentary).ifBlank {
                                     "No commentary cached for ayah $number in ${state.selectedTafseerTitle}."
                                 },
-                                style = MaterialTheme.typography.bodyMedium,
+                                fontSize = appearanceConfig.translationFontSize.sp,
+                                lineHeight = (appearanceConfig.translationFontSize * 1.35f).sp,
+                                textAlign = if (TafsirText.isRtl(state.selectedTafseerLanguage)) {
+                                    TextAlign.End
+                                } else {
+                                    TextAlign.Start
+                                },
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
                 }
+            }
             }
         }
     }
