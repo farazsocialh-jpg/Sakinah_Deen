@@ -579,7 +579,9 @@ class IslamicDataRepository(
         ) { ayahs, translations ->
             val byAyah = translations.associateBy { it.ayahNumber }
             ayahs.map { ayah ->
-                ayah.copy(translation = byAyah[ayah.ayahNumber]?.translation ?: ayah.translation)
+                // Never silently substitute the seeded English text for a different
+                // selected edition. An empty string tells the reader the download is pending.
+                ayah.copy(translation = byAyah[ayah.ayahNumber]?.translation.orEmpty())
             }
         }
 

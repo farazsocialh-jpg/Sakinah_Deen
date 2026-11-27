@@ -299,6 +299,17 @@ class QuranViewModel(
         observeRoomSurahs()
         observeSelectedSurahAyahs()
         observeQulData()
+        // A translation chosen during onboarding is already in the preference by the time
+        // the reader opens, so kick off its download on first load too.
+        ensureTranslationDownloaded(
+            QuranTranslationSelection(
+                translationId = selectedTranslationIdFlow.value,
+                languageName = _uiState.value.selectedTranslationLanguage,
+                isoCode = _uiState.value.selectedTranslationIsoCode,
+                editionKey = _uiState.value.selectedTranslationEditionKey,
+                source = _uiState.value.selectedTranslationSource
+            )
+        )
         if (islamicRepository != null) {
             viewModelScope.launch { loadTranslationCatalog() }
         }
@@ -499,7 +510,7 @@ class QuranViewModel(
             _uiState.update { it.copy(isLoadingTranslation = false) }
             return
         }
-        val surahNumber = _uiState.value.currentSurah.number
+        val surahNumber = selectedSurahNumber.value
         viewModelScope.launch {
             val cached = runCatching {
                 repo.hasTranslationForSurah(surahNumber, selection.translationId)
@@ -573,6 +584,11 @@ class QuranViewModel(
         val highlighted = mapped.firstOrNull { it.numberInSurah == desiredAyah } ?: mapped.first()
         val scrollTarget = pendingTargetAyah
         pendingTargetAyah = null
+        val translationNotice = if (mapped.none { it.translation.isNotBlank() }) {
+            "Loading ${_uiState.value.selectedTranslationLanguage} translation…"
+        } else {
+            null
+        }
 
         _uiState.update {
             it.copy(
@@ -580,7 +596,7 @@ class QuranViewModel(
                 activeHighlightedAyah = highlighted.numberInSurah,
                 scrollTargetAyah = scrollTarget ?: it.scrollTargetAyah,
                 selectedTafseerContent = highlighted.tafseerIbnKathir,
-                contentNotice = null,
+                contentNotice = translationNotice,
                 errorMessage = null
             )
         }
