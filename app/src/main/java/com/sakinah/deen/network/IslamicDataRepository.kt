@@ -557,6 +557,34 @@ class IslamicDataRepository(
         }.toMap()
     }
 
+    /**
+     * Downloads the selected translation for the whole Quran in the background. Surahs already
+     * cached for this edition are skipped, and audio is deliberately omitted so onboarding can
+     * prepare the reader without pulling large recitation files.
+     */
+    suspend fun downloadTranslationPack(
+        translationId: Int,
+        editionKey: String = "",
+        source: String = QuranTranslationResource.SOURCE_QURAN_COM,
+        onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
+    ): Result<Int> = runCatching {
+        var done = 0
+        for (surahNumber in 1..114) {
+            if (!hasTranslationForSurah(surahNumber, translationId)) {
+                syncSurah(
+                    surahNumber = surahNumber,
+                    translationId = translationId,
+                    translationEditionKey = editionKey,
+                    translationSource = source,
+                    withAudio = false
+                ).getOrThrow()
+            }
+            done++
+            onProgress(done, 114)
+        }
+        done
+    }
+
     /** True when every cached ayah of a surah already has this edition's translation. */
     suspend fun hasTranslationForSurah(surahNumber: Int, translationId: Int): Boolean {
         val expected = quranDao.countAyahs(surahNumber)

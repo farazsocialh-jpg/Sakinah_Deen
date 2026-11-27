@@ -340,6 +340,9 @@ fun PersonalizedOnboardingScreen(
     var selectedEditionKey by rememberSaveable { mutableStateOf("") }
     var selectedEditionLabel by rememberSaveable { mutableStateOf("") }
     var translationResources by remember { mutableStateOf<List<QuranTranslationResource>>(emptyList()) }
+    var quranRepository by remember { mutableStateOf<IslamicDataRepository?>(null) }
+    var translationDownloadLabel by remember { mutableStateOf<String?>(null) }
+    var translationDownloadJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var availableLanguages by remember { mutableStateOf<List<LanguageOption>>(emptyList()) }
     var permissionTick by remember { mutableIntStateOf(0) }
     var prefsTick by remember { mutableIntStateOf(0) }
@@ -359,6 +362,7 @@ fun PersonalizedOnboardingScreen(
 
     LaunchedEffect(Unit) {
         val repo = runCatching { GlobalContext.get().get<IslamicDataRepository>() }.getOrNull()
+        quranRepository = repo
         val fetched = runCatching { repo?.fetchTranslationCatalog().orEmpty() }.getOrDefault(emptyList())
         val resources = fetched.ifEmpty { defaultTranslationResources() }
         translationResources = resources
@@ -448,6 +452,27 @@ fun PersonalizedOnboardingScreen(
                 editionKey = quranRes.editionKey,
                 source = quranRes.source
             )
+            // Start the offline download here instead of making the user wait for the
+            // Quran screen. Selecting another edition cancels the previous download.
+            translationDownloadJob?.cancel()
+            val repo = quranRepository
+            if (repo != null) {
+                translationDownloadJob = scope.launch {
+                    translationDownloadLabel = "Preparing $langName translation…"
+                    val result = repo.downloadTranslationPack(
+                        translationId = quranRes.id,
+                        editionKey = quranRes.editionKey,
+                        source = quranRes.source
+                    ) { done, total ->
+                        translationDownloadLabel = "$langName translation $done/$total surahs"
+                    }
+                    translationDownloadLabel = if (result.isSuccess) {
+                        "$langName translation ready offline"
+                    } else {
+                        "$langName translation will finish when you open the Quran"
+                    }
+                }
+            }
         }
         // WBW - map to iso code; fallback to en
         quranReaderPrefs.wbwLanguage = normalizeWbwLanguage(iso)
@@ -612,6 +637,7 @@ fun PersonalizedOnboardingScreen(
                             userName = config.userName,
                             selectedLanguageName = selectedLanguageName.ifBlank { appPrefs?.quranTranslationLanguage ?: "English" },
                             selectedEditionLabel = selectedEditionLabel.ifBlank { selectedEditionKey.ifBlank { "Default" } },
+                            translationDownloadLabel = translationDownloadLabel,
                             appPrefs = appPrefs,
                             prefsTick = prefsTick,
                             accent = accent,
@@ -1363,6 +1389,7 @@ private fun FirstWinStep(
     userName: String,
     selectedLanguageName: String,
     selectedEditionLabel: String,
+    translationDownloadLabel: String?,
     appPrefs: SakinahPreferences?,
     prefsTick: Int,
     accent: Color,
@@ -1426,6 +1453,16 @@ private fun FirstWinStep(
                 fontWeight = FontWeight.SemiBold,
                 color = accent,
                 textAlign = TextAlign.Center
+            )
+        }
+
+        translationDownloadLabel?.let { label ->
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                color = accent,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
             )
         }
 
