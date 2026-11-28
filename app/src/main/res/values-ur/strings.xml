@@ -283,12 +283,12 @@
     <string name="profile_cancel">منسوخ</string>
     <string name="info_data_sources_title">اسلامی ڈیٹا کے ذرائع اور حوالہ جات</string>
     <string name="info_help_title">مدد، رائے اور بگ رپورٹ</string>
-    <string name="info_help_contact">سپورٹ سے رابطہ کریں اور مسائل support@imancore.app پر رپورٹ کریں۔</string>
+    <string name="info_help_contact">سپورٹ سے رابطہ کریں اور مسائل support@insightsltd.com پر رپورٹ کریں۔</string>
     <string name="info_help_send_feedback">رائے بھیجیں / بگ رپورٹ کریں</string>
     <string name="info_help_no_email_app">کوئی ای میل ایپ نہیں ملی</string>
     <string name="info_help_no_email_client">اس ڈیوائس پر کوئی ای میل ایپ ترتیب نہیں دی گئی۔ اپنی رائے براہِ راست یہاں بھیجیں:</string>
     <string name="info_help_copy_email">ای میل نقل کریں</string>
-    <string name="info_help_copied">support@imancore.app نقل ہو گیا</string>
+    <string name="info_help_copied">support@insightsltd.com نقل ہو گیا</string>
     <string name="info_privacy_title">پرائیویسی پالیسی اور شرائط</string>
     <string name="info_privacy_location">مقام: صرف نماز کے اوقات اور قبلہ کی گنتی کے لیے استعمال ہوتا ہے؛ ڈیوائس پر مقامی طور پر محفوظ رہتا ہے۔</string>
     <string name="info_privacy_notifications">اطلاعات: نماز کی یاد دہانی کے لیے مقامی طور پر شیڈول ہوتی ہیں؛ کوئی ڈیٹا شیئر نہیں ہوتا۔</string>
@@ -331,7 +331,7 @@
     <string name="tools_quran_offline_title">قرآن اور آف لائن پیک</string>
     <string name="tools_quran_offline_subtitle">ترجمے کا ایڈیشن، تفسیر ڈاؤن لوڈز اور کیش</string>
     <string name="tools_help_title">مدد اور رائے</string>
-    <string name="tools_help_subtitle">support@imancore.app پر رابطہ کریں یا بگ رپورٹ کریں</string>
+    <string name="tools_help_subtitle">support@insightsltd.com پر رابطہ کریں یا بگ رپورٹ کریں</string>
     <string name="tools_data_sources_title">اسلامی ڈیٹا کے ذرائع</string>
     <string name="tools_data_sources_subtitle">AlAdhan، Quran.com v4، حدیث CDN اور آف لائن ڈیٹا</string>
     <string name="tools_privacy_title">پرائیویسی اور شرائط</string>

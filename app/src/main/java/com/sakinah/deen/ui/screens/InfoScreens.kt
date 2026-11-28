@@ -101,7 +101,7 @@ fun HelpScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     Text(stringResource(R.string.info_help_no_email_client))
                     SelectionContainer {
                         Text(
-                            text = "support@imancore.app",
+                            text = "support@insightsltd.com",
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -112,7 +112,7 @@ fun HelpScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 TextButton(onClick = {
                     scope.launch {
                         clipboard.setClipEntry(
-                            ClipEntry(ClipData.newPlainText("Sakinah Deen", "support@imancore.app"))
+                            ClipEntry(ClipData.newPlainText("Sakinah Deen", "support@insightsltd.com"))
                         )
                     }
                     showEmailFallback = false
@@ -231,7 +231,7 @@ private fun SimpleInfoScreen(
 
 private fun sendFeedbackEmail(context: Context): Boolean {
     val intent = Intent(Intent.ACTION_SENDTO).apply {
-        data = "mailto:support@imancore.app".toUri()
+        data = "mailto:support@insightsltd.com".toUri()
         putExtra(Intent.EXTRA_SUBJECT, "ImanCore Feedback v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
         putExtra(
             Intent.EXTRA_TEXT,

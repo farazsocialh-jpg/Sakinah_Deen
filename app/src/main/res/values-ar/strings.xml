@@ -283,12 +283,12 @@
     <string name="profile_cancel">إلغاء</string>
     <string name="info_data_sources_title">مصادر البيانات الإسلامية والإسناد</string>
     <string name="info_help_title">المساعدة والملاحظات والإبلاغ عن خطأ</string>
-    <string name="info_help_contact">تواصل مع الدعم وأبلغ عن المشكلات على support@imancore.app.</string>
+    <string name="info_help_contact">تواصل مع الدعم وأبلغ عن المشكلات على support@insightsltd.com.</string>
     <string name="info_help_send_feedback">إرسال ملاحظات / الإبلاغ عن خطأ</string>
     <string name="info_help_no_email_app">لم يُعثر على تطبيق بريد</string>
     <string name="info_help_no_email_client">لا يوجد تطبيق بريد مهيّأ على هذا الجهاز. أرسل ملاحظاتك مباشرة إلى:</string>
     <string name="info_help_copy_email">نسخ البريد الإلكتروني</string>
-    <string name="info_help_copied">تم نسخ support@imancore.app</string>
+    <string name="info_help_copied">تم نسخ support@insightsltd.com</string>
     <string name="info_privacy_title">سياسة الخصوصية والشروط</string>
     <string name="info_privacy_location">الموقع: يُستخدم فقط لحساب أوقات الصلاة والقبلة؛ ويُخزَّن محليًا على الجهاز.</string>
     <string name="info_privacy_notifications">الإشعارات: تُجدول محليًا لتذكيرات الصلاة؛ ولا تُشارك أي بيانات.</string>
@@ -331,7 +331,7 @@
     <string name="tools_quran_offline_title">القرآن وحزم دون اتصال</string>
     <string name="tools_quran_offline_subtitle">إصدار الترجمة وتنزيلات التفسير والذاكرة المؤقتة</string>
     <string name="tools_help_title">المساعدة والملاحظات</string>
-    <string name="tools_help_subtitle">راسل support@imancore.app أو أبلغ عن خطأ</string>
+    <string name="tools_help_subtitle">راسل support@insightsltd.com أو أبلغ عن خطأ</string>
     <string name="tools_data_sources_title">مصادر البيانات الإسلامية</string>
     <string name="tools_data_sources_subtitle">AlAdhan وQuran.com v4 وحديث CDN وبذور دون اتصال</string>
     <string name="tools_privacy_title">الخصوصية والشروط</string>

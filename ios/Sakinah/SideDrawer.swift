@@ -55,7 +55,7 @@ struct SideDrawer: View {
                     case .sources: InfoView(title: "Islamic Data Sources & Attribution",
                                          message: "Quran text: Tanzil / King Fahd Complex. Tafsir: Ibn Kathir, As-Sa'di, Al-Jalalayn. Hadith: nine canonical collections. Audio: Makkah adhan recordings.")
                     case .help: InfoView(title: "Help, Feedback & Bug Report",
-                                       message: "Send feedback to support@imancore.app and include your app version and device model.")
+                                       message: "Send feedback to support@insightsltd.com and include your app version and device model.")
                     case .privacy: InfoView(title: "Privacy Policy & Terms",
                                          message: "Guest data stays on device. Signed-in profiles sync only what you choose to share.")
                     case .about: InfoView(title: "About ImanCore",

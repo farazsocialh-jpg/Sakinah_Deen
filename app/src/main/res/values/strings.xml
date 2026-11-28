@@ -161,12 +161,12 @@
     <!-- Info screens -->
     <string name="info_data_sources_title">Islamic Data Sources &amp; Attribution</string>
     <string name="info_help_title">Help, Feedback &amp; Bug Report</string>
-    <string name="info_help_contact">Contact support and report issues to support@imancore.app.</string>
+    <string name="info_help_contact">Contact support and report issues to support@insightsltd.com.</string>
     <string name="info_help_send_feedback">Send Feedback / Report a Bug</string>
     <string name="info_help_no_email_app">No Email App Found</string>
     <string name="info_help_no_email_client">No email client is configured on this device. Send feedback directly to:</string>
     <string name="info_help_copy_email">Copy Email</string>
-    <string name="info_help_copied">Copied support@imancore.app</string>
+    <string name="info_help_copied">Copied support@insightsltd.com</string>
     <string name="info_privacy_title">Privacy Policy &amp; Terms</string>
     <string name="info_privacy_location">Location: used only to calculate prayer times and Qibla; stored locally on device.</string>
     <string name="info_privacy_notifications">Notifications: scheduled locally for prayer reminders; no data is shared.</string>
@@ -210,7 +210,7 @@
     <string name="tools_quran_offline_title">Quran &amp; Offline Packs</string>
     <string name="tools_quran_offline_subtitle">Translation edition, tafseer downloads &amp; cache</string>
     <string name="tools_help_title">Help &amp; Feedback</string>
-    <string name="tools_help_subtitle">Contact support@imancore.app or report a bug</string>
+    <string name="tools_help_subtitle">Contact support@insightsltd.com or report a bug</string>
     <string name="tools_data_sources_title">Islamic Data Sources</string>
     <string name="tools_data_sources_subtitle">AlAdhan, Quran.com v4, Hadith CDN &amp; offline seeds</string>
     <string name="tools_privacy_title">Privacy &amp; Terms</string>
