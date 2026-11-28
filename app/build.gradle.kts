@@ -360,9 +360,10 @@ val downloadBundledAssets = tasks.register("downloadBundledAssets") {
 }
 
 // Fail release builds early when signing material is missing instead of shipping unsigned.
+val hasReleaseSigningConfig = releaseStoreFile != null
 tasks.matching { it.name in setOf("assembleRelease", "bundleRelease") }.configureEach {
     doFirst {
-        if (releaseStoreFile == null) {
+        if (!hasReleaseSigningConfig) {
             throw GradleException(
                 "Release signing config is missing: provide keystore.properties or " +
                     "KEYSTORE_PATH/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD."
