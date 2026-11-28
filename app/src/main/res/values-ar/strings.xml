@@ -297,7 +297,7 @@
     <string name="info_privacy_on_device">التخزين على الجهاز: سجلات الصلاة والقضاء والحفظ والعلامات المرجعية والزكاة تُحفظ في قاعدة بيانات مشفّرة على هذا الجهاز فقط.</string>
     <string name="info_privacy_recovery">تعذّر فتح قاعدة بيانات سابقة على هذا الجهاز واحتُفظ بها كنسخة استرداد: %1$s. صدّرها قبل البدء من جديد إذا كنت بحاجة إلى السجلات القديمة.</string>
     <string name="info_privacy_open_full">فتح سياسة الخصوصية الكاملة</string>
-    <string name="info_privacy_no_browser">لا يوجد تطبيق متصفح لفتح https://imancore.app/privacy</string>
+    <string name="info_privacy_no_browser">لا يوجد تطبيق متصفح لفتح https://insightsltd.com/privacy</string>
     <string name="info_about_title">حول ImanCore</string>
     <string name="info_about_version">الإصدار %1$s (%2$d)</string>
     <string name="info_back_cd">رجوع</string>

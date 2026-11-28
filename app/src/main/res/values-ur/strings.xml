@@ -297,7 +297,7 @@
     <string name="info_privacy_on_device">ڈیوائس پر اسٹوریج: نماز کے ریکارڈ، قضا، حفظ، بُک مارکس اور زکوٰۃ صرف اسی ڈیوائس کی خفیہ ڈیٹا بیس میں محفوظ ہوتے ہیں۔</string>
     <string name="info_privacy_recovery">اس ڈیوائس پر پچھلی ڈیٹا بیس نہیں کھل سکی اور اسے ریکوری کاپی کے طور پر رکھا گیا: %1$s۔ پرانے ریکارڈ درکار ہوں تو نئے سرے سے شروع کرنے سے پہلے اسے برآمد کریں۔</string>
     <string name="info_privacy_open_full">مکمل پرائیویسی پالیسی کھولیں</string>
-    <string name="info_privacy_no_browser">https://imancore.app/privacy کھولنے کے لیے کوئی براؤزر ایپ نہیں ملی</string>
+    <string name="info_privacy_no_browser">https://insightsltd.com/privacy کھولنے کے لیے کوئی براؤزر ایپ نہیں ملی</string>
     <string name="info_about_title">ImanCore کے بارے میں</string>
     <string name="info_about_version">ورژن %1$s (%2$d)</string>
     <string name="info_back_cd">واپس</string>

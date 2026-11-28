@@ -161,7 +161,7 @@ fun PrivacyScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 )
             }
             TextButton(onClick = {
-                val intent = Intent(Intent.ACTION_VIEW, "https://imancore.app/privacy".toUri())
+                val intent = Intent(Intent.ACTION_VIEW, "https://insightsltd.com/privacy".toUri())
                 try {
                     context.startActivity(intent)
                 } catch (_: ActivityNotFoundException) {
