@@ -14,7 +14,7 @@ pattern = "ai.insightsltd.com"
 custom_domain = true
 
 [vars]
-GEMINI_MODEL = "gemini-3.6-flash"
+GEMINI_MODEL = "gemini-3.5-flash-lite"
 
 # CORS allowlist: comma-separated browser origins. Unset means no browser origin is allowed.
 # Native mobile clients send no Origin header, so they are unaffected. Never use "*".
