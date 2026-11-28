@@ -110,6 +110,10 @@ class ExhaustiveUiMatrixSnapshotTest {
     val composeRule = createComposeRule()
 
     private lateinit var application: Application
+    // Built outside composition (after Koin starts) so lint's ViewModelConstructorInComposable
+    // stays quiet. Rebuilt in setUp() for every test, preserving a fresh instance per test.
+    private lateinit var quranViewModel: QuranViewModel
+    private lateinit var hadithViewModel: HadithViewModel
     private var scene by mutableStateOf(Scene())
 
     private class Scene(
@@ -197,6 +201,8 @@ class ExhaustiveUiMatrixSnapshotTest {
             )
             modules(snapshotStorageModule, snapshotAccountModule)
         }
+        quranViewModel = QuranViewModel()
+        hadithViewModel = HadithViewModel()
         // Infinite progress animations must not stall the snapshot clock.
         composeRule.mainClock.autoAdvance = false
         composeRule.setContent {
@@ -333,8 +339,8 @@ class ExhaustiveUiMatrixSnapshotTest {
     private val salahScene: @Composable () -> Unit = {
         SalahScreen(onOpenGuide = {}, viewModel = null)
     }
-    private val quranScene: @Composable () -> Unit = { QuranScreen(viewModel = QuranViewModel()) }
-    private val hadithScene: @Composable () -> Unit = { HadithScreen(viewModel = HadithViewModel()) }
+    private val quranScene: @Composable () -> Unit = { QuranScreen(viewModel = quranViewModel) }
+    private val hadithScene: @Composable () -> Unit = { HadithScreen(viewModel = hadithViewModel) }
 
     // ------------------------------------------------------------ matrices
 

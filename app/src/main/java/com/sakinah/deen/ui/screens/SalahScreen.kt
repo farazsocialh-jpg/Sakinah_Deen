@@ -438,7 +438,7 @@ fun SalahScreen(
                                 .heightIn(max = 320.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            items(filteredMethods.size) { idx ->
+                            items(filteredMethods.size, key = { filteredMethods[it] }) { idx ->
                                 val m = filteredMethods[idx]
                                 val label = m.name.replace('_', ' ')
                                 val isSelected = !draftIsAutomatic && draftMethod == m

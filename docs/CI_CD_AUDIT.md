@@ -1,5 +1,10 @@
 # CI/CD Audit — ImanCore (Sakinah_Deen)
 
+> [!WARNING]
+> **Historical document.** This page describes the retired five-workflow CI pipeline, not the
+> active CI. See the [README](../README.md#checks-and-releases) for the three workflows that run
+> today.
+
 Audit of every GitHub Actions workflow in the repository, the triggers that cause duplicate
 executions, the failure modes reported against this project, and the root cause of each.
 

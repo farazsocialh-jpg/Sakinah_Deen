@@ -23,8 +23,19 @@ internal object PasswordHasher {
     private const val KEY_LENGTH_BYTES = 32
     private const val SALT_BYTES = 16
 
+    /** Upper bounds for parsing untrusted stored records; anything larger is rejected. */
+    private const val MAX_SALT_HEX_LENGTH = SALT_BYTES * 4
+    private const val MAX_SUPPORTED_ITERATIONS = 10_000_000
+
     /** New random salt for a freshly created or upgraded account. */
     fun newSalt(): String = secureRandomBytes(SALT_BYTES).toHex()
+
+    /**
+     * One-way, non-secret identifier for an OAuth credential. Used when the provider payload
+     * has no stable `sub` so a raw identity token is never persisted as a user id.
+     */
+    internal fun fingerprint(input: String): String =
+        sha256(input.encodeToByteArray()).toHex().take(32)
 
     /** Encodes a password with a fresh hash using [salt]. */
     fun hash(password: String, salt: String): String {
@@ -40,36 +51,56 @@ internal object PasswordHasher {
     /** True when [storedHash] should be replaced with the current algorithm/parameters. */
     fun needsUpgrade(storedHash: String): Boolean {
         if (!storedHash.startsWith("$ALGORITHM\$")) return true
-        val iterations = storedHash.split('$').getOrNull(1)?.toIntOrNull() ?: return true
+        val parts = storedHash.split('$')
+        if (parts.size != 4 || parts[0] != ALGORITHM) return true
+        val iterations = parseIterations(parts[1]) ?: return true
+        if (!isValidStoredSalt(parts[2]) || !isValidStoredHash(parts[3])) return true
         return iterations < ITERATIONS
     }
+
+    /** True when [password] meets the current minimum length. */
+    fun isAcceptablePassword(password: String): Boolean = password.length >= MIN_PASSWORD_LENGTH
 
     /**
      * Constant-time-ish verification against either the current format or the legacy
      * FNV-1a record, so existing installs keep working and are upgraded on next sign-in.
+     * Stored fields are validated before any key length or iteration count is derived from
+     * them, so a corrupted record cannot trigger a huge allocation or an unbounded KDF loop.
      */
-    /** True when [password] meets the current minimum length. */
-    fun isAcceptablePassword(password: String): Boolean = password.length >= MIN_PASSWORD_LENGTH
-
     fun verify(password: String, salt: String, storedHash: String): Boolean {
         if (storedHash.startsWith("$ALGORITHM\$")) {
             val parts = storedHash.split('$')
-            if (parts.size != 4) return false
-            val iterations = parts[1].toIntOrNull() ?: return false
+            if (parts.size != 4 || parts[0] != ALGORITHM) return false
+            val iterations = parseIterations(parts[1]) ?: return false
             val storedSalt = parts[2]
             val expectedHash = parts[3]
-            if (storedSalt.isBlank() || expectedHash.isBlank()) return false
+            if (!isValidStoredSalt(storedSalt) || !isValidStoredHash(expectedHash)) return false
             val actual = pbkdf2(
                 password = password.encodeToByteArray(),
                 salt = storedSalt.hexToBytes(),
                 iterations = iterations,
-                keyLength = expectedHash.length / 2
+                keyLength = KEY_LENGTH_BYTES
             ).toHex()
             return constantTimeEquals(actual, expectedHash)
         }
         // Legacy record written before the KDF change.
+        if (salt.isBlank() || storedHash.isBlank()) return false
         return constantTimeEquals(legacyHash(salt, password), storedHash)
     }
+
+    private fun parseIterations(value: String): Int? {
+        if (value.isEmpty() || value.any { it !in '0'..'9' }) return null
+        val iterations = value.toIntOrNull() ?: return null
+        return if (iterations in 1..MAX_SUPPORTED_ITERATIONS) iterations else null
+    }
+
+    private fun isValidStoredSalt(value: String): Boolean =
+        value.length in 2..MAX_SALT_HEX_LENGTH && value.length % 2 == 0 && isHex(value)
+
+    private fun isValidStoredHash(value: String): Boolean =
+        value.length == KEY_LENGTH_BYTES * 2 && isHex(value)
+
+    private fun isHex(value: String): Boolean = value.isNotEmpty() && value.all { hexDigit(it) != null }
 
     /** The pre-KDF record: kept only to migrate existing accounts on sign-in. */
     fun legacyHash(salt: String, password: String): String {

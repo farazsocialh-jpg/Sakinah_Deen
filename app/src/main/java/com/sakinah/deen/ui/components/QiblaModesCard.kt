@@ -76,6 +76,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.core.location.LocationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -103,12 +104,18 @@ enum class QiblaMode(val label: String) {
 }
 
 /**
- * Virtual origin the bundled Leaflet page is served from. Using a real https origin for the
- * document (instead of loadDataWithBaseURL, which gives the page an opaque origin) is what
- * lets leaflet.js/css and the map tiles load without cross-origin blocking.
+ * Virtual origin the bundled Leaflet page is served from. WebViewAssetLoader owns the
+ * Android-reserved `appassets.androidplatform.net` domain, so the document has a real https
+ * origin (instead of loadDataWithBaseURL's opaque origin) and leaflet.js/css plus tiles load
+ * without cross-origin blocking. No custom trust anchors are needed: the platform chains its
+ * certificate to the system trust store.
  */
-private const val QIBLA_MAP_DOMAIN = "app.imancore.local"
+private const val QIBLA_MAP_DOMAIN = "appassets.androidplatform.net"
 private const val QIBLA_MAP_URL = "https://$QIBLA_MAP_DOMAIN/assets/leaflet/qibla_map.html"
+
+/** Remembers that the location permission was actually requested, to tell a permanent denial from a first ask. */
+private const val QIBLA_PERMISSION_PREFS = "qibla_permission_state"
+private const val KEY_LOCATION_PERMISSION_REQUESTED = "location_permission_requested"
 
 /** How long the map may stay without a single rendered tile before the native fallback wins. */
 private const val MAP_LOAD_TIMEOUT_MS = 12_000L
@@ -179,6 +186,9 @@ fun QiblaModesCard(
         when (action) {
             QiblaAction.GRANT_PERMISSION -> {
                 permissionRequestInFlight = true
+                context.applicationContext
+                    .getSharedPreferences(QIBLA_PERMISSION_PREFS, Context.MODE_PRIVATE)
+                    .edit { putBoolean(KEY_LOCATION_PERMISSION_REQUESTED, true) }
                 permissionLauncher.launch(
                     arrayOf(
                         Manifest.permission.ACCESS_FINE_LOCATION,
@@ -526,8 +536,8 @@ private fun QiblaMapView(
     var reloadToken by remember(latitude, longitude) { mutableIntStateOf(0) }
     val webViewHolder = remember { mutableStateOf<WebView?>(null) }
 
-    // Serves assets/leaflet/* from https://app.imancore.local/… with correct MIME types and
-    // CORS headers, so Leaflet is not blocked as a cross-origin script.
+    // Serves assets/leaflet/* from https://appassets.androidplatform.net/… with correct MIME
+    // types and CORS headers, so Leaflet is not blocked as a cross-origin script.
     val assetLoader = remember(context) {
         WebViewAssetLoader.Builder()
             .setDomain(QIBLA_MAP_DOMAIN)
@@ -914,15 +924,7 @@ internal class QiblaMapBridge(
 
     @Keep
     @JavascriptInterface
-    fun onMapReady(unused: String) = onReadyCallback()
-
-    @Keep
-    @JavascriptInterface
     fun onTileLoaded() = onTileLoadedCallback()
-
-    @Keep
-    @JavascriptInterface
-    fun onTileLoaded(unused: String) = onTileLoadedCallback()
 
     @Keep
     @JavascriptInterface
@@ -1046,7 +1048,7 @@ private fun hasLocationPermission(context: Context): Boolean =
 private fun currentPermissionState(context: Context): QiblaPermissionState {
     if (hasLocationPermission(context)) return QiblaPermissionState.GRANTED
     val activity = context.findActivity()
-    val blockedByUser = activity != null &&
+    val canShowRationale = activity != null &&
         (ActivityCompat.shouldShowRequestPermissionRationale(
             activity,
             Manifest.permission.ACCESS_FINE_LOCATION
@@ -1054,7 +1056,13 @@ private fun currentPermissionState(context: Context): QiblaPermissionState {
             activity,
             Manifest.permission.ACCESS_COARSE_LOCATION
         ))
-    return if (blockedByUser) QiblaPermissionState.DENIED else QiblaPermissionState.NOT_REQUESTED
+    if (canShowRationale) return QiblaPermissionState.DENIED
+    // shouldShowRequestPermissionRationale is also false before the first request, so the
+    // persisted "asked" flag distinguishes a permanent denial from a never-asked state.
+    val askedBefore = context.applicationContext
+        .getSharedPreferences(QIBLA_PERMISSION_PREFS, Context.MODE_PRIVATE)
+        .getBoolean(KEY_LOCATION_PERMISSION_REQUESTED, false)
+    return if (askedBefore) QiblaPermissionState.PERMANENTLY_DENIED else QiblaPermissionState.NOT_REQUESTED
 }
 
 private fun isLocationEnabled(context: Context): Boolean {

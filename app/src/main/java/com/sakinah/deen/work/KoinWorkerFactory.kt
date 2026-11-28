@@ -7,8 +7,6 @@ import androidx.work.WorkerParameters
 import com.sakinah.deen.data.database.SakinahEncryptedDatabase
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.prefs.SalahGuideProgressStore
-import com.sakinah.deen.data.repository.TafseerDownloadRepository
-import com.sakinah.deen.network.ContentDownloadWorker
 import org.koin.core.Koin
 
 /**
@@ -39,14 +37,6 @@ class KoinWorkerFactory(private val koin: Koin) : WorkerFactory() {
                 appContext,
                 workerParameters,
                 koin.get(SalahGuideProgressStore::class)
-            )
-
-        ContentDownloadWorker::class.java.name ->
-            ContentDownloadWorker(
-                appContext,
-                workerParameters,
-                koin.get(TafseerDownloadRepository::class),
-                koin.get(SakinahEncryptedDatabase::class)
             )
 
         else -> null

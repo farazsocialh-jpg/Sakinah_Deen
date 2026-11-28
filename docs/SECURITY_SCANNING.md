@@ -1,5 +1,10 @@
 # Security scanning: what blocks a merge
 
+> [!WARNING]
+> **Historical document.** This page describes the retired five-workflow CI pipeline, not the
+> active CI. See the [README](../README.md#checks-and-releases) for the three workflows that run
+> today.
+
 Two scanners in `.github/workflows/security.yml` produce their own findings: **mobsfscan**
 (OWASP MASVS static analysis) and **Gitleaks** (committed secrets). CodeQL runs alongside them
 and reports through GitHub code scanning instead of this policy.

@@ -12,7 +12,7 @@ that need the repository, not the schema:
     a tag or digest instead of an implicit `latest`;
   * with `--resolve-refs`, every remote `owner/repo@ref` really exists upstream, so a typo in a
     tag cannot look like a passing workflow change;
-  * the five expected workflows are present, so a deletion cannot turn the job green.
+  * the three expected workflows are present, so a deletion cannot turn the job green.
 
 `--self-test` proves the checks fire: it builds deliberately broken fixtures and fails if any of
 them is not detected. The validation workflow runs it before validating the repository.
@@ -20,7 +20,7 @@ them is not detected. The validation workflow runs it before validating the repo
 Usage:
   python3 .github/scripts/validate-workflows.py --self-test
   python3 .github/scripts/validate-workflows.py --dir .github/workflows --resolve-refs \\
-      --expected ci.yml ios.yml release.yml security.yml worker.yml \\
+      --expected ci.yml maestro-android.yml arbigent-ai-qa.yml \\
       --report "$RUNNER_TEMP/workflow-validation.json"
 """
 
@@ -37,7 +37,7 @@ from pathlib import Path
 
 import yaml
 
-EXPECTED_DEFAULT = ["ci.yml", "ios.yml", "release.yml", "security.yml", "worker.yml"]
+EXPECTED_DEFAULT = ["ci.yml", "maestro-android.yml", "arbigent-ai-qa.yml"]
 
 REMOTE_USES = re.compile(
     r"^(?P<repo>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)@(?P<ref>[^@\s]+)$"
@@ -147,6 +147,14 @@ def ref_exists(repo: str, ref: str) -> bool:
     except (OSError, subprocess.TimeoutExpired):
         return False
     if listing.returncode != 0:
+        return False
+    # A 40-hex ref is a pinned commit SHA: match the object id of an advertised
+    # tag/head (or the peeled commit of an annotated tag) in column one.
+    if re.fullmatch(r"[0-9a-fA-F]{40}", ref):
+        for line in listing.stdout.splitlines():
+            sha, _, _ = line.partition("\t")
+            if sha.strip().lower() == ref.lower():
+                return True
         return False
     for line in listing.stdout.splitlines():
         _, _, name = line.partition("\t")

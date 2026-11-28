@@ -1,5 +1,10 @@
 # CI tooling: pinned versions
 
+> [!WARNING]
+> **Historical document.** This page describes the retired five-workflow CI pipeline, not the
+> active CI. See the [README](../README.md#checks-and-releases) for the three workflows that run
+> today.
+
 Every tool the pipeline downloads is pinned, so an unchanged commit produces the same pipeline
 as yesterday. Nothing in CI resolves a floating tag (`latest`, `v4`, `brew install`) any more.
 

@@ -121,7 +121,9 @@ fun NotificationSettingsScreen(
         nextAlarmText = describeNextAlarm(appPrefs)
     }
 
-    val previewPlayer = remember(context, previewPlayerFactory) { previewPlayerFactory(context) }
+    // previewPlayerFactory is a lambda supplied by callers/tests and is a new instance on
+    // every recomposition; keying on it would tear down and recreate the MediaPlayer.
+    val previewPlayer = remember(context) { previewPlayerFactory(context) }
     var previewingMuezzin by remember { mutableStateOf<Muezzin?>(null) }
 
     val lifecycleOwner = LocalLifecycleOwner.current

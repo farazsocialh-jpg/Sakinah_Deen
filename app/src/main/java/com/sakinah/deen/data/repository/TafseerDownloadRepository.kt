@@ -1,6 +1,5 @@
 package com.sakinah.deen.data.repository
 
-import android.content.Context
 import com.sakinah.deen.data.database.dao.TafsirDao
 import com.sakinah.deen.data.database.entity.TafsirEntryEntity
 import com.sakinah.deen.data.model.TafsirResource
@@ -109,7 +108,6 @@ data class TafseerPackage(
  * available, but a fresh install already has a multi-language offline fallback catalog.
  */
 class TafseerDownloadRepository(
-    @Suppress("UNUSED_PARAMETER") context: Context? = null,
     private val tafsirDao: TafsirDao? = null,
     private val islamicRepository: IslamicDataRepository? = null,
     /** Narrowed in unit tests so a full 114-chapter run is not needed. */

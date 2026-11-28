@@ -4,8 +4,8 @@ import android.content.Context
 import android.content.Context.MODE_PRIVATE
 import android.net.Uri
 import androidx.core.content.edit
+import androidx.room.withTransaction
 import com.sakinah.deen.data.database.SakinahEncryptedDatabase
-import com.sakinah.deen.data.database.dao.BookmarkKey
 import com.sakinah.deen.data.database.entity.HifzMistakeEntity
 import com.sakinah.deen.data.database.entity.QadhaLedgerEntity
 import com.sakinah.deen.data.database.entity.SadaqahLogEntity
@@ -26,6 +26,8 @@ object EncryptedBackupManager {
 
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = false }
     private const val MAGIC = "SKNBAK1"
+    /** Only this envelope version is understood; newer backups must be rejected, not half-restored. */
+    private const val SCHEMA_VERSION = 1
 
     suspend fun export(
         context: Context,
@@ -62,7 +64,7 @@ object EncryptedBackupManager {
 
             val dataJson = json.encodeToString(data)
             val checksum = sha256(dataJson.toByteArray(Charsets.UTF_8))
-            val envelope = BackupEnvelope(schemaVersion = 1, checksum = checksum, data = data)
+            val envelope = BackupEnvelope(schemaVersion = SCHEMA_VERSION, checksum = checksum, data = data)
             val envelopeJson = json.encodeToString(envelope)
             val encrypted = encrypt(envelopeJson.toByteArray(Charsets.UTF_8), passphrase)
 
@@ -99,6 +101,12 @@ object EncryptedBackupManager {
             val encrypted = bytes.copyOfRange(MAGIC.length, bytes.size)
             val decrypted = decrypt(encrypted, passphrase)
             val envelope = json.decodeFromString<BackupEnvelope>(decrypted.toString(Charsets.UTF_8))
+            if (envelope.schemaVersion != SCHEMA_VERSION) {
+                error(
+                    "Unsupported backup schema version ${envelope.schemaVersion}; " +
+                        "this app supports version $SCHEMA_VERSION"
+                )
+            }
             val dataJson = json.encodeToString(envelope.data)
             val computed = sha256(dataJson.toByteArray(Charsets.UTF_8))
             if (computed != envelope.checksum) error("Backup checksum mismatch or wrong passphrase")
@@ -108,28 +116,30 @@ object EncryptedBackupManager {
                 com.sakinah.deen.data.database.DatabasePassphraseProvider.getPassphrase(context)
             )
 
-            db.runInTransaction {
-                // Qadha
+            // One transaction for every imported entity: a failed checksum, DAO write or
+            // bookmark update can no longer leave a half-restored backup behind.
+            db.withTransaction {
                 envelope.data.qadha.forEach { q ->
-                    // upsert via DAO run on main? We're in IO; call suspend not allowed in runInTransaction.
+                    db.qadhaDao().upsertQadha(
+                        QadhaLedgerEntity(q.prayerType, q.totalMissed, q.totalMadeUp, q.updatedTimestamp)
+                    )
                 }
-            }
-            // DAOs are suspend; do sequentially outside transaction for simplicity.
-            envelope.data.qadha.forEach { q ->
-                db.qadhaDao().upsertQadha(QadhaLedgerEntity(q.prayerType, q.totalMissed, q.totalMadeUp, q.updatedTimestamp))
-            }
-            envelope.data.hifz.forEach { h ->
-                db.hifzDao().upsertMistake(HifzMistakeEntity(h.surahNumber, h.ayahNumber, h.wordPosition, h.mistakeType, h.lastReviewedTimestamp))
-            }
-            envelope.data.sadaqah.forEach { s ->
-                db.sadaqahDao().insertLog(SadaqahLogEntity(s.id, s.amount, s.currency, s.note, s.timestamp, s.category))
-            }
-            envelope.data.bookmarks.forEach { b ->
-                // mark bookmarked
-                db.openHelper.writableDatabase.execSQL(
-                    "UPDATE quran_ayahs SET isBookmarked = 1 WHERE surahNumber = ? AND ayahNumber = ?",
-                    arrayOf(b.surahNumber, b.ayahNumber)
-                )
+                envelope.data.hifz.forEach { h ->
+                    db.hifzDao().upsertMistake(
+                        HifzMistakeEntity(h.surahNumber, h.ayahNumber, h.wordPosition, h.mistakeType, h.lastReviewedTimestamp)
+                    )
+                }
+                envelope.data.sadaqah.forEach { s ->
+                    db.sadaqahDao().insertLog(
+                        SadaqahLogEntity(s.id, s.amount, s.currency, s.note, s.timestamp, s.category)
+                    )
+                }
+                envelope.data.bookmarks.forEach { b ->
+                    db.openHelper.writableDatabase.execSQL(
+                        "UPDATE quran_ayahs SET isBookmarked = 1 WHERE surahNumber = ? AND ayahNumber = ?",
+                        arrayOf(b.surahNumber, b.ayahNumber)
+                    )
+                }
             }
 
             // Restore prefs

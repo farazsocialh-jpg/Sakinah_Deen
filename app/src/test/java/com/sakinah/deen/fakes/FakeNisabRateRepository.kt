@@ -25,8 +25,4 @@ class FakeNisabRateRepository(
         _rates.value = fresh
         return Result.success(Unit)
     }
-
-    fun setRates(rates: NisabRates) {
-        _rates.value = rates
-    }
 }

@@ -1,6 +1,7 @@
 package com.sakinah.deen.data.scholar
 
 import android.content.Context
+import android.util.Log
 import com.sakinah.deen.data.model.Citation
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -57,7 +58,10 @@ class ScholarHistoryStore(context: Context) {
         if (!file.exists()) return emptyList()
         return runCatching {
             json.decodeFromString<List<ScholarChatSession>>(file.readText())
-        }.getOrDefault(emptyList())
+        }.getOrElse { e ->
+            Log.w(TAG, "Scholar history is corrupt; starting with an empty list", e)
+            emptyList()
+        }
     }
 
     @Synchronized
@@ -67,9 +71,23 @@ class ScholarHistoryStore(context: Context) {
             file.parentFile?.mkdirs()
             val tmp = File(file.absolutePath + ".tmp")
             tmp.writeText(json.encodeToString(retained))
-            if (file.exists()) file.delete()
-            tmp.renameTo(file)
-        }
+            try {
+                java.nio.file.Files.move(
+                    tmp.toPath(),
+                    file.toPath(),
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                )
+            } catch (e: java.nio.file.AtomicMoveNotSupportedException) {
+                // Some filesystems cannot do an atomic rename; replacing in place is still
+                // preferable to the old delete-then-rename window where data could be lost.
+                java.nio.file.Files.move(
+                    tmp.toPath(),
+                    file.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                )
+            }
+        }.onFailure { Log.w(TAG, "Could not persist scholar history", it) }
     }
 
     /** Pinned chats survive; the rest are trimmed to the newest [MAX_SESSIONS]. */
@@ -77,6 +95,7 @@ class ScholarHistoryStore(context: Context) {
         pruneRetained(sessions, MAX_SESSIONS, MAX_MESSAGES_PER_SESSION)
 
     companion object {
+        private const val TAG = "ScholarHistoryStore"
         const val MAX_SESSIONS = 30
         const val MAX_MESSAGES_PER_SESSION = 200
 

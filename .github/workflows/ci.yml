@@ -1,26 +1,31 @@
 name: Android CI
 
-# Two jobs:
+# Three jobs:
 #   1. build the debug APK and upload it (the installable app);
 #   2. render the exhaustive UI matrix on the JVM (Robolectric + Roborazzi) and upload
-#      every palette / mode / font / layout screenshot plus the HTML report.
+#      every palette / mode / font / layout screenshot plus the HTML report;
+#   3. run the JVM/common and Worker unit tests without any secrets.
 #
 # Run them locally with the same commands:
 #   ./gradlew :app:assembleDebug --build-cache --parallel
 #   ./gradlew :app:recordRoborazziDebug
+#   ./gradlew :shared:allTests :app:testDebugUnitTest --no-configuration-cache
+#   npm test --prefix worker
 
 on:
   push:
+    branches: [ main ]
+  pull_request:
     branches: [ main ]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# A newer push supersedes an in-flight build for the same ref.
+# A newer PR commit supersedes an in-flight run; pushes to main run to completion.
 concurrency:
-  group: android-debug-apk-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   fast-debug-apk:
@@ -31,11 +36,13 @@ jobs:
     # bakes AI_PROXY_URL into this APK, so the debug build must see the same values as release.
     environment: Playstore
     env:
-      GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+      GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID || vars.GOOGLE_WEB_CLIENT_ID }}
       NISAB_RATE_URL: ${{ vars.NISAB_RATE_URL || secrets.NISAB_RATE_URL }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Verify AI_PROXY_URL is configured
         env:
@@ -47,18 +54,30 @@ jobs:
           }
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6.3.0
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.4.1
         with:
           cache-read-only: false
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
+
+      - name: Decode Firebase config (if provided)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" | base64 --decode > app/google-services.json
+            echo "Decoded app/google-services.json from GOOGLE_SERVICES_JSON."
+          else
+            echo "GOOGLE_SERVICES_JSON is empty; continuing without a Firebase config."
+          fi
 
       - name: Build debug APK
         env:
@@ -75,7 +94,7 @@ jobs:
             | grep 'SHA-1 digest' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: app-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
@@ -87,23 +106,25 @@ jobs:
     runs-on: ubuntu-latest
     environment: Playstore
     env:
-      GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+      GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID || vars.GOOGLE_WEB_CLIENT_ID }}
       NISAB_RATE_URL: ${{ vars.NISAB_RATE_URL || secrets.NISAB_RATE_URL }}
     # ~300 PNGs (17 palettes x 2 modes x every screen, 4 font presets, 19 layouts,
     # 15 secondary screens) render in a few minutes; the margin covers a cold Gradle cache.
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6.3.0
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.4.1
         with:
           cache-read-only: false
 
@@ -119,6 +140,18 @@ jobs:
             exit 1
           }
 
+      - name: Decode Firebase config (if provided)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" | base64 --decode > app/google-services.json
+            echo "Decoded app/google-services.json from GOOGLE_SERVICES_JSON."
+          else
+            echo "GOOGLE_SERVICES_JSON is empty; continuing without a Firebase config."
+          fi
+
       - name: Record every screen in every theme/font/layout
         # --no-configuration-cache: Roborazzi injects per-task system properties, which
         # configuration-cache snapshots would otherwise keep from the first invocation.
@@ -128,7 +161,7 @@ jobs:
 
       - name: Upload snapshot matrix PNGs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: ui-snapshot-matrix
           path: |
@@ -137,3 +170,34 @@ jobs:
             app/build/reports/roborazzi
           retention-days: 14
           if-no-files-found: warn
+
+  unit-tests:
+    name: Unit tests (JVM + Worker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6.3.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6.4.1
+        with:
+          # PR runs only read the cache; pushes to main may populate it.
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Run JVM unit tests
+        run: ./gradlew :shared:allTests :app:testDebugUnitTest --no-configuration-cache
+
+      - name: Run Worker tests
+        run: npm test --prefix worker

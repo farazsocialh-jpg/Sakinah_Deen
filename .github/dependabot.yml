@@ -7,6 +7,13 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - android
+    assignees:
+      - farazsocialh-jpg
+    commit-message:
+      prefix: "chore(deps)"
     groups:
       androidx:
         patterns:
@@ -77,12 +84,42 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 1
+    labels:
+      - dependencies
+      - ci
+    assignees:
+      - farazsocialh-jpg
+    commit-message:
+      prefix: "chore(actions)"
     groups:
       actions:
         patterns:
           - "*"
 
+  # Cloudflare Worker proxy.
   - package-ecosystem: npm
     directory: /worker
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - worker
+    assignees:
+      - farazsocialh-jpg
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Root web app (package.json at the repository root).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - web
+    assignees:
+      - farazsocialh-jpg
+    commit-message:
+      prefix: "chore(deps)"

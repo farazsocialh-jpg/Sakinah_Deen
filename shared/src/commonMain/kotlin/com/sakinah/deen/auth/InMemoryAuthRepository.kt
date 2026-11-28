@@ -19,7 +19,9 @@ class InMemoryAuthRepository : AuthRepository {
     override suspend fun signUp(email: String, password: String, displayName: String): Result<AuthUser> =
         stateMutex.withLock {
             if (users.containsKey(email)) return@withLock Result.failure(IllegalStateException("Account already exists"))
-            if (email.isBlank() || password.length < 6) return@withLock Result.failure(IllegalArgumentException("Invalid credentials"))
+            if (email.isBlank() || !PasswordHasher.isAcceptablePassword(password)) {
+                return@withLock Result.failure(IllegalArgumentException("Invalid credentials"))
+            }
             users[email] = StoredUser(email, password, displayName)
             val user = AuthUser(id = email, email = email, displayName = displayName)
             current = user

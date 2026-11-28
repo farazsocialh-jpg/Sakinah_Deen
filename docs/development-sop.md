@@ -1,5 +1,10 @@
 # Development SOP
 
+> [!WARNING]
+> **Historical document.** This page describes the retired five-workflow CI pipeline, not the
+> active CI. See the [README](../README.md#checks-and-releases) for the three workflows that run
+> today.
+
 The standard operating procedure for changing, auditing and releasing ImanCore. Everything that
 can be automated runs in CI; the manual items below are the ones a machine cannot decide.
 

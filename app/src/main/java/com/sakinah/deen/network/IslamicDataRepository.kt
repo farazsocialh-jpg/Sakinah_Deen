@@ -44,6 +44,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import android.util.JsonReader
+import android.util.Log
 import java.io.InputStreamReader
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
@@ -82,7 +83,23 @@ class IslamicDataRepository(
     private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO
 ) {
 
+    /** android.util.Log is not mocked in plain JVM tests; diagnostics must never break them. */
+    private fun logMirrorFailure(message: String, t: Throwable) {
+        runCatching { Log.w(TAG, message, t) }
+    }
+
+    /**
+     * android.util.JsonReader is an Android framework stub in plain JVM tests. Detect it from
+     * the throw site (not from message text, which may come from a remote server) so the
+     * in-memory parser can be used there without weakening production error handling.
+     */
+    private fun isAndroidJsonUnavailable(t: Throwable): Boolean =
+        t is RuntimeException &&
+            (t.stackTrace.any { it.className.startsWith("android.util.JsonReader") } ||
+                t.message.orEmpty().contains("not mocked", ignoreCase = true))
+
     companion object {
+        private const val TAG = "IslamicDataRepository"
         const val QURAN_API_BASE = "https://api.quran.com/api/v4"
         const val HADITH_CDN_BASE = "https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1"
         const val HADITH_CDN_RAW_BASE = "https://raw.githubusercontent.com/fawazahmed0/hadith-api/1"
@@ -745,13 +762,9 @@ class IslamicDataRepository(
         val count = withContext(Dispatchers.IO) {
             try {
                 streamEdition(bookKey, languageCode, arabicEdition, onProgress)
-            } catch (e: RuntimeException) {
-                // android.util.JsonReader is not available in plain JVM unit tests (it is
-                // stubbed by the Android SDK). Fall back to the in-memory parser there so
-                // tests still exercise syncHadithBook; production uses the streaming path.
-                if (!e.message.orEmpty().contains("not mocked", ignoreCase = true) &&
-                    !e.message.orEmpty().contains("JsonReader", ignoreCase = true)
-                ) throw e
+            } catch (t: Throwable) {
+                if (!isAndroidJsonUnavailable(t)) throw t
+                // Plain JVM unit tests have no native JsonReader; use the in-memory parser.
                 val body = fetchHadithEdition(languageCode, bookKey)
                 val entries = parseHadithEdition(body, bookKey, languageCode, arabicEdition)
                 hadithDao.clearBook(bookKey, languageCode)
@@ -780,19 +793,16 @@ class IslamicDataRepository(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (t: Throwable) {
-                if (t is RuntimeException &&
-                    (t.message.orEmpty().contains("not mocked", ignoreCase = true) ||
-                        t.message.orEmpty().contains("JsonReader", ignoreCase = true))
-                ) {
-                    // JVM unit-test fallback.
+                if (isAndroidJsonUnavailable(t)) {
                     return try {
-                        val body = fetchHadithEdition("ara", bookKey)
-                        parseArabicTexts(body)
-                    } catch (e: Throwable) {
+                        parseArabicTexts(fetchHadithEdition("ara", bookKey))
+                    } catch (fallbackError: Throwable) {
+                        logMirrorFailure("Could not parse the Arabic hadith index in memory", fallbackError)
                         ArabicEditionIndex()
                     }
                 }
-                // try next mirror
+                // A mirror failed for a real reason; log it and try the next one.
+                logMirrorFailure("Could not read Arabic hadith index from $url", t)
             }
         }
         return ArabicEditionIndex()
@@ -816,6 +826,7 @@ class IslamicDataRepository(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (t: Throwable) {
+                logMirrorFailure("Could not stream $languageCode-$bookKey from $url", t)
                 lastError = t
                 hadithDao.clearBook(bookKey, languageCode)
             }

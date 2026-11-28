@@ -2,6 +2,7 @@ package com.sakinah.deen.data.prayer
 
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
+import com.sakinah.deen.settings.CalculationMethod as SharedCalculationMethod
 
 /**
  * A Sunni calculation authority as published by the free AlAdhan API. [methodId] is the
@@ -85,6 +86,37 @@ object SunniMethodMapper {
     /** Manual selection wins; otherwise the country's authority is used. */
     fun resolve(countryCode: String?, override: CalculationMethod?): SunniAuthority =
         override?.let(::fromOverride) ?: fromCountryCode(countryCode)
+
+    /**
+     * Legacy (shared module) method -> app calculation method. The shared enum is a small
+     * subset of the app's methods, so this is the only place that knows the old ids.
+     */
+    fun fromSharedCalculation(method: SharedCalculationMethod): CalculationMethod = when (method) {
+        SharedCalculationMethod.MWL -> CalculationMethod.MUSLIM_WORLD_LEAGUE
+        SharedCalculationMethod.ISNA -> CalculationMethod.NORTH_AMERICA
+        SharedCalculationMethod.UMM_AL_QURA -> CalculationMethod.UMM_AL_QURA
+        SharedCalculationMethod.EGYPTIAN -> CalculationMethod.EGYPTIAN
+        SharedCalculationMethod.KARACHI -> CalculationMethod.KARACHI
+        SharedCalculationMethod.TEHRAN -> CalculationMethod.TEHRAN
+        SharedCalculationMethod.MAKKAH -> CalculationMethod.UMM_AL_QURA
+    }
+
+    /**
+     * Reverse of [fromSharedCalculation] for the settings screen: the closest legacy method
+     * for an app method, or null when the legacy enum has no equivalent. Built on the
+     * authoritative [fromOverride] mapping so new app methods need no restatement here.
+     */
+    fun sharedCalculationFor(method: CalculationMethod): SharedCalculationMethod? =
+        when (fromOverride(method)) {
+            SunniAuthority.MUSLIM_WORLD_LEAGUE -> SharedCalculationMethod.MWL
+            SunniAuthority.ISNA -> SharedCalculationMethod.ISNA
+            SunniAuthority.UMM_AL_QURA -> SharedCalculationMethod.UMM_AL_QURA
+            SunniAuthority.EGYPTIAN -> SharedCalculationMethod.EGYPTIAN
+            SunniAuthority.KARACHI -> SharedCalculationMethod.KARACHI
+            // Legacy settings had no Qatar/Dubai ids; both were stored as Umm Al-Qura.
+            SunniAuthority.QATAR, SunniAuthority.DUBAI -> SharedCalculationMethod.UMM_AL_QURA
+            else -> null
+        }
 
     /** AlAdhan `school`: 0 = Shafi'i/Maliki/Hanbali (1:1 shadow), 1 = Hanafi (2:1). */
     fun schoolId(madhhab: Madhhab): Int =

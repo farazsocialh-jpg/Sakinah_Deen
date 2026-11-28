@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
@@ -434,7 +435,8 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         value = backupPassphrase,
                         onValueChange = { backupPassphrase = it },
                         label = { Text(stringResource(R.string.profile_backup_passphrase)) },
-                        singleLine = true
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation()
                     )
                 }
             },
@@ -442,6 +444,7 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 TextButton(onClick = {
                     val uri = pendingExportUri
                     val pass = backupPassphrase
+                    backupPassphrase = ""
                     if (uri != null && pass.isNotBlank()) {
                         showExportPassphrase = false
                         scope.launch {
@@ -475,7 +478,8 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         value = backupPassphrase,
                         onValueChange = { backupPassphrase = it },
                         label = { Text(stringResource(R.string.profile_backup_passphrase)) },
-                        singleLine = true
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation()
                     )
                 }
             },
@@ -483,6 +487,7 @@ fun ProfileScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 TextButton(onClick = {
                     val uri = pendingImportUri
                     val pass = backupPassphrase
+                    backupPassphrase = ""
                     if (uri != null && pass.isNotBlank()) {
                         showImportPassphrase = false
                         scope.launch {

@@ -1,6 +1,8 @@
 package com.sakinah.deen
 
+import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.service.AdhanPlaybackService
+import com.sakinah.deen.service.PrayerReminderContent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -15,10 +17,10 @@ class AdhanStopIntentTest {
 
     @Test
     fun notificationTitle_formatIncludesPrayerName() {
-        // The service builds the title as "<Prayer> prayer time started".
-        val prayer = "Maghrib"
-        val title = "$prayer prayer time started"
-        assertEquals("Maghrib prayer time started", title)
-        assertTrue(title.endsWith("prayer time started"))
+        // Exercise the exact pure helper PrayerNotificationFactory.build() uses for its
+        // expanded notification title, instead of asserting a locally built string.
+        val title = PrayerReminderContent.expandedTitle(PrayerType.MAGHRIB, "Maghrib")
+        assertEquals("Maghrib · 3 Rakat Fard", title)
+        assertTrue(title.startsWith("Maghrib"))
     }
 }

@@ -95,6 +95,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.ui.location.rememberGpsHomeSaver
 import com.sakinah.deen.R
 import com.sakinah.deen.data.model.CalculationMethod as AppMethod
+import com.sakinah.deen.data.prayer.SunniMethodMapper
 import com.sakinah.deen.data.model.QuranArabicScript
 import com.sakinah.deen.data.model.QuranTranslationResource
 import com.sakinah.deen.data.model.Madhhab as AppMadhhab
@@ -321,7 +322,7 @@ fun SettingsScreen(
                                         onClick = {
                                             appPrefs.calculationMethodOverride = m
                                             methodOverride = m
-                                            sharedMethodFor(m)?.let { shared ->
+                                            SunniMethodMapper.sharedCalculationFor(m)?.let { shared ->
                                                 scope.launch {
                                                     repo.updatePrayer(
                                                         settings.prayer.copy(calculationMethod = shared)
@@ -1655,14 +1656,4 @@ private fun formatBytes(bytes: Long): String = when {
     bytes >= 1_048_576L -> String.format(Locale.US, "%.2f MB", bytes / 1_048_576.0)
     bytes >= 1_024L -> String.format(Locale.US, "%.1f KB", bytes / 1_024.0)
     else -> "$bytes bytes"
-}
-
-/** Mirrors an Android override into the shared settings store (closest equivalent authority). */
-private fun sharedMethodFor(method: AppMethod): CalculationMethod? = when (method) {
-    AppMethod.UMM_AL_QURA, AppMethod.QATAR, AppMethod.DUBAI -> CalculationMethod.UMM_AL_QURA
-    AppMethod.EGYPTIAN -> CalculationMethod.EGYPTIAN
-    AppMethod.KARACHI -> CalculationMethod.KARACHI
-    AppMethod.NORTH_AMERICA -> CalculationMethod.ISNA
-    AppMethod.MUSLIM_WORLD_LEAGUE -> CalculationMethod.MWL
-    else -> null
 }

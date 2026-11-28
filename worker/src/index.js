@@ -86,7 +86,7 @@ function corsHeaders(env, origin) {
   const headers = {
     vary: "origin",
     "access-control-allow-methods": "POST, OPTIONS",
-    "access-control-allow-headers": "content-type, x-sakinah-client, x-admin-token",
+    "access-control-allow-headers": "content-type, x-sakinah-client, x-installation-id, x-admin-token",
     "access-control-max-age": "600",
   };
   if (origin && isOriginAllowed(origin, env)) {
@@ -185,10 +185,30 @@ function clientIp(request) {
   );
 }
 
-/** Anonymous proxy: IP plus a short token fingerprint keeps one device from exhausting a shared IP. */
+const INSTALLATION_ID_HEADER = "x-installation-id";
+const MAX_INSTALLATION_ID_LENGTH = 64;
+
+/**
+ * App-generated, per-installation id. It is opaque and non-secret: never derive it from
+ * CLIENT_TOKEN, whose shared prefix would make every installation compete for one budget.
+ */
+function installationId(request) {
+  const raw = request.headers.get(INSTALLATION_ID_HEADER) || "";
+  const id = raw.trim();
+  if (id.length === 0 || id.length > MAX_INSTALLATION_ID_LENGTH) return "";
+  // Keep the rate-limit key bounded and free of control characters / header injection.
+  return /^[A-Za-z0-9._:-]+$/.test(id) ? id : "";
+}
+
+/** Anonymous proxy: IP plus a per-installation id keeps one install from exhausting a shared IP. */
 function clientKey(request) {
-  const token = request.headers.get("x-sakinah-client") || "";
-  return `${clientIp(request)}|${token.slice(0, 12)}`;
+  const id = installationId(request);
+  return id ? `${clientIp(request)}|install:${id}` : `${clientIp(request)}|ip`;
+}
+
+/** Minimal structured logging: status/codes only, never bodies, prompts, tokens or keys. */
+function logStructured(level, event, status) {
+  console[level](JSON.stringify({ event, status }));
 }
 
 /**
@@ -342,6 +362,7 @@ async function getFcmAccessToken(serviceAccount) {
     }).toString(),
   });
   if (!response.ok) {
+    logStructured("warn", "fcm_oauth_error", response.status);
     throw new Error("oauth token exchange failed");
   }
   const data = await response.json();
@@ -398,6 +419,7 @@ async function sendFcmNotification(env, { title, body, topic, data, dataOnly }) 
   );
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
+    logStructured("warn", "fcm_send_error", response.status);
     throw new Error("fcm send failed");
   }
   const messageId = result && typeof result.name === "string" ? result.name : undefined;
@@ -426,6 +448,7 @@ async function handleNotify(request, env) {
   // token-guessing oracle at full request rate.
   const rate = await checkNotifyRateLimit(request, env);
   if (!rate.allowed) {
+    logStructured("warn", "rate_limited_notify", 429);
     return errorResponse("RATE_LIMITED", "Too many requests. Please retry shortly.", {
       "retry-after": String(rate.retryAfter),
     });
@@ -450,7 +473,7 @@ async function handleNotify(request, env) {
   } catch {
     return errorResponse("INVALID_JSON", "Request body must be JSON.");
   }
-  if (bodyText.length > MAX_NOTIFY_BODY_BYTES) {
+  if (new TextEncoder().encode(bodyText).byteLength > MAX_NOTIFY_BODY_BYTES) {
     return errorResponse("BODY_TOO_LARGE", "Request body is too large.");
   }
   let payload;
@@ -491,6 +514,7 @@ async function handleNotify(request, env) {
     });
     return jsonResponse(result, 200);
   } catch {
+    logStructured("error", "fcm_failure", 502);
     return errorResponse("FCM_ERROR", "Failed to send notification.");
   }
 }
@@ -508,6 +532,7 @@ async function handleScholarProxy(request, env) {
 
   const rate = await checkRateLimit(request, env);
   if (!rate.allowed) {
+    logStructured("warn", "rate_limited_proxy", 429);
     return errorResponse("RATE_LIMITED", "Too many requests. Please retry shortly.", {
       "retry-after": String(rate.retryAfter),
     });
@@ -519,7 +544,7 @@ async function handleScholarProxy(request, env) {
     return errorResponse("BODY_TOO_LARGE", "Request body is too large.");
   }
   const body = await request.text();
-  if (body.length > MAX_BODY_BYTES) {
+  if (new TextEncoder().encode(body).byteLength > MAX_BODY_BYTES) {
     return errorResponse("BODY_TOO_LARGE", "Request body is too large.");
   }
 
@@ -561,6 +586,7 @@ async function handleScholarProxy(request, env) {
       body: JSON.stringify(clampGenerationConfig(payload)),
     });
   } catch {
+    logStructured("warn", "upstream_unreachable", 0);
     return errorResponse("UPSTREAM_UNAVAILABLE", "The model provider could not be reached.");
   }
 
@@ -568,6 +594,7 @@ async function handleScholarProxy(request, env) {
     // Log only the status: the provider body can contain prompt fragments or key hints.
     const retryAfter = upstream.headers.get("retry-after");
     const code = upstream.status === 429 ? "UPSTREAM_RATE_LIMITED" : "UPSTREAM_ERROR";
+    logStructured("warn", "upstream_http_error", upstream.status);
     return errorResponse(
       code,
       "The model provider rejected the request.",
@@ -626,9 +653,12 @@ export {
   allowedOrigins,
   checkNotifyRateLimit,
   checkRateLimit,
+  clientKey,
   clampGenerationConfig,
+  installationId,
   isOriginAllowed,
   tokensMatch,
   validatePayload,
+  MAX_BODY_BYTES,
   MAX_PROMPT_CHARS,
 };

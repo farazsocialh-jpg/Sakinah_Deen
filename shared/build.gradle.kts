@@ -19,7 +19,6 @@ kotlin {
         }
     }
 
-    iosArm64()
     iosSimulatorArm64()
 
     val xcframeworkName = "Shared"

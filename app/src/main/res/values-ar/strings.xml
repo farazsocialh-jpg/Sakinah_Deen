@@ -217,6 +217,18 @@
     <string name="quran_reference">القرآن %1$d:%2$d</string>
     <string name="quran_surah_chip">سورة %1$d</string>
 
+    <string name="quran_wbw_single_behavior">بين السطور من اليمين: العربية مع معانيها تحتها. اضغط أي كلمة لمعناها وجذرها.</string>
+    <string name="quran_preview_label">معاينة مباشرة</string>
+    <string name="quran_preview_reference">سورة الفاتحة · ١:١</string>
+    <string name="quran_preview_translation_language">ترجمة %1$s</string>
+    <string name="quran_preview_layout_split">عمودان: الترجمة على اليسار والعربية على اليمين.</string>
+    <string name="quran_preview_layout_dock">شريط: قراءة بيد واحدة مع شريط عائم في الأسفل.</string>
+    <string name="quran_preview_mode_mushaf">صفحة المصحف: تتدفق السورة كاملة دون فواصل بين الآيات.</string>
+    <string name="quran_script_title">رسم الخط</string>
+    <string name="quran_translation_language_title">لغة الترجمة</string>
+    <string name="quran_wbw_language_title">لغة الكلمة بكلمة</string>
+    <string name="quran_option_change">تغيير</string>
+
     <string name="hadith_tab_books">الكتب</string>
     <string name="hadith_tab_daily">اليومي</string>
     <string name="hadith_tab_search">بحث</string>

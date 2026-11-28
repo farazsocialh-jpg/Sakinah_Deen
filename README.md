@@ -46,16 +46,29 @@ iOS (macOS only):
 
 ## Checks and releases
 
-CI is one workflow: [`ci.yml`](.github/workflows/ci.yml), a single `fast-debug-apk` job that runs
-on every push to `main` (or on demand) and builds `:app:assembleDebug`, then uploads
-`app-debug.apk` as a 7-day artifact. Tests, lint, the emulator device audit, MobSF, release
-signing, iOS and the Worker pipeline no longer run in CI — build them locally when needed.
+Three workflows are active:
 
-The retired multi-workflow pipeline (and its audit) is described in
-[docs/CI_CD_AUDIT.md](docs/CI_CD_AUDIT.md) and [docs/development-sop.md](docs/development-sop.md).
+- [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — pushes to `main`, pull requests to
+  `main`, and manual runs. It builds/uploads the debug APK (7-day artifact), renders the
+  exhaustive Roborazzi UI snapshot matrix on **JDK 21**, and runs a `unit-tests` job
+  (`:shared:allTests`, `:app:testDebugUnitTest`, `npm test --prefix worker`) that needs no secrets.
+- [`.github/workflows/maestro-android.yml`](.github/workflows/maestro-android.yml) — Maestro
+  Android E2E on an emulator for changes under `app/`, `.maestro/` or the workflow file, on
+  pushes and pull requests plus manual runs. Reports and screenshots are uploaded for 7 days.
+- [`.github/workflows/arbigent-ai-qa.yml`](.github/workflows/arbigent-ai-qa.yml) — **manual only**;
+  the AI UX agent runs 11 scenarios (each run spends free-tier AI quota), with the report
+  uploaded for 14 days.
+
+**Not in CI:** the full test suites beyond the JVM unit tests and the two E2E flows above
+(instrumented/device-audit tests), lint, MobSF/security scanning, iOS builds and tests, the
+Worker deployment pipeline, and release signing. Run those locally as needed; see
+[docs/development-sop.md](docs/development-sop.md).
+
+The retired five-workflow pipeline and its audit are kept for historical context in
+[docs/CI_CD_AUDIT.md](docs/CI_CD_AUDIT.md) and [docs/CI_CD_FINAL_REPORT.md](docs/CI_CD_FINAL_REPORT.md).
 
 ## Setup
 
-- JDK 17, Android SDK 35.
+- JDK 17, Android SDK 36 (the UI snapshot job in CI uses JDK 21).
 - Optionally copy `.env.example` to `.env` and set `AI_PROXY_URL` to the deployed AI Scholar proxy. There is no built-in default: without it, the AI Scholar screen shows its "not configured" state.
 - Never commit keystores or API keys; signing uses repository secrets.

@@ -217,6 +217,18 @@
     <string name="quran_reference">قرآن %1$d:%2$d</string>
     <string name="quran_surah_chip">سورہ %1$d</string>
 
+    <string name="quran_wbw_single_behavior">بین السطور دائیں سے: عربی اور اس کے نیچے معانی۔ معنی اور جذر کے لیے کوئی لفظ دبائیں۔</string>
+    <string name="quran_preview_label">براہِ راست پیش نظارہ</string>
+    <string name="quran_preview_reference">سورۃ الفاتحہ · 1:1</string>
+    <string name="quran_preview_translation_language">%1$s ترجمہ</string>
+    <string name="quran_preview_layout_split">دو کالم: ترجمہ بائیں اور عربی دائیں۔</string>
+    <string name="quran_preview_layout_dock">پٹی: ایک ہاتھ سے پڑھائی، نیچے تیرتی ہوئی پٹی کے ساتھ۔</string>
+    <string name="quran_preview_mode_mushaf">مصحف کا صفحہ: پوری سورہ بغیر آیتوں کی لکیروں کے مسلسل چلتی ہے۔</string>
+    <string name="quran_script_title">رسم الخط</string>
+    <string name="quran_translation_language_title">ترجمے کی زبان</string>
+    <string name="quran_wbw_language_title">لفظ بلفظ کی زبان</string>
+    <string name="quran_option_change">تبدیل کریں</string>
+
     <string name="hadith_tab_books">کتب</string>
     <string name="hadith_tab_daily">روزانہ</string>
     <string name="hadith_tab_search">تلاش</string>

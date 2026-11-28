@@ -1,5 +1,10 @@
 # Release signing & Play-ready builds
 
+> [!WARNING]
+> **Historical document.** This page describes the retired five-workflow CI pipeline, not the
+> active CI. See the [README](../README.md#checks-and-releases) for the three workflows that run
+> today.
+
 ImanCore builds a signed **AAB** (Android App Bundle) in CI from repository secrets.
 No keystore, password, or key is ever committed to this repository.
 

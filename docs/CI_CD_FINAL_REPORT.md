@@ -1,5 +1,10 @@
 # CI/CD Validation and Hardening — Final Report
 
+> [!WARNING]
+> **Historical document.** This page describes the retired five-workflow CI pipeline, not the
+> active CI. See the [README](../README.md#checks-and-releases) for the three workflows that run
+> today.
+
 Result of the six-phase post-remediation validation and hardening program for
 `farazsocialh-jpg/Sakinah_Deen` (ImanCore), following the audit in
 [CI_CD_AUDIT.md](CI_CD_AUDIT.md) and the remediation summarized in the prior report.

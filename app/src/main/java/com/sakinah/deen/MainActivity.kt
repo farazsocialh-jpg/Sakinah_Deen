@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -180,10 +181,13 @@ class MainActivity : ComponentActivity() {
             startService(intent)
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
+            Log.w(TAG, "Could not start Azaan playback service to stop it", e)
         }
     }
 
     companion object {
+        private const val TAG = "MainActivity"
+
         /** Route values an FCM notification is allowed to steer the app to. */
         val ALLOWED_NOTIFICATION_ROUTES: Set<String> = setOf(
             "quran",

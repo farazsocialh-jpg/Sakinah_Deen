@@ -3,6 +3,8 @@ build/
 .gradle/
 .kotlin/
 *.log
+/dist/
+/.build-outputs/
 
 # iOS / Xcode
 ios/build/
@@ -36,7 +38,6 @@ app/release/
 .DS_Store
 
 # Node tooling for the automated UI/UX audit (QAosMonkey)
-node_modules/
 .qaos-monkey/
 qaos-monkey-report/
 uiux-report/

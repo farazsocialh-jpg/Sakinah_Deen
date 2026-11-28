@@ -3,6 +3,7 @@ package com.sakinah.deen.service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +17,10 @@ import kotlinx.coroutines.launch
  * exact alarm whenever the OS reports one of those events.
  */
 class BootAndAlarmReceiver : BroadcastReceiver() {
+
+    companion object {
+        private const val TAG = "BootAndAlarmReceiver"
+    }
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action
@@ -62,10 +67,11 @@ class BootAndAlarmReceiver : BroadcastReceiver() {
         // location the user selected. If none is saved yet, the app will schedule after
         // onboarding/location resolution instead of firing alarms for the wrong place.
         val coordinates = preferences.locationCoordinates ?: return
-        scheduler.scheduleAllDailyAlarms(
+        val result = scheduler.scheduleAllDailyAlarms(
             coordinates = coordinates,
             method = preferences.calculationMethodOverride,
             madhhab = preferences.madhhab
         )
+        Log.i(TAG, "Alarm reschedule after system event: ${result.code}")
     }
 }

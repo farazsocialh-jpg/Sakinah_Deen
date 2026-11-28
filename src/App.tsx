@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Clock,
   Compass,
@@ -21,6 +21,22 @@ type TabType = 'prayers' | 'qibla' | 'quran' | 'tasbih' | 'widgets' | 'build';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('prayers');
+  const [apiStatus, setApiStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+
+  // Connectivity is observed from the API itself; never hardcode a port or assume it is live.
+  useEffect(() => {
+    let active = true;
+    fetch('/api/status')
+      .then((res) => {
+        if (active) setApiStatus(res.ok ? 'online' : 'offline');
+      })
+      .catch(() => {
+        if (active) setApiStatus('offline');
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const navItems: { id: TabType; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'prayers', label: 'Prayer Times', icon: Clock },
@@ -44,11 +60,11 @@ export const App: React.FC = () => {
               <div className="flex items-center gap-2">
                 <span className="font-bold text-lg text-white tracking-tight">ImanCore</span>
                 <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Android & Web
+                  com.imancore.app
                 </span>
               </div>
               <p className="text-xs text-slate-400 hidden sm:block">
-                Sakinah_Deen Islamic Companion & Android Widget Suite
+                Islamic Companion & Android Widget Suite
               </p>
             </div>
           </div>
@@ -63,9 +79,26 @@ export const App: React.FC = () => {
               <span>Get Android APK</span>
             </a>
             <div className="h-4 w-px bg-slate-800 hidden sm:block" />
-            <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-1 rounded-full font-mono">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              Port 3000 Active
+            <div
+              className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-mono border ${
+                apiStatus === 'online'
+                  ? 'text-emerald-400 bg-emerald-950/40 border-emerald-500/30'
+                  : apiStatus === 'offline'
+                    ? 'text-rose-400 bg-rose-950/40 border-rose-500/30'
+                    : 'text-slate-400 bg-slate-900 border-slate-700'
+              }`}
+              title="Derived from GET /api/status"
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  apiStatus === 'online'
+                    ? 'bg-emerald-400 animate-pulse'
+                    : apiStatus === 'offline'
+                      ? 'bg-rose-400'
+                      : 'bg-slate-500'
+                }`}
+              />
+              API {apiStatus}
             </div>
           </div>
         </div>
@@ -109,9 +142,7 @@ export const App: React.FC = () => {
       {/* Footer */}
       <footer className="border-t border-slate-900 bg-slate-950 py-6 px-4 md:px-8 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <span>
-            ImanCore (com.sakinah.deen) • Jetpack Compose + KMP + Express on port 3000
-          </span>
+          <span>ImanCore (com.imancore.app) • Jetpack Compose + KMP + Express</span>
           <div className="flex items-center gap-4">
             <button
               onClick={() => setActiveTab('widgets')}

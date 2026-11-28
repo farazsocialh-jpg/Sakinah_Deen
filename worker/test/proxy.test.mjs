@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import gate, {
+  MAX_BODY_BYTES,
   MAX_PROMPT_CHARS,
   allowedOrigins,
   checkNotifyRateLimit,
   checkRateLimit,
+  clientKey,
   clampGenerationConfig,
+  installationId,
   isOriginAllowed,
   tokensMatch,
   validatePayload,
@@ -186,6 +189,17 @@ test("checkNotifyRateLimit keys on the calling IP", async () => {
   assert.ok([...limiter.counts.keys()].every((key) => key.startsWith("notify:")));
 });
 
+test("rate limit keys are per installation and never include the shared client token", () => {
+  const token = "shared-client-token-value";
+  const a = request({ "x-sakinah-client": token, "x-installation-id": "install-a" });
+  const b = request({ "x-sakinah-client": token, "x-installation-id": "install-b" });
+  assert.notEqual(clientKey(a), clientKey(b));
+  assert.equal(clientKey(a).includes(token), false);
+  assert.match(clientKey(a), /install:install-a$/);
+  assert.match(clientKey(request({ "x-installation-id": "bad id" })), /\|ip$/);
+  assert.equal(installationId(request({ "x-installation-id": "x".repeat(65) })), "");
+});
+
 test("a missing rate limiter binding fails open instead of blocking the app", async () => {
   assert.deepEqual(await checkRateLimit(request(), {}), { allowed: true, retryAfter: 0 });
   assert.deepEqual(await checkNotifyRateLimit(request({}, "/notify"), {}), {
@@ -222,6 +236,23 @@ test("wrong client token is rejected before any upstream call", async () => {
   });
   assert.equal(response.status, 401);
   assert.equal((await response.json()).error.code, "UNAUTHORIZED");
+});
+
+test("proxy body limit counts UTF-8 bytes, not JS characters", async () => {
+  // 150k accented characters are ~300k UTF-8 bytes but fewer than MAX_BODY_BYTES characters.
+  const body = "é".repeat(150_000);
+  assert.ok(body.length < MAX_BODY_BYTES);
+  assert.ok(new TextEncoder().encode(body).byteLength > MAX_BODY_BYTES);
+  const response = await gate.fetch(
+    new Request("https://proxy.example/", {
+      method: "POST",
+      body,
+      headers: { "cf-connecting-ip": "198.51.100.12" },
+    }),
+    { GEMINI_API_KEY: "test-key" }
+  );
+  assert.equal(response.status, 413);
+  assert.equal((await response.json()).error.code, "BODY_TOO_LARGE");
 });
 
 test("invalid JSON is rejected with a stable code", async () => {

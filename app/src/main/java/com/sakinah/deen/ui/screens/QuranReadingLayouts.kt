@@ -72,6 +72,7 @@ import com.sakinah.deen.ui.components.ArabicVerseBlock
 import com.sakinah.deen.ui.components.SegmentedPillBar
 import com.sakinah.deen.ui.theme.UthmanicFontFamily
 import com.sakinah.deen.util.ArabicNormalizer
+import kotlin.math.roundToInt
 
 internal data class QuranAyahUiState(
     val selectedAyahNumber: Int,
@@ -1021,10 +1022,14 @@ private fun PreviewBody(
                     modifier = Modifier.weight(0.46f),
                     verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    PreviewTranslationLine(translationLanguage, maxLines = 3, fontSize = 8)
+                    PreviewTranslationLine(
+                        translationLanguage,
+                        maxLines = 3,
+                        fontSize = previewMicroSp(0.73f)
+                    )
                     Text(
                         text = stringResource(R.string.quran_options_tafseer),
-                        fontSize = 7.sp,
+                        fontSize = previewMicroSp(0.64f).sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -1069,7 +1074,7 @@ private fun PreviewBody(
                 Text(
                     text = "Al-Fatihah ▾",
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    fontSize = 8.sp,
+                    fontSize = previewMicroSp(0.73f).sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -1087,7 +1092,7 @@ private fun PreviewMushafPage(arabic: String, translationLanguage: String) {
     ) {
         Text(
             text = "سورة الفاتحة · Al-Fatihah",
-            fontSize = 8.sp,
+            fontSize = previewMicroSp(0.73f).sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
             maxLines = 1
@@ -1108,13 +1113,22 @@ private fun PreviewMushafPage(arabic: String, translationLanguage: String) {
         PreviewTranslationLine(
             language = translationLanguage,
             maxLines = 2,
-            fontSize = 8,
+            fontSize = previewMicroSp(0.73f),
             center = true
         )
         PreviewSkeletonLine(0.95f)
         PreviewSkeletonLine(0.7f)
     }
 }
+
+/**
+ * Tiny preview labels, derived from the theme's [androidx.compose.material3.Typography.labelSmall]
+ * token. `.sp` then picks up the reading-density font scale, so previews stay proportional to
+ * the real reader instead of being fixed absolute sizes.
+ */
+@Composable
+private fun previewMicroSp(fractionOfLabel: Float): Int =
+    (MaterialTheme.typography.labelSmall.fontSize.value * fractionOfLabel).roundToInt()
 
 @Composable
 private fun PreviewArabicLine(text: String, fontSize: Int) {
@@ -1186,7 +1200,7 @@ private fun PreviewWbwStrip(script: String) {
                     )
                     Text(
                         text = word.translation,
-                        fontSize = 6.sp,
+                        fontSize = previewMicroSp(0.55f).sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

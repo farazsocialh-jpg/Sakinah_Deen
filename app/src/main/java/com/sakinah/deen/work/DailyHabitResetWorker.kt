@@ -30,6 +30,9 @@ class DailyHabitResetWorker(
 
         /** Give transient database failures a few runs before WorkManager gives up. */
         private const val MAX_ATTEMPTS = 3
+
+        /** A device that was off for weeks must not roll an unbounded number of days at once. */
+        private const val MAX_ROLLOVER_DAYS = 7
     }
 
     override suspend fun doWork(): Result {
@@ -43,11 +46,16 @@ class DailyHabitResetWorker(
                 val salahDao = database.salahDao()
                 val qadhaDao = database.qadhaDao()
 
-                // Qadha rollover runs at most once per day. Without this guard a retry after
-                // a partially completed run would double-count the same missed prayers.
-                if (preferences.lastQadhaRolloverEpochDay < yesterdayEpochDay) {
-                    salahDao.getUncompletedFard(yesterdayEpochDay).forEach { record ->
-                        qadhaDao.incrementMissed(record.prayerType, 1)
+                // Catch up every unrolled day since the last successful run, but cap at a week
+                // (a first run has no anchor at all and must not loop from Long.MIN_VALUE).
+                val lastRollover = preferences.lastQadhaRolloverEpochDay
+                if (lastRollover < yesterdayEpochDay) {
+                    val firstDay = (lastRollover + 1)
+                        .coerceAtLeast(yesterdayEpochDay - MAX_ROLLOVER_DAYS + 1L)
+                    for (epochDay in firstDay..yesterdayEpochDay) {
+                        salahDao.getUncompletedFard(epochDay).forEach { record ->
+                            qadhaDao.incrementMissed(record.prayerType, 1)
+                        }
                     }
                 }
 
