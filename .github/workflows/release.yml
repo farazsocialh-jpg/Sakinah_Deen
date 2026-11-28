@@ -1,0 +1,268 @@
+name: Release
+
+# Builds signed, Play-ready release artifacts (AAB + APK).
+# The AAB is the Play Store upload format; the APK is for direct install / sideload.
+#
+# Triggers:
+#   - Push a v* tag to publish a versioned release.
+#   - Run manually from Actions to build a release on demand.
+#
+# Required Playstore environment secrets/vars:
+#   KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD - release signing
+#   AI_PROXY_URL - AI Scholar proxy (build fails when missing, same as CI)
+#   GOOGLE_WEB_CLIENT_ID / GOOGLE_SERVICES_JSON - Google Sign-In / Firebase config
+#   NISAB_RATE_URL - optional metal-price endpoint
+#   PLAY_SERVICE_ACCOUNT_JSON - optional; when set, uploads the AAB to Play Console
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Version name (e.g. 1.2.0). Defaults to tag without v, or 1.0.0.'
+        required: false
+        type: string
+      play_track:
+        description: 'Google Play track when PLAY_SERVICE_ACCOUNT_JSON is configured.'
+        required: false
+        default: internal
+        type: choice
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
+      play_status:
+        description: 'Google Play release status for the uploaded AAB.'
+        required: false
+        default: completed
+        type: choice
+        options:
+          - completed
+          - draft
+
+permissions:
+  contents: write
+
+# Do not cancel release builds; each tag/manual run should finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Signed release (AAB + APK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: Playstore
+    env:
+      GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID || vars.GOOGLE_WEB_CLIENT_ID }}
+      NISAB_RATE_URL: ${{ vars.NISAB_RATE_URL || secrets.NISAB_RATE_URL }}
+      PLAY_TRACK: ${{ inputs.play_track || 'internal' }}
+      PLAY_STATUS: ${{ inputs.play_status || 'completed' }}
+      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON || '' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version_name }}" ]; then
+            VERSION_NAME="${{ inputs.version_name }}"
+          elif [[ "${GITHUB_REF_NAME}" == v* ]]; then
+            VERSION_NAME="${GITHUB_REF_NAME#v}"
+          else
+            VERSION_NAME="1.0.0"
+          fi
+          # Play requires a monotonically increasing integer versionCode.
+          VERSION_CODE="${GITHUB_RUN_NUMBER}"
+          echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
+          echo "VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "Resolved release version: ${VERSION_NAME} (${VERSION_CODE})"
+
+      - name: Validate required secrets
+        shell: bash
+        env:
+          AI_PROXY_URL: ${{ vars.AI_PROXY_URL || secrets.AI_PROXY_URL }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in AI_PROXY_URL KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            value="${!name:-}"
+            if [ -z "$(printf '%s' "$value" | tr -d '[:space:]')" ]; then
+              echo "::error::${name} is missing. Configure it in the Playstore environment before releasing."
+              missing=1
+            fi
+          done
+          if [ -z "$(printf '%s' "${GOOGLE_WEB_CLIENT_ID:-}" | tr -d '[:space:]')" ]; then
+            echo "::warning::GOOGLE_WEB_CLIENT_ID is empty. The release APK/AAB will build, but Google Sign-In will show 'not configured'."
+          fi
+          if [ -z "$(printf '%s' "${GOOGLE_SERVICES_JSON:-}" | tr -d '[:space:]')" ]; then
+            echo "::warning::GOOGLE_SERVICES_JSON is empty. Firebase-dependent features may be unavailable in this build."
+          fi
+          [ "$missing" -eq 0 ]
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6.3.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6.4.1
+        with:
+          cache-read-only: false
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Decode Firebase config (if provided)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" | base64 --decode > app/google-services.json
+            echo "Decoded app/google-services.json from GOOGLE_SERVICES_JSON."
+          else
+            echo "GOOGLE_SERVICES_JSON is empty; continuing without a Firebase config."
+          fi
+
+      - name: Decode release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE_PATH="$RUNNER_TEMP/sakinah-release.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          echo "KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+          echo "Decoded release keystore to $KEYSTORE_PATH"
+
+      - name: Build signed release AAB and APK
+        env:
+          AI_PROXY_URL: ${{ vars.AI_PROXY_URL || secrets.AI_PROXY_URL }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew :app:bundleRelease :app:assembleRelease --build-cache --parallel --stacktrace
+
+      - name: Verify release signatures and print SHA-1
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAB="app/build/outputs/bundle/release/app-release.aab"
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -f "$AAB" || { echo "::error::Missing release AAB: $AAB"; exit 1; }
+          test -f "$APK" || { echo "::error::Missing release APK: $APK"; exit 1; }
+
+          JARSIGNER="$(command -v jarsigner)"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          test -n "$APKSIGNER" || { echo "::error::apksigner not found in ANDROID_HOME/build-tools"; exit 1; }
+
+          echo "Verifying AAB signature..."
+          "$JARSIGNER" -verify -verbose -certs "$AAB" | tail -n 20
+
+          echo "Verifying APK signature..."
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+
+          CERTS="$("$APKSIGNER" verify --print-certs "$APK")"
+          SHA1="$(printf '%s\n' "$CERTS" | awk -F': ' '/SHA-1 digest/{print $2; exit}')"
+          SHA256="$(printf '%s\n' "$CERTS" | awk -F': ' '/SHA-256 digest/{print $2; exit}')"
+
+          echo ""
+          echo "============================================================"
+          echo "RELEASE SIGNING SHA-1 (paste into Firebase Android app):"
+          echo "${SHA1}"
+          echo "SHA-256:"
+          echo "${SHA256}"
+          echo "============================================================"
+
+          {
+            echo "### Release signing"
+            echo
+            echo "- Version: ${VERSION_NAME} (${VERSION_CODE})"
+            echo "- Package: com.imancore.app"
+            echo
+            echo "**SHA-1 (paste into Firebase → Project Settings → Your Android App → SHA certificate fingerprints):**"
+            echo '```'
+            echo "${SHA1}"
+            echo '```'
+            echo
+            echo "**SHA-256:**"
+            echo '```'
+            echo "${SHA256}"
+            echo '```'
+            echo
+            echo "<details><summary>Full APK signer certs</summary>"
+            echo
+            echo '```'
+            printf '%s\n' "$CERTS"
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="release-artifacts"
+          mkdir -p "$OUT"
+          cp app/build/outputs/bundle/release/app-release.aab "$OUT/imancore-${VERSION_NAME}.aab"
+          cp app/build/outputs/apk/release/app-release.apk "$OUT/imancore-${VERSION_NAME}.apk"
+          if [ -f app/build/outputs/mapping/release/mapping.txt ]; then
+            cp app/build/outputs/mapping/release/mapping.txt "$OUT/mapping-${VERSION_NAME}.txt"
+          else
+            echo "::warning::mapping.txt not found; creating an empty mapping file so downstream upload steps have a valid path."
+            : > "$OUT/mapping-${VERSION_NAME}.txt"
+          fi
+          sha256sum "$OUT"/* > "$OUT/SHA256SUMS.txt"
+          ls -lh "$OUT"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: imancore-release-${{ env.VERSION_NAME }}
+          path: release-artifacts/
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ImanCore v${{ env.VERSION_NAME }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release-artifacts/imancore-${{ env.VERSION_NAME }}.aab
+            release-artifacts/imancore-${{ env.VERSION_NAME }}.apk
+            release-artifacts/mapping-${{ env.VERSION_NAME }}.txt
+            release-artifacts/SHA256SUMS.txt
+
+      - name: Upload AAB to Google Play
+        if: env.PLAY_SERVICE_ACCOUNT_JSON != ''
+        uses: r0adkll/upload-google-play@v1.1.3
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.imancore.app
+          releaseFiles: release-artifacts/imancore-${{ env.VERSION_NAME }}.aab
+          track: ${{ env.PLAY_TRACK }}
+          status: ${{ env.PLAY_STATUS }}
+          mappingFile: release-artifacts/mapping-${{ env.VERSION_NAME }}.txt

@@ -760,9 +760,6 @@ fun PersonalizedOnboardingScreen(
                             label = ctaLabel,
                             accent = accent,
                             onAccent = onAccent,
-                            onBack = if (step > 0) {
-                                { step-- }
-                            } else null,
                             onClick = {
                                 when (step) {
                                     0 -> step = 1
@@ -1097,43 +1094,19 @@ private fun OnboardingCta(
     label: String,
     accent: Color,
     onAccent: Color,
-    onBack: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
-    Row(
+    Button(
+        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
-            .padding(bottom = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(bottom = 8.dp)
+            .height(54.dp),
+        shape = RoundedCornerShape(27.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = onAccent)
     ) {
-        if (onBack != null) {
-            OutlinedButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .height(54.dp)
-                    .testTag("onboarding_cta_back"),
-                shape = RoundedCornerShape(27.dp)
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.onboarding_back)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.onboarding_back))
-            }
-        }
-        Button(
-            onClick = onClick,
-            modifier = Modifier
-                .weight(1f)
-                .height(54.dp),
-            shape = RoundedCornerShape(27.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = onAccent)
-        ) {
-            Text(text = label, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        }
+        Text(text = label, fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
 }
 
