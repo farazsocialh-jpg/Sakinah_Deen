@@ -86,8 +86,8 @@ scenarios:
       4. On the language step, verify "Search languages...", then tap "Continue".
       5. On the edition step, verify "Select your preferred translation style across Quran,
           WBW, Hadith, and Tafseer.", then tap "Continue".
-      6. On the Tafsir step, verify "Choose your English Tafsir" and tap "Download later",
-          then tap "Continue".
+      6. On the Tafsir step, verify "Choose your English Tafsir" and tap "Download later".
+         That action already advances to the permissions step; do not tap "Continue" again.
       7. On the permissions step, verify the heading reads "You're all set, Faraz" (the name
           must not be missing). Inspect all four tiles - Location, Notifications, Exact Alarms,
           Battery Optimization. Do NOT tap "Continue". Stay on this screen.
