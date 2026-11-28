@@ -4,7 +4,7 @@ appId: com.imancore.app
     clearState: true
 - assertVisible: "As-salamu alaykum"
 - takeScreenshot: "01_welcome"
-- tapOn: "Enter your name"
+- tapOn: { id: "onboarding_name_input" }
 - inputText: "Faraz"
 - hideKeyboard
 - tapOn: "Continue"

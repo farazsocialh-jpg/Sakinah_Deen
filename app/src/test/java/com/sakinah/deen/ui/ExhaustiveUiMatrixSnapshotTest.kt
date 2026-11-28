@@ -82,9 +82,9 @@ import org.robolectric.annotation.GraphicsMode
  * without booting an emulator.
  *
  * Coverage:
- *  - every [SakinahPalette] x Light/Dark: onboarding steps 0..3 (permissions granted, so the
- *    "Allowed" pills are exercised in every palette), Salah, Quran and Hadith;
- *  - every [FontScalePreset] on onboarding steps 2/3, Salah, Quran and Hadith, plus the
+ *  - every [SakinahPalette] x Light/Dark: the current 8-step onboarding flow (permissions are
+ *    granted, so the "Granted" pills are exercised in every palette), Salah, Quran and Hadith;
+ *  - every [FontScalePreset] across the onboarding flow, Salah, Quran and Hadith, plus the
  *    Arabic/translation size extremes on the Quran reader;
  *  - every [SalahHomeLayout], [QuranReadingLayout] and [HadithReadingLayout] in both modes;
  *  - every secondary screen (Scholar, Tools, Travel, Wealth, Visual Guide, all three Settings
@@ -249,6 +249,24 @@ class ExhaustiveUiMatrixSnapshotTest {
         shot(path)
     }
 
+    /**
+     * The welcome CTA appears only after the animated logo assembles and the greeting fades in.
+     * This suite drives the clock manually, so advance it until a CTA is actually present rather
+     * than assuming a fixed animation duration.
+     */
+    private fun advanceUntilOnboardingCta() {
+        repeat(60) {
+            val ctaVisible =
+                composeRule.onAllNodesWithText("Continue").fetchSemanticsNodes().isNotEmpty() ||
+                    composeRule.onAllNodesWithText("Start Using Sakinah")
+                        .fetchSemanticsNodes().isNotEmpty()
+            if (ctaVisible) return
+            composeRule.mainClock.advanceTimeBy(100)
+            composeRule.waitForIdle()
+        }
+        error("No onboarding CTA appeared. Tree:\n" + composeRule.onRoot().printToString(maxDepth = 12))
+    }
+
     private fun onboarding(
         palette: SakinahPalette,
         dark: Boolean,
@@ -257,7 +275,7 @@ class ExhaustiveUiMatrixSnapshotTest {
     ) {
         val prefix = "${palette.name.lowercase()}-${if (dark) "dark" else "light"}"
         // A fresh saveable slot per configuration: otherwise rememberSaveable restores the
-        // previous run's step and the wizard re-opens at step 4 with an "Open ImanCore" CTA.
+        // previous run's step and the wizard re-opens midway with stale state.
         show(palette, dark, fontScale) {
             key("onboarding-$prefix-$fontScale") {
                 PersonalizedOnboardingScreen(
@@ -274,23 +292,42 @@ class ExhaustiveUiMatrixSnapshotTest {
                 )
             }
         }
-        // The welcome CTA and Skip appear only after the logo finishes assembling (~900ms)
-        // plus the greeting's fade/slide, and this suite drives the clock manually.
-        composeRule.mainClock.advanceTimeBy(1_200)
-        composeRule.waitForIdle()
+        advanceUntilOnboardingCta()
         shots?.invoke("onboarding/$prefix-step0-welcome")
-        val stepNames = listOf("step1-journey", "step2-location-method", "step3-first-win")
-        stepNames.forEach { stepName ->
-            val found = composeRule.onAllNodesWithText("Continue").fetchSemanticsNodes()
-            check(found.isNotEmpty()) {
-                "No Continue CTA at fontScale=$fontScale. Tree:\n" +
+
+        // The current flow has up to eight steps and may skip Edition/Tafsir when there is only
+        // one edition or no offline Tafsir pack. Follow the actual CTA instead of hard-coding
+        // step names so the snapshots track the app rather than a stale four-step wizard.
+        var step = 0
+        while (step < 10) {
+            if (composeRule.onAllNodesWithText("Start Using Sakinah")
+                    .fetchSemanticsNodes().isNotEmpty()
+            ) {
+                shots?.invoke("onboarding/$prefix-step$step-final")
+                return
+            }
+            check(composeRule.onAllNodesWithText("Continue").fetchSemanticsNodes().isNotEmpty()) {
+                "No Continue CTA at step $step, fontScale=$fontScale. Tree:\n" +
                     composeRule.onRoot().printToString(maxDepth = 12)
             }
             composeRule.onNodeWithText("Continue").performClick()
+            step++
             composeRule.mainClock.advanceTimeBy(600)
             composeRule.waitForIdle()
-            shots?.invoke("onboarding/$prefix-$stepName")
+            advanceUntilOnboardingCta()
+            val label = when (step) {
+                1 -> "appearance"
+                2 -> "goals"
+                3 -> "language"
+                4 -> "edition"
+                5 -> "tafsir"
+                6 -> "permissions"
+                7 -> "final"
+                else -> "step"
+            }
+            shots?.invoke("onboarding/$prefix-step$step-$label")
         }
+        error("Onboarding did not reach its final CTA within 10 steps")
     }
 
     private val salahScene: @Composable () -> Unit = {
