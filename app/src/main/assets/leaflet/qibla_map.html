@@ -6,9 +6,11 @@
 <link rel="stylesheet" href="leaflet.css"/>
 <script src="leaflet.js"></script>
 <style>
-  html, body { height: 100%; margin: 0; padding: 0; background: #0B3B2C; }
-  #map { position: absolute; inset: 0; background: #0B3B2C; }
-  .leaflet-container { background: #0B3B2C; font: inherit; }
+  /* Transparent backgrounds let the permanent native vector base layer beneath the WebView
+     show through any tile gap. Leaflet tile images themselves stay fully opaque. */
+  html, body { height: 100%; margin: 0; padding: 0; background: transparent; }
+  #map { position: absolute; inset: 0; background: transparent; }
+  .leaflet-container { background: transparent; font: inherit; }
   /* Offline bearing graphic: covers the map until a real tile paints, so Map mode is never a
      bare solid-colour rectangle on an emulator or a network that blocks tile CDNs. */
   #qibla-fallback {
@@ -119,8 +121,8 @@
   var fallbackCanvas = document.getElementById("qibla-fallback");
   var fallbackCtx = fallbackCanvas ? fallbackCanvas.getContext("2d") : null;
 
-  function hideFallback() {
-    if (fallbackCanvas) { fallbackCanvas.classList.add("hidden"); }
+  function hideFallback(hide) {
+    if (fallbackCanvas) { fallbackCanvas.classList.toggle("hidden", hide !== false); }
   }
 
   function drawFallback() {
@@ -206,7 +208,7 @@
   window.addEventListener("resize", drawFallback);
 
   function markReady() {
-    hideFallback();
+    hideFallback(true);
     call("onTileLoaded");
   }
 
@@ -227,6 +229,7 @@
         // Every provider failed. The page keeps its offline bearing graphic, and the native
         // card is told so it can offer the retry control instead of spinning forever.
         debug("tiles_unavailable: all providers failed, keeping offline bearing graphic");
+        hideFallback(false);
         fail("tiles_unavailable");
       }
     });

@@ -99,11 +99,24 @@ android {
         ).firstOrNull { !it.isNullOrBlank() }?.trim().orEmpty()
         buildConfigField("String", "AI_PROXY_URL", "\"$aiProxyUrl\"")
 
-        // Public metal-price endpoint used for the live nisab threshold. Empty disables
-        // fetching, in which case the last cached rate is used.
-        val nisabRateUrl = (signingValue("NISAB_RATE_URL", "NISAB_RATE_URL") ?: dotenvValue("NISAB_RATE_URL"))
-            .orEmpty()
+        // Public metal-price endpoint used for the live nisab threshold. Empty (or an
+        // unsupported response) lets the repository try the public gold-api.com fallback.
+        // Resolution order matches AI_PROXY_URL: local.properties, -P, the environment,
+        // keystore.properties, then .env.
+        val nisabRateUrl = listOf(
+            localProperties.getProperty("NISAB_RATE_URL"),
+            project.findProperty("NISAB_RATE_URL")?.toString(),
+            System.getenv("NISAB_RATE_URL"),
+            keystoreProperties.getProperty("NISAB_RATE_URL"),
+            dotenvProperties.getProperty("NISAB_RATE_URL")
+        ).firstOrNull { !it.isNullOrBlank() }?.trim().orEmpty()
         buildConfigField("String", "NISAB_RATE_URL", "\"$nisabRateUrl\"")
+
+        // Opaque shared token sent to the AI proxy as x-sakinah-client, only when non-blank.
+        // Never hardcoded: same resolution chain as GOOGLE_WEB_CLIENT_ID below. A blank build
+        // simply sends no header, which is correct for a public deployment of the worker.
+        val sakinahClientToken = localOrSigningValue("SAKINAH_CLIENT_TOKEN").orEmpty()
+        buildConfigField("String", "SAKINAH_CLIENT_TOKEN", "\"$sakinahClientToken\"")
 
         // Web OAuth client id used as Credential Manager's serverClientId for Google Sign-In.
         // Never hardcoded: supply via local.properties, the GOOGLE_WEB_CLIENT_ID env var or .env.

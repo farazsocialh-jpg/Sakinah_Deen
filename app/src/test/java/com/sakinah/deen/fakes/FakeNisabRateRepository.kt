@@ -10,8 +10,14 @@ import kotlinx.coroutines.flow.StateFlow
  * set the last cached rate is kept, which is what the offline path relies on.
  */
 class FakeNisabRateRepository(
-    initial: NisabRates = NisabRates(88.40f, 1.15f, 1_700_000_000_000L),
-    private val fresh: NisabRates = NisabRates(90.0f, 1.20f, 1_760_000_000_000L)
+    initial: NisabRates = NisabRates(
+        88.40f, 1.15f, 1_700_000_000_000L,
+        sourceLabel = "Offline estimate"
+    ),
+    private val fresh: NisabRates = NisabRates(
+        90.0f, 1.20f, 1_760_000_000_000L,
+        sourceLabel = "Live API"
+    )
 ) : NisabRateRepository {
 
     private val _rates = MutableStateFlow(initial)

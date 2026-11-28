@@ -51,6 +51,7 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -122,10 +123,43 @@ class IslamicDataRepository(
         private const val TAFSIR_CATALOG_PREFS = "sakinah_tafsir_catalog"
         private const val CATALOG_KEY = "catalog_json"
 
+        /** Verified free community dataset: one JSON per book with Arabic and English text. */
+        const val HADITH_COMMUNITY_CDN_BASE =
+            "https://cdn.jsdelivr.net/gh/AhmedBaset/hadith-json@main/db/by_book/"
+        const val HADITH_COMMUNITY_RAW_BASE =
+            "https://raw.githubusercontent.com/AhmedBaset/hadith-json/main/db/by_book/"
+
+        /** One additional authentic collection and the path of its single JSON file. */
+        data class AdditionalHadithBook(
+            val key: String,
+            val path: String,
+            val label: String
+        )
+
+        val ADDITIONAL_HADITH_BOOKS = listOf(
+            AdditionalHadithBook("riyad", "other_books/riyad_assalihin.json", "Riyad as-Salihin"),
+            AdditionalHadithBook("adab", "other_books/aladab_almufrad.json", "Al-Adab al-Mufrad"),
+            AdditionalHadithBook("bulugh", "other_books/bulugh_almaram.json", "Bulugh al-Maram"),
+            AdditionalHadithBook(
+                "shamail",
+                "other_books/shamail_muhammadiyah.json",
+                "Ash-Shama'il al-Muhammadiyyah"
+            ),
+            AdditionalHadithBook("ahmad", "the_9_books/ahmed.json", "Musnad Ahmad")
+        )
+
+        val ADDITIONAL_HADITH_KEYS = ADDITIONAL_HADITH_BOOKS.map { it.key }.toSet()
+
+        /** Authentic collections only; dehlawi and qudsi stay excluded. */
         val SUPPORTED_HADITH_BOOKS = listOf(
             "bukhari", "muslim", "nawawi", "abudawud",
             "tirmidhi", "nasai", "ibnmajah", "malik"
-        )
+        ) + ADDITIONAL_HADITH_BOOKS.map { it.key }
+
+        /** Only authenticated collections are exposed; ignore any other CDN editions. */
+        private fun filterSupportedHadithBooks(
+            catalog: List<HadithBookCatalog>
+        ): List<HadithBookCatalog> = catalog.filter { it.bookKey in SUPPORTED_HADITH_BOOKS }
 
         private const val USER_AGENT = "ImanCore-Android/1.0 (offline-first Islamic companion)"
 
@@ -357,7 +391,7 @@ class IslamicDataRepository(
         ): List<HadithBookCatalog> {
             val editionsRoot = runCatching { json.parseToJsonElement(editionsBody) as? JsonObject }.getOrNull() ?: return emptyList()
             val infoRoot = infoBody?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
-            return editionsRoot.mapNotNull { (bookKey, value) ->
+            return filterSupportedHadithBooks(editionsRoot.mapNotNull { (bookKey, value) ->
                 val obj = value as? JsonObject ?: return@mapNotNull null
                 val bookTitle = (obj["name"] as? JsonPrimitive)?.contentOrNull.orEmpty()
                 val collection = obj["collection"] as? JsonArray ?: JsonArray(emptyList())
@@ -393,7 +427,114 @@ class IslamicDataRepository(
                     editions = editions,
                     sections = sections
                 )
-            }
+            })
+        }
+
+        /** These JSONs hold plain strings; accept an occasional {"text": ...} wrapper too. */
+        private fun localizedText(element: JsonElement?): String = when (element) {
+            is JsonPrimitive -> element.contentOrNull.orEmpty()
+            is JsonObject -> (element["text"] as? JsonPrimitive)?.contentOrNull
+                ?: (element["title"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+            else -> ""
+        }
+
+        private fun jsonInt(element: JsonElement?): Int? {
+            val primitive = element as? JsonPrimitive ?: return null
+            return primitive.intOrNull ?: primitive.contentOrNull?.trim()?.toIntOrNull()
+        }
+
+        /** Hadith references can be "3" or "3a"; keep the numeric part when possible. */
+        private fun leadingInt(element: JsonElement?): Int? {
+            val raw = (element as? JsonPrimitive)?.contentOrNull?.trim() ?: return null
+            return raw.toIntOrNull() ?: Regex("\\d+").find(raw)?.value?.toIntOrNull()
+        }
+
+        private fun additionalSections(root: JsonObject, json: Json): Map<Int, String> {
+            val chapters = root["chapters"] as? JsonArray ?: return emptyMap()
+            return chapters.mapIndexedNotNull { index, element ->
+                val chapter = element as? JsonObject ?: return@mapIndexedNotNull null
+                val number = jsonInt(chapter["id"]) ?: (index + 1)
+                val title = cleanText(localizedText(chapter["english"]))
+                if (title.isBlank()) null else number to title
+            }.toMap()
+        }
+
+        /** Catalog view of one community JSON: curated label plus real chapter counts. */
+        fun parseAdditionalHadithCatalog(
+            body: String,
+            spec: AdditionalHadithBook,
+            json: Json = defaultJson
+        ): HadithBookCatalog? {
+            val root = json.parseToJsonElement(body) as? JsonObject ?: return null
+            val metadata = root["metadata"] as? JsonObject ?: return null
+            if (metadata["english"] !is JsonObject) return null
+            // Use the curated label so catalog titles match the visible card exactly.
+            val title = spec.label
+            val editions = listOf(
+                HadithEditionResource(
+                    editionName = "eng-${spec.key}",
+                    bookKey = spec.key,
+                    bookTitle = title,
+                    languageCode = "eng",
+                    languageName = "English",
+                    hasSections = true,
+                    direction = "ltr",
+                    link = spec.path
+                ),
+                HadithEditionResource(
+                    editionName = "ara-${spec.key}",
+                    bookKey = spec.key,
+                    bookTitle = title,
+                    languageCode = "ara",
+                    languageName = "Arabic",
+                    hasSections = true,
+                    direction = "rtl",
+                    link = spec.path
+                )
+            )
+            return HadithBookCatalog(
+                bookKey = spec.key,
+                bookTitle = title,
+                editions = editions,
+                sections = additionalSections(root, json)
+            )
+        }
+
+        /** Both ENG and ARA rows are written so the language toggle stays offline-first. */
+        fun parseAdditionalHadithEntries(
+            body: String,
+            bookKey: String,
+            defaultTitle: String,
+            json: Json = defaultJson
+        ): List<HadithEntryEntity> {
+            val root = json.parseToJsonElement(body) as? JsonObject ?: return emptyList()
+            val title = defaultTitle.ifBlank { bookKey.replaceFirstChar { it.uppercase() } }
+            val sections = additionalSections(root, json)
+            val hadiths = root["hadiths"] as? JsonArray ?: return emptyList()
+            val usedNumbers = HashSet<Int>(hadiths.size)
+            return hadiths.mapIndexedNotNull { index, element ->
+                val hadith = element as? JsonObject ?: return@mapIndexedNotNull null
+                val number = leadingInt(hadith["idInBook"])
+                    ?: leadingInt(hadith["id"])
+                    ?: (index + 1)
+                if (!usedNumbers.add(number)) return@mapIndexedNotNull null
+                val sectionNumber = leadingInt(hadith["chapterId"]) ?: 0
+                val narration = hadith["english"] as? JsonObject
+                val translation = cleanText(localizedText(narration?.get("text")))
+                val arabic = cleanText(localizedText(hadith["arabic"]))
+                if (translation.isBlank() && arabic.isBlank()) return@mapIndexedNotNull null
+                val entity = HadithEntryEntity(
+                    bookKey = bookKey,
+                    languageCode = "eng",
+                    hadithNumber = number,
+                    bookTitle = title,
+                    sectionNumber = sectionNumber,
+                    chapterTitle = sections[sectionNumber].orEmpty(),
+                    arabicText = arabic,
+                    englishText = translation
+                )
+                listOf(entity, entity.copy(languageCode = "ara"))
+            }.flatten()
         }
 
     }
@@ -719,7 +860,9 @@ class IslamicDataRepository(
         cacheCatalog(HADITH_CATALOG_PREFS, catalog, ListSerializer(HadithBookCatalog.serializer()))
 
     private fun loadCachedHadithCatalog(): List<HadithBookCatalog> =
-        loadCachedCatalog(HADITH_CATALOG_PREFS, ListSerializer(HadithBookCatalog.serializer()))
+        filterSupportedHadithBooks(
+            loadCachedCatalog(HADITH_CATALOG_PREFS, ListSerializer(HadithBookCatalog.serializer()))
+        )
 
     /** Both catalogs are small JSON lists, each cached in its own preferences file. */
     private fun <T> cacheCatalog(
@@ -752,6 +895,13 @@ class IslamicDataRepository(
     ): Result<Int> = try {
         onProgress(0.05f)
 
+        // The community dataset ships one JSON per book with both languages; it does not
+        // have fawazahmed0's `editions/ara-*.min.json` companion file.
+        val additional = ADDITIONAL_HADITH_BOOKS.firstOrNull { it.key == bookKey }
+        if (additional != null) {
+            return syncAdditionalHadithBook(additional, languageCode, onProgress)
+        }
+
         val arabicEdition = if (languageCode == "ara") {
             ArabicEditionIndex()
         } else {
@@ -780,6 +930,45 @@ class IslamicDataRepository(
         throw e
     } catch (t: Throwable) {
         Result.failure(t)
+    }
+
+    /**
+     * Downloads one AhmedBaset dataset book and stores both ENG and ARA rows from the
+     * same payload, so switching language never needs a second network round trip.
+     * [languageCode] is the reader's current edition; both editions are refreshed.
+     */
+    private suspend fun syncAdditionalHadithBook(
+        spec: Companion.AdditionalHadithBook,
+        languageCode: String,
+        onProgress: (Float) -> Unit
+    ): Result<Int> {
+        val urls = listOf(
+            "$HADITH_COMMUNITY_CDN_BASE${spec.path}",
+            "$HADITH_COMMUNITY_RAW_BASE${spec.path}"
+        )
+        var lastError: Throwable? = null
+        for (url in urls) {
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    val body = fetch(url)
+                    onProgress(0.45f)
+                    val entries = Companion.parseAdditionalHadithEntries(body, spec.key, spec.label, json)
+                    if (entries.isEmpty()) error("No hadith parsed for ${spec.key}")
+                    hadithDao.clearBook(spec.key, "eng")
+                    hadithDao.clearBook(spec.key, "ara")
+                    entries.chunked(250).forEach { hadithDao.upsertAll(it) }
+                    onProgress(1f)
+                    entries.size
+                }
+            }
+            if (result.isSuccess) return result
+            val failure = result.exceptionOrNull()
+                ?: IllegalStateException("Failed to download ${spec.key} ($languageCode) from $url")
+            if (failure is CancellationException) throw failure
+            lastError = failure
+            logMirrorFailure("Could not read ${spec.key} from $url", failure)
+        }
+        return Result.failure(lastError ?: IllegalStateException("Failed to download ${spec.key}"))
     }
 
     private suspend fun downloadArabicIndex(bookKey: String): ArabicEditionIndex {
@@ -1113,14 +1302,32 @@ class IslamicDataRepository(
     // ------------------------------------------------------------------ Hadith catalog
 
     suspend fun fetchHadithCatalog(): List<HadithBookCatalog> {
-        return runCatching {
+        val cached = loadCachedHadithCatalog()
+        val base = runCatching {
             val editionsBody = fetchHadithJson("/editions.min.json")
             val infoBody = runCatching { fetchHadithJson("/info.min.json") }.getOrNull()
             val parsed = Companion.parseHadithCatalog(editionsBody, infoBody, json)
             if (parsed.isEmpty()) error("Hadith catalog was empty")
-            cacheHadithCatalog(parsed)
             parsed
-        }.getOrElse { loadCachedHadithCatalog() }
+        }.getOrElse { cached }
+
+        // The community books are static, so once their chapter lists are cached there is
+        // no reason to re-download the large JSON files on every catalog refresh.
+        val cachedAdditional = cached.filter { it.bookKey in ADDITIONAL_HADITH_KEYS }
+            .associateBy { it.bookKey }
+        val additional = ADDITIONAL_HADITH_BOOKS.mapNotNull { spec ->
+            cachedAdditional[spec.key]?.takeIf { it.sections.isNotEmpty() }
+                ?: runCatching { fetchAdditionalHadithBook(spec) }
+                    .getOrNull()
+                    ?.let { Companion.parseAdditionalHadithCatalog(it, spec, json) }
+                ?: cachedAdditional[spec.key]
+        }
+        val merged = filterSupportedHadithBooks(
+            base.filterNot { it.bookKey in ADDITIONAL_HADITH_KEYS } + additional
+        )
+        cacheHadithCatalog(merged)
+        // Belt-and-braces: every path (remote, mirror, cached) exposes only authentic books.
+        return merged
     }
 
     /** Try jsDelivr first, then the GitHub raw mirror for the same versioned edition. */
@@ -1129,6 +1336,14 @@ class IslamicDataRepository(
     }.getOrElse {
         fetch("$HADITH_CDN_RAW_BASE$path")
     }
+
+    /** The community dataset has no edition index; fetch the single book JSON directly. */
+    private suspend fun fetchAdditionalHadithBook(spec: Companion.AdditionalHadithBook): String =
+        runCatching {
+            fetch("$HADITH_COMMUNITY_CDN_BASE${spec.path}")
+        }.getOrElse {
+            fetch("$HADITH_COMMUNITY_RAW_BASE${spec.path}")
+        }
 
     private suspend fun fetchHadithEdition(languageCode: String, bookKey: String): String =
         fetchHadithJson("/editions/$languageCode-$bookKey.min.json")

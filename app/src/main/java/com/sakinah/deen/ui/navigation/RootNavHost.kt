@@ -212,6 +212,9 @@ fun RootNavHost(
             locationProvider = locationProvider,
             onComplete = { completedDraft ->
                 val savedConfig = completedDraft.copy(onboardingCompleted = true)
+                // Permissions are now only asked inside the wizard's Permissions step, so
+                // completing onboarding is the point at which the first-launch prompt is handled.
+                appPrefs?.firstLaunchPermissionsRequested = true
                 appearancePrefs.saveConfig(savedConfig)
                 settingsRepo?.let { repo ->
                     val mappedTheme = when (savedConfig.themeMode) {

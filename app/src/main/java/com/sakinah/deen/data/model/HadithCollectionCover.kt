@@ -93,6 +93,51 @@ object HadithCollectionCovers {
             coverColor = Color(0xFF4F4A1C),
             spineColor = Color(0xFF38340F),
             foilColor = Color(0xFFE5CF83)
+        ),
+        HadithCollectionCover(
+            bookKey = "riyad",
+            englishTitle = "Riyad as-Salihin",
+            arabicTitle = "رياض الصالحين",
+            compiler = "Imam an-Nawawi",
+            coverColor = Color(0xFF1F5A4F),
+            spineColor = Color(0xFF143F37),
+            foilColor = Color(0xFFE3C978)
+        ),
+        HadithCollectionCover(
+            bookKey = "adab",
+            englishTitle = "Al-Adab al-Mufrad",
+            arabicTitle = "الأدب المفرد",
+            compiler = "Imam al-Bukhari",
+            coverColor = Color(0xFF4A2A52),
+            spineColor = Color(0xFF351C3B),
+            foilColor = Color(0xFFE6CB88)
+        ),
+        HadithCollectionCover(
+            bookKey = "bulugh",
+            englishTitle = "Bulugh al-Maram",
+            arabicTitle = "بلوغ المرام",
+            compiler = "Ibn Hajar al-Asqalani",
+            coverColor = Color(0xFF6B3420),
+            spineColor = Color(0xFF4C2416),
+            foilColor = Color(0xFFF0D18A)
+        ),
+        HadithCollectionCover(
+            bookKey = "shamail",
+            englishTitle = "Ash-Shama'il al-Muhammadiyyah",
+            arabicTitle = "الشمائل المحمدية",
+            compiler = "Imam at-Tirmidhi",
+            coverColor = Color(0xFF1C4362),
+            spineColor = Color(0xFF123047),
+            foilColor = Color(0xFFD7D9E8)
+        ),
+        HadithCollectionCover(
+            bookKey = "ahmad",
+            englishTitle = "Musnad Ahmad",
+            arabicTitle = "مسند أحمد",
+            compiler = "Imam Ahmad ibn Hanbal",
+            coverColor = Color(0xFF5C4A12),
+            spineColor = Color(0xFF40330B),
+            foilColor = Color(0xFFF2DA8F)
         )
     )
 

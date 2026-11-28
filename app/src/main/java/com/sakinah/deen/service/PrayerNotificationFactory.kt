@@ -52,7 +52,13 @@ object PrayerNotificationFactory {
         val alertMode: PrayerAlertMode,
         val isTest: Boolean = false,
         /** Routes Fajr to the optional highest-priority channel (see [NotificationChannels]). */
-        val criticalFajrChannel: Boolean = false
+        val criticalFajrChannel: Boolean = false,
+        /** Optional content overrides for the end-of-window nudge; null keeps the normal card. */
+        val lateReminder: PrayerReminderContent.Reminder? = null,
+        val titleOverride: String? = null,
+        val bodyOverride: String? = null,
+        val channelIdOverride: String? = null,
+        val autoCancel: Boolean? = null
     )
 
     private const val MUTE_REQUEST_CODE = 4100
@@ -79,16 +85,18 @@ object PrayerNotificationFactory {
         val startText = formatTime(startMillis, zone)
         val endText = formatTime(endMillis, zone)
         val windowText = context.getString(R.string.notif_prayer_window, startText, endText)
-        val collapsedTitle = if (spec.prayerType == PrayerType.SUNRISE) {
+        val collapsedTitle = spec.titleOverride ?: if (spec.prayerType == PrayerType.SUNRISE) {
             "${spec.prayerName} · $startText"
         } else {
             "${spec.prayerName} · $windowText"
         }
-        val expandedTitle = PrayerReminderContent.expandedTitle(spec.prayerType, spec.prayerName)
-        val reminder = PrayerReminderContent.reminderFor(
+        val expandedTitle = spec.titleOverride
+            ?: PrayerReminderContent.expandedTitle(spec.prayerType, spec.prayerName)
+        val reminder = spec.lateReminder ?: PrayerReminderContent.reminderFor(
             prayer = spec.prayerType,
             dayOfYear = LocalDate.now(zone).dayOfYear
         )
+        val collapsedBody = spec.bodyOverride ?: context.getString(R.string.adhan_body)
 
         val remainingFraction = ((endMillis - now).toDouble() / (endMillis - startMillis).toDouble())
             .coerceIn(0.0, 1.0)
@@ -128,7 +136,7 @@ object PrayerNotificationFactory {
         val collapsed = collapsedViews(
             context = context,
             title = collapsedTitle,
-            subtitle = context.getString(R.string.adhan_body),
+            subtitle = collapsedBody,
             contentIntent = contentIntent
         )
         val expanded = expandedViews(
@@ -141,7 +149,7 @@ object PrayerNotificationFactory {
             contentIntent = contentIntent
         )
 
-        val channelId = NotificationChannels.channelFor(
+        val channelId = spec.channelIdOverride ?: NotificationChannels.channelFor(
             mode = spec.alertMode,
             prayerType = spec.prayerType,
             criticalFajrEnabled = spec.criticalFajrChannel
@@ -150,10 +158,10 @@ object PrayerNotificationFactory {
         return NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_stat_app)
             .setContentTitle(collapsedTitle)
-            .setContentText(windowText)
+            .setContentText(spec.bodyOverride ?: windowText)
             .setContentIntent(contentIntent)
             .setDeleteIntent(dismissIntent)
-            .setAutoCancel(false)
+            .setAutoCancel(spec.autoCancel ?: false)
             .setOngoing(false)
             .setOnlyAlertOnce(spec.alertMode == PrayerAlertMode.SILENT)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)

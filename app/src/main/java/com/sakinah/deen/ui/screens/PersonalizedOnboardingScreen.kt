@@ -119,6 +119,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.sakinah.deen.R
 import com.sakinah.deen.data.model.CalculationMethod
 import com.sakinah.deen.data.model.Madhhab
 import com.sakinah.deen.data.model.PrayerType
@@ -446,6 +447,9 @@ fun PersonalizedOnboardingScreen(
                     timeZoneId = zone
                 )
                 prefsTick++
+                // New coordinates mean new timings: repaint every placed widget here.
+                // Widgets are no longer refreshed at app launch, so onboarding owns this.
+                com.sakinah.deen.widget.updateAllWidgets(context)
             }
         }
     }
@@ -565,10 +569,6 @@ fun PersonalizedOnboardingScreen(
         ThemeMode.LIGHT -> false
         ThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
     }
-    val accent = MaterialTheme.colorScheme.primary
-    val onAccent = MaterialTheme.colorScheme.onPrimary
-    val accentSoft = MaterialTheme.colorScheme.primaryContainer
-    val onAccentSoft = MaterialTheme.colorScheme.onPrimaryContainer
 
     fun finish() {
         val saved = config.copy(onboardingCompleted = true)
@@ -581,12 +581,18 @@ fun PersonalizedOnboardingScreen(
         palette = config.palette,
         fontScaleMultiplier = config.fontScale.multiplier
     ) {
+        // Read the tokens inside the wizard's own theme so step previews match the applied
+        // theme instead of the parent activity's theme.
+        val accent = MaterialTheme.colorScheme.primary
+        val onAccent = MaterialTheme.colorScheme.onPrimary
+        val accentSoft = MaterialTheme.colorScheme.primaryContainer
+        val onAccentSoft = MaterialTheme.colorScheme.onPrimaryContainer
+
         BoxWithConstraints(
             modifier = modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .statusBarsPadding()
-                .navigationBarsPadding()
                 .imePadding(),
             contentAlignment = Alignment.TopCenter
         ) {
@@ -610,184 +616,190 @@ fun PersonalizedOnboardingScreen(
                     onSkip = { if (onDismiss != null) onDismiss() else finish() }
                 )
 
-                OnboardingSheet(
-                    step = step,
-                    bodyMaxHeight = bodyMaxHeight,
-                    sheetColor = MaterialTheme.colorScheme.surface,
-                    accent = accent,
-                    accentSoft = accentSoft
-                ) { currentStep ->
-                    when (currentStep) {
-                        0 -> WelcomeStep(
-                            config = config,
-                            showGreeting = showGreeting,
-                            accent = accent,
-                            onConfigChange = ::updateConfig
-                        )
-                        1 -> AppearanceStep(
-                            draft = config,
-                            accent = accent,
-                            accentSoft = accentSoft,
-                            onDraftChange = ::updateConfig
-                        )
-                        2 -> GoalsStep(
-                            userName = config.userName,
-                            selectedGoalIndices = selectedGoalIndices,
-                            accent = accent,
-                            accentSoft = accentSoft,
-                            onAccent = onAccent,
-                            onToggle = { index ->
-                                selectedGoalIndices = if (index in selectedGoalIndices) {
-                                    selectedGoalIndices - index
-                                } else {
-                                    selectedGoalIndices + index
+                Column(modifier = Modifier.navigationBarsPadding()) {
+                    OnboardingSheet(
+                        step = step,
+                        bodyMaxHeight = bodyMaxHeight,
+                        sheetColor = MaterialTheme.colorScheme.background,
+                        accent = accent,
+                        accentSoft = accentSoft
+                    ) { currentStep ->
+                        when (currentStep) {
+                            0 -> WelcomeStep(
+                                config = config,
+                                showGreeting = showGreeting,
+                                accent = accent,
+                                onConfigChange = ::updateConfig
+                            )
+                            1 -> AppearanceStep(
+                                draft = config,
+                                accent = accent,
+                                accentSoft = accentSoft,
+                                onDraftChange = ::updateConfig
+                            )
+                            2 -> GoalsStep(
+                                userName = config.userName,
+                                selectedGoalIndices = selectedGoalIndices,
+                                accent = accent,
+                                accentSoft = accentSoft,
+                                onAccent = onAccent,
+                                onToggle = { index ->
+                                    selectedGoalIndices = if (index in selectedGoalIndices) {
+                                        selectedGoalIndices - index
+                                    } else {
+                                        selectedGoalIndices + index
+                                    }
+                                    updateConfig(config.copy(objective = objectiveForGoals(selectedGoalIndices)))
+                                },
+                                onSelectAll = {
+                                    selectedGoalIndices = GOALS.indices.toSet()
+                                    updateConfig(config.copy(objective = UserObjective.ALL_IN_ONE))
                                 }
-                                updateConfig(config.copy(objective = objectiveForGoals(selectedGoalIndices)))
-                            },
-                            onSelectAll = {
-                                selectedGoalIndices = GOALS.indices.toSet()
-                                updateConfig(config.copy(objective = UserObjective.ALL_IN_ONE))
-                            }
-                        )
-                        3 -> LanguageStep(
-                            search = languageSearch,
-                            onSearchChange = { languageSearch = it },
-                            languages = availableLanguages,
-                            selectedIso = selectedLanguageIso,
-                            accent = accent,
-                            accentSoft = accentSoft,
-                            onSelect = { lang ->
-                                selectedLanguageIso = lang.isoCode
-                                selectedLanguageName = lang.displayName
-                                selectedEditionKey = ""
-                                selectedEditionLabel = ""
-                            }
-                        )
-                        4 -> EditionStep(
-                            languageName = selectedLanguageName.ifBlank { "English" },
-                            editions = editionsForSelectedLanguage,
-                            selectedEditionKey = selectedEditionKey,
-                            accent = accent,
-                            accentSoft = accentSoft,
-                            onSelect = { edition ->
-                                val lang = LanguageOption(selectedLanguageName.ifBlank { "English" }, selectedLanguageIso.ifBlank { "en" })
-                                applyLanguageAndEdition(lang, edition)
-                            }
-                        )
-                        5 -> TafsirStep(
-                            languageName = selectedLanguageName.ifBlank { "English" },
-                            packages = availableTafsirPackages,
-                            selectedTafsirId = selectedTafsirId,
-                            downloading = tafsirDownloading,
-                            progress = tafsirDownloadProgress,
-                            error = tafsirDownloadError,
-                            accent = accent,
-                            accentSoft = accentSoft,
-                            onSelect = ::selectTafsirBook,
-                            onRetry = ::selectTafsirBook,
-                            onDownloadLater = { step = 6 }
-                        )
-                        6 -> PermissionsStep(
-                            permissions = permissions,
-                            accent = accent,
-                            onAccent = onAccent,
-                            accentSoft = accentSoft,
-                            onAllowLocation = {
-                                locationLauncher.launch(
-                                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-                                )
-                            },
-                            onEnterCityManually = { showCityPicker = true },
-                            onAllowNotifications = {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                    notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                } else {
-                                    permissionTick++
+                            )
+                            3 -> LanguageStep(
+                                search = languageSearch,
+                                onSearchChange = { languageSearch = it },
+                                languages = availableLanguages,
+                                selectedIso = selectedLanguageIso,
+                                accent = accent,
+                                accentSoft = accentSoft,
+                                onSelect = { lang ->
+                                    selectedLanguageIso = lang.isoCode
+                                    selectedLanguageName = lang.displayName
+                                    selectedEditionKey = ""
+                                    selectedEditionLabel = ""
                                 }
-                            },
-                            onAllowExactAlarms = {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                    exactAlarmLauncher.launch(
-                                        Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                            )
+                            4 -> EditionStep(
+                                languageName = selectedLanguageName.ifBlank { "English" },
+                                editions = editionsForSelectedLanguage,
+                                selectedEditionKey = selectedEditionKey,
+                                accent = accent,
+                                accentSoft = accentSoft,
+                                onSelect = { edition ->
+                                    val lang = LanguageOption(selectedLanguageName.ifBlank { "English" }, selectedLanguageIso.ifBlank { "en" })
+                                    applyLanguageAndEdition(lang, edition)
+                                }
+                            )
+                            5 -> TafsirStep(
+                                languageName = selectedLanguageName.ifBlank { "English" },
+                                packages = availableTafsirPackages,
+                                selectedTafsirId = selectedTafsirId,
+                                downloading = tafsirDownloading,
+                                progress = tafsirDownloadProgress,
+                                error = tafsirDownloadError,
+                                accent = accent,
+                                accentSoft = accentSoft,
+                                onSelect = ::selectTafsirBook,
+                                onRetry = ::selectTafsirBook,
+                                onDownloadLater = { step = 6 }
+                            )
+                            6 -> PermissionsStep(
+                                permissions = permissions,
+                                accent = accent,
+                                onAccent = onAccent,
+                                accentSoft = accentSoft,
+                                onAllowLocation = {
+                                    locationLauncher.launch(
+                                        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+                                    )
+                                },
+                                onEnterCityManually = { showCityPicker = true },
+                                onAllowNotifications = {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                        notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    } else {
+                                        permissionTick++
+                                    }
+                                },
+                                onAllowExactAlarms = {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                        exactAlarmLauncher.launch(
+                                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                                data = Uri.parse("package:${context.packageName}")
+                                            }
+                                        )
+                                    } else {
+                                        permissionTick++
+                                    }
+                                },
+                                onAllowBattery = {
+                                    batteryLauncher.launch(
+                                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                                             data = Uri.parse("package:${context.packageName}")
                                         }
                                     )
-                                } else {
-                                    permissionTick++
                                 }
-                            },
-                            onAllowBattery = {
-                                batteryLauncher.launch(
-                                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                                        data = Uri.parse("package:${context.packageName}")
-                                    }
-                                )
-                            }
-                        )
-                        else -> FirstWinStep(
-                            userName = config.userName,
-                            selectedLanguageName = selectedLanguageName.ifBlank { appPrefs?.quranTranslationLanguage ?: "English" },
-                            selectedEditionLabel = selectedEditionLabel.ifBlank { selectedEditionKey.ifBlank { "Default" } },
-                            translationDownloadLabel = translationDownloadLabel,
-                            appPrefs = appPrefs,
-                            prefsTick = prefsTick,
-                            accent = accent,
-                            accentSoft = accentSoft
-                        )
+                            )
+                            else -> FirstWinStep(
+                                userName = config.userName,
+                                selectedLanguageName = selectedLanguageName.ifBlank { appPrefs?.quranTranslationLanguage ?: "English" },
+                                selectedEditionLabel = selectedEditionLabel.ifBlank { selectedEditionKey.ifBlank { "Default" } },
+                                translationDownloadLabel = translationDownloadLabel,
+                                appPrefs = appPrefs,
+                                prefsTick = prefsTick,
+                                accent = accent,
+                                onAccent = onAccent,
+                                accentSoft = accentSoft
+                            )
+                        }
                     }
-                }
 
-                val ctaLabel = when (step) {
-                    0 -> "Continue"
-                    1, 2, 3, 4, 5, 6 -> "Continue"
-                    else -> "Start Using Sakinah"
-                }
-                val showCta = step > 0 || showGreeting
-                AnimatedVisibility(
-                    visible = showCta,
-                    enter = fadeIn(tween(300)) + slideInVertically(initialOffsetY = { it / 4 }),
-                    exit = fadeOut(tween(220)) + slideOutVertically(targetOffsetY = { it / 4 })
-                ) {
-                    OnboardingCta(
-                        label = ctaLabel,
-                        accent = accent,
-                        onAccent = onAccent,
-                        onClick = {
-                            when (step) {
-                                0 -> step = 1
-                                1 -> step = 2
-                                2 -> step = 3
-                                3 -> {
-                                    val lang = LanguageOption(
-                                        selectedLanguageName.ifBlank { "English" },
-                                        selectedLanguageIso.ifBlank { "en" }
-                                    )
-                                    if (selectedLanguageName.isBlank()) {
-                                        selectedLanguageName = "English"
-                                        selectedLanguageIso = "en"
+                    val ctaLabel = when (step) {
+                        0 -> "Continue"
+                        1, 2, 3, 4, 5, 6 -> "Continue"
+                        else -> "Start Using Sakinah"
+                    }
+                    val showCta = step > 0 || showGreeting
+                    AnimatedVisibility(
+                        visible = showCta,
+                        enter = fadeIn(tween(300)) + slideInVertically(initialOffsetY = { it / 4 }),
+                        exit = fadeOut(tween(220)) + slideOutVertically(targetOffsetY = { it / 4 })
+                    ) {
+                        OnboardingCta(
+                            label = ctaLabel,
+                            accent = accent,
+                            onAccent = onAccent,
+                            onBack = if (step > 0) {
+                                { step-- }
+                            } else null,
+                            onClick = {
+                                when (step) {
+                                    0 -> step = 1
+                                    1 -> step = 2
+                                    2 -> step = 3
+                                    3 -> {
+                                        val lang = LanguageOption(
+                                            selectedLanguageName.ifBlank { "English" },
+                                            selectedLanguageIso.ifBlank { "en" }
+                                        )
+                                        if (selectedLanguageName.isBlank()) {
+                                            selectedLanguageName = "English"
+                                            selectedLanguageIso = "en"
+                                        }
+                                        val editions = editionsForLanguage(translationResources, lang.isoCode, lang.displayName)
+                                        if (editions.size > 1) {
+                                            step = 4
+                                        } else {
+                                            applyLanguageAndEdition(lang, editions.firstOrNull())
+                                            step = if (availableTafsirPackages.isEmpty()) 6 else 5
+                                        }
                                     }
-                                    val editions = editionsForLanguage(translationResources, lang.isoCode, lang.displayName)
-                                    if (editions.size > 1) {
-                                        step = 4
-                                    } else {
-                                        applyLanguageAndEdition(lang, editions.firstOrNull())
+                                    4 -> {
+                                        if (selectedEditionKey.isBlank()) {
+                                            val lang = LanguageOption(selectedLanguageName.ifBlank { "English" }, selectedLanguageIso.ifBlank { "en" })
+                                            val editions = editionsForLanguage(translationResources, lang.isoCode, lang.displayName)
+                                            applyLanguageAndEdition(lang, editions.firstOrNull())
+                                        }
                                         step = if (availableTafsirPackages.isEmpty()) 6 else 5
                                     }
+                                    5 -> step = 6
+                                    6 -> step = 7
+                                    else -> finish()
                                 }
-                                4 -> {
-                                    if (selectedEditionKey.isBlank()) {
-                                        val lang = LanguageOption(selectedLanguageName.ifBlank { "English" }, selectedLanguageIso.ifBlank { "en" })
-                                        val editions = editionsForLanguage(translationResources, lang.isoCode, lang.displayName)
-                                        applyLanguageAndEdition(lang, editions.firstOrNull())
-                                    }
-                                    step = if (availableTafsirPackages.isEmpty()) 6 else 5
-                                }
-                                5 -> step = 6
-                                6 -> step = 7
-                                else -> finish()
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
 
@@ -839,12 +851,18 @@ private fun HeroZone(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (step > 0) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = accent
-                    )
+                Surface(
+                    shape = CircleShape,
+                    color = accentSoft,
+                    modifier = Modifier.testTag("onboarding_back")
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.onboarding_back),
+                            tint = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
                 }
             } else {
                 Spacer(Modifier.size(48.dp))
@@ -1016,9 +1034,7 @@ private fun OnboardingSheet(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-        color = sheetColor,
-        shadowElevation = 18.dp
+        color = sheetColor
     ) {
         Column(
             modifier = Modifier
@@ -1081,19 +1097,43 @@ private fun OnboardingCta(
     label: String,
     accent: Color,
     onAccent: Color,
+    onBack: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
-    Button(
-        onClick = onClick,
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
-            .padding(bottom = 8.dp)
-            .height(54.dp),
-        shape = RoundedCornerShape(27.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = onAccent)
+            .padding(bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        if (onBack != null) {
+            OutlinedButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .height(54.dp)
+                    .testTag("onboarding_cta_back"),
+                shape = RoundedCornerShape(27.dp)
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.onboarding_back)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.onboarding_back))
+            }
+        }
+        Button(
+            onClick = onClick,
+            modifier = Modifier
+                .weight(1f)
+                .height(54.dp),
+            shape = RoundedCornerShape(27.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = onAccent)
+        ) {
+            Text(text = label, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
 
@@ -1789,6 +1829,7 @@ private fun FirstWinStep(
     appPrefs: SakinahPreferences?,
     prefsTick: Int,
     accent: Color,
+    onAccent: Color,
     accentSoft: Color
 ) {
     val name = userName.trim()
@@ -1813,7 +1854,7 @@ private fun FirstWinStep(
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.8.sp,
-                color = Color.White.copy(alpha = 0.82f)
+                color = onAccent.copy(alpha = 0.82f)
             )
             Spacer(Modifier.height(4.dp))
             if (nextPrayerName != null && countdown != null) {
@@ -1821,19 +1862,19 @@ private fun FirstWinStep(
                     text = "$nextPrayerName · $nextPrayerTime",
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = onAccent
                 )
                 Text(
                     text = "in $countdown",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.9f)
+                    color = onAccent.copy(alpha = 0.9f)
                 )
             } else {
                 Text(
                     text = "Set your location to see the next prayer",
                     fontSize = 14.sp,
-                    color = Color.White.copy(alpha = 0.92f)
+                    color = onAccent.copy(alpha = 0.92f)
                 )
             }
         }

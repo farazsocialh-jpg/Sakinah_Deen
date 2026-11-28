@@ -26,6 +26,8 @@
     <string name="channel_prayer_silent_desc">Silent Salah reminders that never ring or vibrate</string>
     <string name="channel_prayer_critical_name">Fajr Alerts — Highest Priority</string>
     <string name="channel_prayer_critical_desc">Dedicated Fajr channel at maximum importance. Android may still apply Do Not Disturb unless you grant notification policy access</string>
+    <string name="channel_prayer_late_name">Salah Alerts — End of Window</string>
+    <string name="channel_prayer_late_desc">Silent reminder near the end of a prayer window when the prayer has not been marked as done</string>
     <string name="channel_safar_name">Travel Mode &amp; Dua al-Safar</string>
     <string name="channel_safar_desc">Heads-up in-vehicle prompts on car Bluetooth connection and Qasr travel mode</string>
     <string name="channel_habit_name">Daily Sunnah &amp; Adhkar Habits</string>
@@ -39,6 +41,10 @@
     <string name="notif_prayer_fallback_title">Salah</string>
     <string name="notif_prayer_fallback_window">Prayer window</string>
     <string name="notif_prayer_window" translatable="false">%1$s – %2$s</string>
+    <string name="notif_late_title">Time for %1$s is almost over</string>
+    <string name="notif_late_body">Have you prayed? Do not leave it until the window ends.</string>
+    <string name="notif_late_reminder_toggle">End-of-window prayer reminder</string>
+    <string name="notif_late_reminder_toggle_desc">Notify me near the end of a prayer window if I have not marked the prayer as done</string>
 
     <!-- Safar / travel -->
     <string name="safar_title">Safar: Dua al-Safar</string>
@@ -535,7 +541,6 @@
     <string name="quran_option_change">Change</string>
 
     <string name="hadith_tab_books">Books</string>
-    <string name="hadith_tab_daily">Daily</string>
     <string name="hadith_tab_search">Search</string>
     <string name="hadith_tab_saved">Saved</string>
     <string name="hadith_open_collection">Open</string>

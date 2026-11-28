@@ -93,6 +93,8 @@ class SakinahPreferences internal constructor(
         private const val KEY_BOOKMARKED_HADITH_IDS = "bookmarked_hadith_ids"
         private const val KEY_HADITH_BOOKMARKS_INITIALIZED = "hadith_bookmarks_initialized"
         private const val KEY_ALARMS_ENABLED = "alarms_enabled"
+        private const val KEY_LATE_REMINDER_ENABLED = "late_prayer_reminder_enabled"
+        private const val KEY_LATE_REMINDER_INDEX = "late_prayer_reminder_index"
         private const val KEY_LAST_QADHA_ROLLOVER = "last_qadha_rollover_epoch_day"
         private const val KEY_FIRST_LAUNCH_PERMISSIONS_REQUESTED = "first_launch_permissions_requested"
                  private const val KEY_ZAKAT_CURRENCY = "zakat_currency"
@@ -367,6 +369,19 @@ class SakinahPreferences internal constructor(
     var alarmsEnabled: Boolean
         get() = prefs.getBoolean(KEY_ALARMS_ENABLED, locationCoordinates != null)
         set(value) = prefs.edit { putBoolean(KEY_ALARMS_ENABLED, value) }
+
+    /** End-of-window "have you prayed?" nudge, on by default for existing installs too. */
+    var latePrayerReminderEnabled: Boolean
+        get() = prefs.getBoolean(KEY_LATE_REMINDER_ENABLED, true)
+        set(value) = prefs.edit { putBoolean(KEY_LATE_REMINDER_ENABLED, value) }
+
+    /**
+     * Counter selecting the next neglect/delay reference. Advanced only after a late reminder
+     * was actually posted, so a skipped or blocked window never consumes a reference.
+     */
+    var lateReminderIndex: Int
+        get() = prefs.getInt(KEY_LATE_REMINDER_INDEX, 0)
+        set(value) = prefs.edit { putInt(KEY_LATE_REMINDER_INDEX, value) }
 
     /**
      * Last day (epoch day) whose missed prayers were rolled into the Qadha ledger. Keeps the

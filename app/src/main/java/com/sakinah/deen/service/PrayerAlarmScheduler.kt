@@ -16,6 +16,7 @@ import com.sakinah.deen.data.model.PrayerAlertMode
 import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.data.prayer.PrayerTimeSnapshot
 import com.sakinah.deen.data.prayer.SunniMethodMapper
+import com.sakinah.deen.data.prayer.englishName
 import com.sakinah.deen.data.prefs.SakinahPreferences
 import com.sakinah.deen.data.repository.PrayerTimeRepository
 import com.sakinah.deen.data.repository.PrayerTimeRepositoryImpl
@@ -35,8 +36,9 @@ import kotlinx.datetime.toJavaLocalTime
  *
  * Every entry point returns an [AlarmScheduleResult]: the UI is never allowed to say
  * "scheduled" unless an alarm was really registered. Identity handling lives in
- * [AlarmIdentity]/[AlarmPendingIntents], so scheduling and cancellation always rebuild the
- * same PendingIntent and no alarm can be orphaned.
+ * [AlarmIdentity]/[AlarmPendingIntents] (and [UrgentReminderPendingIntents] for the dated
+ * end-of-window nudges), so scheduling and cancellation always rebuild the same PendingIntent
+ * and no alarm can be orphaned.
  */
 class PrayerAlarmScheduler(
     private val context: Context,
@@ -285,6 +287,17 @@ class PrayerAlarmScheduler(
             }
         }
 
+        // End-of-window nudges use the same validated tables, zone, offsets and permission
+        // truth as the alarms above, armed as their own date-stamped exact alarms.
+        scheduleLateReminders(
+            todayTimes = todayTimes,
+            tomorrowTimes = tomorrowTimes,
+            zone = zone,
+            epochDay = todayJ.toEpochDay(),
+            nowMillis = nowZoned.toInstant().toEpochMilli(),
+            settings = settings
+        )
+
         if (armedCount == 0) {
             return lastFailure ?: AlarmScheduleResult.Failed("No prayer time could be resolved")
         }
@@ -293,6 +306,97 @@ class PrayerAlarmScheduler(
         preferences.nextAlarmAtMillis = trigger
         preferences.nextAlarmPrayer = earliestPrayer?.name.orEmpty()
         return if (anyInexact) AlarmScheduleResult.ExactAlarmDenied else AlarmScheduleResult.Scheduled(trigger)
+    }
+
+    /**
+     * Arms one exact, silent nudge per prayer whose window is still ahead. A failure here must
+     * never roll back the normal alarms, so every planner/scheduler call is isolated. The same
+     * planner still owns the window maths (including Isha → next-day Fajr); only the delivery
+     * mechanism changed from WorkManager to a date-stamped AlarmManager slot.
+     */
+    private fun scheduleLateReminders(
+        todayTimes: Map<PrayerType, JLocalTime>,
+        tomorrowTimes: Map<PrayerType, JLocalTime>,
+        zone: ZoneId,
+        epochDay: Long,
+        nowMillis: Long,
+        settings: AzaanSettings
+    ) {
+        if (!preferences.latePrayerReminderEnabled) {
+            cancelUrgentReminders()
+            return
+        }
+        for (prayer in REQUIRED_PRAYERS) {
+            if (settings.modeFor(prayer) == PrayerAlertMode.OFF) continue
+            runCatching {
+                LatePrayerReminderPlanner.plan(
+                    prayer = prayer,
+                    epochDay = epochDay,
+                    todayTimes = todayTimes,
+                    nextDayTimes = tomorrowTimes,
+                    zone = zone,
+                    offsetMinutes = settings.offsetFor(prayer).toLong(),
+                    nowMillis = nowMillis
+                )?.let(::armUrgentReminder)
+            }.onFailure { error ->
+                Log.w(TAG, "Could not schedule urgent reminder for $prayer", error)
+            }
+        }
+    }
+
+    /**
+     * Arms the 90%-of-window nudge on the same exact-alarm path as a normal prayer, but with an
+     * offset request code and a date in the identity so re-arming refreshes the slot instead of
+     * stacking a duplicate. The receiver re-validates every baked-in value before notifying.
+     */
+    private fun armUrgentReminder(plan: LatePrayerReminderPlanner.Plan) {
+        val preflight = AlarmSchedulePreflight.evaluate(
+            alarmManagerAvailable = alarmManager != null,
+            alarmsEnabled = preferences.alarmsEnabled,
+            notificationsGranted = notificationsGranted(),
+            exactAlarmsAllowed = canScheduleExactAlarms(),
+            triggerAtMillis = plan.triggerMillis,
+            nowMillis = System.currentTimeMillis()
+        )
+        if (preflight != null && preflight !is AlarmScheduleResult.ExactAlarmDenied) {
+            Log.w(TAG, "Urgent reminder for ${plan.prayer} not armed: ${preflight.code}")
+            return
+        }
+
+        val key = UrgentReminderAlarmIdentity.key(plan.prayer, plan.epochDay)
+        val pendingIntent = UrgentReminderPendingIntents.create(
+            context = context,
+            prayer = plan.prayer,
+            epochDay = plan.epochDay
+        ) { intent ->
+            intent.putExtra(EXTRA_PRAYER_NAME, plan.prayer.englishName)
+            intent.putExtra(EXTRA_PRAYER_TYPE, plan.prayer.name)
+            intent.putExtra(UrgentReminderAlarmIdentity.EXTRA_PRAYER_EPOCH_DAY, plan.epochDay)
+            intent.putExtra(EXTRA_TRIGGER_MILLIS, plan.triggerMillis)
+            intent.putExtra(EXTRA_WINDOW_START_MILLIS, plan.windowStartMillis)
+            intent.putExtra(EXTRA_WINDOW_END_MILLIS, plan.windowEndMillis)
+            intent.putExtra(
+                UrgentReminderAlarmIdentity.EXTRA_REMAINING_MINUTES,
+                UrgentReminderAlarmIdentity.remainingMinutes(plan.triggerMillis, plan.windowEndMillis)
+            )
+            intent.putExtra(UrgentReminderAlarmIdentity.EXTRA_IS_URGENT_REMINDER, true)
+        }
+        UrgentReminderPendingIntents.register(context, key)
+        if (!setAlarmCompat(plan.triggerMillis, pendingIntent)) {
+            Log.w(TAG, "Urgent reminder for ${plan.prayer} could only be armed inexactly")
+        }
+    }
+
+    /** Drops every date-stamped nudge still registered with AlarmManager. */
+    private fun cancelUrgentReminders() {
+        UrgentReminderPendingIntents.registeredKeys(context).forEach { key ->
+            val (prayer, epochDay) = UrgentReminderAlarmIdentity.parseKey(key) ?: return@forEach
+            UrgentReminderPendingIntents.existing(context, prayer, epochDay)?.let { pendingIntent ->
+                alarmManager?.cancel(pendingIntent)
+                pendingIntent.cancel()
+            }
+        }
+        UrgentReminderPendingIntents.clearRegistry(context)
     }
 
     /** Authority the repository would use for these settings (manual override or country). */
@@ -463,8 +567,8 @@ class PrayerAlarmScheduler(
     }
 
     /**
-     * Cancels every alarm this app may have armed: the five stable prayer slots plus any
-     * one-off test/snooze keys still recorded in the registry.
+     * Cancels every alarm this app may have armed: the five stable prayer slots, any one-off
+     * test/snooze keys still recorded in the registry, and every date-stamped urgent nudge.
      *
      * Safe to call repeatedly and safe to call after code changes, because each intent is
      * rebuilt from its key instead of a hard-coded request-code table.
@@ -475,6 +579,7 @@ class PrayerAlarmScheduler(
         }
         AlarmPendingIntents.registeredKeys(context).forEach { cancelKey(it) }
         AlarmPendingIntents.clearRegistry(context)
+        runCatching { cancelUrgentReminders() }
         preferences.nextAlarmAtMillis = 0L
         preferences.nextAlarmPrayer = ""
     }

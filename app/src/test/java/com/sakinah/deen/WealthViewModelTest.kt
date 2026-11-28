@@ -1,11 +1,14 @@
 package com.sakinah.deen
 
+import com.sakinah.deen.data.repository.NisabRateRepository
 import com.sakinah.deen.data.repository.NisabRates
 import com.sakinah.deen.fakes.FakeNisabRateRepository
 import com.sakinah.deen.fakes.FakeSadaqahDao
 import com.sakinah.deen.ui.viewmodel.WealthUiIntent
 import com.sakinah.deen.ui.viewmodel.WealthUiState
 import com.sakinah.deen.ui.viewmodel.WealthViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
@@ -21,6 +24,26 @@ import org.junit.Before
 import org.junit.Test
 
 class WealthViewModelTest {
+
+    /** Records currency switches and refreshes, which the simple fake cannot do. */
+    private class CountingNisabRateRepository(
+        private val fresh: NisabRates
+    ) : NisabRateRepository {
+        private val _rates = MutableStateFlow(NisabRates.FALLBACK)
+        override val rates: StateFlow<NisabRates> = _rates
+        var refreshCount = 0
+        val currencyRequests = mutableListOf<String>()
+
+        override fun setCurrency(code: String) {
+            currencyRequests += code
+        }
+
+        override suspend fun refresh(): Result<Unit> {
+            refreshCount++
+            _rates.value = fresh
+            return Result.success(Unit)
+        }
+    }
 
     private lateinit var testDispatcher: TestDispatcher
 
@@ -61,11 +84,19 @@ class WealthViewModelTest {
         assertEquals(1_760_000_000_000L, vm.uiState.value.nisabLastUpdatedEpochMillis)
         // Threshold recomputed from the live rate, not the hardcoded 88.40 constant.
         assertEquals(85f * 90.0f, vm.uiState.value.nisabThreshold, 0.01f)
+        assertEquals("USD", vm.uiState.value.nisabRateCurrencyCode)
+        assertEquals("Live API", vm.uiState.value.rateSource)
+        assertFalse(vm.uiState.value.isNisabRateFallback)
     }
 
     @Test
     fun offlineFallback_keepsCachedRateWhenRefreshFails() = runTest(testDispatcher) {
-        val cached = NisabRates(goldPricePerGram = 87.25f, silverPricePerGram = 1.10f, lastUpdatedEpochMillis = 1_700_000_000_000L)
+        val cached = NisabRates(
+            goldPricePerGram = 87.25f,
+            silverPricePerGram = 1.10f,
+            lastUpdatedEpochMillis = 1_700_000_000_000L,
+            sourceLabel = "Offline estimate"
+        )
         val repo = FakeNisabRateRepository(initial = cached).apply { shouldFail = true }
 
         val vm = WealthViewModel(sadaqahDao = FakeSadaqahDao(), nisabRateRepository = repo)
@@ -75,6 +106,77 @@ class WealthViewModelTest {
         assertEquals(87.25f, vm.uiState.value.goldPricePerGram, 0.001f)
         assertEquals(1_700_000_000_000L, vm.uiState.value.nisabLastUpdatedEpochMillis)
         assertEquals(85f * 87.25f, vm.uiState.value.nisabThreshold, 0.01f)
+        assertEquals("USD", vm.uiState.value.nisabRateCurrencyCode)
+        assertEquals("Offline Fallback Estimate", vm.uiState.value.rateSource)
+        assertTrue(vm.uiState.value.isNisabRateFallback)
+    }
+
+    @Test
+    fun rateInAnotherCurrencyIsNeverMarkedLive() = runTest(testDispatcher) {
+        val foreign = NisabRates(
+            goldPricePerGram = 90.0f,
+            silverPricePerGram = 1.20f,
+            lastUpdatedEpochMillis = 1_760_000_000_000L,
+            currencyCode = "EUR",
+            sourceLabel = "Live API"
+        )
+        val vm = WealthViewModel(
+            sadaqahDao = FakeSadaqahDao(),
+            nisabRateRepository = FakeNisabRateRepository(fresh = foreign)
+        )
+        advanceUntilIdle()
+
+        val state = vm.uiState.value
+        // A fresh timestamp alone is not enough: the quote must be in the wallet currency.
+        assertEquals("EUR", state.nisabRateCurrencyCode)
+        assertEquals("Offline Fallback Estimate", state.rateSource)
+        assertTrue(state.isNisabRateFallback)
+    }
+
+    @Test
+    fun untimestampedRateIsNeverMarkedLive() = runTest(testDispatcher) {
+        val unstamped = NisabRates(
+            goldPricePerGram = 90.0f,
+            silverPricePerGram = 1.20f,
+            lastUpdatedEpochMillis = 0L,
+            currencyCode = "USD"
+        )
+        val vm = WealthViewModel(
+            sadaqahDao = FakeSadaqahDao(),
+            nisabRateRepository = FakeNisabRateRepository(fresh = unstamped)
+        )
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.isNisabRateFallback)
+        assertEquals("Offline Fallback Estimate", vm.uiState.value.rateSource)
+    }
+
+    @Test
+    fun changingCurrencyRefetchesNisabAndKeepsBalancesCleared() = runTest(testDispatcher) {
+        val qarRate = NisabRates(
+            goldPricePerGram = 333.0f,
+            silverPricePerGram = 4.2f,
+            lastUpdatedEpochMillis = 1_760_000_000_000L,
+            currencyCode = "QAR",
+            sourceLabel = "Live API"
+        )
+        val repo = CountingNisabRateRepository(qarRate)
+        val vm = WealthViewModel(sadaqahDao = FakeSadaqahDao(), nisabRateRepository = repo)
+        advanceUntilIdle()
+        assertEquals(1, repo.refreshCount)
+
+        vm.onIntent(WealthUiIntent.SetCurrency("QAR"))
+        advanceUntilIdle()
+
+        assertEquals(2, repo.refreshCount)
+        assertEquals("QAR", repo.currencyRequests.last())
+        val state = vm.uiState.value
+        assertEquals("QAR", state.nisabRateCurrencyCode)
+        assertEquals("Live API", state.rateSource)
+        assertFalse(state.isNisabRateFallback)
+        assertEquals(85f * 333.0f, state.nisabThreshold, 0.01f)
+        // The conservative balance-clearing behaviour is unchanged.
+        assertEquals(0f, state.cashInBank, 0.001f)
     }
 
     @Test
@@ -181,6 +283,7 @@ class WealthViewModelTest {
         assertEquals("USD", state.nisabRateCurrencyCode)
         assertTrue(state.isNisabRateFallback)
         assertEquals(0L, state.nisabLastUpdatedEpochMillis)
+        assertEquals("Offline estimate", NisabRates.FALLBACK.sourceLabel)
     }
 
     @Test

@@ -28,7 +28,7 @@ data class HadithBookInfo(
     val chapterCount: Int = 0
 )
 
-enum class HadithTab { BOOKS, DAILY, SEARCH, SAVED }
+enum class HadithTab { BOOKS, SEARCH, SAVED }
 
 data class HadithUiState(
     val selectedTab: HadithTab = HadithTab.BOOKS,
@@ -98,8 +98,16 @@ class HadithViewModel(
         HadithBookInfo("nasai", "Sunan an-Nasa'i", "5,760 Hadiths"),
         HadithBookInfo("ibnmajah", "Sunan Ibn Majah", "4,341 Hadiths"),
         HadithBookInfo("malik", "Muwatta Malik", "1,858 Hadiths"),
-        HadithBookInfo("nawawi", "40 Hadith Nawawi", "42 Hadiths")
+        HadithBookInfo("nawawi", "40 Hadith Nawawi", "42 Hadiths"),
+        HadithBookInfo("riyad", "Riyad as-Salihin", "Hadith collection"),
+        HadithBookInfo("adab", "Al-Adab al-Mufrad", "Hadith collection"),
+        HadithBookInfo("bulugh", "Bulugh al-Maram", "Hadith collection"),
+        HadithBookInfo("shamail", "Ash-Shama'il al-Muhammadiyyah", "Hadith collection"),
+        HadithBookInfo("ahmad", "Musnad Ahmad", "Hadith collection")
     )
+
+    /** Only these thirteen authentic collections are shown or downloaded. */
+    private val supportedBookKeys = IslamicDataRepository.SUPPORTED_HADITH_BOOKS.toSet()
 
     private val placeholderCorpus = listOf(
         HadithModel(
@@ -194,7 +202,7 @@ class HadithViewModel(
             is HadithUiIntent.SelectBook -> {
                 _uiState.update {
                     it.copy(
-                        selectedTab = if (intent.bookKey == "all") HadithTab.BOOKS else HadithTab.DAILY,
+                        selectedTab = HadithTab.BOOKS,
                         selectedBookKey = intent.bookKey,
                         resolvedLanguageCode = null,
                         selectedSectionNumber = 0,
@@ -368,6 +376,7 @@ class HadithViewModel(
         viewModelScope.launch {
             try {
                 val catalog = repo.fetchHadithCatalog()
+                    .filter { it.bookKey in supportedBookKeys }
                 hadithCatalog = catalog
             _uiState.update { state ->
                 val selectedCatalog = catalog.firstOrNull { it.bookKey == state.selectedBookKey }
@@ -380,27 +389,11 @@ class HadithViewModel(
                 state.copy(
                     books = if (catalog.isNotEmpty()) {
                         val catalogByKey = catalog.associateBy { it.bookKey }
-                        val knownKeys = canonicalBooks.map { it.key }.toSet()
-                        val canonical = canonicalBooks.map { canonical ->
+                        // Keep the curated local labels/order; the CDN may only add chapter counts.
+                        canonicalBooks.map { canonical ->
                             val info = catalogByKey[canonical.key]
-                            if (info == null) {
-                                canonical
-                            } else {
-                                canonical.copy(
-                                    title = info.bookTitle.ifBlank { canonical.title },
-                                    chapterCount = info.sections.size
-                                )
-                            }
+                            if (info == null) canonical else canonical.copy(chapterCount = info.sections.size)
                         }
-                        val additional = catalog.filterNot { it.bookKey in knownKeys }.map { info ->
-                            HadithBookInfo(
-                                key = info.bookKey,
-                                title = info.bookTitle.ifBlank { info.bookKey },
-                                totalCount = "${info.editions.size} editions",
-                                chapterCount = info.sections.size
-                            )
-                        }
-                        canonical + additional
                     } else {
                         state.books
                     },
@@ -588,7 +581,11 @@ class HadithViewModel(
                     val bookmarked = _uiState.value.bookmarkedIds
                     val mapped = withContext(Dispatchers.Default) {
                         val entries = if (bookKey == "all") {
-                            preferredAllBookEntries(rawEntries, languageCode)
+                            // Old installs may still hold rows for removed/weak books.
+                            preferredAllBookEntries(
+                                rawEntries.filter { it.bookKey in supportedBookKeys },
+                                languageCode
+                            )
                         } else {
                             rawEntries
                         }

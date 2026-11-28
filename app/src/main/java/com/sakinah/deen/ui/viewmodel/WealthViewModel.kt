@@ -127,18 +127,38 @@ class WealthViewModel(
         prefs.zakatShortTermDebts = s.shortTermDebts
     }
 
+    private fun isOfflineRate(rates: NisabRates): Boolean =
+        rates.sourceLabel?.let { label ->
+            label.contains("offline", ignoreCase = true) ||
+                label.contains("fallback", ignoreCase = true) ||
+                label.contains("estimate", ignoreCase = true)
+        } ?: false
+
+    private fun rateSourceFor(rates: NisabRates, walletCurrency: String): String =
+        if (rates.lastUpdatedEpochMillis > 0L &&
+            rates.currencyCode.equals(walletCurrency, ignoreCase = true) &&
+            !isOfflineRate(rates)
+        ) "Live API" else "Offline Fallback Estimate"
+
     private fun observeNisabRates() {
         val repo = nisabRateRepository ?: return
+        // Restore the persisted wallet currency into the rate source before the first read.
+        repo.setCurrency(_uiState.value.currencyCode)
         viewModelScope.launch {
             repo.rates.collectLatest { rates: NisabRates ->
                 if (_uiState.value.isManualNisabOverride) return@collectLatest
+                // A rate is only "Live API" when it has a real timestamp AND is quoted in
+                // the currency the user is entering balances in. A stale/foreign-currency
+                // quote must keep the honest offline label and its own currency code.
+                val source = rateSourceFor(rates, _uiState.value.currencyCode)
                 _uiState.update {
                     it.copy(
                         goldPricePerGram = rates.goldPricePerGram,
                         silverPricePerGram = rates.silverPricePerGram,
                         nisabLastUpdatedEpochMillis = rates.lastUpdatedEpochMillis,
-                        rateSource = "Live API",
-                        isNisabRateFallback = false
+                        nisabRateCurrencyCode = rates.currencyCode,
+                        rateSource = source,
+                        isNisabRateFallback = source != "Live API"
                     )
                 }
                 recalculateZakat()
@@ -155,7 +175,9 @@ class WealthViewModel(
             try {
                 val result = target.refresh()
                 if (result.isSuccess) {
-                    _uiState.update { it.copy(errorMessage = null, rateSource = "Live API") }
+                    // The rates collector owns source metadata: a successful fetch whose
+                    // quote currency does not match the wallet must not be called live.
+                    _uiState.update { it.copy(errorMessage = null) }
                 } else {
                     _uiState.update {
                         it.copy(
@@ -218,8 +240,24 @@ class WealthViewModel(
                         )
                     }
                 }
+                // StateFlow may not re-emit an unchanged rate object, so re-evaluate the
+                // source label for the new wallet currency immediately.
+                nisabRateRepository?.rates?.value?.let { currentRates ->
+                    val source = rateSourceFor(currentRates, code)
+                    _uiState.update {
+                        it.copy(
+                            nisabRateCurrencyCode = currentRates.currencyCode,
+                            rateSource = source,
+                            isNisabRateFallback = source != "Live API"
+                        )
+                    }
+                }
                 recalculateZakat()
                 persistBalances()
+                // The old quote is in the previous currency: re-read/refetch nisab for the
+                // new one. Balances above stay cleared; no FX guess is applied to them.
+                nisabRateRepository?.setCurrency(code)
+                refreshNisabRates()
             }
             is WealthUiIntent.DismissCurrencyChangeNotice -> {
                 _uiState.update { it.copy(currencyChangeNotice = null) }

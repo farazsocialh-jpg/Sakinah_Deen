@@ -22,6 +22,8 @@
     <string name="channel_prayer_silent_desc">تنبيهات صلاة صامتة لا ترن ولا تهتز</string>
     <string name="channel_prayer_critical_name">تنبيهات الفجر — أعلى أولوية</string>
     <string name="channel_prayer_critical_desc">قناة مخصصة للفجر بأعلى درجة أهمية. قد يطبق أندرويد وضع عدم الإزعاج ما لم تمنح الإذن بالوصول إلى سياسة الإشعارات</string>
+    <string name="channel_prayer_late_name">تنبيهات الصلاة — نهاية الوقت</string>
+    <string name="channel_prayer_late_desc">تذكير صامت قبيل نهاية وقت الصلاة إذا لم تُسجَّل كأُديت</string>
     <string name="channel_safar_name">وضع السفر ودعاء السفر</string>
     <string name="channel_safar_desc">تنبيهات عند الاتصال ببلوتوث السيارة وعند تفعيل القصر</string>
     <string name="channel_habit_name">أذكار وسنن يومية</string>
@@ -33,6 +35,10 @@
     <string name="notif_action_mark_prayed">تسجيل الصلاة</string>
     <string name="notif_prayer_fallback_title">الصلاة</string>
     <string name="notif_prayer_fallback_window">وقت الصلاة</string>
+    <string name="notif_late_title">وقت %1$s أوشك على الانتهاء</string>
+    <string name="notif_late_body">هل أدّيت الصلاة؟ لا تؤجّلها حتى يخرج وقتها.</string>
+    <string name="notif_late_reminder_toggle">تذكير الصلاة عند نهاية الوقت</string>
+    <string name="notif_late_reminder_toggle_desc">أرسل لي تنبيهًا قبيل نهاية وقت الصلاة إذا لم أُسجّلها كأُديت</string>
 
     <string name="safar_title">السفر: دعاء السفر</string>
     <string name="safar_dua_arabic">سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَٰذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ</string>
@@ -230,7 +236,6 @@
     <string name="quran_option_change">تغيير</string>
 
     <string name="hadith_tab_books">الكتب</string>
-    <string name="hadith_tab_daily">اليومي</string>
     <string name="hadith_tab_search">بحث</string>
     <string name="hadith_tab_saved">المحفوظات</string>
     <string name="hadith_open_collection">فتح</string>

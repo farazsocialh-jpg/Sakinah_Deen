@@ -1,6 +1,7 @@
 package com.sakinah.deen.service
 
 import android.Manifest
+import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -9,13 +10,16 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.sakinah.deen.R
 import com.sakinah.deen.data.database.dao.SalahDao
 import com.sakinah.deen.data.model.PrayerAlertMode
 import com.sakinah.deen.data.model.PrayerType
 import com.sakinah.deen.data.prefs.SakinahPreferences
+import com.sakinah.deen.data.prayer.englishName
 import com.sakinah.deen.data.repository.PrayerTimeRepository
 import com.sakinah.deen.domain.astronomy.PrayerCalculationEngineImpl
 import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,6 +37,10 @@ import org.koin.core.context.GlobalContext
  *  - Short Tone / Vibrate Only / Silent: post the rich card directly, on the matching channel.
  *  - Off (or notifications blocked / prayer already marked): no card at all.
  *
+ * A date-stamped urgent reminder ([UrgentReminderAlarmIdentity]) takes a separate path: it
+ * re-validates its window, posts one silent card on the late channel (never starts audio) and
+ * advances the reminder rotation only after that post succeeded.
+ *
  * Nothing here requests a full-screen intent or the alarm stream any more.
  */
 class PrayerAlarmReceiver : BroadcastReceiver() {
@@ -40,6 +48,9 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
     private companion object {
         const val TAG = "PrayerAlarmReceiver"
         const val DEFAULT_WINDOW_MS = 10 * 60_000L
+
+        /** Separate slot so the silent nudge never replaces the main prayer card. */
+        const val LATE_NOTIFICATION_ID = 4301
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -59,6 +70,10 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         }
         val isSnooze = intent.getBooleanExtra(PrayerAlarmScheduler.EXTRA_IS_SNOOZE, false)
         val isTest = intent.getBooleanExtra(PrayerAlarmScheduler.EXTRA_IS_TEST, false)
+        val isUrgent = intent.getBooleanExtra(
+            UrgentReminderAlarmIdentity.EXTRA_IS_URGENT_REMINDER,
+            false
+        )
 
         val triggerMillis = intent.getLongExtra(
             PrayerAlarmScheduler.EXTRA_TRIGGER_MILLIS,
@@ -82,6 +97,21 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 NotificationChannels.createChannels(appContext)
+
+                if (isUrgent) {
+                    // A one-shot nudge is separate from the daily table: it never starts audio,
+                    // never consumes a normal alarm slot, and must not be re-armed here.
+                    handleUrgentReminder(
+                        context = appContext,
+                        prefs = prefs,
+                        intent = intent,
+                        prayerType = prayerType,
+                        triggerMillis = triggerMillis,
+                        windowStart = windowStart,
+                        windowEnd = windowEnd
+                    )
+                    return@launch
+                }
 
                 val alertMode = prefs.alertModeFor(prayerType)
                 val notificationsAllowed = prefs.alarmsEnabled && canPostNotifications(appContext)
@@ -137,6 +167,112 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
                 pendingResult.finish()
             }
         }
+    }
+
+    /**
+     * Silent end-of-window nudge. Every guard returns before the rotation counter is touched, so
+     * a stale, completed, disabled or blocked alarm never consumes a reminder reference.
+     */
+    private suspend fun handleUrgentReminder(
+        context: Context,
+        prefs: SakinahPreferences,
+        intent: Intent,
+        prayerType: PrayerType,
+        triggerMillis: Long,
+        windowStart: Long,
+        windowEnd: Long
+    ) {
+        // Checked first, as required: a prayer already marked done gets no card and no sound.
+        // Use the window's own date so an Isha nudge after midnight still sees the record
+        // the user created before midnight.
+        val windowEpochDay = intent.getLongExtra(
+            UrgentReminderAlarmIdentity.EXTRA_PRAYER_EPOCH_DAY,
+            LocalDate.now(AzaanScheduling.activeZoneId(prefs)).toEpochDay()
+        )
+        if (isPrayerAlreadyCompleted(context, prefs, prayerType, windowEpochDay)) return
+
+        if (!prefs.latePrayerReminderEnabled || !prefs.alarmsEnabled ||
+            prefs.alertModeFor(prayerType) == PrayerAlertMode.OFF
+        ) {
+            return
+        }
+        if (!isUrgentReminderFresh(
+            prefs = prefs,
+            prayerType = prayerType,
+            intent = intent,
+            nowMillis = System.currentTimeMillis(),
+            triggerMillis = triggerMillis,
+            windowStart = windowStart,
+            windowEnd = windowEnd
+        )) {
+            return
+        }
+        if (!canPostNotifications(context) ||
+            !NotificationManagerCompat.from(context).areNotificationsEnabled()
+        ) {
+            return
+        }
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        if (manager?.getNotificationChannel(NotificationChannels.CHANNEL_PRAYER_LATE)?.importance ==
+            NotificationManager.IMPORTANCE_NONE
+        ) {
+            return
+        }
+
+        val index = prefs.lateReminderIndex
+        val notification = PrayerNotificationFactory.build(
+            context = context,
+            spec = PrayerNotificationFactory.Spec(
+                prayerType = prayerType,
+                prayerName = prayerType.englishName,
+                startMillis = windowStart,
+                endMillis = windowEnd,
+                // SILENT + the dedicated late channel: no Adhan service, no audio. The factory
+                // still adds the Mark-as-Prayed action, tagged with the active-zone date.
+                alertMode = PrayerAlertMode.SILENT,
+                lateReminder = PrayerReminderContent.lateReminderFor(index),
+                titleOverride = context.getString(R.string.notif_late_title, prayerType.englishName),
+                bodyOverride = context.getString(R.string.notif_late_body),
+                channelIdOverride = NotificationChannels.CHANNEL_PRAYER_LATE,
+                autoCancel = true
+            )
+        )
+        // Explicit call-site permission guard: the user may revoke POST_NOTIFICATIONS
+        // between the earlier check and the actual post.
+        if (!canPostNotifications(context)) return
+        runCatching {
+            NotificationManagerCompat.from(context).notify(LATE_NOTIFICATION_ID, notification)
+        }.onSuccess {
+            // Only a successfully posted notification consumes a rotation slot.
+            prefs.lateReminderIndex = index + 1
+        }.onFailure { error ->
+            Log.w(TAG, "Could not post the late prayer reminder", error)
+        }
+    }
+
+    /** Re-validates the baked-in window in the prayer location's zone at fire time. */
+    private fun isUrgentReminderFresh(
+        prefs: SakinahPreferences,
+        prayerType: PrayerType,
+        intent: Intent,
+        nowMillis: Long,
+        triggerMillis: Long,
+        windowStart: Long,
+        windowEnd: Long
+    ): Boolean {
+        val zone = runCatching { AzaanScheduling.activeZoneId(prefs) }
+            .getOrDefault(ZoneId.systemDefault())
+        return UrgentReminderAlarmIdentity.isFresh(
+            nowMillis = nowMillis,
+            todayEpochDay = LocalDate.now(zone).toEpochDay(),
+            epochDay = intent.getLongExtra(UrgentReminderAlarmIdentity.EXTRA_PRAYER_EPOCH_DAY, -1L),
+            windowStartMillis = windowStart,
+            windowEndMillis = windowEnd,
+            triggerMillis = triggerMillis,
+            zone = zone,
+            // Isha's window can close after midnight; the other four cannot.
+            allowNextDayGrace = prayerType == PrayerType.ISHA
+        )
     }
 
     /** Full Azaan: the service owns the card so it can detach it cleanly when muted. */
@@ -231,13 +367,13 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
     private suspend fun isPrayerAlreadyCompleted(
         context: Context,
         prefs: SakinahPreferences,
-        prayerType: PrayerType
+        prayerType: PrayerType,
+        epochDay: Long = LocalDate.now(AzaanScheduling.activeZoneId(prefs)).toEpochDay()
     ): Boolean {
         if (prayerType == PrayerType.SUNRISE) return false
         val salahDao = runCatching {
             GlobalContext.getOrNull()?.get<SalahDao>()
         }.getOrNull() ?: return false
-        val epochDay = LocalDate.now(AzaanScheduling.activeZoneId(prefs)).toEpochDay()
         return runCatching {
             salahDao.getSalahRecord(epochDay, prayerType.name)?.isCompleted == true
         }.getOrDefault(false)

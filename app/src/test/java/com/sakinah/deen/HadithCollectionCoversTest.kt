@@ -16,7 +16,12 @@ class HadithCollectionCoversTest {
         "nasai",
         "ibnmajah",
         "malik",
-        "nawawi"
+        "nawawi",
+        "riyad",
+        "adab",
+        "bulugh",
+        "shamail",
+        "ahmad"
     )
 
     @Test

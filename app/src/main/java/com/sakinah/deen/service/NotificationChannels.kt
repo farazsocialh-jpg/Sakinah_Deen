@@ -36,6 +36,9 @@ object NotificationChannels {
     /** IMPORTANCE_DEFAULT, no sound, no vibration (Silent). */
     const val CHANNEL_PRAYER_SILENT = "sakinah_prayer_silent_v2"
 
+    /** IMPORTANCE_DEFAULT, silent nudge near the end of an uncompleted prayer window. */
+    const val CHANNEL_PRAYER_LATE = "sakinah_prayer_late_v1"
+
     /**
      * Optional dedicated Fajr channel at maximum importance, with sound and vibration.
      *
@@ -93,7 +96,8 @@ object NotificationChannels {
         CHANNEL_PRAYER_SOUND,
         CHANNEL_PRAYER_VIBRATE,
         CHANNEL_PRAYER_SILENT,
-        CHANNEL_PRAYER_CRITICAL_FAJR
+        CHANNEL_PRAYER_CRITICAL_FAJR,
+        CHANNEL_PRAYER_LATE
     )
 
     /** True when the user silenced every prayer channel in Android settings. */
@@ -182,6 +186,18 @@ object NotificationChannels {
             setShowBadge(false)
         }
 
+        val lateChannel = NotificationChannel(
+            CHANNEL_PRAYER_LATE,
+            context.getString(R.string.channel_prayer_late_name),
+            NotificationManager.IMPORTANCE_DEFAULT
+        ).apply {
+            group = GROUP_PRAYER
+            description = context.getString(R.string.channel_prayer_late_desc)
+            setSound(null, null)
+            enableVibration(false)
+            setShowBadge(false)
+        }
+
         val criticalFajrChannel = NotificationChannel(
             CHANNEL_PRAYER_CRITICAL_FAJR,
             context.getString(R.string.channel_prayer_critical_name),
@@ -229,6 +245,7 @@ object NotificationChannels {
                 soundChannel,
                 vibrateChannel,
                 silentChannel,
+                lateChannel,
                 criticalFajrChannel,
                 safarChannel,
                 habitChannel

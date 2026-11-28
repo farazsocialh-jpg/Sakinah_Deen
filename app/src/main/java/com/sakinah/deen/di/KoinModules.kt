@@ -36,6 +36,7 @@ import com.sakinah.deen.ui.viewmodel.TravelViewModel
 import com.sakinah.deen.ui.viewmodel.WealthViewModel
 import com.sakinah.deen.work.KoinWorkerFactory
 import io.ktor.client.HttpClient
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import io.ktor.client.engine.okhttp.OkHttp
@@ -46,6 +47,13 @@ import kotlinx.serialization.json.Json
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
+
+/**
+ * One opaque id per process, generated once at container creation. It is sent to the AI
+ * proxy as `x-installation-id` so rate limits apply per installation, not per shared IP.
+ * It is never derived from the client token and is kept out of persisted preferences.
+ */
+private val scholarInstallationId: String = UUID.randomUUID().toString()
 
 val preferencesModule = module {
     single { SakinahPreferences(androidContext()) }
@@ -143,7 +151,7 @@ val networkModule = module {
             }
         }
     }
-    single { SunniAiClient(httpClient = get(), json = get()) }
+    single { SunniAiClient(httpClient = get(), json = get(), installationId = scholarInstallationId) }
     single {
         IslamicDataRepository(
             quranDao = get(),
@@ -188,7 +196,9 @@ val repositoryModule = module {
         NisabRateRepositoryImpl(
             client = get(),
             json = get(),
-            cache = PreferencesNisabRateCache(SharedPreferencesNisabRateCacheStore(prefs))
+            cache = PreferencesNisabRateCache(SharedPreferencesNisabRateCacheStore(prefs)),
+            madhhabKey = get<com.sakinah.deen.data.prefs.SakinahPreferences>()
+                .madhhab.name.lowercase()
         )
     }
 }

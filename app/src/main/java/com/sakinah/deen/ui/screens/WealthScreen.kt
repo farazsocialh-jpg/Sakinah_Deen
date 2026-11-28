@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Button
@@ -31,8 +32,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -74,6 +78,14 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+/** Currencies offered by the wealth sheet, kept in one place for a stable pill order. */
+private val WEALTH_CURRENCY_CODES = listOf(
+    "USD", "GBP", "EUR", "CAD", "AUD", "JPY", "CHF", "CNY", "INR", "MYR", "IDR", "TRY",
+    "ZAR", "SEK", "NOK", "SGD", "DKK", "SAR", "AED", "KWD", "BHD", "OMR", "QAR", "EGP",
+    "PKR", "BDT", "NGN", "MAD", "DZD", "JOD", "TND", "IQD", "LBP", "LYD", "KZT", "AFN",
+    "UZS"
+)
+
 /** Honest freshness label: an unset timestamp means the built-in estimate is in use. */
 internal fun formatNisabTimestamp(epochMillis: Long): String {
     if (epochMillis <= 0L) return "Nisab rates: built-in estimate · update when online"
@@ -108,6 +120,7 @@ fun WealthScreen(
     var inventoryText by remember { mutableStateOf(formatFieldInit(state.tradeInventory)) }
     var stocksText by remember { mutableStateOf(formatFieldInit(state.stocksValue)) }
     var debtsText by remember { mutableStateOf(formatFieldInit(state.shortTermDebts)) }
+    var currencyMenuExpanded by remember { mutableStateOf(false) }
 
     // A cleared field is an explicit zero, and any balance the view model changes itself
     // (restored values, reset) re-syncs the buffers so the UI never shows a stale amount.
@@ -197,26 +210,48 @@ fun WealthScreen(
 
                     // Currency is part of the Nisab identity, not a bare number: amounts are
                     // always rendered with the currency that priced them.
-                    val currencyOptions = remember(state.currencyCode) {
-                        listOf(state.currencyCode) +
-                            listOf("QAR", "USD", "SAR", "AED", "GBP", "EUR")
-                                .filter { it != state.currencyCode }
-                    }
-                    SegmentedPillBar(
-                        options = currencyOptions,
-                        selectedIndex = 0,
-                        onSelect = { idx ->
-                            viewModel.onIntent(WealthUiIntent.SetCurrency(currencyOptions[idx]))
+                    Box {
+                        OutlinedButton(onClick = { currencyMenuExpanded = true }) {
+                            Text("Currency: ${state.currencyCode}")
+                            Spacer(Modifier.width(6.dp))
+                            Icon(
+                                Icons.Filled.ArrowDropDown,
+                                contentDescription = "Change currency"
+                            )
                         }
-                    )
+                        DropdownMenu(
+                            expanded = currencyMenuExpanded,
+                            onDismissRequest = { currencyMenuExpanded = false }
+                        ) {
+                            WEALTH_CURRENCY_CODES.forEach { code ->
+                                DropdownMenuItem(
+                                    text = { Text(code) },
+                                    onClick = {
+                                        currencyMenuExpanded = false
+                                        viewModel.onIntent(WealthUiIntent.SetCurrency(code))
+                                    }
+                                )
+                            }
+                        }
+                    }
 
+                    val thresholdLabel = stringResource(
+                        R.string.wealth_nisab_threshold,
+                        // The threshold is only meaningful in the currency the metal rate
+                        // is quoted in; it is never silently converted to another.
+                        formatMoney(state.nisabThreshold, state.nisabRateCurrencyCode)
+                    )
                     Text(
-                        text = stringResource(
-                            R.string.wealth_nisab_threshold,
-                            // The threshold is only meaningful in the currency the metal rate
-                            // is quoted in; it is never silently converted to another.
-                            formatMoney(state.nisabThreshold, state.nisabRateCurrencyCode)
-                        ),
+                        text = if (
+                            state.nisabRateCurrencyCode.equals(state.currencyCode, ignoreCase = true)
+                        ) {
+                            thresholdLabel
+                        } else {
+                            // Make the mismatch explicit instead of implying the threshold
+                            // is in the balance-sheet currency.
+                            "$thresholdLabel · quoted in ${state.nisabRateCurrencyCode}, " +
+                                "balances in ${state.currencyCode}"
+                        },
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface

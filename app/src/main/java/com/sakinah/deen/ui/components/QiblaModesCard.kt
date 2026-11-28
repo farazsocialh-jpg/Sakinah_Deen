@@ -600,8 +600,24 @@ private fun QiblaMapView(
                 .height(230.dp)
                 .clip(RoundedCornerShape(12.dp))
         ) {
+            // Permanent native base layer underneath the WebView: remote tiles may be slow,
+            // blocked, or fail after the first paint. Any transparent gap in the WebView now
+            // reveals this grid and bearing instead of a blank panel.
+            QiblaMapBaseLayer(
+                qiblaBearing = qiblaBearing,
+                distanceKm = distanceKm,
+                reason = failureReason,
+                failed = loadState == MapLoadState.FAILED,
+                onRetry = { reloadToken++ },
+                modifier = Modifier
+                    .matchParentSize()
+                    .zIndex(0f)
+            )
+
             AndroidView(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(1f),
                 factory = { webContext ->
                     WebView(webContext).apply {
                         settings.javaScriptEnabled = true
@@ -739,22 +755,7 @@ private fun QiblaMapView(
                 }
             )
 
-            // Always-on native base layer: remote tiles may be slow, blocked, or fail after
-            // first paint. This guarantees Map mode can never look like an empty green panel.
-            if (loadState != MapLoadState.READY) {
-                QiblaMapBaseLayer(
-                    qiblaBearing = qiblaBearing,
-                    distanceKm = distanceKm,
-                    reason = failureReason,
-                    failed = loadState == MapLoadState.FAILED,
-                    onRetry = { reloadToken++ },
-                    modifier = Modifier
-                        .matchParentSize()
-                        .zIndex(1f)
-                )
-            }
-
-            // A small progress pill above the native base layer: it communicates that real
+            // A small progress pill above both layers: it communicates that real
             // street tiles are still being fetched without hiding the offline bearing graphic.
             if (loadState == MapLoadState.LOADING) {
                 Surface(
@@ -780,6 +781,19 @@ private fun QiblaMapView(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+            }
+
+            // The WebView is above the base layer, so expose retry here where it stays tappable.
+            if (loadState == MapLoadState.FAILED) {
+                Button(
+                    onClick = { reloadToken++ },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 10.dp)
+                        .zIndex(2f)
+                ) {
+                    Text("Retry map", fontSize = 12.sp)
                 }
             }
         }

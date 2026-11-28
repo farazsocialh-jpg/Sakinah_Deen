@@ -134,7 +134,22 @@ class AiScholarViewModel(
         internal fun classifyScholarFailure(error: Throwable): ScholarErrorKind {
             val message = error.localizedMessage.orEmpty()
             val lower = message.lowercase()
+            // The proxy answers with a stable { error: { code, message } } envelope. Prefer
+            // that code over prose so a translated/updated message cannot change the UI's
+            // recovery affordance (in particular, no literal API-key string is parsed).
+            val proxyCode = (error as? com.sakinah.deen.network.SunniAiClient.ScholarHttpException)
+                ?.code?.trim()?.uppercase(Locale.ROOT)
             return when {
+                proxyCode == "NOT_CONFIGURED" ||
+                    proxyCode == "UNAUTHORIZED" ||
+                    proxyCode == "FORBIDDEN" -> ScholarErrorKind.CONFIG
+
+                proxyCode == "RATE_LIMITED" ||
+                    proxyCode == "UPSTREAM_RATE_LIMITED" -> ScholarErrorKind.RATE_LIMIT
+
+                proxyCode == "UPSTREAM_ERROR" ||
+                    proxyCode == "UPSTREAM_UNAVAILABLE" -> ScholarErrorKind.SERVER
+
                 error is TimeoutCancellationException ||
                     lower.contains("timeout") ||
                     lower.contains("timed out") -> ScholarErrorKind.TIMEOUT
@@ -152,8 +167,7 @@ class AiScholarViewModel(
                     lower.contains("service unavailable") ||
                     lower.contains("bad gateway") -> ScholarErrorKind.SERVER
 
-                lower.contains("not configured") ||
-                    lower.contains("missing gemini_api_key") -> ScholarErrorKind.CONFIG
+                lower.contains("not configured") -> ScholarErrorKind.CONFIG
 
                 error is java.io.IOException ||
                     lower.contains("unable to resolve host") ||

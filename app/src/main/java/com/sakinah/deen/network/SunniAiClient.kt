@@ -6,6 +6,7 @@ import com.sakinah.deen.network.model.RagQueryRequest
 import com.sakinah.deen.network.model.RagStreamChunk
 import com.sakinah.deen.util.CitationParser
 import io.ktor.client.HttpClient
+import io.ktor.client.request.header
 import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
@@ -33,6 +34,8 @@ import kotlinx.serialization.json.put
  *
  * No model API key is compiled into the APK: the proxy URL comes from
  * `BuildConfig.AI_PROXY_URL` and the upstream provider credential stays on the server.
+ * An optional opaque client token ([BuildConfig.SAKINAH_CLIENT_TOKEN]) and a per-process
+ * installation id are sent as headers only when configured; neither is ever a model key.
  * The proxy is expected to answer with the same server-sent-event shape the Gemini
  * streaming endpoint uses (`data: {"candidates": [...]}`), which keeps the existing
  * citation and madhhab extraction below unchanged.
@@ -40,7 +43,9 @@ import kotlinx.serialization.json.put
 class SunniAiClient(
     private val httpClient: HttpClient,
     private val json: Json,
-    private val proxyUrl: String = BuildConfig.AI_PROXY_URL
+    private val proxyUrl: String = BuildConfig.AI_PROXY_URL,
+    /** Generated once per process in DI; lets the proxy rate-limit per installation. */
+    private val installationId: String = ""
 ) {
 
     companion object {
@@ -74,6 +79,7 @@ class SunniAiClient(
         private const val MIN_MADHHAB_SUMMARY = 8
         private const val MAX_CITATIONS = 8
         private const val MAX_HISTORY_MESSAGES = 8
+        private const val MAX_ERROR_DETAIL_CHARS = 120
 
         /** Shown instead of an HTTP/connection error when the proxy URL was never set. */
         const val NOT_CONFIGURED_MESSAGE =
@@ -88,10 +94,15 @@ class SunniAiClient(
                 "study summary and confirm the ruling with a qualified scholar."
     }
 
-    /** HTTP failure carrying the status code so callers can decide whether to retry. */
+    /**
+     * HTTP failure carrying the status code and the proxy's stable error code
+     * (`{ "error": { "code": "NOT_CONFIGURED", ... } }`) so callers can classify the
+     * failure by code instead of scraping prose. The raw upstream body is never echoed.
+     */
     class ScholarHttpException(
         val status: Int,
-        message: String
+        message: String,
+        val code: String? = null
     ) : java.io.IOException(message)
 
     /** A blank (or placeholder) proxy URL means the build has no Scholar backend. */
@@ -117,16 +128,34 @@ class SunniAiClient(
         val url = proxyUrl
         httpClient.preparePost(url) {
             contentType(ContentType.Application.Json)
+            // The token is an optional shared secret for the worker (never a model key).
+            if (BuildConfig.SAKINAH_CLIENT_TOKEN.isNotBlank()) {
+                header("x-sakinah-client", BuildConfig.SAKINAH_CLIENT_TOKEN.trim())
+            }
+            if (installationId.isNotBlank()) {
+                header("x-installation-id", installationId.trim())
+            }
             setBody(buildRequestBody(request).toString())
         }.execute { httpResponse ->
             if (!httpResponse.status.isSuccess()) {
-                // Structured status only: the proxy's error envelope is never echoed into a
-                // user-visible message, it is summarised by the ViewModel's error taxonomy.
+                // Only the stable code is retained for classification; the upstream body is
+                // never echoed into a user-visible message (the UI owns the error taxonomy).
                 val detail = runCatching { httpResponse.bodyAsText() }.getOrDefault("")
+                val envelope = runCatching {
+                    (json.parseToJsonElement(detail) as? JsonObject)?.get("error") as? JsonObject
+                }.getOrNull()
+                val code = (envelope?.get("code") as? JsonPrimitive)?.contentOrNull
+                    ?.takeIf { it.isNotBlank() }
+                val summary = (envelope?.get("message") as? JsonPrimitive)?.contentOrNull
+                    ?.take(MAX_ERROR_DETAIL_CHARS)
+                    ?.takeIf { it.isNotBlank() }
+                    ?: detail.take(MAX_ERROR_DETAIL_CHARS)
                 throw ScholarHttpException(
                     status = httpResponse.status.value,
                     message = "Scholar proxy rejected the request (HTTP ${httpResponse.status.value})" +
-                        detail.take(200).let { if (it.isBlank()) "" else ": $it" }
+                        (code?.let { " [$it]" } ?: "") +
+                        (summary.let { ": $it" }),
+                    code = code
                 )
             }
 

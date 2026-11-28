@@ -1,40 +1,31 @@
 package com.sakinah.deen
 
-import android.Manifest
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sakinah.deen.data.prefs.AppearancePreferences
-import com.sakinah.deen.data.prefs.SakinahPreferences
-import com.sakinah.deen.domain.astronomy.UserLocationProvider
 import com.sakinah.deen.receiver.CarBluetoothReceiver
 import com.sakinah.deen.service.AdhanPlaybackService
-import com.sakinah.deen.service.AzaanScheduling
 import com.sakinah.deen.service.PrayerAlertSilencer
 import com.sakinah.deen.ui.navigation.RootNavHost
 import com.sakinah.deen.ui.rememberInject
 import com.sakinah.deen.ui.theme.SakinahTheme
 import com.sakinah.deen.util.enableTapjackingProtection
 import com.sakinah.deen.ui.theme.ThemeMode
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -58,41 +49,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             val appearancePrefs = rememberInject<AppearancePreferences>()
             val appearanceConfig by appearancePrefs.effectiveConfig.collectAsStateWithLifecycle()
-            val appPrefs = rememberInject<SakinahPreferences>()
-            val locationProvider = rememberInject<UserLocationProvider>()
-            val scope = rememberCoroutineScope()
-
-            val firstLaunchPermissionLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.RequestMultiplePermissions()
-            ) { result ->
-                // Mark the prompt as handled only after the user has actually responded.
-                appPrefs.firstLaunchPermissionsRequested = true
-                val locationGranted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-                    result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-                if (locationGranted) {
-                    scope.launch {
-                        AzaanScheduling.scheduleWithBestLocation(
-                            context = applicationContext,
-                            locationProvider = locationProvider
-                        )
-                        // New coordinates mean new timings: refresh every widget.
-                        com.sakinah.deen.widget.updateAllWidgets(applicationContext)
-                    }
-                }
-            }
-
-            LaunchedEffect(Unit) {
-                if (!appPrefs.firstLaunchPermissionsRequested) {
-                    val permissions = buildList {
-                        add(Manifest.permission.ACCESS_FINE_LOCATION)
-                        add(Manifest.permission.ACCESS_COARSE_LOCATION)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            add(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                    }
-                    firstLaunchPermissionLauncher.launch(permissions.toTypedArray())
-                }
-            }
             // A theme change must repaint every placed widget, not just the app.
             LaunchedEffect(appearanceConfig.themeMode, appearanceConfig.palette) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {

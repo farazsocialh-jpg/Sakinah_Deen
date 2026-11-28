@@ -122,7 +122,6 @@ fun HadithScreen(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val tabLabels = listOf(
         stringResource(R.string.hadith_tab_books),
-        stringResource(R.string.hadith_tab_daily),
         stringResource(R.string.hadith_tab_search),
         stringResource(R.string.hadith_tab_saved)
     )
@@ -166,10 +165,14 @@ fun HadithScreen(
 
     LaunchedEffect(state.selectedTab) {
         when (state.selectedTab) {
-            HadithTab.SEARCH -> searchExpanded = true
+            HadithTab.SEARCH -> {
+                searchExpanded = true
+                savedOnly = false
+            }
             HadithTab.SAVED -> savedOnly = true
-            HadithTab.DAILY -> savedOnly = false
-            HadithTab.BOOKS -> Unit
+            // The removed Daily tab used to clear the saved-only filter; Books is now
+            // the default view that always shows the selected collection's hadiths.
+            HadithTab.BOOKS -> savedOnly = false
         }
     }
 

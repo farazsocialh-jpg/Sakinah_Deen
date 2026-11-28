@@ -12,43 +12,40 @@ import org.junit.Test
 class SunniAiScholarRepositoryTest {
 
     @Test
-    fun unconfiguredBackend_usesGroundedOfflineAnswer() = runBlocking {
+    fun unconfiguredBackend_reportsMissingProxyInsteadOfFabricatingRulings() = runBlocking {
         val chunks = SunniAiScholarRepositoryImpl()
             .streamAskScholar(RagQueryRequest(query = "How do I perform Sujud as-Sahw?"))
             .toList()
 
         val text = chunks.filterIsInstance<RagStreamChunk.TextDelta>()
             .joinToString("") { it.delta }
-
-        assertTrue("expected the offline sujud answer", text.contains("Sujud as-Sahw"))
-        assertFalse("must not show the setup message", text.contains("not configured", ignoreCase = true))
-        assertTrue("expected a source citation", chunks.any { it is RagStreamChunk.SourceCitation })
+        assertTrue(text.contains("configured backend proxy", ignoreCase = true))
+        assertFalse(text.contains("Sujud as-Sahw", ignoreCase = true))
+        assertTrue(chunks.any { it is RagStreamChunk.SourcesUnverified })
+        assertFalse(chunks.any { it is RagStreamChunk.SourceCitation })
         assertTrue(chunks.last() is RagStreamChunk.Complete)
     }
 
     @Test
-    fun unconfiguredBackend_answersTahajjudFromOfflineTopic() = runBlocking {
+    fun unconfiguredBackend_neverInventsTopicAnswers() = runBlocking {
         val chunks = SunniAiScholarRepositoryImpl()
             .streamAskScholar(RagQueryRequest(query = "what is tahajjud"))
             .toList()
 
         val text = chunks.filterIsInstance<RagStreamChunk.TextDelta>()
             .joinToString("") { it.delta }
-
-        assertTrue("expected tahajjud answer", text.contains("Tahajjud", ignoreCase = true))
-        assertTrue("expected Al-Isra citation", chunks.any { it is RagStreamChunk.SourceCitation })
+        assertFalse(text.contains("Tahajjud", ignoreCase = true))
+        assertTrue(text.contains("internet connection", ignoreCase = true))
     }
 
     @Test
-    fun unconfiguredBackend_doesNotReuseGenericAnswerForUnknownTopics() = runBlocking {
+    fun unconfiguredBackend_hasNoCannedMadhabOrSourceContent() = runBlocking {
         val chunks = SunniAiScholarRepositoryImpl()
             .streamAskScholar(RagQueryRequest(query = "what is the ruling on a new invented topic"))
             .toList()
 
-        val text = chunks.filterIsInstance<RagStreamChunk.TextDelta>()
-            .joinToString("") { it.delta }
-
-        assertTrue(text.contains("don't have a verified offline answer", ignoreCase = true))
-        assertFalse(text.contains("four established Usul", ignoreCase = true))
+        assertFalse(chunks.any { it is RagStreamChunk.MadhhabBreakdown })
+        assertFalse(chunks.any { it is RagStreamChunk.SourceCitation })
+        assertTrue(chunks.last() is RagStreamChunk.Complete)
     }
 }

@@ -132,6 +132,74 @@ object PrayerReminderContent {
         )
     )
 
+    /**
+     * References about neglecting or delaying prayer, shown when a prayer window is nearly
+     * over and the prayer has not been marked as done. Every entry has a distinct source so
+     * two consecutive indices never produce the same reference, even across the wrap.
+     */
+    private val NEGLECT = listOf(
+        Reminder(
+            arabic = "إِنَّ الصَّلَاةَ كَانَتْ عَلَى الْمُؤْمِنِينَ كِتَابًا مَّوْقُوتًا",
+            english = "Indeed, prayer has been decreed upon the believers a decree of specified times.",
+            source = "Qur'an 4:103"
+        ),
+        Reminder(
+            arabic = "حَافِظُوا عَلَى الصَّلَوَاتِ وَالصَّلَاةِ الْوُسْطَىٰ وَقُومُوا لِلَّهِ قَانِتِينَ",
+            english = "Guard strictly your prayers, especially the middle prayer, and stand before Allah with devotion.",
+            source = "Qur'an 2:238"
+        ),
+        Reminder(
+            arabic = "وَيْلٌ لِّلْمُصَلِّينَ ۙ الَّذِينَ هُمْ عَن صَلَاتِهِمْ سَاهُونَ",
+            english = "Woe to those who pray, yet are heedless of their prayer.",
+            source = "Qur'an 107:4-5"
+        ),
+        Reminder(
+            arabic = "فَخَلَفَ مِن بَعْدِهِمْ خَلْفٌ أَضَاعُوا الصَّلَاةَ وَاتَّبَعُوا الشَّهَوَاتِ فَسَوْفَ يَلْقَوْنَ غَيًّا",
+            english = "There came after them successors who neglected prayer and pursued desires; so they are going to meet evil.",
+            source = "Qur'an 19:59"
+        ),
+        Reminder(
+            arabic = "بَيْنَ الْعَبْدِ وَالْكُفْرِ تَرْكُ الصَّلَاةِ",
+            english = "Between a person and disbelief is abandoning the prayer.",
+            source = "Sahih Muslim 82"
+        ),
+        Reminder(
+            arabic = "أَحَبُّ الْأَعْمَالِ إِلَى اللَّهِ الصَّلَاةُ عَلَى وَقْتِهَا",
+            english = "The most beloved deed to Allah is prayer at its proper time.",
+            source = "Sahih al-Bukhari 527"
+        ),
+        Reminder(
+            arabic = "أَوَّلُ مَا يُحَاسَبُ بِهِ الْعَبْدُ يَوْمَ الْقِيَامَةِ الصَّلَاةُ",
+            english = "The first matter the servant will be brought to account for on the Day of Judgment is the prayer.",
+            source = "Jami' at-Tirmidhi 413"
+        ),
+        Reminder(
+            arabic = "مَا سَلَكَكُمْ فِي سَقَرَ ۙ قَالُوا لَمْ نَكُ مِنَ الْمُصَلِّينَ",
+            english = "What put you into Hell? They will say: We were not of those who prayed.",
+            source = "Qur'an 74:42-43"
+        ),
+        Reminder(
+            arabic = "مَنْ تَرَكَ صَلَاةَ الْعَصْرِ فَقَدْ حَبِطَ عَمَلُهُ",
+            english = "Whoever misses the Asr prayer, it is as if he lost his family and property.",
+            source = "Sahih al-Bukhari 552"
+        ),
+        Reminder(
+            arabic = "أَقِمِ الصَّلَاةَ ۙ إِنَّ الصَّلَاةَ تَنْهَىٰ عَنِ الْفَحْشَاءِ وَالْمُنكَرِ",
+            english = "Establish prayer. Indeed, prayer prohibits immorality and wrongdoing, and the remembrance of Allah is greater.",
+            source = "Qur'an 29:45"
+        )
+    )
+
+    /** Size of the late-reminder rotation; exposed so callers/tests can reason about the wrap. */
+    val lateReminderCount: Int get() = NEGLECT.size
+
+    /**
+     * Rotating neglect/delay reference for a monotonically increasing counter. [Math.floorMod]
+     * keeps negative or very large stored values valid, and sources are unique so consecutive
+     * indices always show a different reference.
+     */
+    fun lateReminderFor(index: Int): Reminder = NEGLECT[Math.floorMod(index, NEGLECT.size)]
+
     /** Reminders for a prayer; sunrise is a window marker and has no prayer reminder pool. */
     fun remindersFor(prayer: PrayerType): List<Reminder> = when (prayer) {
         PrayerType.FAJR -> FAJR
