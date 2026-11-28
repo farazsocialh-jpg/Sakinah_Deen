@@ -35,9 +35,8 @@ const MAX_NOTIFY_BODY_BYTES = 16 * 1024;
 const MAX_PROMPT_CHARS = 16_000;
 const MAX_CONTENTS = 40;
 const MAX_OUTPUT_TOKENS = 2048;
-// Gemini 2.0 Flash was shut down on 2026-06-01. 3.6 Flash is the supported
-// generateContent/streamGenerateContent replacement; keep wrangler.toml in sync.
-const DEFAULT_MODEL = "gemini-3.6-flash";
+// Gemini 3.5 Flash Lite is the production model.
+const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 const RATE_LIMIT_WINDOW_SECONDS = 60;
 
 const ERROR_STATUS = {
@@ -591,7 +590,8 @@ async function handleScholarProxy(request, env) {
   }
 
   if (!upstream.ok) {
-    // Log only the status: the provider body can contain prompt fragments or key hints.
+    const errText = await upstream.text().catch(() => "");
+    console.error("Gemini upstream error:", upstream.status, errText);
     const retryAfter = upstream.headers.get("retry-after");
     const code = upstream.status === 429 ? "UPSTREAM_RATE_LIMITED" : "UPSTREAM_ERROR";
     logStructured("warn", "upstream_http_error", upstream.status);
